@@ -1,0 +1,148 @@
+﻿# Sefa Receptionist - Default Configuration
+app:
+  name: "Sefa Receptionist"
+  version: "0.1.0"
+  environment: "development"
+  debug: true
+
+languages:
+  primary: "en"
+  supported: ["en", "bn"]
+  code_switching: true
+  default_greeting:
+    en: "Thank you for calling Sefa Clinic. How may I help you today?"
+    bn: "মেডভয়েস ক্লিনিকে আপনাকে স্বাগতম। আমি আপনাকে কিভাবে সাহায্য করতে পারি?"
+
+telephony:
+  provider: "twilio"
+  twilio:
+    account_sid: "${TWILIO_ACCOUNT_SID}"
+    auth_token: "${TWILIO_AUTH_TOKEN}"
+    phone_number: "${TWILIO_PHONE_NUMBER}"
+    voice: "Polly.Matthew"
+    max_call_duration: 1800  # 30 min
+  websocket:
+    host: "0.0.0.0"
+    port: 8765
+
+pipeline:
+  stt:
+    provider: "openai"  # openai | whisper_local | elevenlabs
+    model: "whisper-1"
+    language: "auto"
+    temperature: 0.0
+    enable_vad: true
+    streaming: true
+  tts:
+    provider: "elevenlabs"  # elevenlabs | openai | piper | vits
+    model: "eleven_multilingual_v2"
+    voice_id: "pNInz6obpgDQGcFmaJgB"  # Adam - professional male
+    stability: 0.5
+    similarity_boost: 0.75
+    speed: 1.0
+    sample_rate: 24000
+  llm:
+    provider: "openai"  # openai | anthropic | qwen_local
+    model: "gpt-4o"
+    temperature: 0.3
+    max_tokens: 512
+    system_prompt_file: "configs/prompts/system.md"
+  language_detection:
+    provider: "simple"  # simple | glotlid
+    confidence_threshold: 0.6
+
+session:
+  backend: "redis"  # redis | memory
+  ttl_seconds: 3600
+  max_history_turns: 50
+
+models:
+  routing:
+    strategy: "config"  # config | language_confidence | cost_optimized
+    fallback_provider: "openai"
+  adapters:
+    stt_openai:
+      type: "openai_stt"
+      api_key: "${OPENAI_API_KEY}"
+    stt_whisper_local:
+      type: "whisper_local_stt"
+      model_size: "large-v3"
+      device: "cuda"
+      compute_type: "float16"
+      bangla_finetuned: true
+    stt_elevenlabs:
+      type: "elevenlabs_stt"
+      api_key: "${ELEVENLABS_API_KEY}"
+    tts_elevenlabs:
+      type: "elevenlabs_tts"
+      api_key: "${ELEVENLABS_API_KEY}"
+    tts_piper:
+      type: "piper_tts"
+      model_path: "models/piper/bn_BD.nf_cycgan.onnx"
+    tts_vits:
+      type: "vits_tts"
+      model_path: "models/vits/bangla_vits.pt"
+    llm_openai:
+      type: "openai_llm"
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o"
+    llm_anthropic:
+      type: "anthropic_llm"
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
+    llm_qwen_local:
+      type: "openai_compatible_llm"
+      base_url: "http://localhost:8080/v1"
+      model: "qwen3-8b"
+      api_key: "not-needed"
+
+integrations:
+  calendar:
+    provider: "google"  # google | epic | custom
+    google:
+      credentials_path: "configs/credentials/google_calendar.json"
+      calendar_id: "primary"
+  ehr:
+    provider: "custom"  # epic | cerner | athenahealth | custom
+    custom:
+      base_url: "http://localhost:8081/api"
+      api_key: "${EHR_API_KEY}"
+  notifications:
+    sms:
+      provider: "twilio"
+    email:
+      provider: "smtp"
+      smtp_host: "smtp.gmail.com"
+      smtp_port: 587
+      from_address: "appointments@Sefa.clinic"
+
+compliance:
+  hipaa_enabled: true
+  encryption_algorithm: "AES-256-GCM"
+  audit_log_enabled: true
+  call_recording_consent_required: true
+  data_retention_days: 2555  # 7 years
+  phi_access_logging: true
+  max_session_ttl: 3600
+
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+  sentry:
+    enabled: false
+    dsn: "${SENTRY_DSN}"
+  logging:
+    level: "INFO"
+    format: "json"
+    phi_masking: true
+
+escalation:
+  confidence_threshold: 0.7
+  max_transfer_attempts: 3
+  emergency_keywords:
+    en: ["emergency", "chest pain", "can't breathe", "severe bleeding", "unconscious"]
+    bn: ["জরুরি", "বুকে ব্যথা", "শ্বাস নিতে পারছি", "তীব্র রক্তক্ষরণ", "অজ্ঞান"]
+  transfer_greeting:
+    en: "I'm transferring you to our receptionist now. Please hold."
+    bn: "আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
