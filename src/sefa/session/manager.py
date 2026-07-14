@@ -1,4 +1,4 @@
-﻿"""Session management with Redis or in-memory fallback."""
+"""Session management with Redis or in-memory fallback."""
 
 from __future__ import annotations
 
@@ -109,9 +109,11 @@ class SessionManager:
     async def _get_redis(self):  # noqa: ANN202
         if self._redis is None:
             try:
+                import os
                 import redis.asyncio as aioredis
+                redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
                 self._redis = await aioredis.from_url(
-                    settings.session.redis_url,
+                    redis_url,
                     decode_responses=True,
                 )
             except Exception:

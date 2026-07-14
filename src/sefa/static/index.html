@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sefa — Medical Voice Agent</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0F172A;--paper:#F8FAFC;--teal:#0D9488;--teal-light:#CCFBF1;
+  --coral:#EF4444;--coral-light:#FEE2E2;--slate:#64748B;--border:#E2E8F0;
+  --surface:#FFFFFF;--sidebar-bg:#0F172A;--sidebar-text:#94A3B8;
+  --sidebar-active:#0D9488;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
+}
+html{font-size:14px}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;display:flex;min-height:100vh}
+
+/* Sidebar */
+.sidebar{width:240px;background:var(--sidebar-bg);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:10}
+.sidebar-brand{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-brand h1{font-size:1.25rem;color:#fff;font-weight:700;letter-spacing:-.02em}
+.sidebar-brand span{font-size:.75rem;color:var(--sidebar-text);display:block;margin-top:2px}
+.sidebar-nav{flex:1;padding:12px 0}
+.sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--sidebar-text);text-decoration:none;font-size:.875rem;transition:all .15s}
+.sidebar-nav a:hover{color:#fff;background:rgba(255,255,255,.05)}
+.sidebar-nav a.active{color:var(--teal);background:rgba(13,148,136,.1);border-right:3px solid var(--teal)}
+.sidebar-nav a svg{width:18px;height:18px;flex-shrink:0}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,.08);font-size:.75rem}
+.sidebar-footer .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.sidebar-footer .status-dot.online{background:#22C55E}
+.sidebar-footer .status-dot.offline{background:var(--coral)}
+
+/* Main */
+.main{margin-left:240px;flex:1;padding:24px 32px;min-height:100vh}
+.page{display:none}
+.page.active{display:block}
+
+/* Header */
+.page-header{margin-bottom:24px}
+.page-header h2{font-size:1.5rem;font-weight:700;color:var(--ink);letter-spacing:-.02em}
+.page-header p{color:var(--slate);font-size:.875rem;margin-top:4px}
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow)}
+.stat-card .label{font-size:.75rem;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.stat-card .value{font-size:1.75rem;font-weight:700;color:var(--ink);margin-top:4px;font-family:'SF Mono','Cascadia Code',Consolas,monospace}
+.stat-card .value.teal{color:var(--teal)}
+.stat-card .value.coral{color:var(--coral)}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h3{font-size:1rem;font-weight:600}
+.card-body{padding:20px}
+
+/* Table */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;border-bottom:1px solid var(--border);background:var(--paper)}
+td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.875rem}
+tr:hover{background:rgba(13,148,136,.03)}
+tr.selected{background:rgba(13,148,136,.06)}
+tr.clickable{cursor:pointer}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600}
+.badge-greeting{background:var(--teal-light);color:#065F46}
+.badge-active{background:#DBEAFE;color:#1E40AF}
+.badge-escalated{background:var(--coral-light);color:#991B1B}
+.badge-en{background:#F1F5F9;color:var(--slate)}
+.badge-bn{background:#FEF3C7;color:#92400E}
+
+/* Pulse animation for active calls */
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(13,148,136,.4)}50%{box-shadow:0 0 0 6px rgba(13,148,136,0)}}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+
+/* Conversation panel */
+.conversation{max-height:400px;overflow-y:auto;padding:16px 20px}
+.msg{margin-bottom:12px;display:flex;gap:10px}
+.msg-user .msg-role{color:var(--teal);font-weight:600;font-size:.75rem;text-transform:uppercase}
+.msg-assistant .msg-role{color:#7C3AED;font-weight:600;font-size:.75rem;text-transform:uppercase}
+.msg-tool .msg-role{color:var(--coral);font-weight:600;font-size:.75rem;text-transform:uppercase}
+.msg-content{font-size:.875rem;line-height:1.6;color:var(--ink)}
+.msg-tool .msg-content{background:#FFF7ED;border:1px solid #FED7AA;border-radius:4px;padding:8px 12px;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:.8rem}
+.msg-meta{font-size:.7rem;color:var(--slate);margin-top:2px}
+.msg-time{color:var(--slate);font-size:.7rem;white-space:nowrap}
+
+/* Forms */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.875rem;font-family:inherit;transition:border-color .15s}
+.form-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.1)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:var(--radius);font-size:.875rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-primary:hover{background:#0F766E}
+.btn-secondary{background:var(--paper);color:var(--ink);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--border)}
+.btn-danger{background:var(--coral);color:#fff}
+.btn-danger:hover{background:#DC2626}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Config grid */
+.config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.config-item{padding:12px 16px;background:var(--paper);border-radius:var(--radius);border:1px solid var(--border)}
+.config-item .config-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600}
+.config-item .config-value{font-size:.9rem;font-weight:600;color:var(--ink);margin-top:4px;font-family:'SF Mono','Cascadia Code',Consolas,monospace}
+
+/* Tool cards */
+.tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.tool-card{padding:16px;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);transition:border-color .15s}
+.tool-card:hover{border-color:var(--teal)}
+.tool-card h4{font-size:.875rem;font-weight:600;color:var(--teal);margin-bottom:4px}
+.tool-card p{font-size:.8rem;color:var(--slate);line-height:1.4}
+.tool-card .tool-params{margin-top:8px;font-size:.75rem;color:var(--slate)}
+.tool-card code{background:var(--surface);padding:1px 4px;border-radius:3px;font-size:.75rem;border:1px solid var(--border)}
+
+/* Empty state */
+.empty-state{text-align:center;padding:48px 20px;color:var(--slate)}
+.empty-state svg{width:48px;height:48px;margin-bottom:12px;opacity:.4}
+.empty-state p{font-size:.875rem}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:.875rem;z-index:100;transform:translateY(100px);opacity:0;transition:all .3s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.error{background:var(--coral)}
+
+/* Mobile */
+@media(max-width:768px){
+  .sidebar{width:100%;height:auto;position:relative;flex-direction:row;overflow-x:auto}
+  .sidebar-brand{display:none}
+  .sidebar-nav{display:flex;padding:0}
+  .sidebar-nav a{padding:12px 16px;white-space:nowrap}
+  .sidebar-nav a.active{border-right:none;border-bottom:3px solid var(--teal)}
+  .sidebar-footer{display:none}
+  .main{margin-left:0;padding:16px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .tool-grid{grid-template-columns:1fr}
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+  .pulse-dot{animation:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h1>Sefa</h1>
+    <span>Medical Voice Agent</span>
+  </div>
+  <div class="sidebar-nav">
+    <a href="#" class="active" data-page="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </a>
+    <a href="#" data-page="sessions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+      Sessions
+    </a>
+    <a href="#" data-page="tools">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      Tools
+    </a>
+    <a href="#" data-page="config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Config
+    </a>
+  </div>
+  <div class="sidebar-footer">
+    <span class="status-dot" id="serverStatus"></span>
+    <span id="serverStatusText">Checking...</span>
+  </div>
+</nav>
+
+<main class="main">
+  <!-- Dashboard Page -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <h2>Dashboard</h2>
+      <p>Real-time overview of your voice agent</p>
+    </div>
+    <div class="stats">
+      <div class="stat-card"><div class="label">Active Calls</div><div class="value teal" id="statActive">0</div></div>
+      <div class="stat-card"><div class="label">Today's Calls</div><div class="value" id="statToday">0</div></div>
+      <div class="stat-card"><div class="label">Escalations</div><div class="value coral" id="statEscalations">0</div></div>
+      <div class="stat-card"><div class="label">Avg Duration</div><div class="value" id="statDuration">--</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Active Calls</h3>
+        <button class="btn btn-secondary" onclick="refreshSessions()" style="font-size:.75rem;padding:6px 12px">Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Call SID</th><th>Patient</th><th>Language</th><th>Status</th><th>Turns</th><th>Duration</th></tr></thead>
+          <tbody id="sessionsTable"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="sessionsEmpty" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+        <p>No active calls</p>
+      </div>
+    </div>
+
+    <div class="card" id="conversationCard" style="display:none">
+      <div class="card-header">
+        <h3>Conversation — <span id="convCallSid"></span></h3>
+        <button class="btn btn-secondary" onclick="closeConversation()" style="font-size:.75rem;padding:6px 12px">Close</button>
+      </div>
+      <div class="conversation" id="conversationBody"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Outbound Call</h3></div>
+      <div class="card-body">
+        <div style="display:flex;gap:12px;align-items:flex-end;max-width:400px">
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label>Phone Number</label>
+            <input type="tel" class="form-input" id="outboundNumber" placeholder="+1 234 567 8900">
+          </div>
+          <button class="btn btn-primary" onclick="makeOutboundCall()">Call</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sessions Page -->
+  <div class="page" id="page-sessions">
+    <div class="page-header">
+      <h2>All Sessions</h2>
+      <p>Browse and review call sessions</p>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Call SID</th><th>Patient</th><th>Language</th><th>Status</th><th>Turns</th><th>Created</th><th>Last Active</th></tr></thead>
+          <tbody id="allSessionsTable"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="allSessionsEmpty" style="display:none">
+        <p>No sessions recorded yet</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tools Page -->
+  <div class="page" id="page-tools">
+    <div class="page-header">
+      <h2>Tool Functions</h2>
+      <p>LLM-callable tools available to the voice agent</p>
+    </div>
+    <div class="tool-grid" id="toolsGrid"></div>
+  </div>
+
+  <!-- Config Page -->
+  <div class="page" id="page-config">
+    <div class="page-header">
+      <h2>System Configuration</h2>
+      <p>Current pipeline and system settings</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Pipeline</h3></div>
+      <div class="card-body"><div class="config-grid" id="configPipeline"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Languages</h3></div>
+      <div class="card-body"><div class="config-grid" id="configLanguages"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>System</h3></div>
+      <div class="card-body"><div class="config-grid" id="configSystem"></div></div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let sessions = [];
+let selectedCallSid = null;
+let refreshInterval = null;
+
+// Navigation
+document.querySelectorAll('.sidebar-nav a').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const page = link.dataset.page;
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    if (page === 'tools') loadTools();
+    if (page === 'config') loadConfig();
+    if (page === 'sessions') loadAllSessions();
+  });
+});
+
+// Toast
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// Format time
+function fmtTime(ts) {
+  if (!ts) return '--';
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDuration(created) {
+  if (!created) return '--';
+  const sec = Math.floor(Date.now() / 1000 - created);
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
+  return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+}
+function fmtDate(ts) {
+  if (!ts) return '--';
+  return new Date(ts * 1000).toLocaleString();
+}
+
+// Badge HTML
+function badge(status) {
+  const cls = { greeting: 'badge-greeting', active: 'badge-active', escalated: 'badge-escalated' }[status] || 'badge-greeting';
+  return `<span class="badge ${cls}">${status}</span>`;
+}
+function langBadge(lang) {
+  const cls = lang === 'bn' ? 'badge-bn' : 'badge-en';
+  return `<span class="badge ${cls}">${lang === 'bn' ? 'Bangla' : 'English'}</span>`;
+}
+
+// Render sessions table
+function renderSessions(data, tableId, emptyId) {
+  const tbody = document.getElementById(tableId);
+  const empty = document.getElementById(emptyId);
+  if (!data.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = data.map(s => `
+    <tr class="clickable${s.call_sid === selectedCallSid ? ' selected' : ''}" onclick="viewConversation('${s.call_sid}')">
+      <td><code style="font-size:.8rem">${s.call_sid.slice(0, 16)}...</code></td>
+      <td>${s.patient_name || '<span style="color:var(--slate)">Unknown</span>'}</td>
+      <td>${langBadge(s.language)}</td>
+      <td>${s.state === 'active' ? '<span class="pulse-dot" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>' : ''}${badge(s.state)}</td>
+      <td>${s.turns}</td>
+      <td>${fmtDuration(s.created_at)}</td>
+    </tr>
+  `).join('');
+}
+
+// Update stats
+function updateStats() {
+  const active = sessions.filter(s => s.state === 'active' || s.state === 'greeting').length;
+  const escalated = sessions.filter(s => s.state === 'escalated').length;
+  document.getElementById('statActive').textContent = active;
+  document.getElementById('statToday').textContent = sessions.length;
+  document.getElementById('statEscalations').textContent = escalated;
+  const durations = sessions.filter(s => s.created_at).map(s => Date.now() / 1000 - s.created_at);
+  document.getElementById('statDuration').textContent = durations.length ? fmtDuration(durations.reduce((a, b) => a + b, 0) / durations.length) : '--';
+}
+
+// Fetch sessions
+async function refreshSessions() {
+  try {
+    const res = await fetch(API + '/api/v1/sessions');
+    sessions = await res.json();
+    renderSessions(sessions, 'sessionsTable', 'sessionsEmpty');
+    renderSessions(sessions, 'allSessionsTable', 'allSessionsEmpty');
+    updateStats();
+  } catch (e) {
+    console.error('Failed to fetch sessions:', e);
+  }
+}
+
+// Load all sessions (separate page)
+async function loadAllSessions() {
+  await refreshSessions();
+}
+
+// View conversation
+async function viewConversation(callSid) {
+  selectedCallSid = callSid;
+  renderSessions(sessions, 'sessionsTable', 'sessionsEmpty');
+  try {
+    const res = await fetch(API + '/api/v1/sessions/' + callSid);
+    const data = await res.json();
+    if (data.error) { showToast(data.error, true); return; }
+    document.getElementById('convCallSid').textContent = callSid.slice(0, 20);
+    document.getElementById('conversationCard').style.display = '';
+    const body = document.getElementById('conversationBody');
+    if (!data.history || !data.history.length) {
+      body.innerHTML = '<div class="empty-state"><p>No conversation history yet</p></div>';
+      return;
+    }
+    body.innerHTML = data.history.map(t => {
+      const cls = t.role === 'user' ? 'msg-user' : t.role === 'tool' ? 'msg-tool' : 'msg-assistant';
+      const roleLabel = t.role === 'user' ? 'Patient' : t.role === 'tool' ? 'Tool: ' + (t.tool_call_name || 'call') : 'Sefa';
+      return `
+        <div class="msg ${cls}">
+          <div style="flex:1">
+            <div class="msg-role">${roleLabel}</div>
+            <div class="msg-content">${escHtml(t.content)}</div>
+            ${t.language ? `<div class="msg-meta">${langBadge(t.language)}</div>` : ''}
+          </div>
+          <div class="msg-time">${fmtTime(t.timestamp)}</div>
+        </div>
+      `;
+    }).join('');
+    body.scrollTop = body.scrollHeight;
+  } catch (e) {
+    showToast('Failed to load conversation', true);
+  }
+}
+
+function closeConversation() {
+  selectedCallSid = null;
+  document.getElementById('conversationCard').style.display = 'none';
+  renderSessions(sessions, 'sessionsTable', 'sessionsEmpty');
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Outbound call
+async function makeOutboundCall() {
+  const num = document.getElementById('outboundNumber').value.trim();
+  if (!num) { showToast('Enter a phone number', true); return; }
+  try {
+    const res = await fetch(API + '/api/v1/calls/outbound?to_number=' + encodeURIComponent(num), { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { showToast(data.error, true); return; }
+    showToast('Call initiated: ' + (data.call_sid || ''));
+    document.getElementById('outboundNumber').value = '';
+    refreshSessions();
+  } catch (e) {
+    showToast('Failed to initiate call', true);
+  }
+}
+
+// Tools
+async function loadTools() {
+  try {
+    const res = await fetch(API + '/api/v1/tools');
+    const tools = await res.json();
+    document.getElementById('toolsGrid').innerHTML = tools.map(t => {
+      const params = t.parameters?.properties ? Object.entries(t.parameters.properties).map(([k, v]) => {
+        const req = (t.parameters.required || []).includes(k);
+        return `<code>${k}</code>${req ? ' *' : ''}`;
+      }).join(', ') : 'none';
+      return `
+        <div class="tool-card">
+          <h4>${t.name}</h4>
+          <p>${t.description}</p>
+          <div class="tool-params">Params: ${params}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    document.getElementById('toolsGrid').innerHTML = '<div class="empty-state"><p>Failed to load tools</p></div>';
+  }
+}
+
+// Config
+async function loadConfig() {
+  try {
+    const res = await fetch(API + '/api/v1/config');
+    const cfg = await res.json();
+    renderConfig(cfg.pipeline, 'configPipeline');
+    renderConfig(cfg.languages, 'configLanguages');
+    renderConfig({ session_backend: cfg.session?.backend, hipaa: cfg.compliance?.hipaa_enabled, audit: cfg.compliance?.audit_log_enabled }, 'configSystem');
+  } catch (e) {
+    console.error('Failed to load config:', e);
+  }
+}
+
+function renderConfig(obj, containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = Object.entries(obj).map(([k, v]) => {
+    const val = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
+    return `<div class="config-item"><div class="config-label">${k.replace(/_/g, ' ')}</div><div class="config-value">${val}</div></div>`;
+  }).join('');
+}
+
+// Health check
+async function checkHealth() {
+  try {
+    const res = await fetch(API + '/health');
+    const data = await res.json();
+    document.getElementById('serverStatus').className = 'status-dot online';
+    document.getElementById('serverStatusText').textContent = 'Connected';
+  } catch {
+    document.getElementById('serverStatus').className = 'status-dot offline';
+    document.getElementById('serverStatusText').textContent = 'Disconnected';
+  }
+}
+
+// Init
+checkHealth();
+refreshSessions();
+refreshInterval = setInterval(refreshSessions, 5000);
+</script>
+</body>
+</html>

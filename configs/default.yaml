@@ -1,4 +1,4 @@
-﻿# Sefa Receptionist - Default Configuration
+# Sefa Receptionist - Default Configuration
 app:
   name: "Sefa Receptionist"
   version: "0.1.0"
@@ -27,14 +27,14 @@ telephony:
 
 pipeline:
   stt:
-    provider: "openai"  # openai | whisper_local | elevenlabs
+    provider: "whisper_local"  # openai | whisper_local | elevenlabs
     model: "whisper-1"
     language: "auto"
     temperature: 0.0
     enable_vad: true
     streaming: true
   tts:
-    provider: "elevenlabs"  # elevenlabs | openai | piper | vits
+    provider: "piper"  # elevenlabs | openai | piper | vits
     model: "eleven_multilingual_v2"
     voice_id: "pNInz6obpgDQGcFmaJgB"  # Adam - professional male
     stability: 0.5
@@ -42,8 +42,8 @@ pipeline:
     speed: 1.0
     sample_rate: 24000
   llm:
-    provider: "openai"  # openai | anthropic | qwen_local
-    model: "gpt-4o"
+    provider: "qwen_local"  # openai | anthropic | qwen_local
+    model: "qwen3-coder-next"
     temperature: 0.3
     max_tokens: 512
     system_prompt_file: "configs/prompts/system.md"
@@ -52,7 +52,7 @@ pipeline:
     confidence_threshold: 0.6
 
 session:
-  backend: "redis"  # redis | memory
+  backend: "memory"  # redis | memory
   ttl_seconds: 3600
   max_history_turns: 50
 

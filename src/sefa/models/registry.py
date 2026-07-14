@@ -1,4 +1,4 @@
-﻿"""Model adapter registry and factory."""
+"""Model adapter registry and factory."""
 
 from __future__ import annotations
 
@@ -87,7 +87,12 @@ class ModelRegistry:
         if provider == "qwen_local":
             from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 
-            return OpenAICompatibleLLM(base_url="http://localhost:8080/v1")
+            return OpenAICompatibleLLM(
+                base_url="http://localhost:11434/v1",
+                model=settings.pipeline.llm.model,
+                temperature=settings.pipeline.llm.temperature,
+                max_tokens=settings.pipeline.llm.max_tokens,
+            )
         raise ValueError(f"Unknown LLM provider: {provider}")
 
     async def reset(self) -> None:
