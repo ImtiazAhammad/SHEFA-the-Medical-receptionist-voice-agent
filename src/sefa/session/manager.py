@@ -105,20 +105,27 @@ class SessionManager:
     def __init__(self) -> None:
         self._sessions: dict[str, CallSession] = {}
         self._redis = None
+        self._redis_failed = False
 
     async def _get_redis(self):  # noqa: ANN202
-        if self._redis is None:
-            try:
-                import os
-                import redis.asyncio as aioredis
-                redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-                self._redis = await aioredis.from_url(
-                    redis_url,
-                    decode_responses=True,
-                )
-            except Exception:
-                return None
-        return self._redis
+        if self._redis_failed:
+            return None
+        if self._redis is not None:
+            return self._redis
+        try:
+            import os
+
+            import redis.asyncio as aioredis
+
+            redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+            self._redis = await aioredis.from_url(
+                redis_url,
+                decode_responses=True,
+            )
+            return self._redis
+        except Exception:
+            self._redis_failed = True
+            return None
 
     async def get_or_create(self, call_sid: str) -> CallSession:
         existing = await self.get(call_sid)
@@ -131,20 +138,36 @@ class SessionManager:
     async def get(self, call_sid: str) -> CallSession | None:
         redis = await self._get_redis()
         if redis:
-            data = await redis.get(f"session:{call_sid}")
-            if data:
-                return CallSession.from_dict(json.loads(data))
+            try:
+                data = await redis.get(f"session:{call_sid}")
+                if data:
+                    return CallSession.from_dict(json.loads(data))
+            except Exception:
+                self._redis_failed = True
+                self._redis = None
         return self._sessions.get(call_sid)
 
     async def save(self, session: CallSession) -> None:
         redis = await self._get_redis()
         if redis:
-            ttl = settings.session.ttl_seconds
-            await redis.setex(f"session:{session.call_sid}", ttl, json.dumps(session.to_dict()))
+            try:
+                ttl = settings.session.ttl_seconds
+                await redis.setex(
+                    f"session:{session.call_sid}",
+                    ttl,
+                    json.dumps(session.to_dict()),
+                )
+            except Exception:
+                self._redis_failed = True
+                self._redis = None
         self._sessions[session.call_sid] = session
 
     async def delete(self, call_sid: str) -> None:
         redis = await self._get_redis()
         if redis:
-            await redis.delete(f"session:{call_sid}")
+            try:
+                await redis.delete(f"session:{call_sid}")
+            except Exception:
+                self._redis_failed = True
+                self._redis = None
         self._sessions.pop(call_sid, None)

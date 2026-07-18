@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class PiperTTS(BaseTTS):
-    def __init__(self, model_path: str = "models/piper/bn_BD.nf_cycgan.onnx"):
+    def __init__(self, model_path: str = "models/piper/en_US-lessac-medium.onnx"):
         self.model_path = model_path
 
     async def synthesize(self, text: str, language: str = "en") -> TTSResult:
@@ -33,7 +34,9 @@ class PiperTTS(BaseTTS):
 
         return TTSResult(audio_bytes=audio_bytes, sample_rate=22050)
 
-    async def synthesize_stream(self, text: str, language: str = "en") -> AsyncIterator[bytes]:
+    async def synthesize_stream(
+        self, text: str, language: str = "en"
+    ) -> AsyncIterator[bytes]:
         proc = await asyncio.create_subprocess_exec(
             "piper",
             "--model", self.model_path,
@@ -42,17 +45,14 @@ class PiperTTS(BaseTTS):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        proc.stdin.write(text.encode("utf-8"))
-        await proc.stdin.drain()
-        proc.stdin.close()
+        proc.stdin.write(text.encode("utf-8"))  # type: ignore
+        await proc.stdin.drain()  # type: ignore
+        proc.stdin.close()  # type: ignore
 
-        async for chunk in proc.stdout.iter_chunked(4096):
+        async for chunk in proc.stdout.iter_chunked(4096):  # type: ignore
             yield chunk
 
         await proc.wait()
 
     async def close(self) -> None:
         pass
-
-
-import asyncio  # noqa: E402
