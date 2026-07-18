@@ -4,29 +4,170 @@ HIPAA-compliant, bilingual (English / Bangla) voice AI receptionist for healthca
 
 ## Architecture
 
+### High-Level System Flow
+
+```mermaid
+flowchart TB
+    Caller([Patient Call]) --> Twilio
+
+    subgraph Twilio["Telephony Layer"]
+        direction TB
+        WS[Media Streams WebSocket]
+        WH[Webhooks - Incoming / Outbound]
+    end
+
+    Twilio --> Pipeline
+
+    subgraph Pipeline["Voice Pipeline"]
+        direction LR
+        STT[STT<br/>OpenAI / Whisper / ElevenLabs]
+        LD[Language Detection<br/>EN / BN / Code-Switch]
+        LLM[LLM Dialogue Manager<br/>GPT-4o / Claude / Qwen3]
+        TTS[TTS<br/>ElevenLabs / Piper / VITS]
+
+        STT --> LD --> LLM --> TTS
+    end
+
+    LLM --> Tools
+
+    subgraph Tools["Tool Function Calling"]
+        direction LR
+        T1[verify_patient]
+        T2[check_slots]
+        T3[book_appointment]
+        T4[cancel / reschedule]
+        T5[get_doctor_info]
+        T6[lookup_history]
+        T7[send_confirmation]
+        T8[transfer_to_human]
+    end
+
+    Tools --> Integrations
+
+    subgraph Integrations["External Integrations"]
+        direction LR
+        Cal[(Calendar<br/>Google / Epic)]
+        EHR[(EHR / CRM<br/>PostgreSQL)]
+        SMS[SMS / Email<br/>Notifications]
+    end
+
+    Pipeline --> Session
+
+    subgraph Session["Session Management"]
+        direction LR
+        Redis[(Redis<br/>Session State)]
+        MemCache[(In-Memory<br/>Fallback)]
+    end
+
+    TTS --> WS
+    WH --> Pipeline
+
+    classDef telephony fill:#e1f5fe,stroke:#0288d1
+    classDef pipeline fill:#f3e5f5,stroke:#7b1fa2
+    classDef tools fill:#e8f5e9,stroke:#388e3c
+    classDef integrations fill:#fff3e0,stroke:#f57c00
+    classDef session fill:#fce4ec,stroke:#c62828
+
+    class Twilio telephony
+    class Pipeline pipeline
+    class Tools tools
+    class Integrations integrations
+    class Session session
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              Sefa Voice Agent               │
-                    │                                             │
-  Phone Call ──────►│  Telephony Layer (Twilio Media Streams)     │
-                    │       │                                     │
-                    │       ▼                                     │
-                    │  Voice Pipeline                             │
-                    │  ┌─────┐  ┌──────────┐  ┌─────┐  ┌─────┐  │
-                    │  │ STT ├─►│Lang Detect├─►│ LLM ├─►│ TTS │  │
-                    │  └─────┘  └──────────┘  └──┬──┘  └──┬──┘  │
-                    │                            │        │      │
-                    │                      ┌─────▼─────┐  │      │
-                    │                      │  Tools /   │  │      │
-                    │                      │  Function  │  │      │
-                    │                      │  Calling   │  │      │
-                    │                      └─────┬──────┘  │      │
-                    │                            │         │      │
-                    │  ┌──────────┐  ┌───────────▼──┐      │      │
-                    │  │ Session  │  │ Integrations │◄─────┘      │
-                    │  │ Manager  │  │ Calendar/EHR │             │
-                    │  └──────────┘  └──────────────┘             │
-                    └─────────────────────────────────────────────┘
+
+### Call Flow Sequence
+
+```mermaid
+sequenceDiagram
+    participant P as Patient
+    participant T as Twilio
+    participant V as Voice Pipeline
+    participant L as Language Detector
+    participant AI as LLM (GPT-4o / Qwen3)
+    participant R as Tools / Integrations
+    participant S as Session (Redis)
+
+    P->>T: Incoming Call
+    T->>V: POST /incoming (TwiML)
+    V->>T: WebSocket Media Stream
+    T->>P: Greeting (detected language)
+
+    loop Conversation Turn
+        P->>T: Audio (μ-law stream)
+        T->>V: WebSocket audio chunk
+        V->>V: Buffer + VAD
+        V->>V: STT (streaming)
+        V->>L: Transcribed text
+        L->>V: Language + confidence
+
+        alt Emergency Detected
+            V->>P: "Transferring you now..."
+            V->>T: Transfer to human
+        else Normal Flow
+            V->>S: Load session context
+            V->>AI: Messages + tools
+            AI->>V: Response + tool calls
+
+            loop Tool Calls
+                AI->>R: execute_tool(name, args)
+                R-->>AI: Tool result
+            end
+
+            AI->>V: Final response text
+            V->>V: TTS synthesis
+            V->>T: Audio stream
+            T->>P: Audio playback
+            V->>S: Save session state
+        end
+    end
+
+    P->>T: Hang up
+    V->>S: Finalize session
+    V->>R: Post-call: log + confirm SMS/email
+```
+
+### Model Abstraction Layer
+
+```mermaid
+flowchart LR
+    subgraph Config["YAML Config"]
+        CFG[pipeline.stt.provider<br/>pipeline.tts.provider<br/>pipeline.llm.provider]
+    end
+
+    subgraph Registry["Model Registry"]
+        REG[factory: create_stt / create_tts / create_llm]
+    end
+
+    subgraph STT_Adapters["STT Adapters"]
+        S1[OpenAI Whisper API]
+        S2[Faster-Whisper Local]
+        S3[ElevenLabs Scribe]
+    end
+
+    subgraph TTS_Adapters["TTS Adapters"]
+        T1[ElevenLabs Multilingual]
+        T2[Piper Local]
+        T3[VITS Bangla]
+    end
+
+    subgraph LLM_Adapters["LLM Adapters"]
+        L1[OpenAI GPT-4o]
+        L2[Anthropic Claude]
+        L3[OpenAI-Compatible<br/>Qwen3 / Llama]
+    end
+
+    CFG --> Registry
+    Registry --> STT_Adapters
+    Registry --> TTS_Adapters
+    Registry --> LLM_Adapters
+
+    classDef config fill:#fff9c4,stroke:#f9a825
+    classDef registry fill:#e8eaf6,stroke:#3949ab
+    classDef adapter fill:#e0f2f1,stroke:#00897b
+
+    class Config config
+    class Registry registry
+    class STT_Adapters,TTS_Adapters,LLM_Adapters adapter
 ```
 
 ## Features
