@@ -108,6 +108,8 @@ class SessionManager:
         self._redis_failed = False
 
     async def _get_redis(self):  # noqa: ANN202
+        if settings.session.backend != "redis":
+            return None
         if self._redis_failed:
             return None
         if self._redis is not None:
