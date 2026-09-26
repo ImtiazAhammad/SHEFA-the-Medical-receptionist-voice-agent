@@ -50,8 +50,14 @@ def test_call_me_uses_verified_number(client, monkeypatch):
     assert calls == ["+8801999999999"]
 
 
-def test_call_me_default_verified_number(client, monkeypatch):
+def test_call_me_has_no_hardcoded_default_number(client, monkeypatch):
+    """T7: no dialable number may originate in source.
+
+    This endpoint used to fall back to a literal number baked into the
+    handler, so every deployment shared one hardcoded target.
+    """
     monkeypatch.setattr(settings.telephony.twilio, "account_sid", "AC123")
+    monkeypatch.setattr(settings.telephony.twilio, "phone_number", "")
     monkeypatch.delenv("VERIFIED_NUMBER", raising=False)
 
     import sefa.telephony.twilio as tw
@@ -67,7 +73,29 @@ def test_call_me_default_verified_number(client, monkeypatch):
     resp = client.post("/api/v1/calls/call-me")
 
     assert resp.status_code == 200
-    assert calls == ["+8801782737074"]
+    assert "VERIFIED_NUMBER" in resp.json()["error"]
+    assert calls == []
+
+
+def test_call_me_falls_back_to_configured_number(client, monkeypatch):
+    monkeypatch.setattr(settings.telephony.twilio, "account_sid", "AC123")
+    monkeypatch.setattr(settings.telephony.twilio, "phone_number", "+8801555000111")
+    monkeypatch.delenv("VERIFIED_NUMBER", raising=False)
+
+    import sefa.telephony.twilio as tw
+
+    calls = []
+
+    async def fake_call(to_number):
+        calls.append(to_number)
+        return {"call_sid": "CA11", "status": "in-progress"}
+
+    monkeypatch.setattr(tw, "initiate_outbound_call", fake_call)
+
+    resp = client.post("/api/v1/calls/call-me")
+
+    assert resp.status_code == 200
+    assert calls == ["+8801555000111"]
 
 
 def test_chat_requires_message(client):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from pathlib import Path
 
 import uvicorn
@@ -17,7 +16,7 @@ from sefa.telephony.twilio import app as telephony_app
 from sefa.tools.definitions import get_tool_definitions
 
 logging.basicConfig(
-    level=getattr(logging, settings.monitoring.log_level, logging.INFO),
+    level=getattr(logging, settings.monitoring.logging.level, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("sefa")
@@ -97,15 +96,21 @@ def create_app() -> FastAPI:
 
     @app.post("/api/v1/calls/call-me")
     async def call_me() -> dict:
-        """Outbound call to the user's verified number."""
-        to_number = settings.telephony.twilio.phone_number
-        # Try to find the verified number from env
+        """Outbound call to the operator's own verified number.
+
+        The number is never defaulted: T7 requires a dialable number to come
+        only from configuration or the environment, never from source.
+        """
         import os
-        verified = os.environ.get("VERIFIED_NUMBER", "+8801782737074")
+
+        verified = os.environ.get("VERIFIED_NUMBER") or settings.telephony.twilio.phone_number
+        if not verified:
+            return {"error": "No verified number configured. Set VERIFIED_NUMBER."}
         sid = settings.telephony.twilio.account_sid
         if not sid:
             return {"error": "Twilio not configured. Set TWILIO_ACCOUNT_SID in .env"}
         from sefa.telephony.twilio import initiate_outbound_call as _call
+
         return await _call(verified)
 
     @app.post("/api/v1/chat")
@@ -116,8 +121,8 @@ def create_app() -> FastAPI:
         session = await session_manager.get_or_create(call_sid)
         session.add_turn("user", message)
         from sefa.models.registry import registry
-        from sefa.tools.definitions import get_tool_definitions
         from sefa.pipeline.voice_pipeline import SYSTEM_PROMPT_TEMPLATE
+        from sefa.tools.definitions import get_tool_definitions
         system = SYSTEM_PROMPT_TEMPLATE.format(
             language=session.language.value,
             patient_name=session.patient_name or "Unknown",
@@ -139,9 +144,18 @@ def create_app() -> FastAPI:
     async def get_config() -> dict:
         return {
             "pipeline": {
-                "stt": {"provider": settings.pipeline.stt.provider, "model": settings.pipeline.stt.model},
-                "tts": {"provider": settings.pipeline.tts.provider, "model": settings.pipeline.tts.model},
-                "llm": {"provider": settings.pipeline.llm.provider, "model": settings.pipeline.llm.model},
+                "stt": {
+                    "provider": settings.pipeline.stt.provider,
+                    "model": settings.pipeline.stt.model,
+                },
+                "tts": {
+                    "provider": settings.pipeline.tts.provider,
+                    "model": settings.pipeline.tts.model,
+                },
+                "llm": {
+                    "provider": settings.pipeline.llm.provider,
+                    "model": settings.pipeline.llm.model,
+                },
             },
             "languages": {
                 "primary": settings.languages.primary,
@@ -176,5 +190,5 @@ if __name__ == "__main__":
         "sefa.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.monitoring.log_level == "DEBUG",
+        reload=settings.monitoring.logging.level == "DEBUG",
     )
