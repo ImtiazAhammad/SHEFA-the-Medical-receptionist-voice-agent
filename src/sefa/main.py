@@ -57,6 +57,11 @@ def create_app() -> FastAPI:
         index = STATIC_DIR / "index.html"
         return HTMLResponse(content=index.read_text(encoding="utf-8"))
 
+    @app.get("/test-call", response_class=HTMLResponse)
+    async def test_call() -> HTMLResponse:
+        page = STATIC_DIR / "test-call.html"
+        return HTMLResponse(content=page.read_text(encoding="utf-8"))
+
     @app.get("/api/v1/sessions")
     async def list_sessions() -> list[dict]:
         sessions = []
@@ -89,6 +94,46 @@ def create_app() -> FastAPI:
             return {"error": "Twilio not configured"}
         from sefa.telephony.twilio import initiate_outbound_call as _call
         return await _call(to_number)
+
+    @app.post("/api/v1/calls/call-me")
+    async def call_me() -> dict:
+        """Outbound call to the user's verified number."""
+        to_number = settings.telephony.twilio.phone_number
+        # Try to find the verified number from env
+        import os
+        verified = os.environ.get("VERIFIED_NUMBER", "+8801782737074")
+        sid = settings.telephony.twilio.account_sid
+        if not sid:
+            return {"error": "Twilio not configured. Set TWILIO_ACCOUNT_SID in .env"}
+        from sefa.telephony.twilio import initiate_outbound_call as _call
+        return await _call(verified)
+
+    @app.post("/api/v1/chat")
+    async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:
+        """Text-only chat endpoint — no voice, just text in/out. Free to test."""
+        if not message:
+            return {"error": "message is required"}
+        session = await session_manager.get_or_create(call_sid)
+        session.add_turn("user", message)
+        from sefa.models.registry import registry
+        from sefa.tools.definitions import get_tool_definitions
+        from sefa.pipeline.voice_pipeline import SYSTEM_PROMPT_TEMPLATE
+        system = SYSTEM_PROMPT_TEMPLATE.format(
+            language=session.language.value,
+            patient_name=session.patient_name or "Unknown",
+        )
+        messages = [{"role": "system", "content": system}]
+        for turn in session.history:
+            messages.append({"role": turn.role, "content": turn.content})
+        llm = await registry.get_llm()
+        llm_result = await llm.generate(messages, tools=get_tool_definitions())
+        session.add_turn("assistant", llm_result.text, llm_result.language)
+        await session_manager.save(session)
+        return {
+            "reply": llm_result.text,
+            "language": llm_result.language.value,
+            "session_id": call_sid,
+        }
 
     @app.get("/api/v1/config")
     async def get_config() -> dict:

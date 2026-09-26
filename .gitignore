@@ -13,3 +13,10 @@ build/
 htmlcov/
 *.log
 .mimocode/
+
+# Local agent tooling (gstack skills vendored into the repo) — not product code
+.opencode/
+.superpowers/
+
+# Model weights (Piper/VITS .onnx/.pt) — fetched by `sefa doctor`, never committed
+models/

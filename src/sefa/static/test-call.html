@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sefa — Test Center</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0F172A;color:#E2E8F0;min-height:100vh}
+.topbar{background:#1E293B;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155}
+.topbar h1{font-size:1.1rem;color:#fff}
+.topbar a{color:#94A3B8;text-decoration:none;font-size:.85rem}
+.tabs{display:flex;gap:0;background:#1E293B;border-bottom:1px solid #334155;padding:0 24px}
+.tab{padding:12px 24px;cursor:pointer;color:#94A3B8;font-size:.875rem;font-weight:600;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:#fff}
+.tab.active{color:#0D9488;border-bottom-color:#0D9488}
+.panel{display:none;padding:32px 24px;max-width:640px;margin:0 auto}
+.panel.active{display:block}
+h2{font-size:1.25rem;color:#fff;margin-bottom:4px}
+.sub{color:#94A3B8;font-size:.85rem;margin-bottom:24px}
+.card{background:#1E293B;border-radius:12px;padding:24px;border:1px solid #334155}
+.status{font-size:.875rem;margin-bottom:16px;min-height:20px}
+.status.ok{color:#22C55E}
+.status.err{color:#EF4444}
+.status.busy{color:#F59E0B}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-green{background:#22C55E;color:#fff}.btn-green:hover{background:#16A34A}
+.btn-red{background:#EF4444;color:#fff}.btn-red:hover{background:#DC2626}
+.btn-blue{background:#3B82F6;color:#fff}.btn-blue:hover{background:#2563EB}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.timer{font-size:2rem;font-weight:700;font-family:'SF Mono',monospace;color:#fff;margin:16px 0;text-align:center;min-height:48px}
+.visualizer{height:40px;display:flex;align-items:center;justify-content:center;gap:3px;margin:12px 0}
+.bar{width:4px;background:#0D9488;border-radius:2px;transition:height .08s}
+.transcript{max-height:300px;overflow-y:auto;background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;margin-top:16px}
+.turn{margin-bottom:8px}
+.role{font-weight:600;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em}
+.role.user{color:#22C55E}.role.assistant{color:#7C3AED}.role.system{color:#F59E0B}
+.text{color:#CBD5E1;margin-top:2px;line-height:1.5}
+.chat-input{display:flex;gap:8px;margin-top:16px}
+.chat-input input{flex:1;padding:10px 14px;border:1px solid #334155;border-radius:8px;background:#0F172A;color:#E2E8F0;font-size:.875rem;font-family:inherit}
+.chat-input input:focus{outline:none;border-color:#0D9488}
+.info{background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;color:#94A3B8;margin-top:16px;line-height:1.6}
+.info strong{color:#E2E8F0}
+.cost{background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:12px;font-size:.8rem;color:#92400E;margin-top:12px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Sefa Test Center</h1>
+  <a href="/dashboard">&larr; Dashboard</a>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('voice')">Voice (Browser Mic)</div>
+  <div class="tab" onclick="switchTab('outbound')">Outbound (Real Phone)</div>
+  <div class="tab" onclick="switchTab('text')">Text Chat</div>
+</div>
+
+<!-- VOICE PANEL -->
+<div class="panel active" id="panel-voice">
+  <h2>Voice Call (Free)</h2>
+  <p class="sub">Speak into your browser mic. Agent responds through speakers. No charges.</p>
+  <div class="card">
+    <div class="visualizer" id="viz"></div>
+    <div class="timer" id="timer"></div>
+    <div class="status" id="v-status">Press to start</div>
+    <div style="text-align:center">
+      <button class="btn btn-green" id="v-btn" onclick="voiceToggle()">&#128222; Start Call</button>
+    </div>
+    <div class="transcript" id="v-transcript"></div>
+  </div>
+  <div class="info">
+    <strong>How it works:</strong> Your browser mic captures audio → sent via WebSocket to server → Whisper transcribes → qwen2.5 responds → Piper generates speech → played back through speakers.<br>
+    <strong>Cost:</strong> Free. No phone charges.
+  </div>
+</div>
+
+<!-- OUTBOUND PANEL -->
+<div class="panel" id="panel-outbound">
+  <h2>Outbound Call (Real Phone)</h2>
+  <p class="sub">Agent calls YOUR phone. You answer and speak normally.</p>
+  <div class="card">
+    <div class="status" id="o-status">Ready to call</div>
+    <div style="text-align:center;margin:16px 0">
+      <button class="btn btn-blue" id="o-btn" onclick="outboundCall()">&#128222; Call Me Now</button>
+    </div>
+    <div id="o-result" style="display:none;background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;margin-top:12px"></div>
+  </div>
+  <div class="cost">
+    <strong>Cost warning:</strong> This uses Twilio credits. Outbound from US number to Bangladesh ~$0.05-0.15/min. You have $15 trial credit.
+  </div>
+  <div class="info">
+    <strong>How it works:</strong> Click "Call Me" → Twilio calls your verified number (+8801782737074) → You answer → Agent speaks first (greeting) → You respond → Conversation continues.<br>
+    <strong>From number:</strong> +19383004501 (your Twilio number)<br>
+    <strong>To number:</strong> +8801782737074 (your verified number)
+  </div>
+</div>
+
+<!-- TEXT PANEL -->
+<div class="panel" id="panel-text">
+  <h2>Text Chat (Free)</h2>
+  <p class="sub">Type messages, get responses. Tests the LLM directly. No voice.</p>
+  <div class="card">
+    <div class="transcript" id="t-transcript"></div>
+    <div class="chat-input">
+      <input type="text" id="t-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter')textSend()">
+      <button class="btn btn-green" onclick="textSend()">Send</button>
+    </div>
+  </div>
+  <div class="info">
+    <strong>How it works:</strong> Text goes directly to qwen2.5 LLM with the medical receptionist system prompt. No STT or TTS involved.<br>
+    <strong>Cost:</strong> Free. Runs entirely on your local machine.
+  </div>
+</div>
+
+<script>
+// Tab switching
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab:nth-child(${name==='voice'?1:name==='outbound'?2:3})`).classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+// Visualizer
+const vizEl = document.getElementById('viz');
+for(let i=0;i<20;i++){const b=document.createElement('div');b.className='bar';b.style.height='4px';vizEl.appendChild(b);}
+
+// ==================== VOICE (FREE) ====================
+let vWs=null,vCtx=null,vStream=null,vProc=null,vConnected=false,vTimer=null,vStart=0;
+
+function vAddTurn(role,text){
+  const d=document.createElement('div');d.className='turn';
+  d.innerHTML=`<div class="role ${role}">${role}</div><div class="text">${text}</div>`;
+  const el=document.getElementById('v-transcript');el.appendChild(d);el.scrollTop=el.scrollHeight;
+}
+function vStatus(m,c){const e=document.getElementById('v-status');e.textContent=m;e.className='status '+(c||'');}
+
+async function voiceToggle(){
+  if(vConnected){voiceHangup();return;}
+  try{
+    vStatus('Requesting microphone...','busy');
+    document.getElementById('v-btn').disabled=true;
+    vStream=await navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    vCtx=new AudioContext({sampleRate:16000});
+    const src=vCtx.createMediaStreamSource(vStream);
+    vProc=vCtx.createScriptProcessor(4096,1,1);
+    const callSid='browser-'+Date.now();
+    vWs=new WebSocket(`ws://${location.host}/api/v1/telephony/media-stream/${callSid}`);
+    vWs.onopen=()=>{
+      vConnected=true;
+      document.getElementById('v-btn').className='btn btn-red';
+      document.getElementById('v-btn').innerHTML='&#128220; Hang Up';
+      document.getElementById('v-btn').disabled=false;
+      vStartTimer();vStatus('Connected — speak now','ok');
+      vWs.send(JSON.stringify({event:'connected'}));
+      vWs.send(JSON.stringify({event:'start',start:{sampleRate:16000,format:'pcm',channels:1}}));
+      vProc.onaudioprocess=e=>{
+        if(!vConnected||!vWs||vWs.readyState!==1)return;
+        const buf=e.inputBuffer.getChannelData(0);
+        const ds=downsample(buf,vCtx.sampleRate,16000);
+        const i16=floatToInt16(ds);
+        const bytes=new Uint8Array(i16.buffer);
+        const b64=btoa(String.fromCharCode(...bytes));
+        vWs.send(JSON.stringify({event:'media',media:{payload:b64}}));
+      };
+      src.connect(vProc);vProc.connect(vCtx.destination);
+    };
+    vWs.onmessage=evt=>{
+      const msg=JSON.parse(evt.data);
+      if(msg.event==='media'&&msg.media&&msg.media.payload)playWav(msg.media.payload);
+    };
+    vWs.onerror=()=>{vStatus('Connection error','err');voiceHangup();};
+    vWs.onclose=()=>{if(vConnected){vStatus('Disconnected','');voiceHangup();}};
+  }catch(e){vStatus('Mic error: '+e.message,'err');document.getElementById('v-btn').disabled=false;}
+}
+function voiceHangup(){
+  vConnected=false;
+  if(vWs){try{vWs.close();}catch(e){}vWs=null;}
+  if(vProc){vProc.disconnect();vProc=null;}
+  if(vStream){vStream.getTracks().forEach(t=>t.stop());vStream=null;}
+  if(vCtx){vCtx.close();vCtx=null;}
+  clearInterval(vTimer);
+  document.getElementById('v-btn').className='btn btn-green';
+  document.getElementById('v-btn').innerHTML='&#128222; Start Call';
+  document.getElementById('v-btn').disabled=false;
+  document.getElementById('timer').textContent='';
+  vStatus('Call ended','');
+}
+function vStartTimer(){vStart=Date.now();vTimer=setInterval(()=>{const s=Math.floor((Date.now()-vStart)/1000);document.getElementById('timer').textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;},1000);}
+
+// ==================== OUTBOUND (TWILIO) ====================
+async function outboundCall(){
+  const btn=document.getElementById('o-btn');
+  const st=document.getElementById('o-status');
+  const res=document.getElementById('o-result');
+  btn.disabled=true;st.textContent='Calling...';st.className='status busy';res.style.display='none';
+  try{
+    const r=await fetch('/api/v1/calls/call-me',{method:'POST'});
+    const d=await r.json();
+    if(d.error){st.textContent='Error: '+d.error;st.className='status err';btn.disabled=false;return;}
+    st.textContent='Call initiated! Phone ringing...';st.className='status ok';
+    res.style.display='block';
+    res.innerHTML=`<strong>Call SID:</strong> ${d.call_sid}<br><strong>Status:</strong> ${d.status}<br><br>Answer your phone at <strong>+8801782737074</strong>`;
+  }catch(e){st.textContent='Error: '+e.message;st.className='status err';}
+  btn.disabled=false;
+}
+
+// ==================== TEXT CHAT (FREE) ====================
+let tSession='text-'+Date.now();
+async function textSend(){
+  const input=document.getElementById('t-input');
+  const msg=input.value.trim();if(!msg)return;
+  input.value='';
+  tAddTurn('user',msg);
+  tAddTurn('system','...');
+  try{
+    const r=await fetch(`/api/v1/chat?message=${encodeURIComponent(msg)}&call_sid=${tSession}`,{method:'POST'});
+    const d=await r.json();
+    // Remove "thinking" turn
+    const t=document.getElementById('t-transcript');
+    if(t.lastChild&&t.lastChild.querySelector('.role.system'))t.removeChild(t.lastChild);
+    if(d.error){tAddTurn('system','Error: '+d.error);}
+    else{tAddTurn('assistant',d.reply);}
+  }catch(e){
+    const t=document.getElementById('t-transcript');
+    if(t.lastChild&&t.lastChild.querySelector('.role.system'))t.removeChild(t.lastChild);
+    tAddTurn('system','Error: '+e.message);
+  }
+}
+function tAddTurn(role,text){
+  const d=document.createElement('div');d.className='turn';
+  d.innerHTML=`<div class="role ${role}">${role}</div><div class="text">${text}</div>`;
+  const el=document.getElementById('t-transcript');el.appendChild(d);el.scrollTop=el.scrollHeight;
+}
+
+// ==================== AUDIO UTILS ====================
+function downsample(buf,inRate,outRate){
+  if(inRate===outRate)return buf;
+  const r=inRate/outRate,nl=Math.round(buf.length/r),res=new Float32Array(nl);
+  for(let i=0;i<nl;i++){const p=i*r,ix=Math.floor(p),f=p-ix;res[i]=buf[ix]*(1-f)+(buf[Math.min(ix+1,buf.length-1)]||0)*f;}
+  return res;
+}
+function floatToInt16(f){const i=new Int16Array(f.length);for(let j=0;j<f.length;j++){const s=Math.max(-1,Math.min(1,f[j]));i[j]=s<0?s*0x8000:s*0x7FFF;}return i;}
+function playWav(b64){
+  try{
+    const raw=atob(b64);const bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:22050});
+    const int16=new Int16Array(bytes.buffer);
+    const buf=ctx.createBuffer(1,int16.length,22050);
+    const data=buf.getChannelData(0);
+    for(let i=0;i<int16.length;i++)data[i]=int16[i]/(int16[i]<0?0x8000:0x7FFF);
+    const src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);src.start();
+  }catch(e){console.warn('Audio error:',e);}
+}
+</script>
+</body>
+</html>

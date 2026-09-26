@@ -33,27 +33,66 @@ def remove_call_handler(call_sid: str) -> None:
 @app.post("/incoming")
 async def handle_incoming_call() -> dict[str, str]:
     """Twilio webhook for incoming calls. Returns TwiML to start a Media Stream."""
+    host = settings.telephony.twilio.account_sid
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=f"wss://{settings.telephony.twilio.account_sid}.twil.io/media-stream")
+    connect.stream(url=f"wss://{host}.twil.io/media-stream")
+    response.append(connect)
+    return {"Twiml": str(response)}
+
+
+@app.post("/outbound-twiml")
+async def outbound_twiml() -> dict[str, str]:
+    """TwiML endpoint for outbound calls — returns Stream connect."""
+    host = settings.telephony.twilio.account_sid
+    response = VoiceResponse()
+    connect = Connect()
+    connect.stream(url=f"wss://{host}.twil.io/media-stream")
     response.append(connect)
     return {"Twiml": str(response)}
 
 
 @app.post("/outbound")
-async def initiate_outbound_call(to_number: str) -> dict[str, str]:
+async def initiate_outbound_call(to_number: str = "") -> dict[str, str]:
     """Initiate an outbound call via Twilio REST API."""
     import httpx
+
+    if not to_number:
+        return {"error": "to_number is required"}
 
     sid = settings.telephony.twilio.account_sid
     token = settings.telephony.twilio.auth_token
     from_number = settings.telephony.twilio.phone_number
 
+    # Get the public URL from ngrok or use the Twilio account SID as host
+    import os
+    ngrok_url = os.environ.get("PUBLIC_URL", "")
+
+    if not ngrok_url:
+        # Try to get from ngrok API
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get("http://localhost:4040/api/tunnels")
+                if resp.status_code == 200:
+                    tunnels = resp.json().get("tunnels", [])
+                    for t in tunnels:
+                        if t.get("proto") == "https":
+                            ngrok_url = t["public_url"]
+                            break
+        except Exception:
+            pass
+
+    if not ngrok_url:
+        return {"error": "No public URL found. Start ngrok first: ngrok http 8000"}
+
+    twiml_url = f"{ngrok_url}/api/v1/telephony/outbound-twiml"
+
     url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"
     data = {
         "To": to_number,
         "From": from_number,
-        "Twiml": f"<Response><Connect><Stream url='wss://{sid}.twil.io/media-stream'/></Connect></Response>",
+        "Url": twiml_url,
+        "Method": "POST",
     }
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, data=data, auth=(sid, token))

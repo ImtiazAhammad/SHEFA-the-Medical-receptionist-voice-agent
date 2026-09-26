@@ -43,7 +43,7 @@ pipeline:
     sample_rate: 24000
   llm:
     provider: "qwen_local"  # openai | anthropic | qwen_local
-    model: "qwen3-coder-next"
+    model: "qwen2.5:7b"
     temperature: 0.3
     max_tokens: 512
     system_prompt_file: "configs/prompts/system.md"
