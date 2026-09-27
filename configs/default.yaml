@@ -138,7 +138,10 @@ monitoring:
     phi_masking: true
 
 escalation:
-  confidence_threshold: 0.7
+  # Gates the "sorry, could you repeat?" prompt. Low confidence means the
+  # agent may have misheard; it does not put the patient on hold for a human.
+  # Escalation is content-driven only (emergency keywords).
+  repeat_threshold: 0.5
   max_transfer_attempts: 3
   emergency_keywords:
     en: ["emergency", "chest pain", "can't breathe", "severe bleeding", "unconscious"]
@@ -146,3 +149,6 @@ escalation:
   transfer_greeting:
     en: "I'm transferring you to our receptionist now. Please hold."
     bn: "আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
+  repeat_prompt:
+    en: "Sorry, I didn't catch that clearly. Could you say that again?"
+    bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"

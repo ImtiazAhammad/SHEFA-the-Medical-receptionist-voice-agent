@@ -10,9 +10,8 @@ import logging
 import time
 
 from sefa.config.settings import settings
-from sefa.models.base import Language
 from sefa.models.registry import registry
-from sefa.pipeline.language_detector import needs_escalation
+from sefa.pipeline.language_detector import evaluate_transcript
 from sefa.session.manager import CallSession, SessionManager
 from sefa.tools.definitions import get_tool_definitions
 from sefa.tools.executor import execute_tool
@@ -115,7 +114,11 @@ class VoicePipeline:
                     session.language = detected_lang
                     logger.info("Language switched to %s for %s", detected_lang.value, call_sid)
 
-                if needs_escalation(stt_result.confidence, stt_result.text, session.language):
+                decision = evaluate_transcript(
+                    stt_result.text, session.language, stt_result.confidence
+                )
+
+                if decision.should_escalate:
                     escalation_msg = settings.escalation.transfer_greeting.get(
                         session.language.value,
                         settings.escalation.transfer_greeting.get("en", "Transferring you now."),
@@ -126,10 +129,27 @@ class VoicePipeline:
                         language=session.language.value,
                     )
                     await playback_queue.put(audio_result.audio_bytes)
-                    session.add_turn("assistant", escalation_msg, Language.BANGLA)
+                    session.add_turn("assistant", escalation_msg, session.language)
                     session.state = "escalated"
                     await self._session_manager.save(session)
                     break
+
+                if decision.needs_repeat:
+                    repeat_msg = settings.escalation.repeat_prompt.get(
+                        session.language.value,
+                        settings.escalation.repeat_prompt.get(
+                            "en", "Sorry, I didn't catch that. Could you repeat?"
+                        ),
+                    )
+                    tts = await registry.get_tts()
+                    repeat_audio = await tts.synthesize(
+                        repeat_msg,
+                        language=session.language.value,
+                    )
+                    await playback_queue.put(repeat_audio.audio_bytes)
+                    session.add_turn("assistant", repeat_msg, session.language)
+                    self._audio_buffers.setdefault(call_sid, [])
+                    continue
 
                 session.add_turn("user", stt_result.text, detected_lang)
                 messages = self._build_messages(session)
