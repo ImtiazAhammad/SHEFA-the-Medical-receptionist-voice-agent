@@ -138,6 +138,11 @@ monitoring:
     phi_masking: true
 
 escalation:
+  # E.164 numbers a transfer can actually dial. Empty means no human is
+  # reachable: the agent must not promise a patient a transfer it cannot make.
+  # The staffed on-call allow-list for the unmanned window is an open blocker.
+  on_call_numbers: []
+  hold_audio_url: ""
   # Gates the "sorry, could you repeat?" prompt. Low confidence means the
   # agent may have misheard; it does not put the patient on hold for a human.
   # Escalation is content-driven only (emergency keywords).

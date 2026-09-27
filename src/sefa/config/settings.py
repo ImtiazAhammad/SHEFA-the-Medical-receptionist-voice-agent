@@ -111,6 +111,8 @@ class SessionConfig(StrictModel):
 class EscalationConfig(StrictModel):
     repeat_threshold: float = 0.5
     max_transfer_attempts: int = 3
+    on_call_numbers: list[str] = Field(default_factory=list)
+    hold_audio_url: str = ""
     emergency_keywords: dict[str, list[str]] = Field(default_factory=dict)
     transfer_greeting: dict[str, str] = Field(default_factory=dict)
     repeat_prompt: dict[str, str] = Field(default_factory=dict)
