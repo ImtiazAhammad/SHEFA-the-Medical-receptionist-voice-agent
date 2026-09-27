@@ -47,6 +47,7 @@ class STTConfig(StrictModel):
 class TTSConfig(StrictModel):
     provider: str = "elevenlabs"
     model: str = "eleven_multilingual_v2"
+    voice_path: str = "models/piper/en_US-lessac-medium.onnx"
     voice_id: str = "pNInz6obpgDQGcFmaJgB"
     stability: float = 0.5
     similarity_boost: float = 0.75

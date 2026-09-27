@@ -9,6 +9,7 @@ import asyncio
 import logging
 import time
 
+from sefa.audio import AudioFrame
 from sefa.config.settings import settings
 from sefa.models.registry import registry
 from sefa.pipeline.language_detector import evaluate_transcript
@@ -53,7 +54,7 @@ class VoicePipeline:
         self,
         call_sid: str,
         audio_queue: asyncio.Queue[bytes],
-        playback_queue: asyncio.Queue[bytes],
+        playback_queue: asyncio.Queue[AudioFrame],
     ) -> None:
         """Process incoming audio from a call and stream TTS responses back."""
         session = await self._session_manager.get_or_create(call_sid)
@@ -68,7 +69,7 @@ class VoicePipeline:
             audio_result = await tts.synthesize(
                 greeting, language=session.language.value
             )
-            await playback_queue.put(audio_result.audio_bytes)
+            await playback_queue.put(AudioFrame.from_result(audio_result))
             session.add_turn("assistant", greeting)
             session.state = "active"
             await self._session_manager.save(session)
@@ -128,7 +129,7 @@ class VoicePipeline:
                         escalation_msg,
                         language=session.language.value,
                     )
-                    await playback_queue.put(audio_result.audio_bytes)
+                    await playback_queue.put(AudioFrame.from_result(audio_result))
                     session.add_turn("assistant", escalation_msg, session.language)
                     session.state = "escalated"
                     await self._session_manager.save(session)
@@ -146,7 +147,7 @@ class VoicePipeline:
                         repeat_msg,
                         language=session.language.value,
                     )
-                    await playback_queue.put(repeat_audio.audio_bytes)
+                    await playback_queue.put(AudioFrame.from_result(repeat_audio))
                     session.add_turn("assistant", repeat_msg, session.language)
                     self._audio_buffers.setdefault(call_sid, [])
                     continue
@@ -180,7 +181,7 @@ class VoicePipeline:
                     llm_result.text,
                     language=session.language.value,
                 )
-                await playback_queue.put(audio_result.audio_bytes)
+                await playback_queue.put(AudioFrame.from_result(audio_result))
                 session.add_turn("assistant", llm_result.text, llm_result.language)
                 await self._session_manager.save(session)
                 self._audio_buffers.setdefault(call_sid, [])

@@ -8,12 +8,15 @@ teardown that releases both the leg and the pipeline task.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import struct
 from typing import Any
 
 import httpx
 import pytest
 
+from sefa.audio import AudioFrame
 from sefa.config.settings import settings
 from sefa.telephony import twilio
 from sefa.telephony.control import control
@@ -212,6 +215,79 @@ def test_media_stream_stops_on_a_stop_event(monkeypatch):
     assert control.get("CA-stop") is None
 
 
+def test_playback_worker_converts_audio_to_the_socket_format(monkeypatch):
+    """TTS output is 24k; the media socket only accepts s16le 16k mono.
+
+    The playback worker is the single boundary every producer crosses, so the
+    conversion belongs here rather than in each of the four pipeline call
+    sites that push onto `playback_queue`.
+    """
+    sent: list[dict[str, Any]] = []
+    delivered = asyncio.Event()
+    twentyfour_k = struct.pack("<8h", 0, 1000, -1000, 2000, -2000, 0, 100, -100)
+
+    class RecordingWebSocket(_FakeWebSocket):
+        async def send_json(self, payload):
+            sent.append(payload)
+            delivered.set()
+
+    ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
+
+    class S24kPipeline:
+        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+            playback_queue.put_nowait(AudioFrame(twentyfour_k, rate=24000))
+
+        async def cleanup(self, call_sid):
+            return None
+
+    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", S24kPipeline)
+
+    async def _drive():
+        await asyncio.wait_for(
+            asyncio.create_task(twilio.media_stream_ws(ws, "CA-codec")), timeout=2
+        )
+
+    asyncio.run(_drive())
+
+    payload = base64.b64decode(sent[0]["media"]["payload"])
+    assert payload != twentyfour_k
+    assert len(payload) < len(twentyfour_k)
+    assert len(payload) % 2 == 0
+
+
+def test_playback_worker_skips_an_empty_frame(monkeypatch):
+    """An empty TTS result must not become a bogus media frame on the wire."""
+    sent: list[dict[str, Any]] = []
+    delivered = asyncio.Event()
+
+    class RecordingWebSocket(_FakeWebSocket):
+        async def send_json(self, payload):
+            sent.append(payload)
+            delivered.set()
+
+    ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
+
+    class EmptyThenRealPipeline:
+        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+            playback_queue.put_nowait(AudioFrame(b""))
+            playback_queue.put_nowait(AudioFrame(b"\x01\x02"))
+
+        async def cleanup(self, call_sid):
+            return None
+
+    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", EmptyThenRealPipeline)
+
+    async def _drive():
+        await asyncio.wait_for(
+            asyncio.create_task(twilio.media_stream_ws(ws, "CA-empty")), timeout=2
+        )
+
+    asyncio.run(_drive())
+
+    assert len(sent) == 1
+    assert base64.b64decode(sent[0]["media"]["payload"]) == b"\x01\x02"
+
+
 def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
     """Playback audio is base64-framed media, not a raw queue put."""
     sent: list[dict[str, Any]] = []
@@ -226,7 +302,7 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
 
     class IdlePipeline:
         async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(b"\x0a\x0b")
+            playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
 
         async def cleanup(self, call_sid):
             return None
@@ -249,21 +325,66 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
 
 def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
     """A dead socket must end the worker, not spin on a broken connection."""
+    attempts: list[int] = []
 
     class BrokenWebSocket(_FakeWebSocket):
         async def send_json(self, payload):
+            attempts.append(1)
             raise ConnectionResetError("socket gone")
 
-    class IdlePipeline:
+    class ChattyPipeline:
         async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(b"\x0a")
+            for _ in range(3):
+                playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
 
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", IdlePipeline)
+    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
 
-    asyncio.run(twilio.media_stream_ws(BrokenWebSocket(events=[{"event": "stop"}]), "CA-dead"))
+    ws = BrokenWebSocket(events=[{"event": "connected"}, {"event": "stop"}])
+
+    async def _drive():
+        await asyncio.wait_for(
+            asyncio.create_task(twilio.media_stream_ws(ws, "CA-dead")), timeout=2
+        )
+
+    asyncio.run(_drive())
+
+    assert len(attempts) == 1, "worker kept sending after the socket died"
+
+
+def test_playback_worker_propagates_cancellation(monkeypatch):
+    """A bare `except Exception` would swallow CancelledError and hang teardown.
+
+    The socket blocks mid-send; the task is cancelled while it is in flight, so
+    the `except Exception: break` path is not what handles it.
+    """
+    entered = asyncio.Event()
+
+    class BlockingWebSocket(_FakeWebSocket):
+        async def send_json(self, payload):
+            entered.set()
+            await asyncio.sleep(30)
+
+    class ChattyPipeline:
+        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+            playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
+
+        async def cleanup(self, call_sid):
+            return None
+
+    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
+
+    async def _drive():
+        ws = BlockingWebSocket(events=[{"event": "connected"}, {"event": "stop"}])
+        task = asyncio.create_task(twilio.media_stream_ws(ws, "CA-cancel"))
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_drive())
 
 
 def test_register_call_handler_round_trips(monkeypatch):

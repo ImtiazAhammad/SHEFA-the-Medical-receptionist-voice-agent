@@ -17,9 +17,14 @@ from sefa.telephony.control import CallLeg, control
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
+    from sefa.audio import AudioFrame
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="sefa Telephony")
+
+# Twilio's bidirectional media stream only accepts 8k or 16k s16le mono.
+MEDIA_STREAM_RATE = 16000
 
 _call_handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
 
@@ -165,14 +170,17 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
 
     pipeline = VoicePipeline()
     audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
-    playback_queue: asyncio.Queue[bytes] = asyncio.Queue()
+    playback_queue: asyncio.Queue[AudioFrame] = asyncio.Queue()
     control.register(TwilioCallLeg(call_sid))
 
     async def _playback_worker() -> None:
         while True:
-            audio_chunk = await playback_queue.get()
+            frame = await playback_queue.get()
             try:
-                encoded = base64.b64encode(audio_chunk).decode()
+                pcm = frame.to_s16le_16k_mono()
+                if not pcm:
+                    continue
+                encoded = base64.b64encode(pcm).decode()
                 await websocket.send_json({
                     "event": "media",
                     "streamSid": call_sid,

@@ -35,7 +35,10 @@ pipeline:
     streaming: true
   tts:
     provider: "piper"  # elevenlabs | openai | piper | vits
-    model: "eleven_multilingual_v2"
+    # Local Piper voice. Bangla is the pilot language and has no licensed
+    # voice yet (T5 blocker): the pilot runs English-only until one exists.
+    voice_path: "models/piper/en_US-lessac-medium.onnx"
+    model: "eleven_multilingual_v2"  # elevenlabs only, unused by piper
     voice_id: "pNInz6obpgDQGcFmaJgB"  # Adam - professional male
     stability: 0.5
     similarity_boost: 0.75

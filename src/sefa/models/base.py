@@ -40,10 +40,20 @@ class STTResult:
 
 @dataclass
 class TTSResult:
+    """Synthesized audio plus the format needed to interpret it.
+
+    `sample_rate` alone was not enough: an adapter returning stereo, 8-bit, or
+    WAV-wrapped bytes produced a result indistinguishable from clean mono
+    s16le, and nothing downstream could tell. `channels` and `sample_width` are
+    bytes-based to match `sefa.audio.AudioFrame`.
+    """
+
     audio_bytes: bytes
     sample_rate: int = 24000
     duration_ms: float = 0.0
     language: Language = Language.ENGLISH
+    channels: int = 1
+    sample_width: int = 2
 
 
 @dataclass
