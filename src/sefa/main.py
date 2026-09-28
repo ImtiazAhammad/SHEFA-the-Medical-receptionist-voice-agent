@@ -7,9 +7,10 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from sefa.auth import AuthStore, Principal, TokenError
 from sefa.config.settings import settings
 from sefa.session.manager import SessionManager
 from sefa.telephony.twilio import app as telephony_app
@@ -25,19 +26,197 @@ session_manager = SessionManager()
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# The permission each route requires, keyed by (method, path).
+#
+# This map lives in code rather than config on purpose: config can grant a
+# permission to a role, but it cannot un-protect a route. A route absent from
+# this map is refused (see `required_permission`), so adding a route means
+# adding its permission here as a deliberate act — `test_every_route_declares_
+# its_required_permission` fails until you do.
+ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
+    ("GET", "/health"): "sessions:read",
+    ("GET", "/"): "sessions:read",
+    ("GET", "/dashboard"): "sessions:read",
+    ("GET", "/test-call"): "calls:place",
+    ("GET", "/api/v1/sessions"): "sessions:read",
+    ("GET", "/api/v1/sessions/{call_sid}"): "sessions:read",
+    ("POST", "/api/v1/calls/outbound"): "calls:place",
+    ("POST", "/api/v1/calls/call-me"): "calls:place",
+    ("POST", "/api/v1/chat"): "chat:use",
+    ("GET", "/api/v1/config"): "config:read",
+    ("GET", "/api/v1/tools"): "config:read",
+}
 
-def create_app() -> FastAPI:
-    """Create and configure the main FastAPI application."""
+# Any telephony route, whatever the provider mounts. Matched by prefix so a new
+# webhook cannot escape authorization by living under a different path.
+TELEPHONY_PREFIX = "/api/v1/telephony"
+TELEPHONY_PERMISSION = "calls:place"
+
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def required_permission(app: FastAPI, method: str, path: str) -> str | None:
+    """The permission a route needs, or None if it is not protected.
+
+    None means "refuse", not "allow": an undeclared route is a route nobody has
+    thought about, and failing open on it is how a debug endpoint ends up serving
+    transcripts.
+
+    `path` is the concrete request path; the permission map is keyed on the
+    route *template* (Starlette uses `/api/v1/sessions/{call_sid}`, not the
+    concrete `/api/v1/sessions/SID-1`), so the route's compiled regex is what
+    matches here.
+    """
+    if path.startswith(TELEPHONY_PREFIX):
+        return TELEPHONY_PERMISSION
+    if path == "/static" or path.startswith("/static/"):
+        return "sessions:read"
+    if path.startswith(("/docs", "/redoc", "/openapi")):
+        return "config:read"
+
+    for route in app.routes:
+        template = getattr(route, "path", None)
+        pattern = getattr(route, "path_regex", None)
+        methods = getattr(route, "methods", None) or ()
+        if not template or not pattern:
+            continue
+        if method not in methods:
+            continue
+        if pattern.match(path):
+            return ROUTE_PERMISSIONS.get((method, template))
+    return None
+
+
+def build_auth_store() -> AuthStore:
+    """Build the store from config, refusing to start on a broken record.
+
+    A principal whose hash will not parse is a config fault. Letting it through
+    would leave an operator staring at a 401 that looks exactly like a wrong
+    password, with nothing in the logs to say otherwise.
+    """
+    auth = settings.auth
+    for principal in auth.principals:
+        # Parse eagerly so a bad record raises here, not on the first request.
+        from sefa.auth import _parse_record
+
+        try:
+            _parse_record(principal.token_hash)
+        except TokenError as error:
+            raise TokenError(
+                f"auth principal {principal.name!r} has an unusable token_hash: {error}"
+            ) from error
+    return AuthStore(
+        [
+            (principal.name, principal.role, principal.token_hash)
+            for principal in auth.principals
+        ],
+        dict(auth.roles),
+    )
+
+
+def _bearer_token(header: str | None) -> str | None:
+    """Pull a bearer token out of an Authorization header, or None."""
+    if not header:
+        return None
+    scheme, _, credentials = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    token = credentials.strip()
+    return token or None
+
+
+def _install_auth(app: FastAPI, store: AuthStore) -> None:
+    """Require a valid token and a sufficient role on every request.
+
+    Implemented as middleware rather than per-route dependencies on purpose: a
+    dependency is opt-in, and a route added without one is public. Middleware has
+    no such hole.
+    """
+
+    @app.middleware("http")
+    async def enforce_auth(request, call_next):
+        permission = required_permission(
+            app, request.method, request.url.path
+        )
+
+        if permission is None:
+            # Undeclared route: refuse rather than guess.
+            return JSONResponse(
+                status_code=403,
+                content={"error": "This route is not authorized."},
+            )
+
+        principal: Principal | None = store.authenticate(
+            _bearer_token(request.headers.get("Authorization"))
+        )
+        if principal is None:
+            # One body for "no token" and "wrong token" — a difference between
+            # them is an oracle for guessing valid credentials.
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication required."},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not store.authorizes(principal, permission):
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Insufficient role for this resource."},
+            )
+
+        request.state.principal = principal
+        return await call_next(request)
+
+    if not store.is_configured:
+        logger.error(
+            "no auth principals configured; every request will be refused. "
+            "Run `sefa token mint` and add the result to auth.principals."
+        )
+
+
+def _telephony_router_allowed() -> bool:
+    """The telephony router is dev-only and loopback-only.
+
+    Mounting live telephony routes on a routable interface is the plan's
+    explicit red line: the webhooks take unauthenticated POSTs, so a public
+    mount is an unauthenticated way to inject calls and read transcripts.
+    """
+    if settings.telephony.provider != "twilio":
+        return False
+    if not settings.auth.dev_mode:
+        return False
+    return settings.auth.bind_host in LOOPBACK_HOSTS
+
+
+
+def create_app(auth_store: AuthStore | None = None) -> FastAPI:
+    """Create and configure the main FastAPI application.
+
+    `auth_store` is injectable so tests can supply their own principals instead
+    of depending on whatever the config happens to contain.
+    """
+    store = auth_store if auth_store is not None else build_auth_store()
     app = FastAPI(
         title="sefa Receptionist",
         version="0.1.0",
         description="HIPAA-compliant bilingual voice AI medical receptionist",
     )
 
-    app.include_router(telephony_app.router, prefix="/api/v1/telephony", tags=["telephony"])
+    _install_auth(app, store)
+
+    if _telephony_router_allowed():
+        app.include_router(
+            telephony_app.router, prefix=TELEPHONY_PREFIX, tags=["telephony"]
+        )
+    else:
+        logger.warning(
+            "telephony router not mounted: requires provider=twilio, "
+            "auth.dev_mode=true, and a loopback bind_host"
+        )
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -188,7 +367,9 @@ app = create_app()
 if __name__ == "__main__":
     uvicorn.run(
         "sefa.main:app",
-        host="0.0.0.0",
+        # Loopback by default: a TTS/HIPAA box reachable on every interface is
+        # the failure this whole task exists to prevent.
+        host=settings.auth.bind_host,
         port=8000,
         reload=settings.monitoring.logging.level == "DEBUG",
     )

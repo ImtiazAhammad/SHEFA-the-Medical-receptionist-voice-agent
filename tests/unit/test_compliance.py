@@ -1,6 +1,14 @@
 ﻿"""Tests for compliance utilities."""
 
-from sefa.utils.compliance import hash_identifier, mask_phi
+from sefa.auth import AuthStore, hash_token
+from sefa.utils.compliance import (
+    audit_log,
+    hash_identifier,
+    mask_phi,
+    validate_phi_access,
+)
+
+_TOKEN = "test-clinician-token-abcdefghijkl"
 
 
 def test_mask_phone():
@@ -32,3 +40,13 @@ def test_hash_identifier():
     assert len(h) == 16
     assert hash_identifier("PAT-001") == h
     assert hash_identifier("PAT-002") != h
+
+
+def test_audit_log_does_not_duplicate_the_event_field():
+    """The event is passed once; the old code raised a TypeError on itself."""
+    audit_log("audit_test_event", patient_id="PAT-1", user="clinician")
+
+
+def test_validate_phi_access_unknown_action_denies_with_true_verdict():
+    store = AuthStore([("c", "clinician", hash_token(_TOKEN))], {"clinician": ["sessions:read"]})
+    assert validate_phi_access("c", "PAT-1", "delete", store) is False

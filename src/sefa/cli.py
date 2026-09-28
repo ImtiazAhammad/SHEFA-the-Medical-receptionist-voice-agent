@@ -55,6 +55,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check that the configured adapters actually load")
 
+    token = sub.add_parser(
+        "token", help="mint an API bearer token for a configured role"
+    )
+    token.add_argument(
+        "--name", required=True, help="principal name, e.g. front-desk"
+    )
+    token.add_argument(
+        "--role", required=True, help="a role declared in auth.roles"
+    )
+
     return parser
 
 
@@ -120,6 +130,34 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
     return "\n".join(lines), ok
 
 
+def configured_roles() -> set[str]:
+    """The role names declared in the auth config.
+
+    Resolved through `importlib` because `sefa.config.__init__` rebinds the
+    package attribute `settings` to the AppConfig instance; importing the module
+    and reading its attribute is the one access that is immune to that rebinding.
+    """
+    import importlib
+
+    settings_module = importlib.import_module("sefa.config.settings")
+    return set(settings_module.settings.auth.roles)
+
+
+def token_mint(name: str, role: str) -> tuple[str, str]:
+    """Mint a token and its PBKDF2 record. Returns (token, record).
+
+    The record is what goes in `auth.principals[].token_hash`; the token is
+    printed to the operator once and is never stored anywhere by this tool. The
+    printed token must be the one the record verifies — minting one token and
+    hashing a different one would ship an operator a credential that does not
+    work.
+    """
+    from sefa.auth import generate_token, hash_token
+
+    token = generate_token()
+    return token, hash_token(token)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -140,6 +178,25 @@ def main(argv: list[str] | None = None) -> int:
         text, ok = doctor_report()
         print(text)
         return 0 if ok else 1
+
+    if args.command == "token":
+        if args.role not in configured_roles():
+            print(
+                f"{args.role!r} is not a configured role (auth.roles). "
+                f"Configured: {sorted(configured_roles()) or 'none'}",
+                file=sys.stderr,
+            )
+            return 2
+        token, record = token_mint(args.name, args.role)
+        print(
+            f"token: {token}\n"
+            f"This is the only time the token is shown. It is not stored anywhere.\n"
+            f"\nAdd to auth.principals in your config:\n"
+            f"  - name: {args.name}\n"
+            f"    role: {args.role}\n"
+            f"    token_hash: {record}"
+        )
+        return 0
 
     parser.print_help()
     return 2

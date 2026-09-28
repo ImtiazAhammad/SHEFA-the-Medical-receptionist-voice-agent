@@ -119,6 +119,33 @@ class EscalationConfig(StrictModel):
     repeat_prompt: dict[str, str] = Field(default_factory=dict)
 
 
+class AuthPrincipalConfig(StrictModel):
+    """One bearer-token holder.
+
+    `token_hash` is a `pbkdf2_sha256$iterations$salt$digest` record, never the
+    token itself: a config file is copied, backed up, and committed by accident,
+    and a plaintext token in it is a live credential for whoever reads it.
+    """
+
+    name: str
+    role: str
+    token_hash: str
+
+
+class AuthConfig(StrictModel):
+    """Authentication and exposure controls for the whole service.
+
+    `bind_host` defaults to loopback and `dev_mode` to false, so the safe
+    posture is what you get by doing nothing. Both must be actively loosened,
+    which means the decision is visible in the config diff.
+    """
+
+    dev_mode: bool = False
+    bind_host: str = "127.0.0.1"
+    principals: list[AuthPrincipalConfig] = Field(default_factory=list)
+    roles: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class ComplianceConfig(StrictModel):
     hipaa_enabled: bool = True
     encryption_algorithm: str = "AES-256-GCM"
@@ -270,6 +297,7 @@ class AppConfig(StrictModel):
     session: SessionConfig = Field(default_factory=SessionConfig)
     escalation: EscalationConfig = Field(default_factory=EscalationConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)

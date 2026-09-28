@@ -160,3 +160,24 @@ escalation:
   repeat_prompt:
     en: "Sorry, I didn't catch that clearly. Could you say that again?"
     bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"
+
+# T7: authentication and authorization for every route. Nothing here is a
+# working secret — `principals[].token_hash` is a PBKDF2 record, and the
+# plaintext token is shown once by `sefa token mint`. With no principal
+# configured the API refuses every request rather than serving unauthenticated.
+auth:
+  dev_mode: false            # must be actively set true; gates the Twilio router
+  bind_host: "127.0.0.1"      # loopback by default, not 0.0.0.0
+  roles:
+    viewer:
+      - "sessions:read"
+    clinician:
+      - "sessions:read"
+      - "calls:place"
+      - "chat:use"
+    admin:
+      - "sessions:read"
+      - "calls:place"
+      - "chat:use"
+      - "config:read"
+  principals: []             # e.g. [{name: front-desk, role: clinician, token_hash: "pbkdf2_sha256$..."}]

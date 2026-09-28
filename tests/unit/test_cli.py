@@ -352,6 +352,84 @@ def _returns(value):
     return create_tts
 
 
+class TestTokenCommand:
+    """`sefa token` is how an operator onboard a principal without touching code.
+
+    T7 removed the fake `.env` keys, so a token has to come from somewhere safe;
+    from the CLI it is printed once and stored as a PBKDF2 record, never as the
+    token itself.
+    """
+
+    def test_token_is_a_known_command(self, capsys):
+        assert cli.main(["token", "--help"]) == 0
+
+    def test_minting_requires_a_name(self, capsys):
+        assert cli.main(["token", "--role", "clinician"]) != 0
+        assert "name" in (capsys.readouterr().err or capsys.readouterr().out).lower()
+
+    def test_minting_requires_a_role(self, capsys):
+        assert cli.main(["token", "--name", "front-desk"]) != 0
+
+    def test_an_unknown_role_is_refused(self, capsys, monkeypatch):
+        self._patch_roles(monkeypatch, {"clinician": ["calls:place"]})
+
+        code = cli.main(["token", "--name", "front-desk", "--role", "admin"])
+
+        assert code != 0
+        assert "not a configured role" in capsys.readouterr().err
+
+    def test_mint_prints_a_token_and_a_paste_ready_record(self, capsys, monkeypatch):
+        self._patch_roles(
+            monkeypatch, {"clinician": ["sessions:read", "calls:place", "chat:use"]}
+        )
+        monkeypatch.setattr("sefa.auth.generate_token", lambda *_: "s" * 40)
+
+        code = cli.main(["token", "--name", "front-desk", "--role", "clinician"])
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "s" * 40 in out
+        assert "front-desk" in out
+        assert "clinician" in out
+
+    def test_the_record_holds_a_hash_that_verifies(self, monkeypatch):
+        """The printed token must actually work against the printed record.
+
+        Minting a token and hashing a different one would hand the operator a
+        credential that fails on the first request.
+        """
+        from sefa.auth import verify_token
+
+        token, record = cli.token_mint("front-desk", "clinician")
+
+        assert verify_token(token, record)
+        assert len(token) >= 24
+
+    def test_token_mint_hashes_the_token_not_stored_plaintext(self, monkeypatch):
+        """The record on disk must never contain the token that has to stay secret."""
+        minted = cli.token_mint("front-desk", "clinician")
+        assert len(minted) == 2
+        token, record = minted
+        assert token not in record
+        assert record.startswith("pbkdf2_sha256$")
+
+    def test_minting_a_role_not_in_settings_fails(self, monkeypatch):
+        self._patch_roles(monkeypatch, {})
+
+        code = cli.main(["token", "--name", "front-desk", "--role", "admin"])
+
+        assert code != 0
+
+    @staticmethod
+    def _patch_roles(monkeypatch, roles: dict) -> None:
+        import importlib
+
+        module = importlib.import_module("sefa.config.settings")
+        monkeypatch.setattr(
+            module, "settings", SimpleNamespace(auth=SimpleNamespace(roles=roles))
+        )
+
+
 class TestModuleEntryPoint:
     """`python -m sefa.cli` is how the bench gets run on a target box."""
 
