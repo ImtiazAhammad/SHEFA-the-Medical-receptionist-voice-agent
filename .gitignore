@@ -18,5 +18,10 @@ htmlcov/
 .opencode/
 .superpowers/
 
-# Model weights (Piper/VITS .onnx/.pt) — fetched by `sefa doctor`, never committed
-models/
+# Model weights (Piper/VITS .onnx/.pt) — fetched by `sefa doctor`, never committed.
+# Anchored to the repo root: unanchored `models/` also swallows src/sefa/models/,
+# so a brand-new adapter file would be silently ignored instead of staged.
+/models/
+
+# Generated knowledge graph (rebuild with `graphify update .`) — derived, not source
+graphify-out/

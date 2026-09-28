@@ -1,64 +1,42 @@
-﻿"""Piper TTS adapter for low-latency local synthesis.
+﻿"""Piper TTS adapter with a persistent voice session and sentence streaming.
 
-Piper writes a RIFF/WAVE container by default, and the media-stream handler
-base64-encodes whatever this adapter returns straight onto the carrier socket,
-which expects raw PCM. Returning the file verbatim put a 44-byte header in
-front of every reply, audible as a click, so the header is parsed off and the
-real rate/channel count is reported rather than asserted as a constant.
+The adapter used to shell out to a `piper` subprocess per utterance, so the
+voice was reloaded from disk on every sentence — the model load is the cold
+start, and it was being paid per reply. `piper.PiperVoice` loads the model once
+and `synthesize` yields one chunk per sentence, so the same loaded voice serves
+both `synthesize` and `synthesize_stream`.
+
+Cold start is measured and reported separately from warm latency: folding a
+0.9s model load into the p95 of an interactive call would hide it, not fix it.
 """
 
 from __future__ import annotations
 
 import asyncio
-import tempfile
-import wave
-from io import BytesIO
-from typing import TYPE_CHECKING
+import contextlib
+import threading
+import time
+from typing import TYPE_CHECKING, Any
 
-from sefa.audio import pcm_data_offset, strip_wav_header
+from piper import PiperVoice
+
 from sefa.models.base import BaseTTS, Language, TTSResult
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterable
+
+    from sefa.audio import AudioFrame
 
 
-def _wav_format(data: bytes) -> tuple[int, int, int] | None:
-    """(rate, channels, sample_width) from a canonical WAV header, else None."""
-    if pcm_data_offset(data) is None:
-        return None
-    try:
-        with wave.open(BytesIO(data), "rb") as handle:
-            return handle.getframerate(), handle.getnchannels(), handle.getsampwidth()
-    except (wave.Error, EOFError):
-        return None
+def _offer(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, item: Any) -> None:
+    """Hand an item from a worker thread to the event loop's queue.
 
-
-def _unwrap_stream_prefix(buffer: bytearray) -> tuple[bool, bytes]:
-    """Decide and strip a leading WAV header from a growing buffer.
-
-    Returns (resolved, pcm). `resolved` is False while more bytes are needed,
-    which is the normal case: a socket delivers 4 KiB chunks and a 44-byte
-    header can straddle two of them. Deciding on the first chunk alone
-    misreads a split header as headerless PCM and ships the RIFF bytes to the
-    caller.
+    `asyncio.Queue` is not thread-safe, and `call_soon_threadsafe` raises once
+    the loop is closed. A barge-in can close the stream while the thread is
+    still finishing a sentence, so a late offer is expected, not exceptional.
     """
-    if not buffer:
-        return True, b""
-
-    if len(buffer) < 4:
-        return False, b""
-
-    if not bytes(buffer[:4]).startswith(b"RIFF"):
-        return True, bytes(buffer)
-
-    if len(buffer) < 12 or bytes(buffer[8:12]) != b"WAVE":
-        return False, b""
-
-    offset = pcm_data_offset(bytes(buffer))
-    if offset is None:
-        return False, b""
-
-    return True, bytes(buffer[offset:])
+    with contextlib.suppress(RuntimeError):
+        loop.call_soon_threadsafe(queue.put_nowait, item)
 
 
 class PiperTTS(BaseTTS):
@@ -69,6 +47,36 @@ class PiperTTS(BaseTTS):
     ):
         self.model_path = model_path
         self.sample_rate = sample_rate
+        self._voice: PiperVoice | None = None
+        self._cold_start_seconds: float | None = None
+        self._load_lock = asyncio.Lock()
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._voice is not None
+
+    @property
+    def cold_start_seconds(self) -> float | None:
+        """Seconds spent loading the voice, recorded once on first use."""
+        return self._cold_start_seconds
+
+    async def _loaded_voice(self) -> PiperVoice:
+        """Load the voice off the event loop, at most once even under a race.
+
+        The load is ~0.9s of synchronous disk and graph setup. Inline it would
+        freeze the call for a second, and two coroutines racing the first call
+        would each allocate their own copy of the model.
+        """
+        async with self._load_lock:
+            if self._voice is None:
+                self._voice = await asyncio.to_thread(self._load_voice)
+            return self._voice
+
+    def _load_voice(self) -> PiperVoice:
+        started = time.perf_counter()
+        voice = PiperVoice.load(self.model_path)
+        self._cold_start_seconds = time.perf_counter() - started
+        return voice
 
     def _resolve_language(self, language: str) -> Language:
         try:
@@ -76,81 +84,102 @@ class PiperTTS(BaseTTS):
         except ValueError:
             return Language.ENGLISH
 
-    def _build_result(self, audio: bytes, language: str) -> TTSResult:
-        pcm = strip_wav_header(audio)
-        rate, channels, width = _wav_format(audio) or (self.sample_rate, 1, 2)
+    def _frame_from_chunk(self, chunk: Any) -> AudioFrame:
+        from sefa.audio import AudioFrame
 
-        bytes_per_second = rate * width * channels
-        duration_ms = (len(pcm) / bytes_per_second * 1000.0) if bytes_per_second else 0.0
+        return AudioFrame(
+            data=bytes(chunk.audio_int16_bytes),
+            rate=chunk.sample_rate,
+            width=chunk.sample_width,
+            channels=chunk.sample_channels,
+        )
 
+    def _result_from_frames(
+        self, frames: Iterable[AudioFrame], language: str
+    ) -> TTSResult:
+        frames = list(frames)
+        if not frames:
+            return TTSResult(
+                audio_bytes=b"",
+                sample_rate=self.sample_rate,
+                language=self._resolve_language(language),
+            )
+
+        first = frames[0]
+        pcm = b"".join(frame.data for frame in frames)
+        bytes_per_second = first.rate * first.width * first.channels
         return TTSResult(
             audio_bytes=pcm,
-            sample_rate=rate,
-            duration_ms=duration_ms,
+            sample_rate=first.rate,
+            duration_ms=(len(pcm) / bytes_per_second * 1000.0) if bytes_per_second else 0.0,
             language=self._resolve_language(language),
-            channels=channels,
-            sample_width=width,
+            channels=first.channels,
+            sample_width=first.width,
         )
 
     async def synthesize(self, text: str, language: str = "en") -> TTSResult:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-            proc = await asyncio.create_subprocess_exec(
-                "piper",
-                "--model",
-                self.model_path,
-                "--output_file",
-                tmp.name,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await proc.communicate(input=text.encode("utf-8"))
-            if proc.returncode != 0:
-                raise RuntimeError(f"Piper TTS failed: {stderr.decode()}")
-
-            audio_bytes = tmp.read()
-
-        return self._build_result(audio_bytes, language)
+        voice = await self._loaded_voice()
+        return await asyncio.to_thread(
+            self._result_from_frames,
+            (self._frame_from_chunk(chunk) for chunk in voice.synthesize(text)),
+            language,
+        )
 
     async def synthesize_stream(
         self, text: str, language: str = "en"
-    ) -> AsyncIterator[bytes]:
-        proc = await asyncio.create_subprocess_exec(
-            "piper",
-            "--model",
-            self.model_path,
-            "--output-raw",
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+    ) -> AsyncIterator[AudioFrame]:
+        """Yield one frame per sentence so playback can start early.
+
+        `PiperVoice.synthesize` is a synchronous generator: advancing it does
+        onnxruntime inference and takes tens of milliseconds per sentence. Pulled
+        straight from this coroutine it would hold the event loop for the whole
+        utterance, starving the Twilio media socket, the STT stream, and the
+        playback worker — the audio being waited on cannot arrive while the loop
+        is frozen. So the generator is pumped by a worker thread that hands
+        frames across, and the loop stays free to run the call around it.
+
+        Barge-in still stops promptly: closing this generator sets `stop`, and the
+        thread abandons the utterance at the next sentence boundary rather than
+        synthesizing audio nobody will hear.
+        """
+        if not text.strip():
+            return
+
+        voice = await self._loaded_voice()
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        stop = threading.Event()
+
+        def pump() -> None:
+            try:
+                for chunk in voice.synthesize(text):
+                    if stop.is_set():
+                        return
+                    frame = self._frame_from_chunk(chunk)
+                    if not frame.is_empty:
+                        _offer(loop, queue, frame)
+            except BaseException as error:  # noqa: BLE001 - forwarded to the loop
+                # A bare `except Exception` would let a BaseException out the
+                # bottom with no terminator queued, and the consumer would wait
+                # on an empty queue forever. Forward it and let the caller see
+                # why synthesis died.
+                _offer(loop, queue, error)
+            finally:
+                # Unconditional: whatever happened, the consumer is told to stop.
+                _offer(loop, queue, None)
+
+        worker = threading.Thread(target=pump, name="piper-tts", daemon=True)
+        worker.start()
         try:
-            proc.stdin.write(text.encode("utf-8"))  # type: ignore[union-attr]
-            await proc.stdin.drain()  # type: ignore[union-attr]
-            proc.stdin.close()  # type: ignore[union-attr]
-
-            prefix = bytearray()
-            resolved = False
-            async for chunk in proc.stdout.iter_chunked(4096):  # type: ignore[union-attr]
-                if resolved:
-                    if chunk:
-                        yield chunk
-                    continue
-                prefix.extend(chunk)
-                resolved, pcm = _unwrap_stream_prefix(prefix)
-                if resolved:
-                    prefix = bytearray()
-                    if pcm:
-                        yield pcm
-
-            await proc.wait()
-            if proc.returncode != 0:
-                stderr = await proc.stderr.read()  # type: ignore[union-attr]
-                raise RuntimeError(f"Piper TTS failed: {stderr.decode()}")
-        except GeneratorExit:
-            # Barge-in or hangup mid-sentence: don't leave a piper process alive.
-            proc.kill()
-            raise
+            while True:
+                item = await queue.get()
+                if item is None:
+                    return
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
+        finally:
+            stop.set()
 
     async def close(self) -> None:
-        pass
+        self._voice = None

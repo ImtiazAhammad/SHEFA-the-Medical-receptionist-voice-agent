@@ -8,8 +8,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import TYPE_CHECKING, Any
 
-from sefa.audio import AudioFrame
+if TYPE_CHECKING:
+    from sefa.audio import AudioFrame
+
 from sefa.config.settings import settings
 from sefa.models.registry import registry
 from sefa.pipeline.language_detector import evaluate_transcript
@@ -42,6 +45,25 @@ SYSTEM_PROMPT_TEMPLATE = (
 )
 
 
+async def speak_to(
+    tts: Any,
+    text: str,
+    language: str,
+    playback_queue: asyncio.Queue[AudioFrame],
+) -> None:
+    """Stream a reply into `playback_queue` one sentence at a time.
+
+    `synthesize` builds the whole utterance before returning, so a push after it
+    leaves the patient hearing nothing for the full synthesis latency. Piper
+    yields one chunk per sentence, so the first audio moves while the rest is
+    still being generated. A barge-in during a long reply therefore stops
+    synthesis instead of finishing audio nobody will hear.
+    """
+    async for frame in tts.synthesize_stream(text, language=language):
+        if not frame.is_empty:
+            await playback_queue.put(frame)
+
+
 class VoicePipeline:
     """Real-time voice conversation pipeline."""
 
@@ -66,10 +88,7 @@ class VoicePipeline:
                 greetings.get("en", ""),
             )
             tts = await registry.get_tts()
-            audio_result = await tts.synthesize(
-                greeting, language=session.language.value
-            )
-            await playback_queue.put(AudioFrame.from_result(audio_result))
+            await speak_to(tts, greeting, session.language.value, playback_queue)
             session.add_turn("assistant", greeting)
             session.state = "active"
             await self._session_manager.save(session)
@@ -125,11 +144,7 @@ class VoicePipeline:
                         settings.escalation.transfer_greeting.get("en", "Transferring you now."),
                     )
                     tts = await registry.get_tts()
-                    audio_result = await tts.synthesize(
-                        escalation_msg,
-                        language=session.language.value,
-                    )
-                    await playback_queue.put(AudioFrame.from_result(audio_result))
+                    await speak_to(tts, escalation_msg, session.language.value, playback_queue)
                     session.add_turn("assistant", escalation_msg, session.language)
                     session.state = "escalated"
                     await self._session_manager.save(session)
@@ -143,11 +158,7 @@ class VoicePipeline:
                         ),
                     )
                     tts = await registry.get_tts()
-                    repeat_audio = await tts.synthesize(
-                        repeat_msg,
-                        language=session.language.value,
-                    )
-                    await playback_queue.put(AudioFrame.from_result(repeat_audio))
+                    await speak_to(tts, repeat_msg, session.language.value, playback_queue)
                     session.add_turn("assistant", repeat_msg, session.language)
                     self._audio_buffers.setdefault(call_sid, [])
                     continue
@@ -177,11 +188,7 @@ class VoicePipeline:
                     llm_result = await llm.generate(messages, tools=tools)
 
                 tts = await registry.get_tts()
-                audio_result = await tts.synthesize(
-                    llm_result.text,
-                    language=session.language.value,
-                )
-                await playback_queue.put(AudioFrame.from_result(audio_result))
+                await speak_to(tts, llm_result.text, session.language.value, playback_queue)
                 session.add_turn("assistant", llm_result.text, llm_result.language)
                 await self._session_manager.save(session)
                 self._audio_buffers.setdefault(call_sid, [])

@@ -7,10 +7,14 @@ these base types, enabling config-driven provider swaps with zero code changes.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from sefa.audio import AudioFrame
 
 
 class ModelProvider(StrEnum):
@@ -99,8 +103,16 @@ class BaseTTS(ABC):
         ...
 
     @abstractmethod
-    async def synthesize_stream(self, text: str, language: str = "en"):
-        """Yield audio chunks for streaming playback."""
+    async def synthesize_stream(
+        self, text: str, language: str = "en"
+    ) -> AsyncIterator[AudioFrame]:
+        """Yield raw audio frames as they are produced, for progressive playback.
+
+        `AudioFrame` is imported under `TYPE_CHECKING` because `sefa.audio`
+        imports `TTSResult` from this module; the annotation is deferred by
+        `from __future__ import annotations`, so the cycle never resolves at
+        runtime.
+        """
         ...
 
     @abstractmethod

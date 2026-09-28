@@ -239,3 +239,15 @@ class TestGoldenFixture:
         assert to_s16le_16k_mono(_wav(_pcm16(samples), rate=16000), rate=16000) == _pcm16(
             samples
         )
+
+
+class TestPcmDataOffsetWithoutAudio:
+    def test_returns_none_when_the_header_never_declares_data(self):
+        """No `data` chunk means no payload, and no offset to point at.
+
+        Reporting an offset anyway would hand the caller the middle of the
+        header as if it were PCM, and the result plays as noise.
+        """
+        from sefa.audio import pcm_data_offset
+
+        assert pcm_data_offset(b"RIFF\x00\x00\x00\x00WAVEfmt ") is None

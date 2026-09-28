@@ -51,7 +51,7 @@ local-tts = [
 ]
 
 [project.scripts]
-sefa = "sefa.main:app"
+sefa = "sefa.cli:main"
 
 [build-system]
 requires = ["hatchling"]
