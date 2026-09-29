@@ -6,7 +6,8 @@ from pathlib import Path
 
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -31,6 +32,94 @@ logger = structlog.get_logger("sefa")
 session_manager = SessionManager()
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# --------------------------------------------------------------------------
+# Error envelope + status map (D-ENG14).
+#
+# Every failure renders as `{"error": {"code": str, "message": str}}` on a
+# non-2xx status. The map is the single source of truth between a stable
+# machine code and the HTTP status, so an endpoint cannot drift back into
+# the old 200-with-`{"error": ...}` style.
+#
+# HTTPException migration list — endpoints that used to smuggle an error out
+# on a 200 status, now raised via `raise_http_error` and rendered by the
+# shared exception handler:
+#   GET  /api/v1/sessions/{sid}   session-not-found  200 -> 404
+#   POST /api/v1/calls/outbound   required to_number 200 -> 422
+#   POST /api/v1/calls/outbound   twilio unconfigured 200 -> 503
+#   POST /api/v1/calls/call-me    no verified number 200 -> 503
+#   POST /api/v1/calls/call-me    twilio unconfigured 200 -> 503
+#   POST /api/v1/chat             required message   200 -> 422
+# Routes are deliberately NOT auto-listed here; adding one to Child 1 means
+# adding its code to the map and test_error_envelope.py coverage.
+ERROR_STATUS_MAP: dict[str, int] = {
+    "authentication_required": 401,
+    "insufficient_role": 403,
+    "route_not_authorized": 403,
+    "session_not_found": 404,
+    "validation": 422,
+    "required_param": 422,
+    "not_configured": 503,
+    "verified_number_missing": 503,
+}
+
+DEFAULT_ERROR_MESSAGES: dict[str, str] = {
+    "authentication_required": "Authentication required.",
+    "insufficient_role": "Insufficient role for this resource.",
+    "route_not_authorized": "This route is not authorized.",
+    "session_not_found": "Session not found",
+    "validation": "Request validation failed.",
+    "required_param": "Required parameter missing.",
+    "not_configured": "Dependency not configured.",
+    "verified_number_missing": "No verified number configured.",
+}
+
+
+def error_response(
+    code: str,
+    message: str | None = None,
+    *,
+    details: object = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    """Render one error in the shared envelope on its mapped status."""
+    envelope_body = {
+        "error": {
+            "code": code,
+            "message": message or DEFAULT_ERROR_MESSAGES.get(code, code),
+        }
+    }
+    if details is not None:
+        envelope_body["error"]["details"] = details
+    return JSONResponse(
+        status_code=ERROR_STATUS_MAP.get(code, 500),
+        content=envelope_body,
+        headers=headers,
+    )
+
+
+def raise_http_error(code: str, message: str | None = None) -> None:
+    """Raise the HTTP error the shared handler renders for `code`."""
+    raise HTTPException(
+        status_code=ERROR_STATUS_MAP.get(code, 500),
+        detail={"code": code, "message": message or DEFAULT_ERROR_MESSAGES.get(code, code)},
+    )
+
+
+def _http_error_handler(request, exc: HTTPException) -> JSONResponse:
+    detail = exc.detail
+    if isinstance(detail, dict) and "code" in detail:
+        return JSONResponse(
+            status_code=exc.status_code, content={"error": detail}
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": "http_error", "message": str(detail)}},
+    )
+
+
+def _validation_error_handler(request, exc: RequestValidationError) -> JSONResponse:
+    return error_response("validation", details=exc.errors())
 
 # The permission each route requires, keyed by (method, path).
 #
@@ -147,10 +236,7 @@ def _install_auth(app: FastAPI, store: AuthStore) -> None:
 
         if permission is None:
             # Undeclared route: refuse rather than guess.
-            return JSONResponse(
-                status_code=403,
-                content={"error": "This route is not authorized."},
-            )
+            return error_response("route_not_authorized")
 
         principal: Principal | None = store.authenticate(
             _bearer_token(request.headers.get("Authorization"))
@@ -158,17 +244,13 @@ def _install_auth(app: FastAPI, store: AuthStore) -> None:
         if principal is None:
             # One body for "no token" and "wrong token" — a difference between
             # them is an oracle for guessing valid credentials.
-            return JSONResponse(
-                status_code=401,
-                content={"error": "Authentication required."},
+            return error_response(
+                "authentication_required",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
         if not store.authorizes(principal, permission):
-            return JSONResponse(
-                status_code=403,
-                content={"error": "Insufficient role for this resource."},
-            )
+            return error_response("insufficient_role")
 
         request.state.principal = principal
         return await call_next(request)
@@ -207,6 +289,8 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         version="0.1.0",
         description="HIPAA-compliant bilingual voice AI medical receptionist",
     )
+    app.add_exception_handler(HTTPException, _http_error_handler)
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)
 
     _install_auth(app, store)
 
@@ -266,16 +350,16 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     async def get_session(call_sid: str) -> dict:
         session = await session_manager.get(call_sid)
         if not session:
-            return {"error": "Session not found"}
+            raise_http_error("session_not_found")
         return session.to_dict()
 
     @app.post("/api/v1/calls/outbound")
     async def initiate_outbound(to_number: str = "") -> dict:
         if not to_number:
-            return {"error": "to_number is required"}
+            raise_http_error("required_param", "to_number is required")
         sid = settings.telephony.twilio.account_sid
         if not sid:
-            return {"error": "Twilio not configured"}
+            raise_http_error("not_configured", "Twilio not configured")
         from sefa.telephony.twilio import initiate_outbound_call as _call
         return await _call(to_number)
 
@@ -290,10 +374,15 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
         verified = os.environ.get("VERIFIED_NUMBER") or settings.telephony.twilio.phone_number
         if not verified:
-            return {"error": "No verified number configured. Set VERIFIED_NUMBER."}
+            raise_http_error(
+                "verified_number_missing",
+                "No verified number configured. Set VERIFIED_NUMBER.",
+            )
         sid = settings.telephony.twilio.account_sid
         if not sid:
-            return {"error": "Twilio not configured. Set TWILIO_ACCOUNT_SID in .env"}
+            raise_http_error(
+                "not_configured", "Twilio not configured. Set TWILIO_ACCOUNT_SID in .env"
+            )
         from sefa.telephony.twilio import initiate_outbound_call as _call
 
         return await _call(verified)
@@ -302,7 +391,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:
         """Text-only chat endpoint — no voice, just text in/out. Free to test."""
         if not message:
-            return {"error": "message is required"}
+            raise_http_error("required_param", "message is required")
         session = await session_manager.get_or_create(call_sid)
         session.add_turn("user", message)
         from sefa.models.registry import registry

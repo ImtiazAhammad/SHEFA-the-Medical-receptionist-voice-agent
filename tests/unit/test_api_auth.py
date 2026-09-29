@@ -268,14 +268,14 @@ class TestAuthorizedAccess:
         assert "PAT-1" in str(found.json())
 
         missing = client.get("/api/v1/sessions/absent", headers=_bearer(VIEWER_TOKEN))
-        assert missing.status_code == 200
-        assert missing.json()["error"] == "Session not found"
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "session_not_found"
 
     def test_outbound_call_requires_a_number(self, client):
         response = client.post("/api/v1/calls/outbound", headers=_bearer(CLINICIAN_TOKEN))
 
-        assert response.status_code == 200
-        assert "to_number is required" in response.json()["error"]
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "required_param"
 
     def test_outbound_call_refuses_when_twilio_is_unconfigured(self, client, monkeypatch):
         monkeypatch.setattr(main_module.settings.telephony.twilio, "account_sid", "")
@@ -284,8 +284,8 @@ class TestAuthorizedAccess:
             params={"to_number": "+15551234567"},
             headers=_bearer(CLINICIAN_TOKEN),
         )
-        assert response.status_code == 200
-        assert "Twilio not configured" in response.json()["error"]
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "not_configured"
 
     def test_outbound_call_places_when_configured(self, client, monkeypatch):
         monkeypatch.setattr(

@@ -49,8 +49,9 @@ def test_call_me_not_configured(client, auth, monkeypatch):
 
     resp = client.post("/api/v1/calls/call-me", headers=auth)
 
-    assert resp.status_code == 200
-    assert "Twilio not configured" in resp.json()["error"]
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "not_configured"
+    assert "Twilio not configured" in resp.json()["error"]["message"]
 
 
 def test_call_me_uses_verified_number(client, auth, monkeypatch):
@@ -95,8 +96,9 @@ def test_call_me_has_no_hardcoded_default_number(client, auth, monkeypatch):
 
     resp = client.post("/api/v1/calls/call-me", headers=auth)
 
-    assert resp.status_code == 200
-    assert "VERIFIED_NUMBER" in resp.json()["error"]
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "verified_number_missing"
+    assert "VERIFIED_NUMBER" in resp.json()["error"]["message"]
     assert calls == []
 
 
@@ -124,7 +126,8 @@ def test_call_me_falls_back_to_configured_number(client, auth, monkeypatch):
 def test_chat_requires_message(client, auth):
     resp = client.post("/api/v1/chat", headers=auth)
 
-    assert resp.json() == {"error": "message is required"}
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "required_param"
 
 
 async def test_chat_round_trip(monkeypatch):
