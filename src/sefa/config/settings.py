@@ -118,6 +118,7 @@ class EscalationConfig(StrictModel):
     transfer_greeting: dict[str, str] = Field(default_factory=dict)
     repeat_prompt: dict[str, str] = Field(default_factory=dict)
     terminal_prompt: dict[str, str] = Field(default_factory=dict)
+    other_language_prompt: dict[str, str] = Field(default_factory=dict)
 
 
 class AuthPrincipalConfig(StrictModel):

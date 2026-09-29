@@ -1,4 +1,10 @@
-﻿"""Language detection for bilingual English/Bangla input."""
+﻿"""Language detection for bilingual English/Bangla input.
+
+Anything that is neither English nor Bangla (Hindi/Urdu/Punjabi in Devanagari
+or Arabic script) is returned as ``Language.OTHER`` so the pipeline can route
+the call to a warm transfer instead of replying in the wrong language
+(D-ENG16).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +14,8 @@ from dataclasses import dataclass
 from sefa.models.base import Language
 
 _BANGLA_RANGE = re.compile(r"[\u0980-\u09FF]")
+# Devanagari (Hindi, Marathi, ...) and Arabic/Persian script (Urdu, ...).
+_OTHER_RANGE = re.compile(r"[\u0900-\u097F\u0600-\u06FF]")
 _BANGLA_KEYWORDS = {
     "আসসালামু আলাইকুম", "ধন্যবাদ", "হ্যাঁ", "না", "কি", "কেমন", "আছেন", "বোঝা",
     "সাহায্য", "ডাক্তার", "অ্যাপয়েন্টমেন্ট", "কখন", "দরকার", "আমি",
@@ -22,6 +30,9 @@ def detect_language(text: str) -> tuple[Language, float]:
     """
     if not text.strip():
         return Language.ENGLISH, 0.0
+
+    if _OTHER_RANGE.search(text):
+        return Language.OTHER, 0.7
 
     bn_chars = len(_BANGLA_RANGE.findall(text))
     total_alpha = sum(1 for c in text if c.isalpha())

@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from sefa.models.base import BaseSTT, Language, STTResult
+from sefa.models.base import BaseSTT, STTResult, language_from_code
 
 
 class OpenAISTT(BaseSTT):
@@ -48,11 +48,7 @@ class OpenAISTT(BaseSTT):
 
         return STTResult(
             text=data.get("text", ""),
-            language=(
-                Language(lang_code)
-                if lang_code in ("en", "bn")
-                else Language.ENGLISH
-            ),
+            language=language_from_code(lang_code),
             confidence=no_speech,
             duration_ms=data.get("duration", 0) * 1000,
         )

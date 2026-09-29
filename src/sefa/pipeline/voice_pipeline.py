@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from sefa.audio import AudioFrame
 
 from sefa.config.settings import settings
+from sefa.models.base import Language
 from sefa.models.registry import registry
 from sefa.pipeline.error_taxonomy import (
     FailureKind,
@@ -31,6 +32,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_TERMINAL_PROMPT = (
     "I'm having trouble hearing you, so I'll connect you to our front desk. "
     "Please hold, or press star at any time."
+)
+
+DEFAULT_OTHER_LANGUAGE_PROMPT = (
+    "I'll connect you to our front desk now. Please hold, or press star for a callback."
 )
 
 SYSTEM_PROMPT_TEMPLATE = (
@@ -185,6 +190,29 @@ class VoicePipeline:
                 continue
 
             detected_lang = stt_result.language
+            if detected_lang == Language.OTHER:
+                # D-ENG16: neither-en-nor-bn is an explicit route, not English.
+                # Coercing it to ENGLISH made the agent reply in the wrong
+                # language; instead the caller gets a warm transfer/DTMF offer
+                # and the loop leaves. No reply is ever generated for it.
+                other_prompt = settings.escalation.other_language_prompt.get(
+                    session.language.value,
+                    settings.escalation.other_language_prompt.get(
+                        "en", DEFAULT_OTHER_LANGUAGE_PROMPT
+                    ),
+                )
+                tts = await registry.get_tts()
+                await speak_to(tts, other_prompt, "en", playback_queue)
+                session.add_turn("assistant", other_prompt, Language.OTHER)
+                session.state = "escaped"
+                await self._session_manager.save(session)
+                logger.info(
+                    "Unsupported language %s on %s; offered warm transfer",
+                    detected_lang.value,
+                    call_sid,
+                )
+                break
+
             if detected_lang != session.language:
                 session.language = detected_lang
                 logger.info("Language switched to %s for %s", detected_lang.value, call_sid)
@@ -230,6 +258,16 @@ class VoicePipeline:
                 logger.info("LLM [%s]: '%s' (%.0fms)", call_sid, llm_result.text[:80], llm_ms)
 
                 if llm_result.tool_calls:
+                    # The assistant turn that declared the calls must stay in
+                    # history: a request carrying a `tool` message without the
+                    # assistant `tool_calls` message in front of it is rejected
+                    # by OpenAI/Qwen-compatible servers (D-ENG15).
+                    session.add_turn(
+                        "assistant",
+                        llm_result.text,
+                        llm_result.language,
+                        tool_calls=llm_result.tool_calls,
+                    )
                     for tc in llm_result.tool_calls:
                         tool_result = await execute_tool(
                             tc["name"], tc["arguments"], session
@@ -324,20 +362,31 @@ class VoicePipeline:
             self._failures.get(call_sid, 0),
         )
 
-    def _build_messages(self, session: CallSession) -> list[dict[str, str]]:
+    def _build_messages(self, session: CallSession) -> list[dict[str, Any]]:
         system = SYSTEM_PROMPT_TEMPLATE.format(
             language=session.language.value,
             patient_name=session.patient_name or "Unknown",
         )
-        messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        tools_open = False
         for turn in session.history:
             if turn.role == "tool":
-                messages.append({
-                    "role": "tool",
-                    "content": turn.content,
-                })
-            else:
-                messages.append({"role": turn.role, "content": turn.content})
+                # A `tool` message is only valid as the answer to an assistant
+                # `tool_calls` message; anything else is an orphan (D-ENG15).
+                if tools_open:
+                    messages.append({"role": "tool", "content": turn.content})
+                continue
+            tools_open = turn.role == "assistant" and bool(turn.tool_calls)
+            msg: dict[str, Any] = {"role": turn.role, "content": turn.content}
+            if tools_open:
+                msg["tool_calls"] = turn.tool_calls
+            messages.append(msg)
+        # A trailing declaration with no results after it would be sent as an
+        # unanswered ``tool_calls`` request, which the API rejects. Truncation
+        # keeps it so pending results can pair up; the request builder is where
+        # it is retracted.
+        if messages and messages[-1].get("tool_calls"):
+            messages.pop()
         return messages
 
     async def cleanup(self, call_sid: str) -> None:

@@ -173,6 +173,12 @@ escalation:
   terminal_prompt:
     en: "I'm having trouble hearing you, so I'll connect you to our front desk. Please hold, or press star at any time."
     bn: "আমি আপনাকে পরিষ্কার করে শুনতে সমস্যা হচ্ছে, তাই আমি আপনাকে আমাদের সামনের ডেস্কে সংযোগ করছি। অনুগ্রহ করে অপেক্ষা করুন, অথবা যেকোনো সময় স্টার চাপুন।"
+  # Spoken once when a caller's language is neither en nor bn (D-ENG16): an
+  # explicit OTHER route hands the call to a human with a warm transfer/DTMF
+  # offer instead of replying in a language the caller does not speak.
+  other_language_prompt:
+    en: "I'll connect you to our front desk now. Please hold, or press star for a callback."
+    bn: "আমি আপনাকে এখন সামনের ডেস্কে সংযোগ করছি। আপনার সুবিধা হলে অপেক্ষা করুন, অথবা স্টার চাপুন।"
 
 # T7: authentication and authorization for every route. Nothing here is a
 # working secret — `principals[].token_hash` is a PBKDF2 record, and the

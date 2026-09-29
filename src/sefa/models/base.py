@@ -30,6 +30,22 @@ class ModelProvider(StrEnum):
 class Language(StrEnum):
     ENGLISH = "en"
     BANGLA = "bn"
+    OTHER = "other"
+
+
+_SUPPORTED_LANGUAGE_CODES = {Language.ENGLISH.value, Language.BANGLA.value}
+
+
+def language_from_code(code: str | None) -> Language:
+    """Map a provider language tag to en/bn, or OTHER for anything else.
+
+    Hindi/Urdu/Punjabi transcripts (faster-whisper, Whisper API, ElevenLabs)
+    used to be coerced silently to English, so the agent replied in the wrong
+    language (D-ENG16). Unsupported tags now take the explicit ``OTHER`` route
+    that hands the call to a human instead of guessing.
+    """
+    tag = (code or "en").lower()[:2]
+    return Language(tag) if tag in _SUPPORTED_LANGUAGE_CODES else Language.OTHER
 
 
 @dataclass

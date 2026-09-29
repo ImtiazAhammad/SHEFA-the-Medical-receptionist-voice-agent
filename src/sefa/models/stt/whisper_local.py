@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sefa.models.base import BaseSTT, Language, STTResult
+from sefa.models.base import BaseSTT, STTResult, language_from_code
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +127,7 @@ class WhisperLocalSTT(BaseSTT):
 
         return STTResult(
             text=full_text,
-            language=(
-                Language(detected[:2])
-                if detected[:2] in ("en", "bn")
-                else Language.ENGLISH
-            ),
+            language=language_from_code(detected),
             confidence=confidence,
             duration_ms=info.duration * 1000 if hasattr(info, "duration") else 0.0,
         )
