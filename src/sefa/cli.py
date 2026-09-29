@@ -127,6 +127,22 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
     finally:
         asyncio.run(tts.close())
 
+    # D-ENG12: max_transfer_attempts gates how many retries run before the
+    # courtesy + DTMF/transfer terminal transition. 0 (or negative) is a
+    # misconfiguration that would let the error loop run unbounded.
+    max_attempts = settings.escalation.max_transfer_attempts
+    if max_attempts < 1:
+        lines.append(
+            f"  BLOCKER  escalation.max_transfer_attempts={max_attempts}: "
+            "at least 1 retry is required before a failure closes the call"
+        )
+        ok = False
+    else:
+        lines.append(
+            f"  ok       escalation retries: {max_attempts} consecutive "
+            "failures end the call"
+        )
+
     return "\n".join(lines), ok
 
 

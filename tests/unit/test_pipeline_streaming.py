@@ -157,9 +157,9 @@ class TestPipelineUsesTheHelper:
         assert "playback_queue.put" not in source, (
             "a speak site pushes to playback_queue directly instead of the helper"
         )
-        assert source.count("speak_to(") == 4, (
-            "expected all four speak sites (greeting, escalation, repeat, reply) "
-            f"to use the helper, found {source.count('speak_to(')}"
+        assert source.count("speak_to(") == 5, (
+            "expected all five speak sites (greeting, escalation, repeat, reply, "
+            f"terminal transition) to use the helper, found {source.count('speak_to(')}"
         )
 
     def test_the_helper_streams_rather_than_buffering(self):

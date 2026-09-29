@@ -250,7 +250,7 @@ class TestRunBench:
 class TestDoctorReport:
     """`doctor` is the gate on the T5 blocker, so it has to be trustworthy."""
 
-    def _patch_voice_path(self, monkeypatch, voice: str) -> None:
+    def _patch_voice_path(self, monkeypatch, voice: str, *, max_transfer_attempts: int = 3) -> None:
         """Patch the settings object behind the `sefa.config.settings` module.
 
         `sefa/config/__init__.py` rebinds the name `settings` on the package to
@@ -262,7 +262,10 @@ class TestDoctorReport:
         monkeypatch.setattr(
             module,
             "settings",
-            SimpleNamespace(pipeline=SimpleNamespace(tts=SimpleNamespace(voice_path=voice))),
+            SimpleNamespace(
+                pipeline=SimpleNamespace(tts=SimpleNamespace(voice_path=voice)),
+                escalation=SimpleNamespace(max_transfer_attempts=max_transfer_attempts),
+            ),
         )
 
     def test_reports_ok_when_the_voice_loads_and_synthesises(self, monkeypatch, tmp_path):
@@ -343,6 +346,39 @@ class TestDoctorReport:
         assert ok is False
         assert "failed to synthesise" in text
         assert "corrupt onnx graph" in text
+
+    def test_reports_the_escalation_retry_policy(self, monkeypatch, tmp_path):
+        voice = tmp_path / "voice.onnx"
+        voice.write_bytes(b"stub")
+        (tmp_path / "models" / "piper").mkdir(parents=True)
+        (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
+        self._patch_voice_path(monkeypatch, str(voice))
+        monkeypatch.setattr(
+            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+        )
+        monkeypatch.chdir(tmp_path)
+
+        text, ok = cli.doctor_report()
+
+        assert ok is True
+        assert "escalation retries: 3 consecutive failures end the call" in text
+
+    def test_flags_a_zero_transfer_attempt_count(self, monkeypatch, tmp_path):
+        voice = tmp_path / "voice.onnx"
+        voice.write_bytes(b"stub")
+        (tmp_path / "models" / "piper").mkdir(parents=True)
+        (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
+        self._patch_voice_path(monkeypatch, str(voice), max_transfer_attempts=0)
+        monkeypatch.setattr(
+            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+        )
+        monkeypatch.chdir(tmp_path)
+
+        text, ok = cli.doctor_report()
+
+        assert ok is False
+        assert "BLOCKER" in text
+        assert "max_transfer_attempts=0" in text
 
 
 def _returns(value):

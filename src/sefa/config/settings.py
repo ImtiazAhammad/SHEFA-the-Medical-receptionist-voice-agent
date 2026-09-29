@@ -117,6 +117,7 @@ class EscalationConfig(StrictModel):
     emergency_keywords: dict[str, list[str]] = Field(default_factory=dict)
     transfer_greeting: dict[str, str] = Field(default_factory=dict)
     repeat_prompt: dict[str, str] = Field(default_factory=dict)
+    terminal_prompt: dict[str, str] = Field(default_factory=dict)
 
 
 class AuthPrincipalConfig(StrictModel):

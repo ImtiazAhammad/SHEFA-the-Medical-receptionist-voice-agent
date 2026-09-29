@@ -166,6 +166,13 @@ escalation:
   repeat_prompt:
     en: "Sorry, I didn't catch that clearly. Could you say that again?"
     bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"
+  # Spoken when the Nth consecutive turn failure ends the call: courtesy plus
+  # a DTMF/transfer offer the patient can act on, so failure is never dead air
+  # or a hangup on its own. max_transfer_attempts gates how many retries run
+  # before this prompt is played.
+  terminal_prompt:
+    en: "I'm having trouble hearing you, so I'll connect you to our front desk. Please hold, or press star at any time."
+    bn: "আমি আপনাকে পরিষ্কার করে শুনতে সমস্যা হচ্ছে, তাই আমি আপনাকে আমাদের সামনের ডেস্কে সংযোগ করছি। অনুগ্রহ করে অপেক্ষা করুন, অথবা যেকোনো সময় স্টার চাপুন।"
 
 # T7: authentication and authorization for every route. Nothing here is a
 # working secret — `principals[].token_hash` is a PBKDF2 record, and the
