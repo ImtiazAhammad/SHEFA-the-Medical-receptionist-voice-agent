@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger("sefa.compliance")
 
+_E164_RE = re.compile(r"\+(\d{8,15})")
 _PHONE_RE = re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b")
 _DOB_RE = re.compile(r"\b\d{4}[-/]\d{2}[-/]\d{2}\b")
 _MRN_RE = re.compile(r"\bMRN[:\s]*\d+\b", re.IGNORECASE)
@@ -21,8 +22,19 @@ _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _EMAIL_RE = re.compile(r"\b[\w.-]+@[\w.-]+\.\w+\b")
 
 
+def _keep_last_four(match: re.Match[str]) -> str:
+    """`+8801712345678` → `[PHONE]...5678`: reveal only the tail.
+
+    The US 10-digit pattern would otherwise match a slice of the BD caller ID
+    and leave a live residual (`678`) in the log — worse than an unlabelled
+    number, because it looks masked.
+    """
+    return f"[PHONE]...{match.group(1)[-4:]}"
+
+
 def mask_phi(text: str) -> str:
     """Mask PHI identifiers in text for logging."""
+    text = _E164_RE.sub(_keep_last_four, text)
     text = _PHONE_RE.sub("[PHONE]", text)
     text = _DOB_RE.sub("[DOB]", text)
     text = _MRN_RE.sub("[MRN]", text)

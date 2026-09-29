@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import TextIO
 
 import structlog
 
 from sefa.utils.compliance import mask_phi
 
 
-def setup_logging(level: str = "INFO", phi_masking: bool = True) -> None:
-    """Configure structured logging with optional PHI masking."""
+def setup_logging(
+    level: str = "INFO",
+    phi_masking: bool = True,
+    stream: TextIO | None = None,
+) -> None:
+    """Configure structured logging with optional PHI masking.
+
+    `stream` defaults to stderr; tests pass a buffer so the masked output can be
+    asserted without fighting whoever else owns stdout/stderr.
+    """
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
@@ -34,7 +43,8 @@ def setup_logging(level: str = "INFO", phi_masking: bool = True) -> None:
         cache_logger_on_first_use=True,
     )
 
-    if sys.stderr.isatty():
+    output = stream or sys.stderr
+    if output.isatty():
         renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer()
     else:
         renderer = structlog.processors.JSONRenderer()
@@ -46,7 +56,7 @@ def setup_logging(level: str = "INFO", phi_masking: bool = True) -> None:
         ],
     )
 
-    handler = logging.StreamHandler(sys.stderr)
+    handler = logging.StreamHandler(output)
     handler.setFormatter(formatter)
 
     root = logging.getLogger()

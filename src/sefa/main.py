@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
+import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -15,12 +15,18 @@ from sefa.config.settings import settings
 from sefa.session.manager import SessionManager
 from sefa.telephony.twilio import app as telephony_app
 from sefa.tools.definitions import get_tool_definitions
+from sefa.utils.logging import setup_logging
 
-logging.basicConfig(
-    level=getattr(logging, settings.monitoring.logging.level, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+# The configured structlog pipeline is the ONLY server logger. Its PHI
+# masking lives behind `monitoring.logging.phi_masking`, so every event in
+# the process shares the same gate — no parallel renderer can unmask a
+# number that this one already redacted.
+setup_logging(
+    level=settings.monitoring.logging.level,
+    phi_masking=settings.monitoring.logging.phi_masking,
 )
-logger = logging.getLogger("sefa")
+
+logger = structlog.get_logger("sefa")
 
 session_manager = SessionManager()
 

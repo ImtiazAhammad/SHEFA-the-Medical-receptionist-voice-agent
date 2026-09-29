@@ -17,6 +17,35 @@ def test_mask_phone():
     assert "[PHONE]" in masked
 
 
+def test_mask_bd_e164_phone_keeps_only_the_last_four():
+    """D-ENG8: the US 10-digit regex misses — worse, half-eats — a BD caller ID.
+
+    `+8801712345678` must be masked wholesale. The old US regex matched ten of
+    its thirteen digits (`8801712345`) and left a bare `678` standing right
+    after the marker, so a "masked" log still leaked the tail of a live number.
+    """
+    masked = mask_phi("Reach me at +8801712345678 please")
+    assert "+8801712345678" not in masked
+    assert "8801712345" not in masked
+    assert "]678" not in masked
+    assert "[PHONE]...5678" in masked
+
+
+def test_mask_e164_phone_is_exactly_keep_last_four():
+    assert mask_phi("+8801712345678") == "[PHONE]...5678"
+    assert mask_phi("+15551234567") == "[PHONE]...4567"
+
+
+def test_mask_local_us_phone_keeps_masking_as_before():
+    assert "[PHONE]" in mask_phi("555-123-4567")
+
+
+def test_mask_e164_does_not_eat_adjacent_short_digits():
+    masked = mask_phi("Dial +8801500111222 then press 1")
+    assert "8801500111" not in masked
+    assert "+8801500111222" not in masked
+
+
 def test_mask_dob():
     masked = mask_phi("DOB: 1990-05-15")
     assert "1990" not in masked
