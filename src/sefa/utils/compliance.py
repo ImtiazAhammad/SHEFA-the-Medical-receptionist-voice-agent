@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-import time
 from typing import TYPE_CHECKING, Any
 
 import structlog
+
+from sefa.config.settings import settings
+from sefa.store import audit as _audit
 
 if TYPE_CHECKING:
     from sefa.auth import AuthStore
@@ -49,17 +51,34 @@ def audit_log(
     patient_id: str | None = None,
     user: str | None = None,
     details: dict[str, Any] | None = None,
-) -> None:
-    """Write a HIPAA audit log entry."""
-    entry = {
-        "timestamp": time.time(),
-        "event": event,
-        "call_sid": call_sid,
-        "patient_id": patient_id,
-        "user": user,
-        "details": details or {},
-    }
-    logger.info(entry["event"], **{k: v for k, v in entry.items() if k != "event"})
+    *,
+    store: Any | None = None,
+) -> int | None:
+    """Write a HIPAA audit entry to the durable store (T9).
+
+    Returns the store's monotonic sequence so a caller can prove the row
+    landed or chain a follow-up against it. `compliance.audit_log_enabled`
+    gates the write; a disabled flag is a silent no-op, never a broken write.
+    """
+    if not settings.compliance.audit_log_enabled:
+        return None
+    target = _audit.default_audit_store() if store is None else store
+    seq = target.append(
+        event,
+        call_sid=call_sid,
+        patient_id=patient_id,
+        user=user,
+        details=details or {},
+    )
+    logger.info(
+        event,
+        seq=seq,
+        call_sid=call_sid,
+        patient_id=patient_id,
+        user=user,
+        details=details or {},
+    )
+    return seq
 
 
 def hash_identifier(identifier: str) -> str:

@@ -1,6 +1,7 @@
 ﻿"""Tests for compliance utilities."""
 
 from sefa.auth import AuthStore, hash_token
+from sefa.store.audit import AuditStore
 from sefa.utils.compliance import (
     audit_log,
     hash_identifier,
@@ -71,9 +72,20 @@ def test_hash_identifier():
     assert hash_identifier("PAT-002") != h
 
 
-def test_audit_log_does_not_duplicate_the_event_field():
-    """The event is passed once; the old code raised a TypeError on itself."""
-    audit_log("audit_test_event", patient_id="PAT-1", user="clinician")
+def test_audit_log_writes_the_event_to_the_durable_store(tmp_path):
+    """The event is written once, with every field on the row it landed in.
+
+    D-ENG9: the audit is a durable store row, not a stdout line.
+    """
+    store = AuditStore(tmp_path / "audit.db")
+    seq = audit_log(
+        "audit_test_event", patient_id="PAT-1", user="clinician", store=store
+    )
+    entry = store.get_entry(seq)
+    assert entry["event"] == "audit_test_event"
+    assert entry["patient_id"] == "PAT-1"
+    assert entry["user"] == "clinician"
+    store.close()
 
 
 def test_validate_phi_access_unknown_action_denies_with_true_verdict():

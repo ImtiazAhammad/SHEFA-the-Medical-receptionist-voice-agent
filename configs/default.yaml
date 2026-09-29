@@ -128,6 +128,12 @@ compliance:
   phi_access_logging: true
   max_session_ttl: 3600
 
+# T9: one SQLite file backs the calls table and the append-only audit log
+# (WAL journal, monotonic seq). Tombstones, daily COUNT reconciliation, and
+# the D5 zero-log alert all read this store.
+storage:
+  db_path: "data/sefa.db"
+
 monitoring:
   prometheus:
     enabled: true

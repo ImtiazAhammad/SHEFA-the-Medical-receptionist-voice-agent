@@ -146,6 +146,16 @@ class AuthConfig(StrictModel):
     roles: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class StorageConfig(StrictModel):
+    """Where the durable stores live.
+
+    One SQLite file backs both the `calls` table and the append-only `audit_log`
+    (T9): a single backup or verification covers the whole evidence trail.
+    """
+
+    db_path: str = "data/sefa.db"
+
+
 class ComplianceConfig(StrictModel):
     hipaa_enabled: bool = True
     encryption_algorithm: str = "AES-256-GCM"
@@ -297,6 +307,7 @@ class AppConfig(StrictModel):
     session: SessionConfig = Field(default_factory=SessionConfig)
     escalation: EscalationConfig = Field(default_factory=EscalationConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
