@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from sefa.config.settings import settings
 from sefa.models.registry import registry
 from sefa.pipeline.language_detector import evaluate_transcript
+from sefa.pipeline.vad import EnergyVAD
 from sefa.session.manager import CallSession, SessionManager
 from sefa.tools.definitions import get_tool_definitions
 from sefa.tools.executor import execute_tool
@@ -97,23 +98,38 @@ class VoicePipeline:
         stt = await registry.get_stt()
         llm = await registry.get_llm()
 
-        silence_threshold = 15
-        silence_count = 0
+        # Turn segmentation is owned by the RMS VAD (D-ENG11), not by a silent
+        # tick count. Whisper's vad_filter stays as an internal per-utterance
+        # filter: it trims leading/trailing silence inside the audio we hand
+        # it. The pipeline decides where one utterance ends and the next
+        # begins, using an adaptive noise floor and an explicit max_buffer
+        # flush so a noisy clinic room can neither stall a turn nor grow the
+        # buffer without bound.
+        vad = EnergyVAD()
 
         while True:
             try:
                 chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
                 self._audio_buffers[call_sid].append(chunk)
-                silence_count = 0
+                decision = vad.update(chunk)
             except TimeoutError:
-                silence_count += 1
-                if silence_count < silence_threshold:
-                    continue
-                buffer = b"".join(self._audio_buffers.pop(call_sid, []))
-                if not buffer or len(buffer) < 1600:
-                    self._audio_buffers.setdefault(call_sid, [])
-                    continue
+                decision = vad.tick_silence()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Pipeline error for %s", call_sid)
+                self._audio_buffers.setdefault(call_sid, [])
+                continue
 
+            if not decision.flush:
+                continue
+
+            buffer = b"".join(self._audio_buffers.pop(call_sid, []))
+            if not buffer or len(buffer) < 1600:
+                self._audio_buffers.setdefault(call_sid, [])
+                continue
+
+            try:
                 start = time.monotonic()
                 stt_result = await stt.transcribe(buffer)
                 stt_ms = (time.monotonic() - start) * 1000
@@ -192,13 +208,11 @@ class VoicePipeline:
                 session.add_turn("assistant", llm_result.text, llm_result.language)
                 await self._session_manager.save(session)
                 self._audio_buffers.setdefault(call_sid, [])
-
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Pipeline error for %s", call_sid)
                 self._audio_buffers.setdefault(call_sid, [])
-                continue
 
     def _build_messages(self, session: CallSession) -> list[dict[str, str]]:
         system = SYSTEM_PROMPT_TEMPLATE.format(
