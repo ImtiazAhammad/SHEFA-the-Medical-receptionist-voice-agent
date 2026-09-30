@@ -14,13 +14,27 @@ languages:
     bn: "মেডভয়েস ক্লিনিকে আপনাকে স্বাগতম। আমি আপনাকে কিভাবে সাহায্য করতে পারি?"
 
 telephony:
+  # Single provider knob (D-ENG13): twilio | asterisk | freeswitch.
   provider: "twilio"
+  # SIP trunk credentials ONLY — provider selection lives at telephony.provider.
+  # A `provider` key under `sip` is the removed two-key state and fails startup.
+  sip:
+    host: ""
+    port: 5060
+    username: ""
+    password: ""
   twilio:
     account_sid: "${TWILIO_ACCOUNT_SID}"
     auth_token: "${TWILIO_AUTH_TOKEN}"
     phone_number: "${TWILIO_PHONE_NUMBER}"
     voice: "Polly.Matthew"
     max_call_duration: 1800  # 30 min
+    # wss:// Media Stream endpoint (startup-validated). Empty = derive
+    # wss://<account_sid>.twil.io/media-stream.
+    media_stream_url: ""
+  # Explicit outbound ingress URL (was: the deleted ngrok localhost scrape).
+  # Must be an absolute http(s) URL when set.
+  public_url: ""
   websocket:
     host: "0.0.0.0"
     port: 8765

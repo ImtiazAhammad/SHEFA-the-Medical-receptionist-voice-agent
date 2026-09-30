@@ -12,14 +12,24 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Language(StrEnum):
     ENGLISH = "en"
     BANGLA = "bn"
+
+
+class TelephonyProvider(StrEnum):
+    """The single provider knob (D-ENG13). SIP trunk credentials live under
+    `telephony.sip.*` and never select a provider — there is exactly one knob."""
+
+    TWILIO = "twilio"
+    ASTERISK = "asterisk"
+    FREESWITCH = "freeswitch"
 
 
 class StrictModel(BaseModel):
@@ -90,6 +100,40 @@ class TwilioConfig(StrictModel):
     phone_number: str = ""
     voice: str = "Polly.Matthew"
     max_call_duration: int = 1800
+    # wss:// Media Stream endpoint. Empty = derive
+    # `wss://<account_sid>.twil.io/media-stream` (D-ENG25).
+    media_stream_url: str = ""
+
+    @field_validator("media_stream_url")
+    @classmethod
+    def _media_stream_url_must_be_wss(cls, value: str) -> str:
+        if value and not value.startswith("wss://"):
+            raise ValueError(
+                "telephony.twilio.media_stream_url must start with wss:// "
+                f"(raw Twilio media streams accept no other scheme; got {value!r})"
+            )
+        return value
+
+    @property
+    def effective_media_stream_url(self) -> str:
+        """The URL TwiML points the media stream at, derived when unset."""
+        if self.media_stream_url:
+            return self.media_stream_url
+        return f"wss://{self.account_sid}.twil.io/media-stream"
+
+
+class SipConfig(StrictModel):
+    """SIP trunk credentials ONLY (D-ENG13).
+
+    Provider selection is the single `telephony.provider` knob; a `provider`
+    key under `sip` is the removed two-key state and is rejected at startup —
+    `StrictModel` forbids it and `TelephonyConfig` names it explicitly.
+    """
+
+    host: str = ""
+    port: int = 5060
+    username: str = ""
+    password: str = ""
 
 
 class WebSocketConfig(StrictModel):
@@ -98,9 +142,46 @@ class WebSocketConfig(StrictModel):
 
 
 class TelephonyConfig(StrictModel):
-    provider: str = "twilio"
+    provider: TelephonyProvider = TelephonyProvider.TWILIO
     twilio: TwilioConfig = Field(default_factory=TwilioConfig)
+    sip: SipConfig | None = None
     websocket: WebSocketConfig = Field(default_factory=WebSocketConfig)
+    # Explicit outbound ingress URL — the ngrok localhost scrape is deleted
+    # (D-ENG25). Validated as an absolute http(s) URL when set.
+    public_url: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_two_provider_knobs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            sip = data.get("sip")
+            if isinstance(sip, dict) and "provider" in sip:
+                raise ValueError(
+                    "telephony.sip.provider is removed (D-ENG13): provider "
+                    "selection is the single knob telephony.provider "
+                    "(twilio|asterisk|freeswitch)"
+                )
+        return data
+
+    @model_validator(mode="after")
+    def _validate_cross_field_knobs(self) -> TelephonyConfig:
+        if self.provider != TelephonyProvider.TWILIO:
+            stream = self.twilio.effective_media_stream_url
+            host = urlparse(stream).hostname or ""
+            if host == "twil.io" or host.endswith(".twil.io"):
+                raise ValueError(
+                    f"provider={self.provider.value} but media_stream_url "
+                    f"resolves to a Twilio host ({stream!r}); calls would "
+                    f"ring nowhere — set a non-*.twil.io media stream URL"
+                )
+        if self.public_url:
+            parsed = urlparse(self.public_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError(
+                    "telephony.public_url must be an absolute http(s) URL "
+                    f"(got {self.public_url!r})"
+                )
+        return self
 
 
 class SessionConfig(StrictModel):

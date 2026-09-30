@@ -47,10 +47,13 @@ from sefa.config.settings import (
     RoutingConfig,
     SentryConfig,
     SessionConfig,
+    SipConfig,
     SMSChannelConfig,
     STTConfig,
     TelephonyConfig,
+    TelephonyProvider,
     TTSConfig,
+    TwilioConfig,
     WebSocketConfig,
     load_config,
 )
@@ -280,6 +283,112 @@ def test_env_var_reference_resolves_from_environment(tmp_path, monkeypatch):
     )
     config = load_config(path)
     assert config.telephony.twilio.account_sid == "ACfromenv"
+
+
+def test_telephony_provider_is_a_single_enum_knob():
+    """D-ENG13: provider selection is one knob, typed so a typo cannot load."""
+    assert TelephonyProvider.TWILIO.value == "twilio"
+    assert TelephonyProvider.ASTERISK.value == "asterisk"
+    assert TelephonyProvider.FREESWITCH.value == "freeswitch"
+    config = TelephonyConfig.model_validate({"provider": "twilio"})
+    assert config.provider is TelephonyProvider.TWILIO
+
+
+def test_telephony_provider_rejects_an_unknown_knob_value():
+    """Flip the knob to a value that is not twilio|asterisk|freeswitch →
+    a startup error, not a silently unbound router."""
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"provider": "twiliooo"})
+
+
+def test_sip_carries_credentials_only_and_never_a_provider_key():
+    sip = SipConfig.model_validate(
+        {"host": "sip.example", "port": 5061, "username": "u", "password": "p"}
+    )
+    assert sip.port == 5061
+    assert sip.password == "p"
+    with pytest.raises(ValidationError):
+        SipConfig.model_validate({"host": "sip.example", "provider": "asterisk"})
+
+
+def test_two_provider_knobs_is_rejected_at_startup():
+    """D-ENG13: `telephony.sip.provider` is the removed two-key state. A config
+    carrying it must not boot quietly and lose calls."""
+    with pytest.raises(ValidationError, match="sip.provider"):
+        TelephonyConfig.model_validate(
+            {
+                "provider": "asterisk",
+                "sip": {"host": "sip.example", "provider": "asterisk"},
+            }
+        )
+
+
+def test_media_stream_url_must_be_wss():
+    """Raw twilio websockets only accept wss:// — anything else is the wrong
+    knob wired in and must error at startup, not mid-call."""
+    with pytest.raises(ValidationError, match="wss://"):
+        TwilioConfig.model_validate({"media_stream_url": "http://acme.twil.io/media-stream"})
+    ok = TwilioConfig.model_validate({"media_stream_url": "wss://acme.twil.io/media-stream"})
+    assert ok.media_stream_url == "wss://acme.twil.io/media-stream"
+
+
+def test_media_stream_url_derives_from_account_sid_when_unset():
+    config = TwilioConfig(account_sid="AC123")
+    assert config.effective_media_stream_url == "wss://AC123.twil.io/media-stream"
+    assert TwilioConfig().effective_media_stream_url == "wss://.twil.io/media-stream"
+
+
+def test_twil_io_media_stream_rejected_when_provider_is_not_twilio():
+    """Provider on the SIP knob while the media stream URL still resolves to
+    *.twil.io → startup error (calls would ring nowhere), never silent."""
+    with pytest.raises(ValidationError, match="twil.io"):
+        TelephonyConfig.model_validate(
+            {
+                "provider": "asterisk",
+                "twilio": {"media_stream_url": "wss://AC123.twil.io/media-stream"},
+            }
+        )
+    with pytest.raises(ValidationError, match="twil.io"):
+        TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    ok = TelephonyConfig.model_validate(
+        {
+            "provider": "asterisk",
+            "twilio": {"media_stream_url": "wss://media.example/ws"},
+        }
+    )
+    assert ok.twilio.media_stream_url == "wss://media.example/ws"
+
+
+def test_public_url_is_an_explicit_validated_config_key():
+    """D-ENG25: no more localhost ngrok scraping — PUBLIC_URL is a config key,
+    validated as an absolute http(s) URL when set."""
+    assert TelephonyConfig().public_url == ""
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"public_url": "notaurl"})
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"public_url": "wss://x.example"})
+    ok = TelephonyConfig.model_validate({"public_url": "https://tunnel.example"})
+    assert ok.public_url == "https://tunnel.example"
+
+
+def test_default_yaml_declares_the_new_telephony_knobs():
+    """The shipped config must not lose the two new keys (sip credentials,
+    media_stream_url, public_url) to a model that cannot represent them."""
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    config = AppConfig(**raw)
+    tel = raw["telephony"]
+    assert config.telephony.sip.host == tel["sip"]["host"]
+    assert config.telephony.twilio.media_stream_url == tel["twilio"]["media_stream_url"]
+    assert config.telephony.public_url == tel["public_url"]
+    assert "media_stream_url" in tel["twilio"]
+    assert "public_url" in tel
+    assert "sip" in tel
+
+
+def test_default_yaml_telephony_section_has_no_provider_key_under_sip():
+    """The shipped config must never reintroduce the two-key state."""
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    assert "provider" not in raw["telephony"]["sip"]
 
 
 def test_config_boots_from_a_fresh_interpreter():

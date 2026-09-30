@@ -21,33 +21,43 @@ def _set_account_sid(monkeypatch, sid: str) -> None:
     monkeypatch.setattr(settings.telephony.twilio, "account_sid", sid)
 
 
-def test_incoming_call_returns_stream_twiml(client, monkeypatch):
+def test_incoming_call_returns_text_xml_stream_twiml(client, monkeypatch):
     _set_account_sid(monkeypatch, "AC123")
 
     resp = client.post("/incoming")
 
     assert resp.status_code == 200
-    twiml = resp.json()["Twiml"]
-    assert "<Connect>" in twiml
-    assert "wss://AC123.twil.io/media-stream" in twiml
+    assert resp.headers["content-type"].startswith("text/xml")
+    assert "<Connect>" in resp.text
+    assert "wss://AC123.twil.io/media-stream" in resp.text
 
 
-def test_outbound_twiml_returns_stream_twiml(client, monkeypatch):
+def test_outbound_twiml_returns_text_xml_stream_twiml(client, monkeypatch):
     _set_account_sid(monkeypatch, "AC456")
 
     resp = client.post("/outbound-twiml")
 
     assert resp.status_code == 200
-    twiml = resp.json()["Twiml"]
-    assert "<Connect>" in twiml
-    assert "wss://AC456.twil.io/media-stream" in twiml
+    assert resp.headers["content-type"].startswith("text/xml")
+    assert "<Connect>" in resp.text
+    assert "wss://AC456.twil.io/media-stream" in resp.text
+
+
+def test_twiml_uses_an_explicit_media_stream_url_when_configured(client, monkeypatch):
+    monkeypatch.setattr(
+        settings.telephony.twilio, "media_stream_url", "wss://media.example/ws"
+    )
+
+    resp = client.post("/outbound-twiml")
+
+    assert resp.status_code == 200
+    assert "wss://media.example/ws" in resp.text
+    assert "twil.io" not in resp.text
 
 
 class _StubAsyncClient:
-    def __init__(self, get_response=None, post_response=None, get_error=None):
-        self.get_response = get_response
+    def __init__(self, post_response=None):
         self.post_response = post_response
-        self.get_error = get_error
         self.post_calls = []
 
     async def __aenter__(self):
@@ -55,11 +65,6 @@ class _StubAsyncClient:
 
     async def __aexit__(self, *exc):
         return False
-
-    async def get(self, url):
-        if self.get_error:
-            raise self.get_error
-        return self.get_response
 
     async def post(self, url, data=None, auth=None):
         self.post_calls.append((url, data, auth))
@@ -76,8 +81,8 @@ async def test_outbound_requires_number(monkeypatch):
     assert result == {"error": "to_number is required"}
 
 
-async def test_outbound_uses_public_url_env(monkeypatch):
-    monkeypatch.setenv("PUBLIC_URL", "https://tunnel.ngrok-free.app")
+async def test_outbound_uses_the_configured_public_url(monkeypatch):
+    monkeypatch.setattr(settings.telephony, "public_url", "https://tunnel.ngrok-free.app")
     monkeypatch.setattr(settings.telephony.twilio, "account_sid", "AC123")
     monkeypatch.setattr(settings.telephony.twilio, "auth_token", "token")
     stub = _StubAsyncClient(
@@ -100,57 +105,25 @@ async def test_outbound_uses_public_url_env(monkeypatch):
     assert auth == ("AC123", "token")
 
 
-async def test_outbound_discovers_ngrok_tunnel(monkeypatch):
-    monkeypatch.delenv("PUBLIC_URL", raising=False)
+async def test_outbound_without_a_public_url_intercepts_before_dialing(monkeypatch):
+    monkeypatch.setattr(settings.telephony, "public_url", "")
     stub = _StubAsyncClient(
-        get_response=httpx.Response(
-            200,
-            request=httpx.Request("GET", "http://localhost:4040/api/tunnels"),
-            json={
-                "tunnels": [
-                    {"proto": "http", "public_url": "http://http.ngrok-free.app"},
-                    {"proto": "https", "public_url": "https://abc.ngrok-free.app"},
-                ]
-            },
-        ),
         post_response=httpx.Response(
             201,
             request=httpx.Request("POST", TWILIO_CALLS_URL),
-            json={"sid": "CA8", "status": "queued"},
-        ),
+            json={"sid": "CA9", "status": "queued"},
+        )
     )
     _patch_http_client(monkeypatch, stub)
 
     result = await twilio.initiate_outbound_call("+8801782737074")
 
-    assert result["call_sid"] == "CA8"
-    _, data, _ = stub.post_calls[0]
-    assert data["Url"] == "https://abc.ngrok-free.app/api/v1/telephony/outbound-twiml"
-
-
-async def test_outbound_no_public_url_errors(monkeypatch):
-    monkeypatch.delenv("PUBLIC_URL", raising=False)
-    stub = _StubAsyncClient(get_response=httpx.Response(404))
-    _patch_http_client(monkeypatch, stub)
-
-    result = await twilio.initiate_outbound_call("+8801782737074")
-
-    assert result == {"error": "No public URL found. Start ngrok first: ngrok http 8000"}
+    assert "public_url" in result["error"]
     assert not stub.post_calls
 
 
-async def test_outbound_ngrok_api_error_falls_through(monkeypatch):
-    monkeypatch.delenv("PUBLIC_URL", raising=False)
-    stub = _StubAsyncClient(get_error=httpx.ConnectError("refused"))
-    _patch_http_client(monkeypatch, stub)
-
-    result = await twilio.initiate_outbound_call("+8801782737074")
-
-    assert "No public URL found" in result["error"]
-
-
 async def test_outbound_twilio_error_propagates(monkeypatch):
-    monkeypatch.setenv("PUBLIC_URL", "https://x.ngrok-free.app")
+    monkeypatch.setattr(settings.telephony, "public_url", "https://x.ngrok-free.app")
     stub = _StubAsyncClient(
         post_response=httpx.Response(401, request=httpx.Request("POST", TWILIO_CALLS_URL))
     )
