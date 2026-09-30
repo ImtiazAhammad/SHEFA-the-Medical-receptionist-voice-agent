@@ -35,7 +35,10 @@ pipeline:
     streaming: true
   tts:
     provider: "piper"  # elevenlabs | openai | piper | vits
-    model: "eleven_multilingual_v2"
+    # Local Piper voice. Bangla is the pilot language and has no licensed
+    # voice yet (T5 blocker): the pilot runs English-only until one exists.
+    voice_path: "models/piper/en_US-lessac-medium.onnx"
+    model: "eleven_multilingual_v2"  # elevenlabs only, unused by piper
     voice_id: "pNInz6obpgDQGcFmaJgB"  # Adam - professional male
     stability: 0.5
     similarity_boost: 0.75
@@ -43,7 +46,7 @@ pipeline:
     sample_rate: 24000
   llm:
     provider: "qwen_local"  # openai | anthropic | qwen_local
-    model: "qwen3-coder-next"
+    model: "qwen2.5:7b"
     temperature: 0.3
     max_tokens: 512
     system_prompt_file: "configs/prompts/system.md"
@@ -125,6 +128,12 @@ compliance:
   phi_access_logging: true
   max_session_ttl: 3600
 
+# T9: one SQLite file backs the calls table and the append-only audit log
+# (WAL journal, monotonic seq). Tombstones, daily COUNT reconciliation, and
+# the D5 zero-log alert all read this store.
+storage:
+  db_path: "data/sefa.db"
+
 monitoring:
   prometheus:
     enabled: true
@@ -138,7 +147,15 @@ monitoring:
     phi_masking: true
 
 escalation:
-  confidence_threshold: 0.7
+  # E.164 numbers a transfer can actually dial. Empty means no human is
+  # reachable: the agent must not promise a patient a transfer it cannot make.
+  # The staffed on-call allow-list for the unmanned window is an open blocker.
+  on_call_numbers: []
+  hold_audio_url: ""
+  # Gates the "sorry, could you repeat?" prompt. Low confidence means the
+  # agent may have misheard; it does not put the patient on hold for a human.
+  # Escalation is content-driven only (emergency keywords).
+  repeat_threshold: 0.5
   max_transfer_attempts: 3
   emergency_keywords:
     en: ["emergency", "chest pain", "can't breathe", "severe bleeding", "unconscious"]
@@ -146,3 +163,40 @@ escalation:
   transfer_greeting:
     en: "I'm transferring you to our receptionist now. Please hold."
     bn: "আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
+  repeat_prompt:
+    en: "Sorry, I didn't catch that clearly. Could you say that again?"
+    bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"
+  # Spoken when the Nth consecutive turn failure ends the call: courtesy plus
+  # a DTMF/transfer offer the patient can act on, so failure is never dead air
+  # or a hangup on its own. max_transfer_attempts gates how many retries run
+  # before this prompt is played.
+  terminal_prompt:
+    en: "I'm having trouble hearing you, so I'll connect you to our front desk. Please hold, or press star at any time."
+    bn: "আমি আপনাকে পরিষ্কার করে শুনতে সমস্যা হচ্ছে, তাই আমি আপনাকে আমাদের সামনের ডেস্কে সংযোগ করছি। অনুগ্রহ করে অপেক্ষা করুন, অথবা যেকোনো সময় স্টার চাপুন।"
+  # Spoken once when a caller's language is neither en nor bn (D-ENG16): an
+  # explicit OTHER route hands the call to a human with a warm transfer/DTMF
+  # offer instead of replying in a language the caller does not speak.
+  other_language_prompt:
+    en: "I'll connect you to our front desk now. Please hold, or press star for a callback."
+    bn: "আমি আপনাকে এখন সামনের ডেস্কে সংযোগ করছি। আপনার সুবিধা হলে অপেক্ষা করুন, অথবা স্টার চাপুন।"
+
+# T7: authentication and authorization for every route. Nothing here is a
+# working secret — `principals[].token_hash` is a PBKDF2 record, and the
+# plaintext token is shown once by `sefa token mint`. With no principal
+# configured the API refuses every request rather than serving unauthenticated.
+auth:
+  dev_mode: false            # must be actively set true; gates the Twilio router
+  bind_host: "127.0.0.1"      # loopback by default, not 0.0.0.0
+  roles:
+    viewer:
+      - "sessions:read"
+    clinician:
+      - "sessions:read"
+      - "calls:place"
+      - "chat:use"
+    admin:
+      - "sessions:read"
+      - "calls:place"
+      - "chat:use"
+      - "config:read"
+  principals: []             # e.g. [{name: front-desk, role: clinician, token_hash: "pbkdf2_sha256$..."}]

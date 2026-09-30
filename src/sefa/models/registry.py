@@ -60,7 +60,10 @@ class ModelRegistry:
         if provider == "piper":
             from sefa.models.tts.piper_tts import PiperTTS
 
-            return PiperTTS()
+            return PiperTTS(
+                model_path=settings.pipeline.tts.voice_path,
+                sample_rate=settings.pipeline.tts.sample_rate,
+            )
         if provider == "vits":
             from sefa.models.tts.vits_tts import VITSTTS
 

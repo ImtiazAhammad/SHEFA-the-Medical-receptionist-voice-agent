@@ -1,12 +1,21 @@
-﻿"""Language detection for bilingual English/Bangla input."""
+﻿"""Language detection for bilingual English/Bangla input.
+
+Anything that is neither English nor Bangla (Hindi/Urdu/Punjabi in Devanagari
+or Arabic script) is returned as ``Language.OTHER`` so the pipeline can route
+the call to a warm transfer instead of replying in the wrong language
+(D-ENG16).
+"""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from sefa.models.base import Language
 
 _BANGLA_RANGE = re.compile(r"[\u0980-\u09FF]")
+# Devanagari (Hindi, Marathi, ...) and Arabic/Persian script (Urdu, ...).
+_OTHER_RANGE = re.compile(r"[\u0900-\u097F\u0600-\u06FF]")
 _BANGLA_KEYWORDS = {
     "আসসালামু আলাইকুম", "ধন্যবাদ", "হ্যাঁ", "না", "কি", "কেমন", "আছেন", "বোঝা",
     "সাহায্য", "ডাক্তার", "অ্যাপয়েন্টমেন্ট", "কখন", "দরকার", "আমি",
@@ -21,6 +30,9 @@ def detect_language(text: str) -> tuple[Language, float]:
     """
     if not text.strip():
         return Language.ENGLISH, 0.0
+
+    if _OTHER_RANGE.search(text):
+        return Language.OTHER, 0.7
 
     bn_chars = len(_BANGLA_RANGE.findall(text))
     total_alpha = sum(1 for c in text if c.isalpha())
@@ -52,9 +64,45 @@ def is_emergency(text: str, language: Language) -> bool:
 
 
 def needs_escalation(confidence: float, text: str, language: Language) -> bool:
-    """Determine if a call should be escalated to a human."""
+    """Determine if a call should be escalated to a human.
+
+    Low confidence alone does not escalate: it means the agent may have
+    misheard, so the patient is asked to repeat. A clinical escalation
+    requires a positive emergency signal, which holds regardless of how
+    confident the transcription is.
+    """
+    return evaluate_transcript(text, language, confidence).should_escalate
+
+
+def needs_repeat(confidence: float, text: str, language: Language) -> bool:
+    """Whether the patient should be asked to repeat themselves."""
+    return evaluate_transcript(text, language, confidence).needs_repeat
+
+
+@dataclass(frozen=True)
+class TranscriptDecision:
+    """The three independent decisions taken about one transcript.
+
+    `is_emergency` is a content judgement, `needs_repeat` is a comprehension
+    judgement. Folding them into one boolean meant a misheard emergency phrase
+    either escalated on a confidence threshold or was silently dropped.
+    """
+
+    is_emergency: bool
+    needs_repeat: bool
+    should_escalate: bool
+
+
+def evaluate_transcript(
+    text: str, language: Language, confidence: float
+) -> TranscriptDecision:
+    """Decide emergency, repeat, and escalation for one transcript."""
     from sefa.config.settings import settings
 
-    if confidence < settings.escalation.confidence_threshold:
-        return True
-    return bool(is_emergency(text, language))
+    emergency = is_emergency(text, language)
+    unclear = confidence < settings.escalation.repeat_threshold
+    return TranscriptDecision(
+        is_emergency=emergency,
+        needs_repeat=unclear and not emergency,
+        should_escalate=emergency,
+    )

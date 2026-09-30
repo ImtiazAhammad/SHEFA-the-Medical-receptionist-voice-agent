@@ -1,13 +1,20 @@
-﻿"""Application settings loaded from YAML config and environment variables."""
+﻿"""Application settings loaded from YAML config and environment variables.
+
+Every model inherits `StrictModel`, so a key that no model declares is a
+validation error rather than a silent drop. Config drift is only detectable if
+it is loud: the previous flat `MonitoringConfig` read `log_level` while the
+shipped YAML nested it under `logging:`, and pydantic's default of "INFO"
+matched the file, so the mismatch stayed invisible.
+"""
 
 from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Language(StrEnum):
@@ -15,7 +22,20 @@ class Language(StrEnum):
     BANGLA = "bn"
 
 
-class STTConfig(BaseModel):
+class StrictModel(BaseModel):
+    """Base for every settings model: unknown keys are errors, not drops."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AppInfoConfig(StrictModel):
+    name: str = "Sefa Receptionist"
+    version: str = "0.1.0"
+    environment: str = "development"
+    debug: bool = True
+
+
+class STTConfig(StrictModel):
     provider: str = "openai"
     model: str = "whisper-1"
     language: str = "auto"
@@ -24,9 +44,10 @@ class STTConfig(BaseModel):
     streaming: bool = True
 
 
-class TTSConfig(BaseModel):
+class TTSConfig(StrictModel):
     provider: str = "elevenlabs"
     model: str = "eleven_multilingual_v2"
+    voice_path: str = "models/piper/en_US-lessac-medium.onnx"
     voice_id: str = "pNInz6obpgDQGcFmaJgB"
     stability: float = 0.5
     similarity_boost: float = 0.75
@@ -34,7 +55,7 @@ class TTSConfig(BaseModel):
     sample_rate: int = 24000
 
 
-class LLMConfig(BaseModel):
+class LLMConfig(StrictModel):
     provider: str = "openai"
     model: str = "gpt-4o"
     temperature: float = 0.3
@@ -42,12 +63,12 @@ class LLMConfig(BaseModel):
     system_prompt_file: str = "configs/prompts/system.md"
 
 
-class LanguageDetectionConfig(BaseModel):
+class LanguageDetectionConfig(StrictModel):
     provider: str = "simple"
     confidence_threshold: float = 0.6
 
 
-class PipelineConfig(BaseModel):
+class PipelineConfig(StrictModel):
     stt: STTConfig = Field(default_factory=STTConfig)
     tts: TTSConfig = Field(default_factory=TTSConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -56,14 +77,14 @@ class PipelineConfig(BaseModel):
     )
 
 
-class LanguagesConfig(BaseModel):
+class LanguagesConfig(StrictModel):
     primary: str = "en"
     supported: list[str] = Field(default_factory=lambda: ["en", "bn"])
     code_switching: bool = True
     default_greeting: dict[str, str] = Field(default_factory=dict)
 
 
-class TwilioConfig(BaseModel):
+class TwilioConfig(StrictModel):
     account_sid: str = ""
     auth_token: str = ""
     phone_number: str = ""
@@ -71,25 +92,73 @@ class TwilioConfig(BaseModel):
     max_call_duration: int = 1800
 
 
-class TelephonyConfig(BaseModel):
+class WebSocketConfig(StrictModel):
+    host: str = "0.0.0.0"
+    port: int = 8765
+
+
+class TelephonyConfig(StrictModel):
     provider: str = "twilio"
     twilio: TwilioConfig = Field(default_factory=TwilioConfig)
+    websocket: WebSocketConfig = Field(default_factory=WebSocketConfig)
 
 
-class SessionConfig(BaseModel):
+class SessionConfig(StrictModel):
     backend: str = "redis"
     ttl_seconds: int = 3600
     max_history_turns: int = 50
 
 
-class EscalationConfig(BaseModel):
-    confidence_threshold: float = 0.7
+class EscalationConfig(StrictModel):
+    repeat_threshold: float = 0.5
     max_transfer_attempts: int = 3
+    on_call_numbers: list[str] = Field(default_factory=list)
+    hold_audio_url: str = ""
     emergency_keywords: dict[str, list[str]] = Field(default_factory=dict)
     transfer_greeting: dict[str, str] = Field(default_factory=dict)
+    repeat_prompt: dict[str, str] = Field(default_factory=dict)
+    terminal_prompt: dict[str, str] = Field(default_factory=dict)
+    other_language_prompt: dict[str, str] = Field(default_factory=dict)
 
 
-class ComplianceConfig(BaseModel):
+class AuthPrincipalConfig(StrictModel):
+    """One bearer-token holder.
+
+    `token_hash` is a `pbkdf2_sha256$iterations$salt$digest` record, never the
+    token itself: a config file is copied, backed up, and committed by accident,
+    and a plaintext token in it is a live credential for whoever reads it.
+    """
+
+    name: str
+    role: str
+    token_hash: str
+
+
+class AuthConfig(StrictModel):
+    """Authentication and exposure controls for the whole service.
+
+    `bind_host` defaults to loopback and `dev_mode` to false, so the safe
+    posture is what you get by doing nothing. Both must be actively loosened,
+    which means the decision is visible in the config diff.
+    """
+
+    dev_mode: bool = False
+    bind_host: str = "127.0.0.1"
+    principals: list[AuthPrincipalConfig] = Field(default_factory=list)
+    roles: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class StorageConfig(StrictModel):
+    """Where the durable stores live.
+
+    One SQLite file backs both the `calls` table and the append-only `audit_log`
+    (T9): a single backup or verification covers the whole evidence trail.
+    """
+
+    db_path: str = "data/sefa.db"
+
+
+class ComplianceConfig(StrictModel):
     hipaa_enabled: bool = True
     encryption_algorithm: str = "AES-256-GCM"
     audit_log_enabled: bool = True
@@ -99,24 +168,152 @@ class ComplianceConfig(BaseModel):
     max_session_ttl: int = 3600
 
 
-class MonitoringConfig(BaseModel):
-    prometheus_enabled: bool = True
-    sentry_enabled: bool = False
-    log_level: str = "INFO"
-    log_format: str = "json"
+class PrometheusConfig(StrictModel):
+    enabled: bool = True
+    port: int = 9090
+
+
+class SentryConfig(StrictModel):
+    enabled: bool = False
+    dsn: str = ""
+
+
+class LoggingConfig(StrictModel):
+    level: str = "INFO"
+    format: str = "json"
     phi_masking: bool = True
 
 
-class AppConfig(BaseModel):
+class MonitoringConfig(StrictModel):
+    prometheus: PrometheusConfig = Field(default_factory=PrometheusConfig)
+    sentry: SentryConfig = Field(default_factory=SentryConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+
+class OpenAIAdapterConfig(StrictModel):
+    type: Literal["openai_stt", "openai_llm"]
+    api_key: str = ""
+    model: str = ""
+
+
+class AnthropicAdapterConfig(StrictModel):
+    type: Literal["anthropic_llm"]
+    api_key: str = ""
+    model: str = ""
+
+
+class OpenAICompatibleAdapterConfig(StrictModel):
+    type: Literal["openai_compatible_llm"]
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+
+
+class ElevenLabsSTTAdapterConfig(StrictModel):
+    type: Literal["elevenlabs_stt"]
+    api_key: str = ""
+
+
+class ElevenLabsTTSAdapterConfig(StrictModel):
+    type: Literal["elevenlabs_tts"]
+    api_key: str = ""
+
+
+class WhisperLocalAdapterConfig(StrictModel):
+    type: Literal["whisper_local_stt"]
+    model_size: str = "large-v3"
+    device: str = "cuda"
+    compute_type: str = "float16"
+    bangla_finetuned: bool = True
+
+
+class PiperAdapterConfig(StrictModel):
+    type: Literal["piper_tts"]
+    model_path: str = ""
+
+
+class VITSAdapterConfig(StrictModel):
+    type: Literal["vits_tts"]
+    model_path: str = ""
+AdapterConfig = Annotated[
+    OpenAIAdapterConfig
+    | AnthropicAdapterConfig
+    | OpenAICompatibleAdapterConfig
+    | ElevenLabsSTTAdapterConfig
+    | ElevenLabsTTSAdapterConfig
+    | WhisperLocalAdapterConfig
+    | PiperAdapterConfig
+    | VITSAdapterConfig,
+    Field(discriminator="type"),
+]
+
+class RoutingConfig(StrictModel):
+    strategy: str = "config"
+    fallback_provider: str = "openai"
+
+
+class ModelsConfig(StrictModel):
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
+    adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
+
+
+class GoogleCalendarConfig(StrictModel):
+    credentials_path: str = ""
+    calendar_id: str = "primary"
+
+
+class CalendarConfig(StrictModel):
+    provider: str = "google"
+    google: GoogleCalendarConfig = Field(default_factory=GoogleCalendarConfig)
+
+
+class CustomEHRConfig(StrictModel):
+    base_url: str = ""
+    api_key: str = ""
+
+
+class EHRConfig(StrictModel):
+    provider: str = "custom"
+    custom: CustomEHRConfig = Field(default_factory=CustomEHRConfig)
+
+
+class SMSChannelConfig(StrictModel):
+    provider: str = "twilio"
+
+
+class EmailChannelConfig(StrictModel):
+    provider: str = "smtp"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    from_address: str = ""
+
+
+class NotificationsConfig(StrictModel):
+    sms: SMSChannelConfig = Field(default_factory=SMSChannelConfig)
+    email: EmailChannelConfig = Field(default_factory=EmailChannelConfig)
+
+
+class IntegrationsConfig(StrictModel):
+    calendar: CalendarConfig = Field(default_factory=CalendarConfig)
+    ehr: EHRConfig = Field(default_factory=EHRConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+
+
+class AppConfig(StrictModel):
     """Root configuration loaded from YAML."""
 
+    app: AppInfoConfig = Field(default_factory=AppInfoConfig)
     languages: LanguagesConfig = Field(default_factory=LanguagesConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     telephony: TelephonyConfig = Field(default_factory=TelephonyConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     escalation: EscalationConfig = Field(default_factory=EscalationConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    models: ModelsConfig = Field(default_factory=ModelsConfig)
+    integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
 
 
 def _resolve_env_vars(obj: Any) -> Any:

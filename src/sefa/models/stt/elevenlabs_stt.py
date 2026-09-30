@@ -7,7 +7,7 @@ import os
 
 import httpx
 
-from sefa.models.base import BaseSTT, Language, STTResult
+from sefa.models.base import BaseSTT, STTResult, language_from_code
 
 
 class ElevenLabsSTT(BaseSTT):
@@ -36,7 +36,7 @@ class ElevenLabsSTT(BaseSTT):
         detected = result.get("language_code", "en")[:2]
         return STTResult(
             text=result.get("text", ""),
-            language=Language(detected) if detected in ("en", "bn") else Language.ENGLISH,
+            language=language_from_code(detected),
             confidence=1.0,
             duration_ms=0.0,
         )

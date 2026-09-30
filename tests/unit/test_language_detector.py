@@ -1,7 +1,12 @@
 ﻿"""Tests for language detection."""
 
 from sefa.models.base import Language
-from sefa.pipeline.language_detector import detect_language, is_emergency, needs_escalation
+from sefa.pipeline.language_detector import (
+    detect_language,
+    is_emergency,
+    needs_escalation,
+    needs_repeat,
+)
 
 
 def test_detect_english():
@@ -27,8 +32,14 @@ def test_emergency_detection():
     assert not is_emergency("I need to book an appointment", Language.ENGLISH)
 
 
-def test_needs_escalation_low_confidence():
-    assert needs_escalation(0.3, "unclear speech", Language.ENGLISH)
+def test_needs_repeat_low_confidence():
+    """Low confidence asks the patient to repeat; it does not escalate.
+
+    T2 split the old conflated decision: a misheard word is a comprehension
+    failure, and escalating it burned the on-call allow-list.
+    """
+    assert needs_repeat(0.3, "unclear speech", Language.ENGLISH)
+    assert not needs_escalation(0.3, "unclear speech", Language.ENGLISH)
 
 
 def test_needs_escalation_emergency():

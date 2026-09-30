@@ -19,6 +19,26 @@ class Turn:
     timestamp: float = 0.0
     tool_call_id: str | None = None
     tool_call_name: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+
+
+def truncate_history(history: list[Turn], max_turns: int) -> list[Turn]:
+    """Suffix-truncate on turn-group boundaries so tool-call pairs stay whole.
+
+    A plain ``history[-max_turns:]`` cut can leave a ``tool`` turn in the
+    window whose assistant ``tool_calls`` partner scrolled off, and an
+    OpenAI/Qwen-compatible server rejects a ``tool`` message with nothing
+    declaring its id (D-ENG15). Since the window is a suffix, a tool run keeps
+    its partner unless the run itself was half-cut - and a half-cut run becomes
+    leading ``tool`` turns, which are orphaned and drop with their partner.
+    An unanswered trailing assistant declaration is kept: its pending ``tool``
+    results arrive right after it and must be allowed to pair up. The request
+    builder, not truncation, retracts a declaration that was never answered.
+    """
+    retained = history[-max_turns:]
+    while retained and retained[0].role == "tool":
+        retained = retained[1:]
+    return retained
 
 
 @dataclass
@@ -49,7 +69,7 @@ class CallSession:
         ))
         self.last_activity = time.time()
         if len(self.history) > settings.session.max_history_turns:
-            self.history = self.history[-settings.session.max_history_turns:]
+            self.history = truncate_history(self.history, settings.session.max_history_turns)
 
     def to_messages(self) -> list[dict[str, str]]:
         return [{"role": t.role, "content": t.content} for t in self.history]
@@ -67,6 +87,7 @@ class CallSession:
                     "content": t.content,
                     "language": t.language.value,
                     "timestamp": t.timestamp,
+                    "tool_calls": t.tool_calls,
                 }
                 for t in self.history
             ],
@@ -83,6 +104,7 @@ class CallSession:
                 content=t["content"],
                 language=Language(t.get("language", "en")),
                 timestamp=t.get("timestamp", 0),
+                tool_calls=t.get("tool_calls"),
             )
             for t in data.get("history", [])
         ]
@@ -108,6 +130,8 @@ class SessionManager:
         self._redis_failed = False
 
     async def _get_redis(self):  # noqa: ANN202
+        if settings.session.backend != "redis":
+            return None
         if self._redis_failed:
             return None
         if self._redis is not None:

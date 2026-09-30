@@ -109,8 +109,43 @@ async def _send_confirmation(args: dict[str, Any], session: CallSession) -> dict
 
 
 async def _transfer_to_human(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
+    """Hand the live call to a human, or report that we could not.
+
+    This used to set `session.state` and return `transferred: True` without
+    touching the call, so the agent announced a transfer that never happened.
+    A transfer is now a provider call whose failure is reported as a failure.
+    """
+    from sefa.config.settings import settings
+    from sefa.telephony.control import control, on_call_target
+
+    target = on_call_target()
+    if target is None:
+        logger.error(
+            "Transfer requested for %s but escalation.on_call_numbers is empty",
+            session.call_sid,
+        )
+        return {
+            "transferred": False,
+            "error": (
+                "No on_call target is configured; set escalation.on_call_numbers "
+                "before promising a patient a transfer"
+            ),
+            "reason": args.get("reason", "User requested"),
+        }
+
+    hold_url = settings.escalation.hold_audio_url
+    if hold_url:
+        await control.play_file(session.call_sid, hold_url, loop=1)
+
+    result = await control.transfer(session.call_sid, target)
+    if result.get("error"):
+        return {**result, "reason": args.get("reason", "User requested")}
     session.state = "escalated"
-    return {"transferred": True, "reason": args.get("reason", "User requested")}
+    return {
+        **result,
+        "transferred": True,
+        "reason": args.get("reason", "User requested"),
+    }
 
 
 _HANDLERS: dict[str, Any] = {
