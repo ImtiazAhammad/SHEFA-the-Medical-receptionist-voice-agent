@@ -157,7 +157,7 @@ escalation:
   # Escalation is content-driven only (emergency keywords).
   repeat_threshold: 0.5
   max_transfer_attempts: 3
-# D-ENG17: emergency_keywords are additive-only — a hit may only ADD the
+  # D-ENG17: emergency_keywords are additive-only — a hit may only ADD the
   # transfer path, never hang up. The four words that embed benignly
   # ("emergency", "unconscious", "জরুরি", "অজ্ঞান") fire only as the whole
   # utterance or its final word ("জরুরি প্রয়োজনে", "emergency contact"
