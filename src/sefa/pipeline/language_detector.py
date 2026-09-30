@@ -16,6 +16,19 @@ from sefa.models.base import Language
 _BANGLA_RANGE = re.compile(r"[\u0980-\u09FF]")
 # Devanagari (Hindi, Marathi, ...) and Arabic/Persian script (Urdu, ...).
 _OTHER_RANGE = re.compile(r"[\u0900-\u097F\u0600-\u06FF]")
+# Word characters for boundary matching (D-ENG17). Python's ``\b``/``\W``
+# treat Bangla vowel signs (ে, া, ি — Mc/Mn marks) as non-word, so script
+# boundaries must be explicit: Latin letters plus the Bangla block.
+_WORD = r"A-Za-z\u0980-\u09FF"
+_NONWORD = rf"[^{_WORD}]"
+_SBOUND = rf"(?<![{_WORD}])"  # "start boundary": char before is not a word char
+_EBOUND = rf"(?![{_WORD}])"  # "end boundary": char after is not a word char
+# Words that embed benignly and must therefore fire only as the whole
+# utterance or its final word (D-ENG17's substring trap): "emergency contact",
+# "জরুরি প্রয়োজনে". Every OTHER keyword — including any single-word
+# addition — is boundary-anchored and may match anywhere, so adding a generic
+# word like "urgent" without classifying it here breaks the benign corpus.
+_END_ANCHORED_KEYWORDS = frozenset({"emergency", "unconscious", "জরুরি", "অজ্ঞান"})
 _BANGLA_KEYWORDS = {
     "আসসালামু আলাইকুম", "ধন্যবাদ", "হ্যাঁ", "না", "কি", "কেমন", "আছেন", "বোঝা",
     "সাহায্য", "ডাক্তার", "অ্যাপয়েন্টমেন্ট", "কখন", "দরকার", "আমি",
@@ -55,12 +68,45 @@ def detect_language(text: str) -> tuple[Language, float]:
 
 
 def is_emergency(text: str, language: Language) -> bool:
-    """Check if input contains emergency keywords."""
+    """Check if input contains an emergency signal (D-ENG17).
+
+    Match is additive-only — a hit may only route toward a human transfer.
+
+    * Keywords that embed benignly ("emergency", "unconscious", "জরুরি",
+      "অজ্ঞান" — the ``_END_ANCHORED_KEYWORDS`` set) fire only as the whole
+      utterance or as its final word: "emergency contact" and
+      ``জরুরি প্রয়োজনে`` stay benign, while "this is an emergency" and
+      ``এটা জরুরি`` escalate.
+    * Every other keyword — multi-word phrases like "chest pain" and any
+      single-word addition — is ``\b``-equivalent boundary-anchored and may
+      match anywhere in the utterance.
+
+    Boundaries are script-aware: Python's ``\b`` treats Bangla vowel signs
+    (এ, া, ি — Mc/Mn marks) as non-word characters, which would turn every
+    Bangla phrase boundary into a lie.
+    """
     from sefa.config.settings import settings
 
     keywords = settings.escalation.emergency_keywords.get(language.value, [])
-    text_lower = text.lower()
-    return any(kw.lower() in text_lower for kw in keywords)
+    if not keywords:
+        return False
+
+    text_lower = text.lower().strip()
+    if not text_lower:
+        return False
+
+    core = re.sub(rf"^{_NONWORD}+|{_NONWORD}+$", "", text_lower)
+
+    for keyword in keywords:
+        kw = keyword.lower()
+        end_anchored = " " not in kw and kw in _END_ANCHORED_KEYWORDS
+        if end_anchored:
+            if core == kw or core.endswith(" " + kw):
+                return True
+            continue
+        if re.search(_SBOUND + re.escape(kw) + _EBOUND, text_lower):
+            return True
+    return False
 
 
 def needs_escalation(confidence: float, text: str, language: Language) -> bool:

@@ -157,9 +157,26 @@ escalation:
   # Escalation is content-driven only (emergency keywords).
   repeat_threshold: 0.5
   max_transfer_attempts: 3
+# D-ENG17: emergency_keywords are additive-only — a hit may only ADD the
+  # transfer path, never hang up. The four words that embed benignly
+  # ("emergency", "unconscious", "জরুরি", "অজ্ঞান") fire only as the whole
+  # utterance or its final word ("জরুরি প্রয়োজনে", "emergency contact"
+  # stay benign); every other entry is boundary-anchored and matches
+  # anywhere. Adding a generic word like "urgent" without also classifying
+  # it breaks the benign-urgent corpus in tests/unit/test_emergency_corpus.py.
+  # NOTE: the phrase set is provisionally extended pending named-owner
+  # (clinician) review before the Child 6 demo.
   emergency_keywords:
-    en: ["emergency", "chest pain", "can't breathe", "severe bleeding", "unconscious"]
-    bn: ["জরুরি", "বুকে ব্যথা", "শ্বাস নিতে পারছি", "তীব্র রক্তক্ষরণ", "অজ্ঞান"]
+    en: ["chest pain", "can't breathe", "cant breathe", "severe bleeding",
+         "heart attack", "not breathing", "isn't breathing", "is not breathing",
+         "passed out", "fainted", "lost consciousness", "is unconscious",
+         "unresponsive", "having a seizure", "having a fit", "severe pain",
+         "can't move", "cant move", "i'm dying", "im dying",
+         "is having a stroke", "had a stroke", "emergency", "unconscious"]
+    bn: ["জরুরি", "অজ্ঞান", "বুকে ব্যথা", "তীব্র রক্তক্ষরণ",
+         "শ্বাস নিতে পারছি না", "অজ্ঞান হয়ে গেছি", "অজ্ঞান হয়ে গিয়েছে",
+         "জ্ঞান হারিয়ে ফেলেছি", "খিচুনি আসছে", "পুড়ে গেছি",
+         "একটা দুর্ঘটনা হয়েছে"]
   transfer_greeting:
     en: "I'm transferring you to our receptionist now. Please hold."
     bn: "আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
