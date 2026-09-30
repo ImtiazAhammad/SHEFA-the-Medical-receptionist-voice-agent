@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 from urllib.parse import urlparse
 
 import yaml
@@ -336,6 +336,40 @@ class RoutingConfig(StrictModel):
 class ModelsConfig(StrictModel):
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
+
+    # D-ENG20: `models.adapters` is the single model-config source. Each
+    # pipeline LLM provider maps to exactly one adapter type, and the registry
+    # reads its model/base_url from the resolved adapter — never a hardcoded
+    # literal (the deleted `http://localhost:11434/v1` default).
+    LLM_PROVIDER_ADAPTER_TYPE: ClassVar[dict[str, str]] = {
+        "openai": "openai_llm",
+        "anthropic": "anthropic_llm",
+        "qwen_local": "openai_compatible_llm",
+    }
+
+    def resolve_llm_adapter(self, provider: str) -> tuple[str, AdapterConfig]:
+        """Return the single (key, adapter) backing an LLM provider.
+
+        A provider must resolve to exactly one adapter of its declared type;
+        zero or several is a config error, never a silent guess.
+        """
+        adapter_type = self.LLM_PROVIDER_ADAPTER_TYPE.get(provider)
+        if adapter_type is None:
+            raise ValueError(
+                f"No models.adapters type registered for LLM provider {provider!r}"
+            )
+        matches = {
+            key: adapter
+            for key, adapter in self.adapters.items()
+            if getattr(adapter, "type", None) == adapter_type
+        }
+        if len(matches) != 1:
+            raise ValueError(
+                f"LLM provider {provider!r} requires exactly one models.adapters "
+                f"entry of type {adapter_type!r}; found {len(matches)}: "
+                f"{sorted(matches)}"
+            )
+        return next(iter(matches.items()))
 
 
 class GoogleCalendarConfig(StrictModel):

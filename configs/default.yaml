@@ -109,8 +109,11 @@ models:
       model: "claude-3-5-sonnet-20241022"
     llm_qwen_local:
       type: "openai_compatible_llm"
+      # D-ENG20/Q12: this adapter IS the single model source the registry reads
+      # (port 8080, model matches pipeline.llm.model — the old 11434/qwen3-8b
+      # drift is deleted).
       base_url: "http://localhost:8080/v1"
-      model: "qwen3-8b"
+      model: "qwen2.5:7b"
       api_key: "not-needed"
 
 integrations:

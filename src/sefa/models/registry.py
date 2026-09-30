@@ -72,31 +72,34 @@ class ModelRegistry:
 
     async def _create_llm(self) -> BaseLLM:
         provider = settings.pipeline.llm.provider
+        _, adapter = settings.models.resolve_llm_adapter(provider)
+        temperature = settings.pipeline.llm.temperature
+        max_tokens = settings.pipeline.llm.max_tokens
         if provider == "openai":
             from sefa.models.llm.openai_llm import OpenAILLM
 
             return OpenAILLM(
-                model=settings.pipeline.llm.model,
-                temperature=settings.pipeline.llm.temperature,
-                max_tokens=settings.pipeline.llm.max_tokens,
+                model=adapter.model,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         if provider == "anthropic":
             from sefa.models.llm.anthropic_llm import AnthropicLLM
 
             return AnthropicLLM(
-                model=settings.pipeline.llm.model,
-                temperature=settings.pipeline.llm.temperature,
+                model=adapter.model,
+                temperature=temperature,
             )
         if provider == "qwen_local":
             from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 
             return OpenAICompatibleLLM(
-                base_url="http://localhost:11434/v1",
-                model=settings.pipeline.llm.model,
-                temperature=settings.pipeline.llm.temperature,
-                max_tokens=settings.pipeline.llm.max_tokens,
+                base_url=adapter.base_url,
+                model=adapter.model,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-        raise ValueError(f"Unknown LLM provider: {provider}")
+        raise AssertionError(f"Unreachable: provider {provider!r} resolved but unhandled")
 
     async def reset(self) -> None:
         for adapter in (self._stt, self._tts, self._llm):
