@@ -324,7 +324,14 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
 
 
 def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
-    """A dead socket must end the worker, not spin on a broken connection."""
+    """A dead socket must end the worker, not spin on a broken connection.
+
+    T18 (D-ENG21): the worker used to `break` on the first send error, so one
+    transient failure ended playback for the rest of the call while the
+    pipeline kept pushing frames into a queue nobody drained. It now retries
+    transient failures and gives up only past a consecutive-failure budget —
+    still bounded, still terminates, but no longer on the first error.
+    """
     attempts: list[int] = []
 
     class BrokenWebSocket(_FakeWebSocket):
@@ -351,7 +358,11 @@ def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
 
     asyncio.run(_drive())
 
-    assert len(attempts) == 1, "worker kept sending after the socket died"
+    budget = twilio.MAX_CONSECUTIVE_SEND_FAILURES
+    assert len(attempts) == budget, (
+        "worker must retry transient send failures up to the budget, "
+        f"then stop (attempts={len(attempts)}, budget={budget})"
+    )
 
 
 def test_playback_worker_propagates_cancellation(monkeypatch):
