@@ -44,10 +44,11 @@ async def test_language_detector() -> bool:
     print("\n" + "=" * 60)
     print("TEST: Language Detection")
     print("=" * 60)
-    from sefa.pipeline.language_detector import (
-        detect_language, is_emergency, needs_escalation,
-    )
     from sefa.models.base import Language
+    from sefa.pipeline.language_detector import (
+        detect_language,
+        is_emergency,
+    )
 
     tests = [
         ("Hello, how are you?", Language.ENGLISH),
@@ -77,8 +78,8 @@ async def test_session() -> bool:
     print("TEST: Session Management")
     print("=" * 60)
     try:
-        from sefa.session.manager import SessionManager, CallSession
         from sefa.models.base import Language
+        from sefa.session.manager import SessionManager
 
         mgr = SessionManager()
         session = await mgr.get_or_create("test_call_001")
@@ -228,9 +229,8 @@ async def test_full_pipeline() -> bool:
     print("TEST: Full Voice Pipeline (simulated)")
     print("=" * 60)
     try:
-        from sefa.session.manager import CallSession
-        from sefa.models.base import Language
         from sefa.pipeline.language_detector import detect_language
+        from sefa.session.manager import CallSession
         from sefa.tools.definitions import get_tool_definitions
 
         # Simulate a conversation turn
