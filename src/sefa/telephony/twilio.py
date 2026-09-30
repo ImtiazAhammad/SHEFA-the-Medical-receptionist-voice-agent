@@ -8,7 +8,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, Dial, Play, VoiceResponse
 
 from sefa.config.settings import settings
@@ -89,26 +89,38 @@ def _play_twiml(url: str, loop: int) -> str:
     return str(response)
 
 
+def media_stream_url() -> str:
+    """The wss:// Media Stream endpoint TwiML points Twilio at (D-ENG25).
+
+    `telephony.twilio.media_stream_url` is validated at startup to be `wss://`;
+    the empty value means the classic per-account host
+    ``wss://<account_sid>.twil.io/media-stream``.
+    """
+    configured = settings.telephony.twilio.media_stream_url
+    if configured:
+        return configured
+    return f"wss://{settings.telephony.twilio.account_sid}.twil.io/media-stream"
+
+
 @app.post("/incoming")
-async def handle_incoming_call() -> dict[str, str]:
-    """Twilio webhook for incoming calls. Returns TwiML to start a Media Stream."""
-    host = settings.telephony.twilio.account_sid
+async def handle_incoming_call() -> Response:
+    """Twilio webhook for incoming calls. Returns TwiML as text/xml to start a
+    Media Stream — a JSON `{"Twiml": ...}` body is not a TwiML response (D-ENG25)."""
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=f"wss://{host}.twil.io/media-stream")
+    connect.stream(url=media_stream_url())
     response.append(connect)
-    return {"Twiml": str(response)}
+    return Response(content=str(response), media_type="text/xml")
 
 
 @app.post("/outbound-twiml")
-async def outbound_twiml() -> dict[str, str]:
-    """TwiML endpoint for outbound calls — returns Stream connect."""
-    host = settings.telephony.twilio.account_sid
+async def outbound_twiml() -> Response:
+    """TwiML endpoint for outbound calls — returns a Stream connect as text/xml."""
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=f"wss://{host}.twil.io/media-stream")
+    connect.stream(url=media_stream_url())
     response.append(connect)
-    return {"Twiml": str(response)}
+    return Response(content=str(response), media_type="text/xml")
 
 
 @app.post("/outbound")
@@ -123,28 +135,17 @@ async def initiate_outbound_call(to_number: str = "") -> dict[str, str]:
     token = settings.telephony.twilio.auth_token
     from_number = settings.telephony.twilio.phone_number
 
-    # Get the public URL from ngrok or use the Twilio account SID as host
-    import os
-    ngrok_url = os.environ.get("PUBLIC_URL", "")
+    # The ngrok localhost scrape is deleted (D-ENG25): the public URL is an
+    # explicit, startup-validated config key.
+    public_url = settings.telephony.public_url
 
-    if not ngrok_url:
-        # Try to get from ngrok API
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get("http://localhost:4040/api/tunnels")
-                if resp.status_code == 200:
-                    tunnels = resp.json().get("tunnels", [])
-                    for t in tunnels:
-                        if t.get("proto") == "https":
-                            ngrok_url = t["public_url"]
-                            break
-        except Exception:
-            pass
+    if not public_url:
+        return {
+            "error": "No public URL configured. Set telephony.public_url "
+            '(an absolute http(s) URL, e.g. public_url: "${PUBLIC_URL}").'
+        }
 
-    if not ngrok_url:
-        return {"error": "No public URL found. Start ngrok first: ngrok http 8000"}
-
-    twiml_url = f"{ngrok_url}/api/v1/telephony/outbound-twiml"
+    twiml_url = f"{public_url}/api/v1/telephony/outbound-twiml"
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"
     data = {

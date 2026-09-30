@@ -11,6 +11,7 @@ without a loud error.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -47,10 +48,13 @@ from sefa.config.settings import (
     RoutingConfig,
     SentryConfig,
     SessionConfig,
+    SipConfig,
     SMSChannelConfig,
     STTConfig,
     TelephonyConfig,
+    TelephonyProvider,
     TTSConfig,
+    TwilioConfig,
     WebSocketConfig,
     load_config,
 )
@@ -282,6 +286,112 @@ def test_env_var_reference_resolves_from_environment(tmp_path, monkeypatch):
     assert config.telephony.twilio.account_sid == "ACfromenv"
 
 
+def test_telephony_provider_is_a_single_enum_knob():
+    """D-ENG13: provider selection is one knob, typed so a typo cannot load."""
+    assert TelephonyProvider.TWILIO.value == "twilio"
+    assert TelephonyProvider.ASTERISK.value == "asterisk"
+    assert TelephonyProvider.FREESWITCH.value == "freeswitch"
+    config = TelephonyConfig.model_validate({"provider": "twilio"})
+    assert config.provider is TelephonyProvider.TWILIO
+
+
+def test_telephony_provider_rejects_an_unknown_knob_value():
+    """Flip the knob to a value that is not twilio|asterisk|freeswitch →
+    a startup error, not a silently unbound router."""
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"provider": "twiliooo"})
+
+
+def test_sip_carries_credentials_only_and_never_a_provider_key():
+    sip = SipConfig.model_validate(
+        {"host": "sip.example", "port": 5061, "username": "u", "password": "p"}
+    )
+    assert sip.port == 5061
+    assert sip.password == "p"
+    with pytest.raises(ValidationError):
+        SipConfig.model_validate({"host": "sip.example", "provider": "asterisk"})
+
+
+def test_two_provider_knobs_is_rejected_at_startup():
+    """D-ENG13: `telephony.sip.provider` is the removed two-key state. A config
+    carrying it must not boot quietly and lose calls."""
+    with pytest.raises(ValidationError, match="sip.provider"):
+        TelephonyConfig.model_validate(
+            {
+                "provider": "asterisk",
+                "sip": {"host": "sip.example", "provider": "asterisk"},
+            }
+        )
+
+
+def test_media_stream_url_must_be_wss():
+    """Raw twilio websockets only accept wss:// — anything else is the wrong
+    knob wired in and must error at startup, not mid-call."""
+    with pytest.raises(ValidationError, match="wss://"):
+        TwilioConfig.model_validate({"media_stream_url": "http://acme.twil.io/media-stream"})
+    ok = TwilioConfig.model_validate({"media_stream_url": "wss://acme.twil.io/media-stream"})
+    assert ok.media_stream_url == "wss://acme.twil.io/media-stream"
+
+
+def test_media_stream_url_derives_from_account_sid_when_unset():
+    config = TwilioConfig(account_sid="AC123")
+    assert config.effective_media_stream_url == "wss://AC123.twil.io/media-stream"
+    assert TwilioConfig().effective_media_stream_url == "wss://.twil.io/media-stream"
+
+
+def test_twil_io_media_stream_rejected_when_provider_is_not_twilio():
+    """Provider on the SIP knob while the media stream URL still resolves to
+    *.twil.io → startup error (calls would ring nowhere), never silent."""
+    with pytest.raises(ValidationError, match="twil.io"):
+        TelephonyConfig.model_validate(
+            {
+                "provider": "asterisk",
+                "twilio": {"media_stream_url": "wss://AC123.twil.io/media-stream"},
+            }
+        )
+    with pytest.raises(ValidationError, match="twil.io"):
+        TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    ok = TelephonyConfig.model_validate(
+        {
+            "provider": "asterisk",
+            "twilio": {"media_stream_url": "wss://media.example/ws"},
+        }
+    )
+    assert ok.twilio.media_stream_url == "wss://media.example/ws"
+
+
+def test_public_url_is_an_explicit_validated_config_key():
+    """D-ENG25: no more localhost ngrok scraping — PUBLIC_URL is a config key,
+    validated as an absolute http(s) URL when set."""
+    assert TelephonyConfig().public_url == ""
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"public_url": "notaurl"})
+    with pytest.raises(ValidationError):
+        TelephonyConfig.model_validate({"public_url": "wss://x.example"})
+    ok = TelephonyConfig.model_validate({"public_url": "https://tunnel.example"})
+    assert ok.public_url == "https://tunnel.example"
+
+
+def test_default_yaml_declares_the_new_telephony_knobs():
+    """The shipped config must not lose the two new keys (sip credentials,
+    media_stream_url, public_url) to a model that cannot represent them."""
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    config = AppConfig(**raw)
+    tel = raw["telephony"]
+    assert config.telephony.sip.host == tel["sip"]["host"]
+    assert config.telephony.twilio.media_stream_url == tel["twilio"]["media_stream_url"]
+    assert config.telephony.public_url == tel["public_url"]
+    assert "media_stream_url" in tel["twilio"]
+    assert "public_url" in tel
+    assert "sip" in tel
+
+
+def test_default_yaml_telephony_section_has_no_provider_key_under_sip():
+    """The shipped config must never reintroduce the two-key state."""
+    raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
+    assert "provider" not in raw["telephony"]["sip"]
+
+
 def test_config_boots_from_a_fresh_interpreter():
     """`sefa doctor`'s precondition: a cold import must load real config.
 
@@ -333,3 +443,116 @@ def test_every_module_imports_cleanly():
     )
     assert result.returncode == 0, result.stderr
     assert "IMPORTS_OK" in result.stdout
+
+
+# --- T17 / D-ENG20: models.adapters is the single model-config source ---
+
+REGISTRY_PY = REPO_ROOT / "src" / "sefa" / "models" / "registry.py"
+
+
+def test_q12_resolved_model_key_is_single_source():
+    """Q12 (D-ENG20): pipeline.llm.model and the resolved qwen_local adapter
+    must agree — the two-key drift must fail loudly, not reconcile silently."""
+    config = load_config(DEFAULT_YAML)
+    assert config.pipeline.llm.provider == "qwen_local"
+    assert config.pipeline.llm.model == "qwen2.5:7b"
+    key, adapter = config.models.resolve_llm_adapter("qwen_local")
+    assert key == "llm_qwen_local"
+    assert adapter.model == config.pipeline.llm.model
+
+
+def test_q12_registry_holds_no_model_literal():
+    """Verify (T17): Q12 fails if registry gains a model literal.
+
+    The registry must resolve base_url/model from models.adapters; a hardcoded
+    endpoint or model string (the old `http://localhost:11434/v1`) is the drift
+    this task's regression exists to catch.
+    """
+    src = REGISTRY_PY.read_text(encoding="utf-8")
+    assert "11434" not in src
+    assert re.search(r'(?:base_url|model)\s*=\s*["\']', src) is None
+
+
+@pytest.mark.asyncio
+async def test_qwen_local_registry_uses_adapter_base_url_and_model():
+    """D-ENG20: the registry builds qwen_local from models.adapters — port 8080
+    (the YAML value), never the deleted 11434, and the adapter's model."""
+    from sefa.models.registry import registry
+
+    llm = await registry._create_llm()
+    assert llm.model == "qwen2.5:7b"
+    assert str(llm._client.base_url).rstrip("/") == "http://localhost:8080/v1"
+
+
+def test_resolve_llm_adapter_requires_exactly_one_adapter():
+    cfg = ModelsConfig(
+        adapters={
+            "a": {"type": "openai_compatible_llm", "base_url": "http://1/v1", "model": "m"},
+            "b": {"type": "openai_compatible_llm", "base_url": "http://2/v1", "model": "m"},
+        }
+    )
+    with pytest.raises(ValueError, match="exactly one"):
+        cfg.resolve_llm_adapter("qwen_local")
+    missing = ModelsConfig(
+        adapters={"other": {"type": "openai_llm", "api_key": "k", "model": "m"}}
+    )
+    with pytest.raises(ValueError, match="exactly one"):
+        missing.resolve_llm_adapter("qwen_local")
+
+
+def test_resolve_llm_adapter_rejects_unregistered_provider():
+    with pytest.raises(ValueError, match="registered"):
+        ModelsConfig().resolve_llm_adapter("no_such_provider")
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_branches_build_from_resolved_adapter(monkeypatch):
+    """Registry's openai/anthropic/qwen branches all consume models.adapters —
+    each provider resolves its type and the adapter's model, never a literal."""
+    from sefa.config.settings import settings
+    from sefa.models.llm.anthropic_llm import AnthropicLLM
+    from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
+    from sefa.models.llm.openai_llm import OpenAILLM
+    from sefa.models.registry import registry
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    monkeypatch.setattr(settings, "models", ModelsConfig(
+        adapters={
+            "llm_openai": {"type": "openai_llm", "api_key": "k", "model": "gpt-4o"},
+            "llm_anthropic": {"type": "anthropic_llm", "api_key": "k", "model": "claude"},
+            "llm_qwen_local": {
+                "type": "openai_compatible_llm",
+                "base_url": "http://localhost:8080/v1",
+                "model": "qwen2.5:7b",
+                "api_key": "not-needed",
+            },
+        }
+    ))
+
+    monkeypatch.setattr(settings.pipeline.llm, "provider", "openai")
+    openai_llm = await registry._create_llm()
+    assert isinstance(openai_llm, OpenAILLM)
+    assert openai_llm.model == "gpt-4o"
+
+    monkeypatch.setattr(settings.pipeline.llm, "provider", "anthropic")
+    anthropic_llm = await registry._create_llm()
+    assert isinstance(anthropic_llm, AnthropicLLM)
+    assert anthropic_llm.model == "claude"
+
+    monkeypatch.setattr(settings.pipeline.llm, "provider", "qwen_local")
+    qwen_llm = await registry._create_llm()
+    assert isinstance(qwen_llm, OpenAICompatibleLLM)
+    assert qwen_llm.model == "qwen2.5:7b"
+    assert str(qwen_llm._client.base_url).rstrip("/") == "http://localhost:8080/v1"
+
+
+@pytest.mark.asyncio
+async def test_unknown_llm_provider_raises(monkeypatch):
+    from sefa.config.settings import settings
+    from sefa.models.registry import registry
+
+    monkeypatch.setattr(settings.pipeline.llm, "provider", "not_a_provider")
+    with pytest.raises(ValueError, match="registered"):
+        await registry._create_llm()

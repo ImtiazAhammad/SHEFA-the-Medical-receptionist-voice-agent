@@ -11,15 +11,25 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
+from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Language(StrEnum):
     ENGLISH = "en"
     BANGLA = "bn"
+
+
+class TelephonyProvider(StrEnum):
+    """The single provider knob (D-ENG13). SIP trunk credentials live under
+    `telephony.sip.*` and never select a provider — there is exactly one knob."""
+
+    TWILIO = "twilio"
+    ASTERISK = "asterisk"
+    FREESWITCH = "freeswitch"
 
 
 class StrictModel(BaseModel):
@@ -90,6 +100,40 @@ class TwilioConfig(StrictModel):
     phone_number: str = ""
     voice: str = "Polly.Matthew"
     max_call_duration: int = 1800
+    # wss:// Media Stream endpoint. Empty = derive
+    # `wss://<account_sid>.twil.io/media-stream` (D-ENG25).
+    media_stream_url: str = ""
+
+    @field_validator("media_stream_url")
+    @classmethod
+    def _media_stream_url_must_be_wss(cls, value: str) -> str:
+        if value and not value.startswith("wss://"):
+            raise ValueError(
+                "telephony.twilio.media_stream_url must start with wss:// "
+                f"(raw Twilio media streams accept no other scheme; got {value!r})"
+            )
+        return value
+
+    @property
+    def effective_media_stream_url(self) -> str:
+        """The URL TwiML points the media stream at, derived when unset."""
+        if self.media_stream_url:
+            return self.media_stream_url
+        return f"wss://{self.account_sid}.twil.io/media-stream"
+
+
+class SipConfig(StrictModel):
+    """SIP trunk credentials ONLY (D-ENG13).
+
+    Provider selection is the single `telephony.provider` knob; a `provider`
+    key under `sip` is the removed two-key state and is rejected at startup —
+    `StrictModel` forbids it and `TelephonyConfig` names it explicitly.
+    """
+
+    host: str = ""
+    port: int = 5060
+    username: str = ""
+    password: str = ""
 
 
 class WebSocketConfig(StrictModel):
@@ -98,9 +142,46 @@ class WebSocketConfig(StrictModel):
 
 
 class TelephonyConfig(StrictModel):
-    provider: str = "twilio"
+    provider: TelephonyProvider = TelephonyProvider.TWILIO
     twilio: TwilioConfig = Field(default_factory=TwilioConfig)
+    sip: SipConfig | None = None
     websocket: WebSocketConfig = Field(default_factory=WebSocketConfig)
+    # Explicit outbound ingress URL — the ngrok localhost scrape is deleted
+    # (D-ENG25). Validated as an absolute http(s) URL when set.
+    public_url: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_two_provider_knobs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            sip = data.get("sip")
+            if isinstance(sip, dict) and "provider" in sip:
+                raise ValueError(
+                    "telephony.sip.provider is removed (D-ENG13): provider "
+                    "selection is the single knob telephony.provider "
+                    "(twilio|asterisk|freeswitch)"
+                )
+        return data
+
+    @model_validator(mode="after")
+    def _validate_cross_field_knobs(self) -> TelephonyConfig:
+        if self.provider != TelephonyProvider.TWILIO:
+            stream = self.twilio.effective_media_stream_url
+            host = urlparse(stream).hostname or ""
+            if host == "twil.io" or host.endswith(".twil.io"):
+                raise ValueError(
+                    f"provider={self.provider.value} but media_stream_url "
+                    f"resolves to a Twilio host ({stream!r}); calls would "
+                    f"ring nowhere — set a non-*.twil.io media stream URL"
+                )
+        if self.public_url:
+            parsed = urlparse(self.public_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError(
+                    "telephony.public_url must be an absolute http(s) URL "
+                    f"(got {self.public_url!r})"
+                )
+        return self
 
 
 class SessionConfig(StrictModel):
@@ -255,6 +336,40 @@ class RoutingConfig(StrictModel):
 class ModelsConfig(StrictModel):
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
+
+    # D-ENG20: `models.adapters` is the single model-config source. Each
+    # pipeline LLM provider maps to exactly one adapter type, and the registry
+    # reads its model/base_url from the resolved adapter — never a hardcoded
+    # literal (the deleted `http://localhost:11434/v1` default).
+    LLM_PROVIDER_ADAPTER_TYPE: ClassVar[dict[str, str]] = {
+        "openai": "openai_llm",
+        "anthropic": "anthropic_llm",
+        "qwen_local": "openai_compatible_llm",
+    }
+
+    def resolve_llm_adapter(self, provider: str) -> tuple[str, AdapterConfig]:
+        """Return the single (key, adapter) backing an LLM provider.
+
+        A provider must resolve to exactly one adapter of its declared type;
+        zero or several is a config error, never a silent guess.
+        """
+        adapter_type = self.LLM_PROVIDER_ADAPTER_TYPE.get(provider)
+        if adapter_type is None:
+            raise ValueError(
+                f"No models.adapters type registered for LLM provider {provider!r}"
+            )
+        matches = {
+            key: adapter
+            for key, adapter in self.adapters.items()
+            if getattr(adapter, "type", None) == adapter_type
+        }
+        if len(matches) != 1:
+            raise ValueError(
+                f"LLM provider {provider!r} requires exactly one models.adapters "
+                f"entry of type {adapter_type!r}; found {len(matches)}: "
+                f"{sorted(matches)}"
+            )
+        return next(iter(matches.items()))
 
 
 class GoogleCalendarConfig(StrictModel):

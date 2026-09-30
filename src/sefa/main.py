@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from sefa.auth import AuthStore, Principal, TokenError
-from sefa.config.settings import settings
+from sefa.config.settings import TelephonyProvider, settings
 from sefa.session.manager import SessionManager
 from sefa.telephony.twilio import app as telephony_app
 from sefa.tools.definitions import get_tool_definitions
@@ -269,7 +269,14 @@ def _telephony_router_allowed() -> bool:
     explicit red line: the webhooks take unauthenticated POSTs, so a public
     mount is an unauthenticated way to inject calls and read transcripts.
     """
-    if settings.telephony.provider != "twilio":
+    if settings.telephony.provider != TelephonyProvider.TWILIO:
+        _provider = settings.telephony.provider
+        logger.warning(
+            "telephony.provider=%s: no adapter is implemented; the telephony "
+            "router stays unmounted. A live trunk on another provider would "
+            "silently lose calls until it is wired up.",
+            getattr(_provider, "value", _provider),
+        )
         return False
     if not settings.auth.dev_mode:
         return False

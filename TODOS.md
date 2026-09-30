@@ -37,5 +37,5 @@ why it was deferred, current state, where to start, and what unblocks it.
 - **T7 full-disk encryption + named raw-audio deletion** — promoted INTO Child 3 (not deferred) because "encryption at rest" is unenforceable without it.
 - **T3 (≥3/4 clean bookings)** and **T8 (weekly gate metrics)** — no owning child; disposition table records "re-scope to Child 2/7 + Child 4" mapping. Tracked here until table lands.
 - **T6 outreach tracker** — dropped with rationale (outreach is the gate, not code, Q6); disposition table records it.
-- **41-item → 8-child disposition table** — ships as a Child 0 artifact; this file is superseded by it when it lands.
+- **41-item → 8-child disposition table** — ships as a Child 0 artifact; this file is superseded by it when it lands. **Landed 2026-09-30**: see `docs/designs/shefa-first-clinic-disposition.md` (T16).
 - **Cross-model confirmation** — Codex not installed; single-model for all phases. Headroom retained until a second model confirms; re-run /plan-eng-review before scale-up spend if a second model becomes available.

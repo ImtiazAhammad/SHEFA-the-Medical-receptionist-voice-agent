@@ -303,6 +303,18 @@ src/sefa/
     └── logging.py             # Structured logging (structlog)
 ```
 
+## Design & Planning Docs
+
+- [`docs/designs/shefa-spec-epic-plan.md`](docs/designs/shefa-spec-epic-plan.md) — the
+  approved epic: 8 code children, Child 0 "Developer loop", cross-model scope decisions.
+- [`docs/designs/shefa-first-clinic.md`](docs/designs/shefa-first-clinic.md) — the original
+  41-item first-clinic plan (Shadow Line + Door-Opener) with the full CEO/Design/DX/Eng review record.
+- [`docs/designs/shefa-first-clinic-disposition.md`](docs/designs/shefa-first-clinic-disposition.md) —
+  T16 (Child 0) artifact: every original plan item (T/D/X/E tasks plus the CEO/Design/DX/Eng
+  accepted blocks) mapped to a child as IN / RE-SCOPED / DROPPED with rationale.
+  T7 (full-disk encryption + named raw-audio deletion) is promoted into Child 3;
+  T6 (outreach tracker) is dropped because outreach is the gate, not code (Q6).
+
 ## API Endpoints
 
 | Method | Path | Description |
