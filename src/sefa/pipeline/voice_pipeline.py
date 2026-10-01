@@ -11,7 +11,14 @@ import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from sefa.audio import AudioFrame
+
+    # D-ENG21: the pipeline is handed a *sink*, not a queue. `MediaQueues.put_playback`
+    # carries the put timeout; a bare `asyncio.Queue` does not, so a queue passed in
+    # here turns a stalled playback consumer into a call that hangs forever.
+    PlaybackSink = Callable[[AudioFrame], Awaitable[None]]
 
 from sefa.config.settings import settings
 from sefa.models.base import Language
@@ -65,9 +72,9 @@ async def speak_to(
     tts: Any,
     text: str,
     language: str,
-    playback_queue: asyncio.Queue[AudioFrame],
+    put_playback: PlaybackSink,
 ) -> None:
-    """Stream a reply into `playback_queue` one sentence at a time.
+    """Stream a reply to `put_playback` one sentence at a time.
 
     `synthesize` builds the whole utterance before returning, so a push after it
     leaves the patient hearing nothing for the full synthesis latency. Piper
@@ -77,7 +84,7 @@ async def speak_to(
     """
     async for frame in tts.synthesize_stream(text, language=language):
         if not frame.is_empty:
-            await playback_queue.put(frame)
+            await put_playback(frame)
 
 
 class VoicePipeline:
@@ -97,7 +104,7 @@ class VoicePipeline:
         self,
         call_sid: str,
         audio_queue: asyncio.Queue[bytes],
-        playback_queue: asyncio.Queue[AudioFrame],
+        put_playback: PlaybackSink,
     ) -> None:
         """Process incoming audio from a call and stream TTS responses back."""
         session = await self._session_manager.get_or_create(call_sid)
@@ -109,7 +116,7 @@ class VoicePipeline:
                 greetings.get("en", ""),
             )
             tts = await registry.get_tts()
-            await speak_to(tts, greeting, session.language.value, playback_queue)
+            await speak_to(tts, greeting, session.language.value, put_playback)
             session.add_turn("assistant", greeting)
             session.state = "active"
             await self._session_manager.save(session)
@@ -168,14 +175,14 @@ class VoicePipeline:
                 break
             except TimeoutError:
                 if await self._rescue(
-                    call_sid, session, playback_queue, FailureKind.STT_TIMEOUT
+                    call_sid, session, put_playback, FailureKind.STT_TIMEOUT
                 ):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
             except Exception:
                 if await self._rescue(
-                    call_sid, session, playback_queue, FailureKind.STT_ERROR
+                    call_sid, session, put_playback, FailureKind.STT_ERROR
                 ):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
@@ -184,7 +191,7 @@ class VoicePipeline:
             if not stt_result.text.strip():
                 self._audio_buffers.setdefault(call_sid, [])
                 if await self._rescue(
-                    call_sid, session, playback_queue, FailureKind.EMPTY_TRANSCRIPTION
+                    call_sid, session, put_playback, FailureKind.EMPTY_TRANSCRIPTION
                 ):
                     break
                 continue
@@ -202,7 +209,7 @@ class VoicePipeline:
                     ),
                 )
                 tts = await registry.get_tts()
-                await speak_to(tts, other_prompt, "en", playback_queue)
+                await speak_to(tts, other_prompt, "en", put_playback)
                 session.add_turn("assistant", other_prompt, Language.OTHER)
                 session.state = "escaped"
                 await self._session_manager.save(session)
@@ -227,7 +234,7 @@ class VoicePipeline:
                     settings.escalation.transfer_greeting.get("en", "Transferring you now."),
                 )
                 tts = await registry.get_tts()
-                await speak_to(tts, escalation_msg, session.language.value, playback_queue)
+                await speak_to(tts, escalation_msg, session.language.value, put_playback)
                 session.add_turn("assistant", escalation_msg, session.language)
                 session.state = "escalated"
                 await self._session_manager.save(session)
@@ -241,7 +248,7 @@ class VoicePipeline:
                     ),
                 )
                 tts = await registry.get_tts()
-                await speak_to(tts, repeat_msg, session.language.value, playback_queue)
+                await speak_to(tts, repeat_msg, session.language.value, put_playback)
                 session.add_turn("assistant", repeat_msg, session.language)
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
@@ -286,7 +293,7 @@ class VoicePipeline:
                 break
             except Exception:
                 if await self._rescue(
-                    call_sid, session, playback_queue, FailureKind.MALFORMED_LLM_OUTPUT
+                    call_sid, session, put_playback, FailureKind.MALFORMED_LLM_OUTPUT
                 ):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
@@ -294,12 +301,12 @@ class VoicePipeline:
 
             try:
                 tts = await registry.get_tts()
-                await speak_to(tts, llm_result.text, session.language.value, playback_queue)
+                await speak_to(tts, llm_result.text, session.language.value, put_playback)
             except asyncio.CancelledError:
                 break
             except Exception:
                 if await self._rescue(
-                    call_sid, session, playback_queue, FailureKind.TTS_FAILURE
+                    call_sid, session, put_playback, FailureKind.TTS_FAILURE
                 ):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
@@ -314,7 +321,7 @@ class VoicePipeline:
         self,
         call_sid: str,
         session: CallSession,
-        playback_queue: asyncio.Queue[AudioFrame],
+        put_playback: PlaybackSink,
         kind: FailureKind,
     ) -> bool:
         """Count a classified failure; back off; return True to close the call.
@@ -333,7 +340,7 @@ class VoicePipeline:
             kind.value,
         )
         if failures >= max_attempts:
-            await self._close_call(call_sid, session, playback_queue)
+            await self._close_call(call_sid, session, put_playback)
             return True
         delay = backoff_delay(failures)
         logger.info("Backing off %.2fs after %s for %s", delay, kind.value, call_sid)
@@ -344,7 +351,7 @@ class VoicePipeline:
         self,
         call_sid: str,
         session: CallSession,
-        playback_queue: asyncio.Queue[AudioFrame],
+        put_playback: PlaybackSink,
     ) -> None:
         """Terminal transition: courtesy + DTMF/transfer, then end the call."""
         prompt = settings.escalation.terminal_prompt.get(
@@ -352,7 +359,7 @@ class VoicePipeline:
             settings.escalation.terminal_prompt.get("en", DEFAULT_TERMINAL_PROMPT),
         )
         tts = await registry.get_tts()
-        await speak_to(tts, prompt, session.language.value, playback_queue)
+        await speak_to(tts, prompt, session.language.value, put_playback)
         session.add_turn("assistant", prompt, session.language)
         session.state = "terminated"
         await self._session_manager.save(session)

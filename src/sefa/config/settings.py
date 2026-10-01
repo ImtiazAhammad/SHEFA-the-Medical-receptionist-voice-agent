@@ -78,10 +78,26 @@ class LanguageDetectionConfig(StrictModel):
     confidence_threshold: float = 0.6
 
 
+class MediaQueueConfig(StrictModel):
+    """Bounds on the per-call media queues (D-ENG21).
+
+    Queue depth is a deployment property — a clinic box and a trunk bridge
+    have different headroom — so these are config keys, not constants. An
+    unbounded queue converts a stalled consumer into a silent memory leak
+    instead of a visible timeout.
+    """
+
+    audio_queue_maxsize: int = Field(default=256, gt=0)
+    playback_queue_maxsize: int = Field(default=256, gt=0)
+    audio_put_timeout_s: float = Field(default=5.0, gt=0)
+    playback_put_timeout_s: float = Field(default=5.0, gt=0)
+
+
 class PipelineConfig(StrictModel):
     stt: STTConfig = Field(default_factory=STTConfig)
     tts: TTSConfig = Field(default_factory=TTSConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    media: MediaQueueConfig = Field(default_factory=MediaQueueConfig)
     language_detection: LanguageDetectionConfig = Field(
         default_factory=LanguageDetectionConfig
     )

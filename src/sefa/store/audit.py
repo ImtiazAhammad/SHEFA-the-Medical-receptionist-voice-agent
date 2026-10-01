@@ -131,7 +131,7 @@ class AuditStore:
         """Rows whose UTC timestamp falls on `day` (`YYYY-MM-DD`)."""
         count = self.connection.execute(
             "SELECT COUNT(*) FROM audit_log"
-            " WHERE date(ts, 'unixepoch', 'utc') = ?",
+            " WHERE date(ts, 'unixepoch') = ?",
             (day,),
         ).fetchone()[0]
         return int(count)

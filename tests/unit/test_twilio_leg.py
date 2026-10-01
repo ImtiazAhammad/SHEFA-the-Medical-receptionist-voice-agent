@@ -159,8 +159,8 @@ def test_media_stream_enqueues_inbound_audio(monkeypatch):
     seen: dict[str, Any] = {}
 
     class FakePipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            seen["playback"] = playback_queue
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            seen["playback"] = put_playback
             seen["audio"] = await audio_queue.get()
             seen["consumed"].set()
 
@@ -196,7 +196,7 @@ def test_media_stream_stops_on_a_stop_event(monkeypatch):
     cleaned: list[str] = []
 
     class FakePipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
             await asyncio.sleep(30)
 
         async def cleanup(self, call_sid):
@@ -234,8 +234,8 @@ def test_playback_worker_converts_audio_to_the_socket_format(monkeypatch):
     ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
 
     class S24kPipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(AudioFrame(twentyfour_k, rate=24000))
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            await put_playback(AudioFrame(twentyfour_k, rate=24000))
 
         async def cleanup(self, call_sid):
             return None
@@ -268,9 +268,9 @@ def test_playback_worker_skips_an_empty_frame(monkeypatch):
     ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
 
     class EmptyThenRealPipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(AudioFrame(b""))
-            playback_queue.put_nowait(AudioFrame(b"\x01\x02"))
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            await put_playback(AudioFrame(b""))
+            await put_playback(AudioFrame(b"\x01\x02"))
 
         async def cleanup(self, call_sid):
             return None
@@ -301,8 +301,8 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
     ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
 
     class IdlePipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            await put_playback(AudioFrame(b"\x0a\x0b"))
 
         async def cleanup(self, call_sid):
             return None
@@ -324,7 +324,14 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
 
 
 def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
-    """A dead socket must end the worker, not spin on a broken connection."""
+    """A dead socket must end the worker, not spin on a broken connection.
+
+    T18 (D-ENG21): the worker used to `break` on the first send error, so one
+    transient failure ended playback for the rest of the call while the
+    pipeline kept pushing frames into a queue nobody drained. It now retries
+    transient failures and gives up only past a consecutive-failure budget —
+    still bounded, still terminates, but no longer on the first error.
+    """
     attempts: list[int] = []
 
     class BrokenWebSocket(_FakeWebSocket):
@@ -333,9 +340,9 @@ def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
             raise ConnectionResetError("socket gone")
 
     class ChattyPipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
             for _ in range(3):
-                playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
+                await put_playback(AudioFrame(b"\x0a\x0b"))
 
         async def cleanup(self, call_sid):
             return None
@@ -351,7 +358,11 @@ def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
 
     asyncio.run(_drive())
 
-    assert len(attempts) == 1, "worker kept sending after the socket died"
+    budget = twilio.MAX_CONSECUTIVE_SEND_FAILURES
+    assert len(attempts) == budget, (
+        "worker must retry transient send failures up to the budget, "
+        f"then stop (attempts={len(attempts)}, budget={budget})"
+    )
 
 
 def test_playback_worker_propagates_cancellation(monkeypatch):
@@ -368,8 +379,8 @@ def test_playback_worker_propagates_cancellation(monkeypatch):
             await asyncio.sleep(30)
 
     class ChattyPipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
-            playback_queue.put_nowait(AudioFrame(b"\x0a\x0b"))
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            await put_playback(AudioFrame(b"\x0a\x0b"))
 
         async def cleanup(self, call_sid):
             return None
@@ -403,7 +414,7 @@ def test_media_stream_does_not_leak_the_leg_when_the_pipeline_task_dies(monkeypa
     cleaned: list[str] = []
 
     class CrashingPipeline:
-        async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
             raise RuntimeError("adapter blew up mid-call")
 
         async def cleanup(self, call_sid):
@@ -434,3 +445,82 @@ def test_media_stream_does_not_leak_the_leg_on_a_provider_error(monkeypatch):
         asyncio.run(twilio.media_stream_ws(_FakeWebSocket(), "CA-boom"))
 
     control.release("CA-boom")
+
+
+# --- T18 follow-up: the production playback put must carry the timeout -------
+#
+# `MediaQueues.put_playback` carries the put timeout, but `media_stream_ws`
+# handed the pipeline the raw `queues.playback` instead of that sink, so
+# `speak_to` did a bare `playback_queue.put(frame)`. The T18 tests exercised the
+# sink directly, so the gap on the live call path was invisible to them. These
+# two tests are written against the production seam, not the wrapper.
+
+
+def test_the_pipeline_is_handed_a_sink_not_a_raw_playback_queue(monkeypatch):
+    """D-ENG21: every media-queue put is bounded and timed.
+
+    A raw `asyncio.Queue` put blocks forever when the consumer stalls, so the
+    pipeline must receive the timeout-carrying sink, not the queue.
+    """
+    seen: dict[str, Any] = {}
+
+    class FakePipeline:
+        async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+            seen["sink"] = put_playback
+            seen["consumed"].set()
+
+        async def cleanup(self, call_sid):
+            pass
+
+    seen["consumed"] = asyncio.Event()
+
+    class SignalingWebSocket(_FakeWebSocket):
+        async def iter_text(self):
+            async for raw in super().iter_text():
+                yield raw
+                seen["consumed"].set()
+
+    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
+
+    async def _drive():
+        task = asyncio.create_task(
+            twilio.media_stream_ws(
+                SignalingWebSocket([{"event": "connected"}, {"event": "stop"}]),
+                "CA-sink",
+            )
+        )
+        await asyncio.wait_for(task, timeout=2)
+
+    asyncio.run(_drive())
+
+    assert callable(seen["sink"]), "pipeline received a raw queue, not a sink"
+    assert not isinstance(seen["sink"], asyncio.Queue)
+
+
+def test_a_stalled_playback_consumer_times_out_instead_of_hanging():
+    """The real composition — `speak_to` into a full queue — must raise.
+
+    A full playback queue with a dead consumer used to park the pipeline
+    forever: no audio, no error, a call that simply stops. Now it raises.
+    """
+    from sefa.pipeline.voice_pipeline import speak_to
+    from sefa.telephony.twilio import MediaQueues
+
+    class StubTTS:
+        async def synthesize_stream(self, text, language):
+            yield AudioFrame(data=b"\x00\x00")
+
+    async def _drive():
+        queues = MediaQueues(
+            audio_maxsize=4,
+            playback_maxsize=1,
+            audio_put_timeout_s=1.0,
+            playback_put_timeout_s=0.05,
+        )
+        # Fill the single slot; nothing drains it.
+        await queues.playback.put(AudioFrame(data=b"\x00\x00"))
+        await speak_to(StubTTS(), "one two three", "en", queues.put_playback)
+
+    with pytest.raises(TimeoutError):
+        # Outer wait_for only stops a genuine hang; the raise is what we assert.
+        asyncio.run(asyncio.wait_for(_drive(), timeout=2))

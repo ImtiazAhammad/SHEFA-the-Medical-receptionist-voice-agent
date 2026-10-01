@@ -13,9 +13,13 @@ if TYPE_CHECKING:
 class ModelRegistry:
     """Central registry for model adapter instances. Lazy-initialized, singleton."""
 
-    _stt: BaseSTT | None = None
-    _tts: BaseTTS | None = None
-    _llm: BaseLLM | None = None
+    def __init__(self) -> None:
+        # Instance attrs, not class attrs (D-ENG22): a class attr is process-wide
+        # state, so any test assigning `ModelRegistry._llm = fake` mutated the
+        # shared slot and made the suite order-dependent.
+        self._stt: BaseSTT | None = None
+        self._tts: BaseTTS | None = None
+        self._llm: BaseLLM | None = None
 
     async def get_stt(self) -> BaseSTT:
         if self._stt is None:

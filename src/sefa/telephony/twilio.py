@@ -23,10 +23,128 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="sefa Telephony")
 
+_call_handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
+
 # Twilio's bidirectional media stream only accepts 8k or 16k s16le mono.
 MEDIA_STREAM_RATE = 16000
 
-_call_handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
+# A playback worker that dies on the first send error leaves the pipeline
+# pushing frames into a queue nobody drains, so the queue must be bounded and
+# the worker must survive transient failures rather than `break` (D-ENG21).
+MAX_CONSECUTIVE_SEND_FAILURES = 3
+
+
+class MediaQueues:
+    """The two per-call media queues, both bounded and both timed on `put`.
+
+    An unbounded queue plus a stalled consumer is a slow memory leak: nothing
+    ever blocks, so the producer keeps accepting audio the call will never
+    play. Bounding it converts that into a visible timeout.
+    """
+
+    def __init__(
+        self,
+        audio_maxsize: int,
+        playback_maxsize: int,
+        audio_put_timeout_s: float,
+        playback_put_timeout_s: float,
+    ) -> None:
+        self.audio: asyncio.Queue[bytes] = asyncio.Queue(maxsize=audio_maxsize)
+        self.playback: asyncio.Queue[AudioFrame] = asyncio.Queue(
+            maxsize=playback_maxsize
+        )
+        self._audio_put_timeout_s = audio_put_timeout_s
+        self._playback_put_timeout_s = playback_put_timeout_s
+
+    async def put_audio(self, chunk: bytes) -> None:
+        await asyncio.wait_for(self.audio.put(chunk), timeout=self._audio_put_timeout_s)
+
+    async def put_playback(self, frame: AudioFrame) -> None:
+        await asyncio.wait_for(
+            self.playback.put(frame), timeout=self._playback_put_timeout_s
+        )
+
+
+def make_media_queues(
+    audio_maxsize: int | None = None,
+    playback_maxsize: int | None = None,
+    audio_put_timeout_s: float | None = None,
+    playback_put_timeout_s: float | None = None,
+) -> MediaQueues:
+    """Build per-call media queues; every bound defaults to configured values."""
+    media = settings.pipeline.media
+    return MediaQueues(
+        audio_maxsize=(
+            audio_maxsize if audio_maxsize is not None else media.audio_queue_maxsize
+        ),
+        playback_maxsize=(
+            playback_maxsize if playback_maxsize is not None else media.playback_queue_maxsize
+        ),
+        audio_put_timeout_s=(
+            audio_put_timeout_s
+            if audio_put_timeout_s is not None
+            else media.audio_put_timeout_s
+        ),
+        playback_put_timeout_s=(
+            playback_put_timeout_s
+            if playback_put_timeout_s is not None
+            else media.playback_put_timeout_s
+        ),
+    )
+
+
+class PlaybackWorker:
+    """Drains `playback_queue` to the carrier, tolerating transient send errors.
+
+    The previous loop did `except Exception: break`, so one failed send ended
+    playback for the whole call while synthesis continued filling the queue.
+    A failure is counted instead: the worker retries, and only exits once the
+    failures are consecutive past the budget (the carrier is genuinely gone).
+    """
+
+    def __init__(
+        self,
+        websocket: WebSocket,
+        playback_queue: asyncio.Queue[AudioFrame],
+        call_sid: str,
+        failure_budget: int = MAX_CONSECUTIVE_SEND_FAILURES,
+    ) -> None:
+        self._websocket = websocket
+        self._queue = playback_queue
+        self._call_sid = call_sid
+        self.failure_budget = failure_budget
+        self.consecutive_failures = 0
+
+    async def run(self) -> None:
+        while True:
+            frame = await self._queue.get()
+            try:
+                pcm = frame.to_s16le_16k_mono()
+                if not pcm:
+                    continue
+                await self._websocket.send_json({
+                    "event": "media",
+                    "streamSid": self._call_sid,
+                    "media": {"payload": base64.b64encode(pcm).decode()},
+                })
+                self.consecutive_failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.consecutive_failures += 1
+                logger.warning(
+                    "Playback send failed (%s/%s) for %s",
+                    self.consecutive_failures,
+                    self.failure_budget,
+                    self._call_sid,
+                )
+                if self.consecutive_failures >= self.failure_budget:
+                    logger.error(
+                        "Giving up on playback for %s after %s consecutive failures",
+                        self._call_sid,
+                        self.consecutive_failures,
+                    )
+                    return
 
 
 def register_call_handler(call_sid: str, handler: Callable[..., Coroutine[Any, Any, None]]) -> None:
@@ -170,29 +288,11 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
     from sefa.pipeline.voice_pipeline import VoicePipeline
 
     pipeline = VoicePipeline()
-    audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
-    playback_queue: asyncio.Queue[AudioFrame] = asyncio.Queue()
+    queues = make_media_queues()
     control.register(TwilioCallLeg(call_sid))
 
-    async def _playback_worker() -> None:
-        while True:
-            frame = await playback_queue.get()
-            try:
-                pcm = frame.to_s16le_16k_mono()
-                if not pcm:
-                    continue
-                encoded = base64.b64encode(pcm).decode()
-                await websocket.send_json({
-                    "event": "media",
-                    "streamSid": call_sid,
-                    "media": {"payload": encoded},
-                })
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                break
-
-    playback_task = asyncio.create_task(_playback_worker())
+    worker = PlaybackWorker(websocket, queues.playback, call_sid)
+    playback_task = asyncio.create_task(worker.run())
     pipeline_task: asyncio.Task[None] | None = None
 
     try:
@@ -202,10 +302,12 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
 
             if event == "media":
                 audio_bytes = base64.b64decode(msg["media"]["payload"])
-                await audio_queue.put(audio_bytes)
+                await queues.put_audio(audio_bytes)
             elif event == "connected":
                 pipeline_task = asyncio.create_task(
-                    pipeline.process_audio_stream(call_sid, audio_queue, playback_queue)
+                    pipeline.process_audio_stream(
+                        call_sid, queues.audio, queues.put_playback
+                    )
                 )
             elif event == "stop":
                 break
