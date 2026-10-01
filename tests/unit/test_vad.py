@@ -272,11 +272,15 @@ class TestPipelineUsesTheVad:
         assert "vad_filter" in source
 
 
-class _RecordingQueue:
+class _RecordingSink:
+    """Collects frames. The pipeline is handed a *sink*, not a queue (D-ENG21):
+    the timeout lives on `MediaQueues.put_playback`, so passing a raw queue here
+    would be the exact production bug the sink signature exists to prevent."""
+
     def __init__(self) -> None:
         self.frames: list[AudioFrame] = []
 
-    async def put(self, frame: AudioFrame) -> None:
+    async def __call__(self, frame: AudioFrame) -> None:
         self.frames.append(frame)
 
 
@@ -311,7 +315,7 @@ class TestPipelineTranscribesTheFixture:
 
         pipe = VoicePipeline()
         audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        playback = _RecordingQueue()
+        playback = _RecordingSink()
         task = asyncio.create_task(
             pipe.process_audio_stream("SID-T11", audio_queue, playback)
         )

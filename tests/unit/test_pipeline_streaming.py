@@ -43,11 +43,15 @@ class FakeTTS:
         raise AssertionError("the pipeline must stream, not block on synthesize()")
 
 
-class RecordingQueue:
+class RecordingSink:
+    """Collects frames. The pipeline is handed a *sink*, not a queue (D-ENG21):
+    the put timeout lives on `MediaQueues.put_playback`, so a raw queue here
+    would reintroduce the production bug the sink signature prevents."""
+
     def __init__(self) -> None:
         self.frames: list[AudioFrame] = []
 
-    async def put(self, frame: AudioFrame) -> None:
+    async def __call__(self, frame: AudioFrame) -> None:
         self.frames.append(frame)
 
 
@@ -55,7 +59,7 @@ class TestSpeakTo:
     @pytest.mark.asyncio
     async def test_pushes_every_sentence_frame(self):
         tts = FakeTTS([b"a" * 4, b"b" * 4, b"c" * 4])
-        queue = RecordingQueue()
+        queue = RecordingSink()
 
         await speak_to(tts, "one. two. three.", "en", queue)
 
@@ -66,7 +70,7 @@ class TestSpeakTo:
         """The whole point of streaming: no full-utterance stall."""
         gate = asyncio.Event()
         tts = FakeTTS([b"a" * 4, b"b" * 4, b"c" * 4], gate_after_first=gate)
-        queue = RecordingQueue()
+        queue = RecordingSink()
 
         task = asyncio.create_task(speak_to(tts, "one. two. three.", "en", queue))
         await asyncio.sleep(0)
@@ -84,7 +88,7 @@ class TestSpeakTo:
     async def test_uses_synthesize_stream(self):
         tts = FakeTTS([b"a" * 4])
 
-        await speak_to(tts, "hello", "en", RecordingQueue())
+        await speak_to(tts, "hello", "en", RecordingSink())
 
         assert tts.stream_calls == ["hello"]
         assert tts.synthesize_calls == []
@@ -98,13 +102,13 @@ class TestSpeakTo:
                 seen.append(language)
                 yield AudioFrame(b"x" * 2, rate=22050)
 
-        await speak_to(LanguageRecordingTTS([b"x" * 2]), "hola", "bn", RecordingQueue())
+        await speak_to(LanguageRecordingTTS([b"x" * 2]), "hola", "bn", RecordingSink())
 
         assert seen == ["bn"]
 
     @pytest.mark.asyncio
     async def test_an_empty_reply_queues_nothing(self):
-        queue = RecordingQueue()
+        queue = RecordingSink()
 
         await speak_to(FakeTTS([]), "", "en", queue)
 
@@ -118,12 +122,12 @@ class TestSpeakTo:
                 yield  # pragma: no cover
 
         with pytest.raises(RuntimeError, match="onnxruntime died"):
-            await speak_to(ExplodingTTS(), "hello", "en", RecordingQueue())
+            await speak_to(ExplodingTTS(), "hello", "en", RecordingSink())
 
     @pytest.mark.asyncio
     async def test_a_failure_after_partial_playback_still_delivers_what_was_spoken(self):
         """Half a reply is better than none when the second sentence dies."""
-        queue = RecordingQueue()
+        queue = RecordingSink()
 
         class HalfTTS:
             async def synthesize_stream(self, text: str, language: str = "en"):

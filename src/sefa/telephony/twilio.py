@@ -305,7 +305,9 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
                 await queues.put_audio(audio_bytes)
             elif event == "connected":
                 pipeline_task = asyncio.create_task(
-                    pipeline.process_audio_stream(call_sid, queues.audio, queues.playback)
+                    pipeline.process_audio_stream(
+                        call_sid, queues.audio, queues.put_playback
+                    )
                 )
             elif event == "stop":
                 break

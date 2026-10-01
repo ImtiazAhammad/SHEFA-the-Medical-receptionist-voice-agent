@@ -46,10 +46,14 @@ def _pcm_chunk(rms: float, n: int = 1600, seed: int = 0) -> bytes:
 
 
 @dataclass
-class _RecordingQueue:
+class _RecordingSink:
+    """Collects frames. The pipeline is handed a *sink*, not a queue (D-ENG21):
+    the timeout lives on `MediaQueues.put_playback`, so passing a raw queue here
+    would be the exact production bug the sink signature exists to prevent."""
+
     frames: list[AudioFrame] = field(default_factory=list)
 
-    async def put(self, frame: AudioFrame) -> None:
+    async def __call__(self, frame: AudioFrame) -> None:
         self.frames.append(frame)
 
 
@@ -131,7 +135,7 @@ class _CallHarness:
         self.llm = llm
         self.tts = tts
         self.audio_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self.playback = _RecordingQueue()
+        self.playback = _RecordingSink()
 
         async def fake_sleep(seconds: float) -> None:
             self.failures.append(seconds)

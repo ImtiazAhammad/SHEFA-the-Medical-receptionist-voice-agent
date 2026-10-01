@@ -101,7 +101,7 @@ class CallsStore:
         """Calls that started on `day` (`YYYY-MM-DD`, UTC)."""
         count = self.connection.execute(
             "SELECT COUNT(*) FROM calls"
-            " WHERE date(created_at, 'unixepoch', 'utc') = ?",
+            " WHERE date(created_at, 'unixepoch') = ?",
             (day,),
         ).fetchone()[0]
         return int(count)
