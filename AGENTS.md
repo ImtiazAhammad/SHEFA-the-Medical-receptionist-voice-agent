@@ -16,8 +16,12 @@ Rules:
 - Run: `.venv/bin/python -m pytest` (pytest 9, config in `pyproject.toml` under `[tool.pytest.ini_options]`).
 - Unit tests live in `tests/unit/` as plain `test_*` functions; `conftest.py` holds shared fixtures.
 - `scripts/test_standalone.py` is a standalone smoke script (not part of the pytest suite).
+- Coverage:
+  - Bare `pytest` measures coverage and enforces the floor via `[tool.coverage.report] fail_under` in `pyproject.toml`. The floor is a real measured value, not an aspiration — it ratchets UP as children land and never down.
+  - `scripts/check_coverage.py` runs AFTER pytest and enforces the per-module rules: modules in `MUST_BE_FULLY_COVERED` must measure 100%, and a module in `CONVERGING_MODULES` that reaches 100% must be promoted. It exits non-zero on any violation, so it is CI-able.
+  - The policy lives in `src/sefa/coverage_policy.py` — the ratchet is code, not prose. Change the floor and the sets there, not in this file.
 - Test expectations:
-  - 100% test coverage is the goal — tests make vibe coding safe.
+  - 100% test coverage is the goal — tests make vibe coding safe. The ratchet makes that goal enforceable rather than aspirational: the modules already at 100% are held there and cannot regress silently.
   - When writing new functions, write a corresponding test.
   - When fixing a bug, write a regression test.
   - When adding error handling, write a test that triggers the error.

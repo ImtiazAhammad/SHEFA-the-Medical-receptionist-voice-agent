@@ -75,3 +75,17 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Bare `pytest` enforces the coverage floor (D-ENG27). The floor lives in
+# `sefa.coverage_policy.RATCHET_FLOOR` and is ratcheted upward per child;
+# `tests/unit/test_coverage_policy.py` asserts the two agree.
+addopts = "--cov=sefa --cov-report=term-missing --cov-report=json:.coverage.json"
+
+[tool.coverage.report]
+# The measured floor, not an aspirational number. Keep this equal to
+# `sefa.coverage_policy.RATCHET_FLOOR`.
+fail_under = 88
+skip_covered = true
+show_missing = true
+
+[tool.coverage.run]
+source = ["sefa"]
