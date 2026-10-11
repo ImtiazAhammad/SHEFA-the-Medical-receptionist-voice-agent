@@ -293,27 +293,32 @@ def test_env_var_quoting_is_stripped(tmp_path, monkeypatch):
     assert load_config(path).telephony.twilio.account_sid == "ACquoted1234567890"
 
 
-def test_real_env_var_reference_resolves_from_dotenv(tmp_path):
+def test_real_env_var_reference_resolves_from_dotenv(tmp_path, monkeypatch):
     """A var only present in `.env` must resolve, not stay a placeholder.
 
     The shipped config references `${TWILIO_ACCOUNT_SID}` and friends, but
     nothing loaded `.env`, so the app ran with the literal string
     '${TWILIO_ACCOUNT_SID}' and failed every call with an opaque auth error.
-    """
-    from dotenv import load_dotenv
 
-    sid = os.environ.get("TWILIO_ACCOUNT_SID")
-    assert sid is not None, "TWILIO_ACCOUNT_SID must be set in the environment for this test"
-    monkey_free_path = tmp_path / "dotenv.yaml"
-    monkey_free_path.write_text(
+    Hermetic: the `.env` lives in a temp CWD and the real variable is removed,
+    so the resolved value can only have come from the file (not a developer's
+    `.env` or the ambient environment).
+    """
+    sid = "AC" + "0" * 32
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        f'TWILIO_ACCOUNT_SID="{sid}"\n', encoding="utf-8"
+    )
+    config_path = tmp_path / "dotenv.yaml"
+    config_path.write_text(
         yaml.safe_dump({"telephony": {"twilio": {"account_sid": "${TWILIO_ACCOUNT_SID}"}}}),
         encoding="utf-8",
     )
-    resolved = load_config(monkey_free_path).telephony.twilio.account_sid
-    assert resolved.startswith("AC"), f"expected a real SID, got {resolved!r}"
-    assert len(resolved) == 34, f"SID must be 34 chars, got {len(resolved)}"
+    resolved = load_config(config_path).telephony.twilio.account_sid
+    assert resolved == sid, f"expected the .env SID, got {resolved!r}"
+    assert os.environ["TWILIO_ACCOUNT_SID"] == sid, "the .env was not loaded"
     assert "$" not in resolved, "placeholder leaked through"
-    _ = load_dotenv  # keep the import meaningful
 
 
 def test_env_var_reference_resolves_from_environment(tmp_path, monkeypatch):
