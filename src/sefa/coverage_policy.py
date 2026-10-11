@@ -52,6 +52,8 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
         "sefa/pipeline/error_taxonomy.py",
         "sefa/pipeline/language_detector.py",
         "sefa/pipeline/vad.py",
+        "sefa/prompts.py",
+        "sefa/session/messages.py",
         "sefa/store/audit.py",
         "sefa/store/calls.py",
         "sefa/telephony/control.py",

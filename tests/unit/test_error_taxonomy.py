@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, STTResult
+from sefa.models.base import Language, LLMResult, StreamEvent, STTResult
 from sefa.models.registry import registry
 from sefa.pipeline.error_taxonomy import (
     FailureKind,
@@ -87,6 +87,14 @@ class FakeLLM:
         if isinstance(behaviour, BaseException):
             raise behaviour
         return behaviour
+
+    async def generate_events(self, messages, tools=None, **kwargs):
+        result = await self.generate(messages, tools=tools, **kwargs)
+        yield StreamEvent(
+            text=getattr(result, "text", None) or "",
+            tool_calls=getattr(result, "tool_calls", None) or [],
+            finish_reason=getattr(result, "finish_reason", None),
+        )
 
 
 class FakeTTS:
@@ -274,6 +282,9 @@ class TestPipelineRescuePaths:
 
     @pytest.mark.asyncio
     async def test_malformed_llm_output_creates_no_hot_loop(self, monkeypatch):
+        from sefa.config.settings import settings
+
+        monkeypatch.setattr(settings.pipeline.llm, "tool_calls", True)
         done = _CallHarness(
             monkeypatch, FakeSTT("hello"), FakeLLM(None, _llm_ok_result()), FakeTTS()
         )
@@ -282,6 +293,27 @@ class TestPipelineRescuePaths:
         await done.utterance(speech_seed=2)
         try:
             assert done.llm.calls == 2
+            assert done.backoffs() == [0.25], done.backoffs()
+            assert (await done.session()).state == "active"
+            assert done.tts.spoken[-1] == "I can help with that."
+        finally:
+            await done.stop()
+
+    @pytest.mark.asyncio
+    async def test_malformed_stream_in_extract_mode_backs_off_once(self, monkeypatch):
+        """With native tool calls off, each turn also polls the JSON router, so
+        a broken stream costs one stream call plus one router call per rescue."""
+        from sefa.config.settings import settings
+
+        monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
+        done = _CallHarness(
+            monkeypatch, FakeSTT("hello"), FakeLLM(None, _llm_ok_result()), FakeTTS()
+        )
+        await done.warmup_and_start()
+        await done.utterance(speech_seed=1)
+        await done.utterance(speech_seed=2)
+        try:
+            assert done.llm.calls == 3
             assert done.backoffs() == [0.25], done.backoffs()
             assert (await done.session()).state == "active"
             assert done.tts.spoken[-1] == "I can help with that."

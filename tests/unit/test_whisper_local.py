@@ -7,7 +7,10 @@ silently downgraded the whole app to int8 CPU transcription.
 
 from __future__ import annotations
 
+import ctypes
+import importlib.util
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,8 +19,84 @@ from sefa.models.base import Language
 from sefa.models.stt.whisper_local import (
     WhisperLocalSTT,
     _combine_confidence,
+    _preload_cuda_libraries,
     _segment_confidence,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_cuda_preload(monkeypatch):
+    """Keep the unit suite off the process-wide GPU library preload.
+
+    `_load("cuda", ...)` calls the real `_preload_cuda_libraries`, which would
+    dlopen ~1GB of NVIDIA libraries on a machine that has the wheels. Tests
+    that exercise the preload call it directly, through their own binding.
+    """
+    monkeypatch.setattr(
+        "sefa.models.stt.whisper_local._preload_cuda_libraries", lambda: None
+    )
+
+
+def test_preload_cuda_libraries_is_a_noop_without_nvidia(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+
+    _preload_cuda_libraries()
+
+
+def test_preload_cuda_libraries_is_a_noop_without_a_search_path(monkeypatch):
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: SimpleNamespace(submodule_search_locations=None),
+    )
+
+    _preload_cuda_libraries()
+
+
+def test_preload_cuda_libraries_loads_available_wheels(monkeypatch, tmp_path):
+    root = tmp_path / "nvidia"
+    (root / "cuda_runtime" / "lib").mkdir(parents=True)
+    (root / "cuda_runtime" / "lib" / "libcudart.so.12").write_bytes(b"")
+    (root / "cublas").mkdir()  # no lib/ directory -> skipped
+    (root / "cudnn" / "lib").mkdir(parents=True)
+    (root / "cudnn" / "lib" / "libcudnn.so.9").write_bytes(b"")
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: SimpleNamespace(submodule_search_locations=[str(root)]),
+    )
+    loaded = []
+
+    def fake_cdll(path, mode=None):
+        loaded.append((path, mode))
+        if path.endswith("libcudnn.so.9"):
+            raise OSError("broken graph")
+        return object()
+
+    monkeypatch.setattr(ctypes, "CDLL", fake_cdll)
+
+    _preload_cuda_libraries()
+
+    assert [Path(p).name for p, _ in loaded] == ["libcudart.so.12", "libcudnn.so.9"]
+    assert all(mode == ctypes.RTLD_GLOBAL for _, mode in loaded)
+
+
+def test_a_cpu_load_does_not_preload_cuda(monkeypatch):
+    stt = WhisperLocalSTT(device="cpu", compute_type="int8")
+    called = []
+    monkeypatch.setattr(
+        "sefa.models.stt.whisper_local._preload_cuda_libraries",
+        lambda: called.append(True),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "faster_whisper",
+        SimpleNamespace(WhisperModel=lambda *a, **k: object()),
+    )
+
+    stt._load("cpu", "int8")
+
+    assert called == []
 
 
 def test_explicit_device_overrides_detection():
@@ -154,6 +233,94 @@ async def test_ensure_model_loads_faster_whisper_once(monkeypatch):
     assert stt._model is first
 
 
+async def test_a_gpu_load_failure_falls_back_to_cpu(monkeypatch):
+    """A configured GPU whose CUDA-12 libs are missing must not kill the call."""
+
+    calls = []
+
+    class FlakyWhisperModel:
+        def __init__(self, model_size, device, compute_type):
+            calls.append((device, compute_type))
+            if device == "cuda":
+                raise RuntimeError("libcublas.so.12 is not found")
+
+    fake_module = SimpleNamespace(WhisperModel=FlakyWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    stt = WhisperLocalSTT(model_size="large-v3", device="cuda", compute_type="float16")
+
+    stt._ensure_model()
+
+    assert calls == [("cuda", "float16"), ("cpu", "int8")]
+    assert stt._model is not None
+
+
+async def test_a_cpu_load_failure_propagates(monkeypatch):
+    """When CPU is the configured device there is nothing to fall back to."""
+
+    class BrokenWhisperModel:
+        def __init__(self, model_size, device, compute_type):
+            raise RuntimeError("no such model")
+
+    fake_module = SimpleNamespace(WhisperModel=BrokenWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    stt = WhisperLocalSTT(device="cpu", compute_type="int8")
+
+    with pytest.raises(RuntimeError, match="no such model"):
+        stt._ensure_model()
+
+
+async def test_a_gpu_inference_failure_rebuilds_on_cpu_and_retries(monkeypatch):
+    """ctranslate2 loads CUDA lazily, so the failure lands at first encode.
+
+    Model construction succeeds, then `transcribe` raises "libcublas.so.12 is
+    not found". The adapter must rebuild on CPU and retry rather than end the
+    call with no transcript.
+    """
+    built: list[tuple[str, str]] = []
+
+    class CudaBrokenWhisperModel:
+        def __init__(self, model_size, device, compute_type):
+            built.append((device, compute_type))
+            self._device = device
+            self._info = SimpleNamespace(
+                language="bn", language_probability=0.9, duration=1.0
+            )
+
+        def transcribe(self, *args, **kwargs):
+            if self._device == "cuda":
+                raise RuntimeError("libcublas.so.12 is not found or cannot be loaded")
+            return iter([]), self._info
+
+    fake_module = SimpleNamespace(WhisperModel=CudaBrokenWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    stt = WhisperLocalSTT(model_size="large-v3", device="cuda", compute_type="float16")
+
+    result = await stt.transcribe(b"\x00\x00" * 100, language="bn")
+
+    assert result.text == ""
+    assert result.language is Language.BANGLA
+    assert stt._model_device == "cpu"
+    assert built == [("cuda", "float16"), ("cpu", "int8")]
+
+
+async def test_a_cpu_inference_failure_propagates(monkeypatch):
+    """A CPU model that fails has no second device to try."""
+
+    class BrokenWhisperModel:
+        def __init__(self, model_size, device, compute_type):
+            self._device = device
+
+        def transcribe(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    fake_module = SimpleNamespace(WhisperModel=BrokenWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    stt = WhisperLocalSTT(device="cpu", compute_type="int8")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await stt.transcribe(b"\x00\x00" * 100)
+
+
 async def test_transcribe_loads_the_model_on_first_use(monkeypatch):
     """A cold adapter must not raise on an unset model."""
 
@@ -188,3 +355,21 @@ def test_text_without_letters_returns_neutral_english():
     from sefa.pipeline.language_detector import detect_language
 
     assert detect_language("12345 !!!") == (Language.ENGLISH, 0.5)
+
+
+async def test_transcribe_of_a_buffer_with_no_usable_pcm_is_empty(monkeypatch):
+    """A frame shorter than one sample must not reach `np.frombuffer`.
+
+    `usable <= 0` is the guard for a zero-length or odd-byte payload; handing
+    either to numpy raises "buffer size must be a multiple of element size"
+    instead of returning an empty transcript.
+    """
+    stt = WhisperLocalSTT(device="cpu", compute_type="int8")
+    monkeypatch.setattr(stt, "_ensure_model", lambda: None)
+
+    for payload in (b"", b"\x01"):
+        result = await stt.transcribe(payload, language="bn")
+
+        assert result.text == ""
+        assert result.confidence == 0.0
+        assert result.language is not None

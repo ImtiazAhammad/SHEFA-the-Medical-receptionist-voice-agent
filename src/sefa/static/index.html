@@ -11,6 +11,11 @@
   --coral:#EF4444;--coral-light:#FEE2E2;--slate:#64748B;--border:#E2E8F0;
   --surface:#FFFFFF;--sidebar-bg:#0F172A;--sidebar-text:#94A3B8;
   --sidebar-active:#0D9488;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);
+  /* Motion vocabulary. Every transition in this file pulls from these tokens
+     rather than ad-hoc durations, and the reduced-motion block below collapses
+     them all at once. */
+  --ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);
+  --dur-press:120ms;--dur-enter:180ms;--dur-toast:300ms;
 }
 html{font-size:14px}
 body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;display:flex;min-height:100vh}
@@ -21,7 +26,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 .sidebar-brand h1{font-size:1.25rem;color:#fff;font-weight:700;letter-spacing:-.02em}
 .sidebar-brand span{font-size:.75rem;color:var(--sidebar-text);display:block;margin-top:2px}
 .sidebar-nav{flex:1;padding:12px 0}
-.sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--sidebar-text);text-decoration:none;font-size:.875rem;transition:all .15s}
+.sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--sidebar-text);text-decoration:none;font-size:.875rem;transition:color var(--dur-press) var(--ease-out),background-color var(--dur-press) var(--ease-out)}
 .sidebar-nav a:hover{color:#fff;background:rgba(255,255,255,.05)}
 .sidebar-nav a.active{color:var(--teal);background:rgba(13,148,136,.1);border-right:3px solid var(--teal)}
 .sidebar-nav a svg{width:18px;height:18px;flex-shrink:0}
@@ -32,8 +37,12 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--
 
 /* Main */
 .main{margin-left:240px;flex:1;padding:24px 32px;min-height:100vh}
-.page{display:none}
-.page.active{display:block}
+/* Page switch: content used to teleport via display:none -> block.
+   @starting-style fades the incoming page in without JS or keyframes.
+   Opacity only — these pages are not nested, so a translate would imply a
+   spatial relationship that does not exist. */
+.page.active{display:block;transition:opacity var(--dur-enter) var(--ease-out)}
+@starting-style{.page.active{opacity:0}}
 
 /* Header */
 .page-header{margin-bottom:24px}
@@ -89,11 +98,17 @@ tr.clickable{cursor:pointer}
 /* Forms */
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-.form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.875rem;font-family:inherit;transition:border-color .15s}
+.form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:.875rem;font-family:inherit;transition:border-color var(--dur-press) var(--ease-out)}
 .form-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.1)}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:var(--radius);font-size:.875rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:var(--radius);font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
+/* Press feedback, gated so touch never inherits a stuck pressed state.
+   Buttons only — the nav rows are full-bleed and would visibly detach from
+   the rail edge if scaled. */
+@media(hover:hover) and (pointer:fine){
+  .btn:not(:disabled):active{transform:scale(.97)}
+}
 .btn-primary{background:var(--teal);color:#fff}
 .btn-primary:hover{background:#0F766E}
 .btn-secondary{background:var(--paper);color:var(--ink);border:1px solid var(--border)}
@@ -110,20 +125,34 @@ tr.clickable{cursor:pointer}
 
 /* Tool cards */
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-.tool-card{padding:16px;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);transition:border-color .15s}
+.tool-card{padding:16px;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);transition:border-color var(--dur-press) var(--ease-out)}
 .tool-card:hover{border-color:var(--teal)}
 .tool-card h4{font-size:.875rem;font-weight:600;color:var(--teal);margin-bottom:4px}
 .tool-card p{font-size:.8rem;color:var(--slate);line-height:1.4}
 .tool-card .tool-params{margin-top:8px;font-size:.75rem;color:var(--slate)}
 .tool-card code{background:var(--surface);padding:1px 4px;border-radius:3px;font-size:.75rem;border:1px solid var(--border)}
 
-/* Empty state */
+/* Conversation card: was materialised with style.display, so the whole block
+   arrived cold and shoved everything below it down. Opacity + a 4px rise.
+   The layout shift itself is unavoidable without reserving height. */
+#conversationCard{display:none;opacity:0;translate:0 4px;
+  transition:opacity var(--dur-enter) var(--ease-out),translate var(--dur-enter) var(--ease-out)}
+#conversationCard.open{display:block;opacity:1;translate:0 0}
+@starting-style{#conversationCard.open{opacity:0;translate:0 4px}}
+
+/* Empty states deliberately have NO entrance transition: renderSessions()
+   re-runs every 5s, so any transition here would re-fire twelve times a
+   minute. Same reason the session table rows get no per-row animation. */
 .empty-state{text-align:center;padding:48px 20px;color:var(--slate)}
 .empty-state svg{width:48px;height:48px;margin-bottom:12px;opacity:.4}
 .empty-state p{font-size:.875rem}
 
 /* Toast */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:.875rem;z-index:100;transform:translateY(100px);opacity:0;transition:all .3s}
+/* Toast: transition is scoped to transform+opacity only. Under `transition:all`
+   the .error class swap at showToast() also animated background-color, fading
+   the toast from ink to coral over 300ms as a side effect. Percentage-based
+   translate so it tracks its own height. Enter and exit share one edge. */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:.875rem;z-index:100;transform:translateY(100%);opacity:0;transition:transform var(--dur-toast) var(--ease-out),opacity var(--dur-toast) var(--ease-out)}
 .toast.show{transform:translateY(0);opacity:1}
 .toast.error{background:var(--coral)}
 
@@ -140,8 +169,13 @@ tr.clickable{cursor:pointer}
   .tool-grid{grid-template-columns:1fr}
 }
 
-/* Reduced motion */
+/* Reduced motion. Previously this block only killed .pulse-dot, leaving the
+   other seven transitions running for users who asked for less motion.
+   Collapsing the duration tokens fixes every transition in one place.
+   Gentler, not zero: transitions still resolve, colours and opacity still
+   land — nothing teleports, but nothing travels either. */
 @media(prefers-reduced-motion:reduce){
+  :root{--dur-press:1ms;--dur-enter:1ms;--dur-toast:1ms}
   .pulse-dot{animation:none}
 }
 </style>
@@ -208,7 +242,7 @@ tr.clickable{cursor:pointer}
       </div>
     </div>
 
-    <div class="card" id="conversationCard" style="display:none">
+    <div class="card" id="conversationCard">
       <div class="card-header">
         <h3>Conversation — <span id="convCallSid"></span></h3>
         <button class="btn btn-secondary" onclick="closeConversation()" style="font-size:.75rem;padding:6px 12px">Close</button>
@@ -398,7 +432,7 @@ async function viewConversation(callSid) {
     const data = await res.json();
     if (data.error) { showToast(data.error, true); return; }
     document.getElementById('convCallSid').textContent = callSid.slice(0, 20);
-    document.getElementById('conversationCard').style.display = '';
+    document.getElementById('conversationCard').classList.add('open');
     const body = document.getElementById('conversationBody');
     if (!data.history || !data.history.length) {
       body.innerHTML = '<div class="empty-state"><p>No conversation history yet</p></div>';
@@ -426,7 +460,7 @@ async function viewConversation(callSid) {
 
 function closeConversation() {
   selectedCallSid = null;
-  document.getElementById('conversationCard').style.display = 'none';
+  document.getElementById('conversationCard').classList.remove('open');
   renderSessions(sessions, 'sessionsTable', 'sessionsEmpty');
 }
 

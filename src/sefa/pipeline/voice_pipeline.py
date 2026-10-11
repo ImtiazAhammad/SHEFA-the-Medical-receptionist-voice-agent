@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -23,14 +26,16 @@ if TYPE_CHECKING:
 from sefa.config.settings import settings
 from sefa.models.base import Language
 from sefa.models.registry import registry
+from sefa.pipeline.actions import confirmation_text, extract_action, tool_result_note
 from sefa.pipeline.error_taxonomy import (
     FailureKind,
+    MalformedLLMOutputError,
     backoff_delay,
-    require_llm_result,
 )
 from sefa.pipeline.language_detector import evaluate_transcript
 from sefa.pipeline.vad import EnergyVAD
 from sefa.session.manager import CallSession, SessionManager
+from sefa.session.messages import build_messages
 from sefa.tools.definitions import get_tool_definitions
 from sefa.tools.executor import execute_tool
 
@@ -45,27 +50,30 @@ DEFAULT_OTHER_LANGUAGE_PROMPT = (
     "I'll connect you to our front desk now. Please hold, or press star for a callback."
 )
 
-SYSTEM_PROMPT_TEMPLATE = (
-    "You are sefa Receptionist, a professional bilingual "
-    "(English/Bangla) medical receptionist AI.\n\n"
-    "## Core Rules\n"
-    "- Always respond in the SAME LANGUAGE the patient is speaking.\n"
-    "- If the patient mixes languages (code-switching), respond in "
-    "the dominant language.\n"
-    "- Be empathetic, professional, and concise.\n"
-    "- Never fabricate medical advice. Route clinical questions to "
-    "a human.\n"
-    "- Use available tools to check schedules, book appointments, "
-    "and verify patient info.\n"
-    "- For emergencies, immediately inform the patient you are "
-    "transferring them.\n\n"
-    "## Languages\n"
-    "- English (en): Standard professional English.\n"
-    "- Bangla (bn): আদর্শ বাংলা, professional and respectful tone.\n\n"
-    "## Current Session\n"
-    "- Patient language preference: {language}\n"
-    "- Patient name: {patient_name}\n"
-)
+# A sentence ends at a Bangla danda, a run of terminal punctuation, a newline,
+# or a period followed by whitespace/end-of-string (so "3.5" and URLs survive).
+_SENTENCE_BOUNDARY = re.compile(r"[।?!\n]+|\.(?=\s|$)")
+
+
+class _SynthesisError(Exception):
+    """Internal marker: a failure came from synthesis, not the model."""
+
+
+def split_complete_sentences(text: str) -> tuple[list[str], str]:
+    """Split ``text`` into finished sentences, returning them plus the tail.
+
+    The tail is the fragment after the last boundary — it has no closing
+    punctuation yet, so speaking it now would cut a word in half. The caller
+    keeps it buffered until more tokens arrive (or the stream ends).
+    """
+    sentences: list[str] = []
+    start = 0
+    for match in _SENTENCE_BOUNDARY.finditer(text):
+        sentence = text[start : match.end()].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = match.end()
+    return sentences, text[start:]
 
 
 async def speak_to(
@@ -156,6 +164,19 @@ class VoicePipeline:
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
 
+            # Log what the VAD actually handed on, so a silent caller can be
+            # told apart from one the codec mangled upstream: RMS below the
+            # gate means no turn, near-zero means the bytes are not speech.
+            samples = np.frombuffer(buffer, dtype="<i2").astype(np.float64)
+            _rms = float(np.sqrt((samples**2).mean()))
+            logger.info(
+                "VAD flush [%s]: %.2fs, %d bytes, rms=%.0f",
+                call_sid,
+                len(buffer) / 32000,
+                len(buffer),
+                _rms,
+            )
+
             # Named rescue paths (D-ENG12): a failure is classified, counted,
             # backed off exponentially, and after max_transfer_attempts the
             # call is closed with a courtesy + DTMF/transfer prompt instead
@@ -189,6 +210,15 @@ class VoicePipeline:
                 continue
 
             if not stt_result.text.strip():
+                logger.info(
+                    "STT [%s]: heard nothing from %.2fs of audio "
+                    "(rms=%.0f, lang=%s, conf=%.2f) — codec or mic problem?",
+                    call_sid,
+                    len(buffer) / 32000,
+                    _rms,
+                    stt_result.language.value,
+                    stt_result.confidence,
+                )
                 self._audio_buffers.setdefault(call_sid, [])
                 if await self._rescue(
                     call_sid, session, put_playback, FailureKind.EMPTY_TRANSCRIPTION
@@ -254,44 +284,36 @@ class VoicePipeline:
                 continue
 
             session.add_turn("user", stt_result.text, detected_lang)
-            messages = self._build_messages(session)
-            tools = get_tool_definitions()
+            tts = await registry.get_tts()
 
             try:
                 start = time.monotonic()
-                llm_result = await llm.generate(messages, tools=tools)
-                llm_result = require_llm_result(llm_result)
+                reply_text = await self._generate_reply(
+                    llm, tts, session, put_playback
+                )
                 llm_ms = (time.monotonic() - start) * 1000
-                logger.info("LLM [%s]: '%s' (%.0fms)", call_sid, llm_result.text[:80], llm_ms)
-
-                if llm_result.tool_calls:
-                    # The assistant turn that declared the calls must stay in
-                    # history: a request carrying a `tool` message without the
-                    # assistant `tool_calls` message in front of it is rejected
-                    # by OpenAI/Qwen-compatible servers (D-ENG15).
-                    session.add_turn(
-                        "assistant",
-                        llm_result.text,
-                        llm_result.language,
-                        tool_calls=llm_result.tool_calls,
-                    )
-                    for tc in llm_result.tool_calls:
-                        tool_result = await execute_tool(
-                            tc["name"], tc["arguments"], session
-                        )
-                        session.add_turn(
-                            "tool",
-                            str(tool_result),
-                            tool_call_id=tc["id"],
-                            tool_call_name=tc["name"],
-                        )
-
-                    messages = self._build_messages(session)
-                    llm_result = await llm.generate(messages, tools=tools)
-                    llm_result = require_llm_result(llm_result)
+                logger.info("LLM [%s]: '%s' (%.0fms)", call_sid, reply_text[:80], llm_ms)
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except _SynthesisError as exc:
+                logger.error("TTS failed for %s: %s", call_sid, exc)
+                if await self._rescue(
+                    call_sid, session, put_playback, FailureKind.TTS_FAILURE
+                ):
+                    break
+                self._audio_buffers.setdefault(call_sid, [])
+                continue
+            except Exception as exc:
+                # Log the cause before classifying: a bare `except` that
+                # reports only MALFORMED_LLM_OUTPUT hides transport faults
+                # (an unsupported tool_choice, a dead server) behind a label
+                # that points at the model's output instead.
+                logger.error(
+                    "LLM call failed for %s: %s: %s",
+                    call_sid,
+                    type(exc).__name__,
+                    exc,
+                )
                 if await self._rescue(
                     call_sid, session, put_playback, FailureKind.MALFORMED_LLM_OUTPUT
                 ):
@@ -299,23 +321,151 @@ class VoicePipeline:
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
 
-            try:
-                tts = await registry.get_tts()
-                await speak_to(tts, llm_result.text, session.language.value, put_playback)
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                if await self._rescue(
-                    call_sid, session, put_playback, FailureKind.TTS_FAILURE
-                ):
-                    break
-                self._audio_buffers.setdefault(call_sid, [])
-                continue
-
-            session.add_turn("assistant", llm_result.text, llm_result.language)
+            session.add_turn("assistant", reply_text, session.language)
             await self._session_manager.save(session)
             self._failures[call_sid] = 0  # a successful turn resets the counter
             self._audio_buffers.setdefault(call_sid, [])
+
+    async def _stream_reply(
+        self,
+        llm: Any,
+        tts: Any,
+        messages: list[dict[str, Any]],
+        tools: list[Any],
+        language: str,
+        put_playback: PlaybackSink,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Speak a reply sentence-by-sentence as the model streams it.
+
+        A non-streaming ``generate()`` made the patient wait for the *whole*
+        reply before the first sound. Here each finished sentence is synthesized
+        the moment its final token arrives, so time-to-first-audio is governed
+        by the first sentence, not the last. Tool calls are surfaced by the
+        adapter after the text; the returned text is what enters history.
+        """
+        text_parts: list[str] = []
+        pending = ""
+        tool_calls: list[dict[str, Any]] = []
+        async for event in llm.generate_events(messages, tools=tools):
+            if event.tool_calls:
+                tool_calls = event.tool_calls
+            if not event.text:
+                continue
+            text_parts.append(event.text)
+            pending += event.text
+            sentences, pending = split_complete_sentences(pending)
+            for sentence in sentences:
+                await self._emit(tts, sentence, language, put_playback)
+
+        remainder = pending.strip()
+        if remainder:
+            await self._emit(tts, remainder, language, put_playback)
+
+        reply_text = "".join(text_parts)
+        if not reply_text.strip() and not tool_calls:
+            raise MalformedLLMOutputError("LLM stream produced no text or tool calls")
+        return reply_text, tool_calls
+
+    async def _generate_reply(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+    ) -> str:
+        """Stream a reply for the latest user turn and, when the model acts,
+        the grounded confirmation that follows.
+
+        Two modes, chosen by ``settings.pipeline.llm.tool_calls``:
+
+        * Native tool_calls (Qwen/vLLM with a tool parser, cloud models): the
+          reply streams with the tool definitions attached and the calls the
+          model declares are executed; a grounded confirmation then streams.
+        * Bangla pilot (Gemma-2): Ollama's gemma2 rejects any request carrying
+          a ``tools`` array, so the reply streams as plain chat and the
+          structured-JSON router decides whether to act. The tool result is
+          injected into the follow-up request as a *context note* (not a tool
+          message, which gemma2 also rejects) so the confirmation only says
+          what the tool actually did.
+        """
+        messages = build_messages(session)
+        if not settings.pipeline.llm.tool_calls:
+            reply_text, _tool_calls = await self._stream_reply(
+                llm, tts, messages, [], session.language.value, put_playback
+            )
+            action = await extract_action(llm, session)
+            if action is not None:
+                tool_result = await execute_tool(
+                    action.name, action.arguments, session
+                )
+                # Facts (date/time/doctor/ID) come from the tool result rendered
+                # in code, spoken verbatim; the model never gets to re-state
+                # them. Only untemplated tools fall back to a grounded model
+                # reply, with the result folded into the LEADING system message
+                # (gemma2's chat template reads a trailing one loosely).
+                fixed = confirmation_text(
+                    action.name, tool_result, session.language.value
+                )
+                if fixed is not None:
+                    await self._emit(
+                        tts, fixed, session.language.value, put_playback
+                    )
+                    return fixed
+                messages = build_messages(session)
+                messages[0]["content"] += "\n\n" + tool_result_note(
+                    action.name, tool_result
+                )
+                reply_text, _tool_calls = await self._stream_reply(
+                    llm, tts, messages, [], session.language.value, put_playback
+                )
+            return reply_text
+
+        tools = get_tool_definitions()
+        reply_text, tool_calls = await self._stream_reply(
+            llm, tts, messages, tools, session.language.value, put_playback
+        )
+        if not tool_calls:
+            return reply_text
+
+        # The assistant turn that declared the calls must stay in history: a
+        # request carrying a `tool` message without the assistant `tool_calls`
+        # message in front of it is rejected by OpenAI/Qwen-compatible servers
+        # (D-ENG15).
+        session.add_turn(
+            "assistant",
+            reply_text,
+            session.language,
+            tool_calls=tool_calls,
+        )
+        for tc in tool_calls:
+            tool_result = await execute_tool(tc["name"], tc["arguments"], session)
+            session.add_turn(
+                "tool",
+                str(tool_result),
+                tool_call_id=tc["id"],
+                tool_call_name=tc["name"],
+            )
+
+        messages = build_messages(session)
+        reply_text, _tool_calls = await self._stream_reply(
+            llm, tts, messages, tools, session.language.value, put_playback
+        )
+        return reply_text
+
+    async def _emit(
+        self,
+        tts: Any,
+        text: str,
+        language: str,
+        put_playback: PlaybackSink,
+    ) -> None:
+        """Speak one sentence, tagging a synthesis fault for the classifier."""
+        try:
+            await speak_to(tts, text, language, put_playback)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            raise _SynthesisError(str(exc)) from exc
 
     async def _rescue(
         self,
@@ -368,33 +518,6 @@ class VoicePipeline:
             call_sid,
             self._failures.get(call_sid, 0),
         )
-
-    def _build_messages(self, session: CallSession) -> list[dict[str, Any]]:
-        system = SYSTEM_PROMPT_TEMPLATE.format(
-            language=session.language.value,
-            patient_name=session.patient_name or "Unknown",
-        )
-        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
-        tools_open = False
-        for turn in session.history:
-            if turn.role == "tool":
-                # A `tool` message is only valid as the answer to an assistant
-                # `tool_calls` message; anything else is an orphan (D-ENG15).
-                if tools_open:
-                    messages.append({"role": "tool", "content": turn.content})
-                continue
-            tools_open = turn.role == "assistant" and bool(turn.tool_calls)
-            msg: dict[str, Any] = {"role": turn.role, "content": turn.content}
-            if tools_open:
-                msg["tool_calls"] = turn.tool_calls
-            messages.append(msg)
-        # A trailing declaration with no results after it would be sent as an
-        # unanswered ``tool_calls`` request, which the API rejects. Truncation
-        # keeps it so pending results can pair up; the request builder is where
-        # it is retracted.
-        if messages and messages[-1].get("tool_calls"):
-            messages.pop()
-        return messages
 
     async def cleanup(self, call_sid: str) -> None:
         self._audio_buffers.pop(call_sid, None)

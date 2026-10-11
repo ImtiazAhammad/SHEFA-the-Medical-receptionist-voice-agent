@@ -134,6 +134,86 @@ def _from_float(samples: np.ndarray) -> bytes:
 
 _DTYPE_FOR_WIDTH = {1: np.uint8, 2: "<i2", 4: "<i4"}
 
+MULAW_RATE = 8000
+
+# G.711 mu-law encode/decode tables. `audioop` does this in C but is deprecated
+# in 3.12 and removed in 3.13 while this package supports `>=3.11`, so the codec
+# is table-driven in numpy instead: 256 codes, expanded once at import.
+_MULAW_DECODE = np.zeros(256, dtype=np.int16)
+for _code in range(256):
+    _u = ~_code & 0xFF
+    _mant = (_u & 0x0F) << 3
+    _exp = (_u & 0x70) >> 4
+    _sample = ((_mant + 0x84) << _exp) - 0x84
+    _MULAW_DECODE[_code] = -_sample if _u & 0x80 else _sample
+
+_MULAW_BIAS = 0x84
+_MULAW_CLIP = 32635
+_MULAW_SEG_ENDS = np.array(
+    [0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF], dtype=np.int32
+)
+
+
+def mulaw8k_to_s16le_16k_mono(data: bytes) -> bytes:
+    """Decode G.711 mu-law 8k mono into the s16le 16k form the pipeline uses.
+
+    Twilio's media stream is fixed at `audio/x-mulaw` / 8000 Hz / mono with no
+    negotiation, so this runs on every inbound frame. Without it the downstream
+    consumers reinterpret the mu-law bit patterns as s16le or float32 PCM and
+    see numeric noise instead of speech: `EnergyVAD` misses every gate and
+    `WhisperSTTAdapter` transcribes nothing.
+    """
+    if not data:
+        return b""
+
+    decoded = _MULAW_DECODE[np.frombuffer(data, dtype=np.uint8)]
+    signal = decoded.astype(np.float32) / 32768.0
+
+    return to_s16le_16k_mono(
+        np.round(np.clip(signal, -1.0, 1.0) * 32767.0).astype("<i2").tobytes(),
+        MULAW_RATE,
+        TARGET_WIDTH,
+        TARGET_CHANNELS,
+    )
+
+
+def s16le_16k_mono_to_mulaw8k(data: bytes) -> bytes:
+    """Encode s16le 16k mono into the G.711 mu-law 8k that Twilio will play.
+
+    The inverse of `mulaw8k_to_s16le_16k_mono`, and equally mandatory: sending
+    s16le to a mu-law stream leaves an unplayable buffer on the caller's side,
+    so the agent stays silent however correct the synthesis is.
+    """
+    payload = strip_wav_header(data)
+    if not payload:
+        return b""
+
+    samples = np.frombuffer(
+        payload[: len(payload) - (len(payload) % 2)], dtype="<i2"
+    ).astype(np.int32)
+
+    # Downsample to 8k before quantizing so the 16k audio is not aliased into
+    # the band the codec actually transmits.
+    if len(samples) > 0:
+        out_len = max(1, int(round(len(samples) * MULAW_RATE / TARGET_RATE)))
+        positions = np.arange(out_len, dtype=np.float64) * (len(samples) / out_len)
+        samples = np.interp(
+            positions,
+            np.arange(len(samples), dtype=np.float64),
+            samples.astype(np.float64),
+        ).astype(np.int32)
+
+    sign = ((samples < 0).astype(np.uint8) << 7)
+    magnitude = np.where(samples < 0, -samples, samples)
+    magnitude = np.clip(magnitude, 0, _MULAW_CLIP) + _MULAW_BIAS
+
+    exponent = np.clip(
+        np.searchsorted(_MULAW_SEG_ENDS, magnitude, side="right"), 0, 7
+    ).astype(np.uint8)
+    mantissa = (magnitude >> (exponent + 3)) & 0x0F
+
+    return (~(sign | (exponent << 4) | mantissa) & 0xFF).astype(np.uint8).tobytes()
+
 
 def to_s16le_16k_mono(
     data: bytes,

@@ -11,6 +11,7 @@ without a loud error.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from sefa.config.settings import (
     AnthropicAdapterConfig,
     AppConfig,
     AppInfoConfig,
+    AuthConfig,
     CalendarConfig,
     ComplianceConfig,
     CustomEHRConfig,
@@ -275,6 +277,50 @@ def test_env_var_reference_is_resolved(tmp_path):
     assert config.telephony.twilio.account_sid == "${TEST_SID}"
 
 
+def test_env_var_quoting_is_stripped(tmp_path, monkeypatch):
+    """A quoted `.env` value must not keep its quotes in the credential.
+
+    `TWILIO_ACCOUNT_SID="AC..."` reached Twilio as a 36-character username
+    with a literal leading `"`, and the API answered "Authentication Error -
+    invalid username" — indistinguishable from a wrong password.
+    """
+    monkeypatch.setenv("TEST_SID", '"ACquoted1234567890"')
+    path = tmp_path / "quoted.yaml"
+    path.write_text(
+        yaml.safe_dump({"telephony": {"twilio": {"account_sid": "${TEST_SID}"}}}),
+        encoding="utf-8",
+    )
+    assert load_config(path).telephony.twilio.account_sid == "ACquoted1234567890"
+
+
+def test_real_env_var_reference_resolves_from_dotenv(tmp_path, monkeypatch):
+    """A var only present in `.env` must resolve, not stay a placeholder.
+
+    The shipped config references `${TWILIO_ACCOUNT_SID}` and friends, but
+    nothing loaded `.env`, so the app ran with the literal string
+    '${TWILIO_ACCOUNT_SID}' and failed every call with an opaque auth error.
+
+    Hermetic: the `.env` lives in a temp CWD and the real variable is removed,
+    so the resolved value can only have come from the file (not a developer's
+    `.env` or the ambient environment).
+    """
+    sid = "AC" + "0" * 32
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        f'TWILIO_ACCOUNT_SID="{sid}"\n', encoding="utf-8"
+    )
+    config_path = tmp_path / "dotenv.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"telephony": {"twilio": {"account_sid": "${TWILIO_ACCOUNT_SID}"}}}),
+        encoding="utf-8",
+    )
+    resolved = load_config(config_path).telephony.twilio.account_sid
+    assert resolved == sid, f"expected the .env SID, got {resolved!r}"
+    assert os.environ["TWILIO_ACCOUNT_SID"] == sid, "the .env was not loaded"
+    assert "$" not in resolved, "placeholder leaked through"
+
+
 def test_env_var_reference_resolves_from_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_SID", "ACfromenv")
     path = tmp_path / "env.yaml"
@@ -284,6 +330,43 @@ def test_env_var_reference_resolves_from_environment(tmp_path, monkeypatch):
     )
     config = load_config(path)
     assert config.telephony.twilio.account_sid == "ACfromenv"
+
+
+def test_env_var_fallback_syntax_yields_empty_not_literal(tmp_path, monkeypatch):
+    """`${VAR:-fallback}` must fall back, not resolve to the literal text.
+
+    Without the `:-` form an unset variable resolves to the string
+    "${VAR}", which then trips the field validators — a `wss://` check for
+    media_stream_url, an absolute-http check for public_url — and makes a
+    valid default config refuse to boot on a machine with no tunnel running.
+    """
+    monkeypatch.delenv("TEST_PUBLIC_URL", raising=False)
+    path = tmp_path / "fallback.yaml"
+    path.write_text(
+        yaml.safe_dump({"telephony": {"public_url": "${TEST_PUBLIC_URL:-}"}}),
+        encoding="utf-8",
+    )
+    assert load_config(path).telephony.public_url == ""
+
+
+def test_env_var_fallback_syntax_uses_env_when_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_PUBLIC_URL", "https://tunnel.example.dev")
+    path = tmp_path / "fallback.yaml"
+    path.write_text(
+        yaml.safe_dump({"telephony": {"public_url": "${TEST_PUBLIC_URL:-}"}}),
+        encoding="utf-8",
+    )
+    config = load_config(path)
+    assert config.telephony.public_url == "https://tunnel.example.dev"
+
+
+def test_default_config_starts_without_tunnel_env_vars(monkeypatch):
+    """The shipped config must load with PUBLIC_URL/MEDIA_STREAM_URL unset."""
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.delenv("MEDIA_STREAM_URL", raising=False)
+    config = load_config(DEFAULT_YAML)
+    assert config.telephony.public_url == ""
+    assert config.telephony.twilio.media_stream_url == ""
 
 
 def test_telephony_provider_is_a_single_enum_knob():
@@ -372,15 +455,25 @@ def test_public_url_is_an_explicit_validated_config_key():
     assert ok.public_url == "https://tunnel.example"
 
 
-def test_default_yaml_declares_the_new_telephony_knobs():
+def test_default_yaml_declares_the_new_telephony_knobs(monkeypatch):
     """The shipped config must not lose the two new keys (sip credentials,
-    media_stream_url, public_url) to a model that cannot represent them."""
+    media_stream_url, public_url) to a model that cannot represent them.
+
+    media_stream_url and public_url ship as `${VAR:-}` placeholders, so an unset
+    environment resolves them to empty rather than to the literal text. The
+    values are compared with the variables set, which is the case that matters:
+    a real tunnel URL must survive the model intact."""
+    monkeypatch.setenv("MEDIA_STREAM_URL", "wss://tunnel.example.dev/api/v1/telephony/media-stream")
+    monkeypatch.setenv("PUBLIC_URL", "https://tunnel.example.dev")
+    config = load_config(DEFAULT_YAML)
     raw = yaml.safe_load(DEFAULT_YAML.read_text(encoding="utf-8"))
-    config = AppConfig(**raw)
     tel = raw["telephony"]
     assert config.telephony.sip.host == tel["sip"]["host"]
-    assert config.telephony.twilio.media_stream_url == tel["twilio"]["media_stream_url"]
-    assert config.telephony.public_url == tel["public_url"]
+    assert (
+        config.telephony.twilio.media_stream_url
+        == "wss://tunnel.example.dev/api/v1/telephony/media-stream"
+    )
+    assert config.telephony.public_url == "https://tunnel.example.dev"
     assert "media_stream_url" in tel["twilio"]
     assert "public_url" in tel
     assert "sip" in tel
@@ -451,13 +544,13 @@ REGISTRY_PY = REPO_ROOT / "src" / "sefa" / "models" / "registry.py"
 
 
 def test_q12_resolved_model_key_is_single_source():
-    """Q12 (D-ENG20): pipeline.llm.model and the resolved qwen_local adapter
+    """Q12 (D-ENG20): pipeline.llm.model and the resolved local adapter
     must agree — the two-key drift must fail loudly, not reconcile silently."""
     config = load_config(DEFAULT_YAML)
-    assert config.pipeline.llm.provider == "qwen_local"
-    assert config.pipeline.llm.model == "qwen2.5:7b"
-    key, adapter = config.models.resolve_llm_adapter("qwen_local")
-    assert key == "llm_qwen_local"
+    assert config.pipeline.llm.provider == "local"
+    assert config.pipeline.llm.model == "gemma2:9b"
+    key, adapter = config.models.resolve_llm_adapter("local")
+    assert key == "llm_local"
     assert adapter.model == config.pipeline.llm.model
 
 
@@ -474,14 +567,18 @@ def test_q12_registry_holds_no_model_literal():
 
 
 @pytest.mark.asyncio
-async def test_qwen_local_registry_uses_adapter_base_url_and_model():
-    """D-ENG20: the registry builds qwen_local from models.adapters — port 8080
-    (the YAML value), never the deleted 11434, and the adapter's model."""
+async def test_local_registry_uses_adapter_base_url_and_model():
+    """D-ENG20: the registry builds the local provider from models.adapters —
+    the YAML base_url and the adapter's model, with no literal in the registry.
+
+    The endpoint is the Ollama server on :11434, whose gemma2:9b is the Bangla
+    pilot's brain. It used to assert the vLLM AWQ server on :8001, whose
+    Qwen2.5 checkpoint could not hold Bangla."""
     from sefa.models.registry import registry
 
     llm = await registry._create_llm()
-    assert llm.model == "qwen2.5:7b"
-    assert str(llm._client.base_url).rstrip("/") == "http://localhost:8080/v1"
+    assert llm.model == "gemma2:9b"
+    assert str(llm._client.base_url).rstrip("/") == "http://localhost:11434/v1"
 
 
 def test_resolve_llm_adapter_requires_exactly_one_adapter():
@@ -492,12 +589,12 @@ def test_resolve_llm_adapter_requires_exactly_one_adapter():
         }
     )
     with pytest.raises(ValueError, match="exactly one"):
-        cfg.resolve_llm_adapter("qwen_local")
+        cfg.resolve_llm_adapter("local")
     missing = ModelsConfig(
         adapters={"other": {"type": "openai_llm", "api_key": "k", "model": "m"}}
     )
     with pytest.raises(ValueError, match="exactly one"):
-        missing.resolve_llm_adapter("qwen_local")
+        missing.resolve_llm_adapter("local")
 
 
 def test_resolve_llm_adapter_rejects_unregistered_provider():
@@ -522,7 +619,7 @@ async def test_llm_provider_branches_build_from_resolved_adapter(monkeypatch):
         adapters={
             "llm_openai": {"type": "openai_llm", "api_key": "k", "model": "gpt-4o"},
             "llm_anthropic": {"type": "anthropic_llm", "api_key": "k", "model": "claude"},
-            "llm_qwen_local": {
+            "llm_local": {
                 "type": "openai_compatible_llm",
                 "base_url": "http://localhost:8080/v1",
                 "model": "qwen2.5:7b",
@@ -541,7 +638,7 @@ async def test_llm_provider_branches_build_from_resolved_adapter(monkeypatch):
     assert isinstance(anthropic_llm, AnthropicLLM)
     assert anthropic_llm.model == "claude"
 
-    monkeypatch.setattr(settings.pipeline.llm, "provider", "qwen_local")
+    monkeypatch.setattr(settings.pipeline.llm, "provider", "local")
     qwen_llm = await registry._create_llm()
     assert isinstance(qwen_llm, OpenAICompatibleLLM)
     assert qwen_llm.model == "qwen2.5:7b"
@@ -556,3 +653,18 @@ async def test_unknown_llm_provider_raises(monkeypatch):
     monkeypatch.setattr(settings.pipeline.llm, "provider", "not_a_provider")
     with pytest.raises(ValueError, match="registered"):
         await registry._create_llm()
+
+
+def test_dev_mode_placeholder_without_a_fallback_is_not_dev_mode(monkeypatch):
+    """`${VAR}` with no `:-fallback` cannot be resolved to a bool.
+
+    The shipped default uses the fallback form so an unset variable stays safe.
+    A placeholder with no fallback has nothing to fall back to, so it must be
+    refused rather than silently read as truthy — a non-empty string would
+    otherwise be a truthy dev_mode.
+    """
+    monkeypatch.setenv("SEFA_DEV_MODE_TEST", "true")
+
+    # The variable is deliberately irrelevant: without `:-` there is no
+    # fallback to read, so the placeholder cannot become a bool by being set.
+    assert AuthConfig(dev_mode="${SEFA_DEV_MODE_TEST}").dev_mode is False

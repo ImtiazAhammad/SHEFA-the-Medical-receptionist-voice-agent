@@ -24,7 +24,7 @@ class ModelProvider(StrEnum):
     ELEVENLABS = "elevenlabs"
     PIPER = "piper"
     VITS = "vits"
-    QWEN_LOCAL = "qwen_local"
+    LOCAL = "local"
 
 
 class Language(StrEnum):
@@ -83,6 +83,21 @@ class LLMResult:
     finish_reason: str = "stop"
     usage: dict[str, int] = field(default_factory=dict)
     language: Language = Language.ENGLISH
+
+
+@dataclass
+class StreamEvent:
+    """One step of a streamed LLM reply.
+
+    ``text`` carries a token/partial-sentence delta; ``tool_calls`` is set on the
+    final event when the model asked for tools instead of (or before) speaking.
+    A streaming caller cannot wait for the whole completion and *then* discover
+    it was a tool call, so both must arrive through the same iterator.
+    """
+
+    text: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -158,6 +173,27 @@ class BaseLLM(ABC):
     ) -> AsyncIterator[str]:
         """Yield text chunks for streaming TTS."""
         ...
+
+    async def generate_events(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Yield a streamed reply as ``StreamEvent`` steps, tool calls included.
+
+        The default is correct but not incremental: it awaits ``generate`` and
+        yields the whole result as one event, so an adapter that has not opted
+        into real streaming keeps working (tools and all) without pretending to
+        stream. Adapters backed by an incremental API override this to publish
+        text deltas as they arrive and surface tool calls at the end.
+        """
+        result = await self.generate(messages, tools=tools, **kwargs)
+        yield StreamEvent(
+            text=getattr(result, "text", None) or "",
+            tool_calls=getattr(result, "tool_calls", None) or [],
+            finish_reason=getattr(result, "finish_reason", None),
+        )
 
     @abstractmethod
     async def close(self) -> None:

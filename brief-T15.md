@@ -1,0 +1,4 @@
+- [ ] **T15 (P2, human: ~3h / CC: ~1h)** — Child 0/1 — single `telephony.provider` enum + startup two-key rejection; delete ngrok scrape; `text/xml` or drop sink; `media_stream_url` validation
+  - Surfaced by: D-ENG13 (H3), D-ENG25 (M6-M8)
+  - Files: settings.py, configs/default.yaml, twilio.py, main.py
+  - Verify: flip wrong knob → startup error, not silent call loss

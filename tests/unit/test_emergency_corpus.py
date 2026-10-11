@@ -60,8 +60,18 @@ CANONICAL_BN = [
     "জরুরি!",
     "বুকে ব্যথা হচ্ছে",
     "আমার বুকে ব্যথা করছে",
+    # The pilot loop heard "my chest hurts" as "বুক বেথা": the inflected
+    # "বুকে ব্যথা" alone missed the natural phrasing and whisper's yaphala
+    # confusion, so these variants are the regression guard.
+    "আমার বুক ব্যথা করছে",
+    "আমার বুক বেথা করছে",
+    "বুকে চাপ লাগছে",
+    "বুক চেপে ধরছে",
+    "হার্ট অ্যাটাক হচ্ছে",
     "তীব্র রক্তক্ষরণ হচ্ছে",
     "আমি শ্বাস নিতে পারছি না",
+    "আমি শ্বাস নিতে পারছিনা",
+    "দম বন্ধ হয়ে আসছে",
     "অজ্ঞান হয়ে গেছি",
     "ও অজ্ঞান হয়ে গিয়েছে",
     "জ্ঞান হারিয়ে ফেলেছি",
@@ -89,6 +99,10 @@ BENIGN_BN = [
     "আমি শ্বাস নিতে পারছি, শুধু দুর্বল লাগছে।",
     "ওষুধ খেলাম, ব্যথা কমে গেছে।",
     "আমি শুধু একটা চেকআপ করাতে চাই।",
+    # The widened chest-pain phrases must stay boundary-anchored: a bare
+    # mention of the same words in a non-emergency sentence is not a trigger.
+    "আমার বুকে কোনো ব্যথা নেই, শুধু কাশি।",
+    "আমার হার্টের সমস্যা আছে, নিয়মিত ওষুধ খাই।",
 ]
 
 

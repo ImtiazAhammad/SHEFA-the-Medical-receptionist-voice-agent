@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, STTResult
+from sefa.models.base import Language, LLMResult, StreamEvent, STTResult
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "noisy_clinic.wav"
 
@@ -304,6 +304,9 @@ class TestPipelineTranscribesTheFixture:
         class FakeLLM:
             async def generate(self, messages, tools=None, **kwargs):
                 return LLMResult(text="I can help with that.", language=Language.ENGLISH)
+
+            async def generate_events(self, messages, tools=None, **kwargs):
+                yield StreamEvent(text="I can help with that.")
 
         class FakeTTS:
             async def synthesize_stream(self, text, language="en"):

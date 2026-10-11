@@ -14,6 +14,7 @@ import struct
 from typing import Any
 
 import httpx
+import numpy as np
 import pytest
 
 from sefa.audio import AudioFrame
@@ -140,15 +141,15 @@ class _FakeWebSocket:
     async def iter_text(self):
         from fastapi import WebSocketDisconnect
 
-        for index, event in enumerate(self._events):
-            if index == 0:
-                yield json.dumps(event)
-                for _ in range(5):
-                    await asyncio.sleep(0)
-            else:
-                yield json.dumps(event)
-                if self._after_first is not None:
-                    await asyncio.wait_for(self._after_first.wait(), timeout=2)
+        for event in self._events:
+            yield json.dumps(event)
+            for _ in range(5):
+                await asyncio.sleep(0)
+        # The pipeline starts on `start`, so the wait has to come after every
+        # scripted event rather than after the first one — otherwise the
+        # gate fires before anything under test has had a chance to run.
+        if self._after_first is not None:
+            await asyncio.wait_for(self._after_first.wait(), timeout=5)
         raise WebSocketDisconnect()
 
 
@@ -169,7 +170,9 @@ def test_media_stream_enqueues_inbound_audio(monkeypatch):
 
     seen["consumed"] = asyncio.Event()
     monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
-    payload = base64.b64encode(b"\x01\x02\x03").decode()
+    # A real mu-law frame, because the stream is fixed at audio/x-mulaw 8k.
+    # 0xFF is mu-law digital silence.
+    payload = base64.b64encode(b"\xff" * 160).decode()
 
     async def _drive():
         task = asyncio.create_task(
@@ -177,6 +180,10 @@ def test_media_stream_enqueues_inbound_audio(monkeypatch):
                 _FakeWebSocket(
                     [
                         {"event": "connected"},
+                        {
+                            "event": "start",
+                            "start": {"callSid": "CA-media", "streamSid": "MZ-media"},
+                        },
                         {"event": "media", "media": {"payload": payload}},
                     ],
                     after_first_event=seen["consumed"],
@@ -188,7 +195,10 @@ def test_media_stream_enqueues_inbound_audio(monkeypatch):
 
     asyncio.run(_drive())
 
-    assert seen["audio"] == b"\x01\x02\x03"
+    # Decoded to the internal s16le contract, not passed through as mu-law:
+    # 160 mu-law samples at 8k become 320 samples at 16k, so 640 bytes.
+    assert len(seen["audio"]) == 640
+    assert np.frombuffer(seen["audio"], dtype="<i2").tolist() == [0] * 320
 
 
 def test_media_stream_stops_on_a_stop_event(monkeypatch):
@@ -231,7 +241,11 @@ def test_playback_worker_converts_audio_to_the_socket_format(monkeypatch):
             sent.append(payload)
             delivered.set()
 
-    ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
+    ws = RecordingWebSocket(events=[
+        {"event": "connected"},
+        {"event": "start", "start": {"callSid": "CA-test", "streamSid": "MZ-test"}},
+    ],
+    after_first_event=delivered)
 
     class S24kPipeline:
         async def process_audio_stream(self, call_sid, audio_queue, put_playback):
@@ -265,7 +279,11 @@ def test_playback_worker_skips_an_empty_frame(monkeypatch):
             sent.append(payload)
             delivered.set()
 
-    ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
+    ws = RecordingWebSocket(events=[
+        {"event": "connected"},
+        {"event": "start", "start": {"callSid": "CA-empty", "streamSid": "MZ-empty"}},
+    ],
+    after_first_event=delivered)
 
     class EmptyThenRealPipeline:
         async def process_audio_stream(self, call_sid, audio_queue, put_playback):
@@ -285,7 +303,9 @@ def test_playback_worker_skips_an_empty_frame(monkeypatch):
     asyncio.run(_drive())
 
     assert len(sent) == 1
-    assert base64.b64decode(sent[0]["media"]["payload"]) == b"\x01\x02"
+    # Exactly one frame, from the non-empty AudioFrame only. The wire
+    # encoding is mu-law, so its byte count no longer mirrors the source.
+    assert len(base64.b64decode(sent[0]["media"]["payload"])) == 1
 
 
 def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
@@ -298,7 +318,18 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
             sent.append(payload)
             delivered.set()
 
-    ws = RecordingWebSocket(events=[{"event": "connected"}], after_first_event=delivered)
+    ws = RecordingWebSocket(events=[
+        {"event": "connected"},
+        # Twilio's `start` carries two different SIDs. Outbound media must be
+        # addressed by the Stream SID (`MZ...`); sending the Call SID (`CA...`)
+        # makes Twilio discard every frame, so the greeting logs as sent while
+        # the caller hears silence.
+        {
+            "event": "start",
+            "start": {"callSid": "CA-play", "streamSid": "MZ-play"},
+        },
+    ],
+    after_first_event=delivered)
 
     class IdlePipeline:
         async def process_audio_stream(self, call_sid, audio_queue, put_playback):
@@ -317,10 +348,13 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
 
     assert sent, "playback audio never reached the socket"
     assert sent[0]["event"] == "media"
-    assert sent[0]["streamSid"] == "CA-play"
+    assert sent[0]["streamSid"] == "MZ-play"
+    assert sent[0]["streamSid"] != "CA-play"
     import base64
 
-    assert base64.b64decode(sent[0]["media"]["payload"]) == b"\x0a\x0b"
+    # The wire format is mu-law, not the s16le the frame carried: two
+    # samples at 16k downsample to one 8k byte.
+    assert base64.b64decode(sent[0]["media"]["payload"]) == b"\xb8"
 
 
 def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
@@ -349,7 +383,11 @@ def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
 
     monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
 
-    ws = BrokenWebSocket(events=[{"event": "connected"}, {"event": "stop"}])
+    ws = BrokenWebSocket(events=[
+        {"event": "connected"},
+        {"event": "start", "start": {"callSid": "CA-test", "streamSid": "MZ-test"}},
+        {"event": "stop"},
+    ])
 
     async def _drive():
         await asyncio.wait_for(
@@ -388,7 +426,11 @@ def test_playback_worker_propagates_cancellation(monkeypatch):
     monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
 
     async def _drive():
-        ws = BlockingWebSocket(events=[{"event": "connected"}, {"event": "stop"}])
+        ws = BlockingWebSocket(events=[
+        {"event": "connected"},
+        {"event": "start", "start": {"callSid": "CA-test", "streamSid": "MZ-test"}},
+        {"event": "stop"},
+    ])
         task = asyncio.create_task(twilio.media_stream_ws(ws, "CA-cancel"))
         await asyncio.wait_for(entered.wait(), timeout=2)
         task.cancel()
@@ -485,7 +527,13 @@ def test_the_pipeline_is_handed_a_sink_not_a_raw_playback_queue(monkeypatch):
     async def _drive():
         task = asyncio.create_task(
             twilio.media_stream_ws(
-                SignalingWebSocket([{"event": "connected"}, {"event": "stop"}]),
+                SignalingWebSocket(
+                    [
+                        {"event": "connected"},
+                        {"event": "start", "start": {"callSid": "CA-sink", "streamSid": "MZ-sink"}},
+                        {"event": "stop"},
+                    ]
+                ),
                 "CA-sink",
             )
         )

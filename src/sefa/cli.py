@@ -105,17 +105,19 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
         lines.append(f"  BLOCKER  voice missing: {voice}")
         ok = False
 
-    # The pilot language is Bangla; an English-only voice is a known blocker
-    # (T5) and must not pass silently.
-    bn_voice = Path("models/piper/bn_BD.nf_cycgan.onnx")
-    if not bn_voice.exists():
+    # The pilot language is Bangla, so a Bangla voice must exist in the voice
+    # directory; an English-only voice cannot serve it. Any `bn_BD*.onnx`
+    # counts, so swapping the concrete voice does not require a code change.
+    bn_voices = sorted(Path("models/piper").glob("bn_BD*.onnx"))
+    if not bn_voices:
         lines.append(
-            "  BLOCKER  bn voice missing: models/piper/bn_BD.nf_cycgan.onnx "
-            "(licensed Bangla voice is an open T5 blocker; pilot is English-only)"
+            "  BLOCKER  no Bangla voice found in models/piper (expected "
+            "bn_BD*.onnx): the pilot language is Bangla and an English-only "
+            "voice cannot serve it"
         )
         ok = False
     else:
-        lines.append(f"  ok       bn voice found: {bn_voice}")
+        lines.append(f"  ok       bn voice found: {bn_voices[0]}")
 
     tts = PiperTTS(model_path=str(voice))
     try:
