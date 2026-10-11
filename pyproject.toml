@@ -45,6 +45,16 @@ local-stt = [
     "faster-whisper>=1.1.0",
     "torch>=2.5.0",
 ]
+# CUDA-12 runtime libs for GPU Whisper. ctranslate2 dlopens cublas/cudnn by
+# soname; WhisperLocalSTT preloads these wheels' libs with RTLD_GLOBAL so they
+# resolve on hosts whose system CUDA is a different major (e.g. 13). Without
+# them the adapter falls back to CPU int8 (~10x slower).
+local-stt-gpu = [
+    "faster-whisper>=1.1.0",
+    "nvidia-cublas-cu12>=12.4",
+    "nvidia-cudnn-cu12>=9.1",
+    "nvidia-cuda-runtime-cu12>=12.4",
+]
 local-tts = [
     "piper-tts>=1.4.0",
     "soundfile>=0.12.0",

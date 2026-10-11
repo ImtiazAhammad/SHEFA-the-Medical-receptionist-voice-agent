@@ -16,8 +16,8 @@ from __future__ import annotations
 import pytest
 
 from sefa.models.base import Language
-from sefa.pipeline.voice_pipeline import VoicePipeline
 from sefa.session.manager import CallSession, Turn, truncate_history
+from sefa.session.messages import build_messages
 
 
 def _tc(call_id: str, name: str = "find_slots") -> list[dict]:
@@ -141,7 +141,7 @@ def test_build_messages_retracts_an_unanswered_trailing_declaration():
         ),
     ]
 
-    messages = VoicePipeline()._build_messages(session)
+    messages = build_messages(session)
     assert [m["role"] for m in messages] == ["system", "user"]
     assert all(not m.get("tool_calls") for m in messages)
 
@@ -202,7 +202,7 @@ def test_build_messages_never_ships_an_orphan_tool_message():
         Turn(role="tool", content="ok", tool_call_id="call_2", tool_call_name="book_slot"),
     ]
 
-    messages = VoicePipeline()._build_messages(session)
+    messages = build_messages(session)
     tools = [m for m in messages if m.get("role") == "tool"]
     assert [m["content"] for m in tools] == ["ok"]
     assert messages[0]["role"] == "system"

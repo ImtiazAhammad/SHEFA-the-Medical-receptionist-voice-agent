@@ -308,7 +308,7 @@ class TestDoctorReport:
         text, ok = cli.doctor_report()
 
         assert ok is False
-        assert "bn_BD.nf_cycgan.onnx" in text
+        assert "bn_BD" in text
 
     def test_passes_once_the_bangla_voice_is_present(self, monkeypatch, tmp_path):
         voice = tmp_path / "voice.onnx"

@@ -1,0 +1,4 @@
+- [ ] **T17 (P2, human: ~3h / CC: ~1h)** — Child 0 — `models.adapters` single source; registry reads it; delete hardcoded `11434`; Q12 asserts resolved key + no model literal
+  - Surfaced by: D-ENG20 (H10)
+  - Files: registry.py, settings.py, configs/default.yaml, tests
+  - Verify: Q12 fails if registry gains a model literal

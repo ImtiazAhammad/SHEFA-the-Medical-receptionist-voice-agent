@@ -20,7 +20,13 @@ from types import SimpleNamespace
 import pytest
 
 from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, STTResult, language_from_code
+from sefa.models.base import (
+    Language,
+    LLMResult,
+    StreamEvent,
+    STTResult,
+    language_from_code,
+)
 from sefa.models.registry import registry
 from sefa.pipeline.language_detector import detect_language
 from sefa.pipeline.voice_pipeline import VoicePipeline
@@ -140,6 +146,10 @@ class _FakeLLM:
             text="An English reply that must never be spoken.",
             language=Language.ENGLISH,
         )
+
+    async def generate_events(self, messages, tools=None, **kwargs):
+        self.calls += 1
+        yield StreamEvent(text="An English reply that must never be spoken.")
 
 
 class _FakeTTS:

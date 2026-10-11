@@ -26,3 +26,7 @@ htmlcov/
 
 # Generated knowledge graph (rebuild with `graphify update .`) — derived, not source
 graphify-out/
+
+# Node dependencies for the owner console (`console/`). Package-lock.json is
+# committed so the build is reproducible; node_modules never is.
+node_modules/

@@ -97,7 +97,9 @@ class TestPlaybackWorkerResilience:
     async def test_playback_worker_survives_a_single_send_error(self):
         socket = FakeSocket(failures=1)
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         await queues.put_playback(_frame(b"\x00\x01"))
@@ -113,7 +115,9 @@ class TestPlaybackWorkerResilience:
     async def test_a_transient_failure_does_not_strand_frames(self):
         socket = FakeSocket(failures=1)
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         for _ in range(4):
@@ -128,7 +132,9 @@ class TestPlaybackWorkerResilience:
     async def test_the_worker_exits_past_the_failure_budget(self):
         socket = FakeSocket(failures=10_000)
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         for _ in range(queues.playback.maxsize):
@@ -141,7 +147,9 @@ class TestPlaybackWorkerResilience:
     async def test_cancellation_still_propagates(self):
         socket = FakeSocket()
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         await queues.put_playback(_frame())
@@ -155,7 +163,9 @@ class TestPlaybackWorkerResilience:
     async def test_an_empty_frame_is_not_sent(self):
         socket = FakeSocket()
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         await queues.put_playback(AudioFrame(b"", rate=16000))
@@ -175,7 +185,9 @@ class TestConcurrencyAssertions:
         socket = FakeSocket()
         queues = make_media_queues()
         baseline = len(asyncio.all_tasks())
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         for _ in range(3):
@@ -190,7 +202,9 @@ class TestConcurrencyAssertions:
     async def test_playback_queue_drains_to_zero_after_a_call(self):
         socket = FakeSocket()
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         for _ in range(3):
@@ -209,7 +223,12 @@ class TestConcurrencyAssertions:
         for index in range(2):
             socket = FakeSocket()
             queues = make_media_queues()
-            worker = PlaybackWorker(socket, queues.playback, call_sid=f"CA{index}")
+            worker = PlaybackWorker(
+                socket,
+                queues.playback,
+                call_sid=f"CA{index}",
+                stream_sid=lambda: "MZ123",
+            )
             workers.append(asyncio.create_task(worker.run()))
             for _ in range(3):
                 await queues.put_playback(_frame())
@@ -246,7 +265,9 @@ class TestMediaQueuesMessage:
     async def test_the_worker_sends_a_twilio_media_envelope(self):
         socket = FakeSocket()
         queues = make_media_queues()
-        worker = PlaybackWorker(socket, queues.playback, call_sid="CA123")
+        worker = PlaybackWorker(
+            socket, queues.playback, call_sid="CA123", stream_sid=lambda: "MZ123"
+        )
 
         task = asyncio.create_task(worker.run())
         await queues.put_playback(_frame(b"\x00\x01\x02"))
@@ -256,7 +277,7 @@ class TestMediaQueuesMessage:
 
         message = socket.sent[0]
         assert message["event"] == "media"
-        assert message["streamSid"] == "CA123"
+        assert message["streamSid"] == "MZ123"
         assert isinstance(json.loads(json.dumps(message)), dict)
 
 

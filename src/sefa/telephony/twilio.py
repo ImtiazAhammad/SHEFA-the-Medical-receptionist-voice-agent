@@ -11,13 +11,18 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, Dial, Play, VoiceResponse
 
+from sefa.audio import (
+    mulaw8k_to_s16le_16k_mono,
+    s16le_16k_mono_to_mulaw8k,
+    to_s16le_16k_mono,
+)
 from sefa.config.settings import settings
 from sefa.telephony.control import CallLeg, control
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
-    from sefa.audio import AudioFrame
+    from sefa.audio import AudioFrame as AudioFrame
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +30,43 @@ app = FastAPI(title="sefa Telephony")
 
 _call_handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
 
-# Twilio's bidirectional media stream only accepts 8k or 16k s16le mono.
+# Twilio's bidirectional media stream is fixed at G.711 mu-law, 8 kHz, mono —
+# there is no negotiation, and `start.mediaFormat` always reports those values.
+# Audio must be converted at this boundary in BOTH directions: inbound frames
+# carry mu-law that the s16le pipeline cannot read, and outbound audio must be
+# re-encoded to mu-law or Twilio plays an unplayable buffer and the caller hears
+# silence. MEDIA_STREAM_RATE stays 16000 because that is the internal rate the
+# pipeline and STT operate at, not the wire rate.
+MEDIA_STREAM_ENCODING = "audio/x-mulaw"
 MEDIA_STREAM_RATE = 16000
+MULAW_ENCODINGS = frozenset({"audio/x-mulaw", "audio/mulaw", "mulaw", "ulaw"})
+
+
+def _width_for(encoding: str) -> int:
+    """Sample width in bytes for a linear-PCM encoding, 0 for compressed."""
+    if encoding in MULAW_ENCODINGS:
+        return 0
+    return 1 if "alaw" in encoding else 2
+
+
+def decode_inbound_media(
+    media: dict[str, Any], encoding: str, rate: int
+) -> bytes:
+    """Decode one Twilio media frame into the s16le 16k the pipeline expects.
+
+    Twilio's bidirectional stream is fixed at `audio/x-mulaw` / 8k / mono with
+    no negotiation, and `start.mediaFormat` is how it announces that. Every
+    downstream consumer — `EnergyVAD` and `WhisperSTTAdapter` — reads s16le
+    PCM, so handing them raw mu-law bytes made each one reinterpret the bit
+    patterns as linear samples: the agent heard numeric noise, never replied,
+    and the caller heard silence.
+    """
+    payload = base64.b64decode(media["payload"])
+    if encoding in MULAW_ENCODINGS:
+        return mulaw8k_to_s16le_16k_mono(payload)
+    # Anything else (s16le, alaw) is already linear PCM; still normalize
+    # width/rate/channels so the pipeline's single contract holds.
+    return to_s16le_16k_mono(payload, rate, _width_for(encoding), 1)
 
 # A playback worker that dies on the first send error leaves the pipeline
 # pushing frames into a queue nobody drains, so the queue must be bounded and
@@ -107,27 +147,55 @@ class PlaybackWorker:
         websocket: WebSocket,
         playback_queue: asyncio.Queue[AudioFrame],
         call_sid: str,
+        stream_sid: Callable[[], str],
         failure_budget: int = MAX_CONSECUTIVE_SEND_FAILURES,
     ) -> None:
         self._websocket = websocket
         self._queue = playback_queue
         self._call_sid = call_sid
+        # Resolved per send, not captured at construction: Twilio discards any
+        # media whose `streamSid` does not match the Stream (`MZ...`) it opened,
+        # and that SID only arrives in the `start` message. Sending the Call
+        # SID (`CA...`) instead made every frame silently unplayable — the
+        # greeting logged as sent while the caller heard nothing.
+        self._stream_sid = stream_sid
         self.failure_budget = failure_budget
         self.consecutive_failures = 0
+        self.frames_sent = 0
 
     async def run(self) -> None:
         while True:
             frame = await self._queue.get()
             try:
-                pcm = frame.to_s16le_16k_mono()
-                if not pcm:
+                # Convert the frame to the exact codec Twilio asked for:
+                # synthesis is 16k s16le internally, the wire is mu-law 8k.
+                wire = s16le_16k_mono_to_mulaw8k(frame.to_s16le_16k_mono())
+                if not wire:
+                    continue
+                stream_sid = self._stream_sid()
+                if not stream_sid:
+                    # No `start` yet: Twilio has no Stream to address, so
+                    # dropping is correct and sending is guaranteed loss.
+                    logger.warning(
+                        "Dropping playback frame for %s: stream SID unknown",
+                        self._call_sid,
+                    )
                     continue
                 await self._websocket.send_json({
                     "event": "media",
-                    "streamSid": self._call_sid,
-                    "media": {"payload": base64.b64encode(pcm).decode()},
+                    "streamSid": stream_sid,
+                    "media": {"payload": base64.b64encode(wire).decode()},
                 })
                 self.consecutive_failures = 0
+                if self.frames_sent == 0:
+                    # First frame proves synthesis reached the wire; without
+                    # this a silent call and a silent caller look identical.
+                    logger.info(
+                        "Playback started for %s: first frame %d bytes mu-law",
+                        self._call_sid,
+                        len(wire),
+                    )
+                self.frames_sent += 1
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -279,11 +347,75 @@ async def initiate_outbound_call(to_number: str = "") -> dict[str, str]:
         return {"call_sid": result["sid"], "status": result["status"]}
 
 
+def _resolve_call_sid(call_sid: str, msg: dict) -> str:
+    """Return the real Twilio Call SID for a media stream.
+
+    Twilio's `start` message carries `callSid`. A `{call_sid}` path segment is
+    optional and only used as a fallback, because `<Stream url=...>` connects to
+    the literal URL with no substitution — so the path segment is empty in real
+    calls and the `start` payload is the only source of truth.
+    """
+    start = msg.get("start")
+    if isinstance(start, dict):
+        resolved = start.get("callSid")
+        if resolved:
+            return str(resolved)
+    return call_sid or "unknown"
+
+
+def _make_capture(call_sid: str):
+    """Return a sink that records decoded inbound PCM, or None when disabled.
+
+    Debug aid: with SEFA_CAPTURE_DIR set, the exact bytes the pipeline receives
+    are written to disk so a silent call can be analyzed offline instead of
+    guessed at. Inert by default — no file I/O and no allocation on the hot
+    path when the variable is unset.
+    """
+    import os
+    from pathlib import Path
+
+    capture_dir = os.environ.get("SEFA_CAPTURE_DIR")
+    if not capture_dir:
+        return None
+
+    directory = Path(capture_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{call_sid}.pcm"
+    # Held open for the life of the call and closed in the endpoint's `finally`
+    # — a context manager cannot span the request without wrapping the whole
+    # handler.
+    handle = open(path, "wb")  # noqa: SIM115
+
+    class _Capture:
+        def __init__(self) -> None:
+            self._bytes = 0
+
+        def feed(self, chunk: bytes) -> None:
+            handle.write(chunk)
+            self._bytes += len(chunk)
+
+        def close(self) -> None:
+            if not handle.closed:
+                handle.flush()
+                handle.close()
+
+    logger.info("Capturing inbound audio for %s -> %s", call_sid, path)
+    return _Capture()
+
+
+@app.websocket("/media-stream")
 @app.websocket("/media-stream/{call_sid}")
-async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
-    """WebSocket endpoint for Twilio Media Streams bidirectional audio."""
+async def media_stream_ws(websocket: WebSocket, call_sid: str = "") -> None:
+    """WebSocket endpoint for Twilio Media Streams bidirectional audio.
+
+    The call SID is optional in the path because Twilio's `<Stream url=...>`
+    does not template the URL — it connects to the literal URL given, so a
+    required `{call_sid}` segment made every real call 404 before a single
+    audio frame arrived. Twilio instead sends the real SID in the `start`
+    message, which `_resolve_call_sid` prefers over the path segment.
+    """
     await websocket.accept()
-    logger.info("Media stream connected: %s", call_sid)
+    logger.info("Media stream connected: %s", call_sid or "(call SID pending)")
 
     from sefa.pipeline.voice_pipeline import VoicePipeline
 
@@ -291,24 +423,87 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
     queues = make_media_queues()
     control.register(TwilioCallLeg(call_sid))
 
-    worker = PlaybackWorker(websocket, queues.playback, call_sid)
-    playback_task = asyncio.create_task(worker.run())
     pipeline_task: asyncio.Task[None] | None = None
+    # The Stream SID (`MZ...`) that Twilio addresses outbound media by. It
+    # only exists after `start`, so it is read through a getter rather than
+    # captured when the worker is built.
+    stream_sid_box: list[str] = []
+
+    def _stream_sid() -> str:
+        return stream_sid_box[0] if stream_sid_box else ""
+
+    def _start_pipeline() -> None:
+        """Start the pipeline once, with a call SID that is actually known.
+
+        Twilio sends `connected` before `start`, so starting on `connected`
+        binds the pipeline to an empty SID and the call runs with no session.
+        """
+        nonlocal pipeline_task
+        if pipeline_task is not None:
+            return
+        worker = PlaybackWorker(websocket, queues.playback, call_sid, _stream_sid)
+        pipeline_task = asyncio.create_task(
+            pipeline.process_audio_stream(
+                call_sid, queues.audio, queues.put_playback
+            )
+        )
+        worker_task.append(asyncio.create_task(worker.run()))
+        playback_workers.append(worker)
+
+    worker_task: list[asyncio.Task[None]] = []
+    playback_workers: list[PlaybackWorker] = []
+
+    _capture = None
+
+    inbound_encoding = MEDIA_STREAM_ENCODING
+    inbound_rate = 8000
 
     try:
         async for raw in websocket.iter_text():
             msg = json.loads(raw)
             event = msg.get("event")
 
-            if event == "media":
-                audio_bytes = base64.b64decode(msg["media"]["payload"])
-                await queues.put_audio(audio_bytes)
-            elif event == "connected":
-                pipeline_task = asyncio.create_task(
-                    pipeline.process_audio_stream(
-                        call_sid, queues.audio, queues.put_playback
-                    )
+            if event == "start":
+                call_sid = _resolve_call_sid(call_sid, msg)
+                media_format = msg.get("start", {}).get("mediaFormat", {})
+                # Twilio addresses our outbound media by the Stream SID, not
+                # the Call SID; without it every frame we send is discarded.
+                resolved_stream = str(
+                    msg.get("start", {}).get("streamSid", "")
+                    or msg.get("streamSid", "")
                 )
+                if resolved_stream:
+                    stream_sid_box[:] = [resolved_stream]
+                inbound_encoding = str(
+                    media_format.get("encoding", MEDIA_STREAM_ENCODING)
+                ).lower()
+                inbound_rate = int(media_format.get("sampleRate", 8000))
+                logger.info(
+                    "Media stream start: call_sid=%s stream_sid=%s encoding=%s rate=%s",
+                    call_sid,
+                    resolved_stream or "(none)",
+                    inbound_encoding,
+                    media_format.get("sampleRate", MEDIA_STREAM_RATE),
+                )
+                control.register(TwilioCallLeg(call_sid))
+                if _capture is None:
+                    _capture = _make_capture(call_sid)
+                _start_pipeline()
+            elif event == "media":
+                if pipeline_task is None:
+                    # Media before `start` (or without one): the SID is unknown,
+                    # so start on the first frame rather than dropping audio.
+                    _start_pipeline()
+                _decoded = decode_inbound_media(
+                    msg["media"], inbound_encoding, inbound_rate
+                )
+                if _capture is None and call_sid:
+                    _capture = _make_capture(call_sid)
+                if _capture is not None:
+                    _capture.feed(_decoded)
+                await queues.put_audio(_decoded)
+            elif event == "connected":
+                pass
             elif event == "stop":
                 break
     except WebSocketDisconnect:
@@ -317,8 +512,17 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str) -> None:
         if pipeline_task is not None:
             pipeline_task.cancel()
             await asyncio.gather(pipeline_task, return_exceptions=True)
-        playback_task.cancel()
-        await asyncio.gather(playback_task, return_exceptions=True)
+        for task in worker_task:
+            task.cancel()
+        await asyncio.gather(*worker_task, return_exceptions=True)
+        if playback_workers:
+            logger.info(
+                "Playback total for %s: %d frames",
+                call_sid,
+                sum(w.frames_sent for w in playback_workers),
+            )
         await pipeline.cleanup(call_sid)
         control.release(call_sid)
         remove_call_handler(call_sid)
+        if _capture is not None:
+            _capture.close()

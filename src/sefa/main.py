@@ -8,12 +8,13 @@ import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from sefa.auth import AuthStore, Principal, TokenError
 from sefa.config.settings import TelephonyProvider, settings
 from sefa.session.manager import SessionManager
+from sefa.session.messages import build_messages
 from sefa.telephony.twilio import app as telephony_app
 from sefa.tools.definitions import get_tool_definitions
 from sefa.utils.logging import setup_logging
@@ -122,6 +123,11 @@ def _validation_error_handler(request, exc: RequestValidationError) -> JSONRespo
     return error_response("validation", details=exc.errors())
 
 # The permission each route requires, keyed by (method, path).
+# A permission value meaning "reachable without a credential". Distinct from
+# `None`, which means "undeclared, therefore refused": naming a route with this
+# is the deliberate, reviewable exception to "every route is protected".
+PUBLIC_PERMISSION = "<public>"
+
 #
 # This map lives in code rather than config on purpose: config can grant a
 # permission to a role, but it cannot un-protect a route. A route absent from
@@ -140,7 +146,9 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/chat"): "chat:use",
     ("GET", "/api/v1/config"): "config:read",
     ("GET", "/api/v1/tools"): "config:read",
+    ("GET", "/login"): PUBLIC_PERMISSION,
 }
+
 
 # Any telephony route, whatever the provider mounts. Matched by prefix so a new
 # webhook cannot escape authorization by living under a different path.
@@ -148,6 +156,10 @@ TELEPHONY_PREFIX = "/api/v1/telephony"
 TELEPHONY_PERMISSION = "calls:place"
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+# HttpOnly session cookie set by /login. HttpOnly keeps page script from reading
+# it; SameSite=Lax keeps it off cross-site requests.
+AUTH_COOKIE = "sefa_token"
 
 
 def required_permission(app: FastAPI, method: str, path: str) -> str | None:
@@ -209,15 +221,22 @@ def build_auth_store() -> AuthStore:
     )
 
 
-def _bearer_token(header: str | None) -> str | None:
-    """Pull a bearer token out of an Authorization header, or None."""
-    if not header:
-        return None
-    scheme, _, credentials = header.partition(" ")
-    if scheme.lower() != "bearer":
-        return None
-    token = credentials.strip()
-    return token or None
+def _bearer_token(header: str | None, cookies: dict[str, str] | None = None) -> str | None:
+    """Pull a bearer token out of an Authorization header or the auth cookie.
+
+    The header wins because it is the deliberate, per-request credential. The
+    cookie exists only so a browser can hold a session: a page load cannot set
+    an Authorization header, so without it every HTML route would be a 401 that
+    no amount of correct credentials could get past.
+    """
+    if header:
+        scheme, _, credentials = header.partition(" ")
+        if scheme.lower() == "bearer":
+            token = credentials.strip()
+            if token:
+                return token
+    cookie = (cookies or {}).get(AUTH_COOKIE)
+    return cookie or None
 
 
 def _install_auth(app: FastAPI, store: AuthStore) -> None:
@@ -238,9 +257,42 @@ def _install_auth(app: FastAPI, store: AuthStore) -> None:
             # Undeclared route: refuse rather than guess.
             return error_response("route_not_authorized")
 
-        principal: Principal | None = store.authenticate(
-            _bearer_token(request.headers.get("Authorization"))
+        token = _bearer_token(
+            request.headers.get("Authorization"), request.cookies
         )
+
+        if permission == PUBLIC_PERMISSION:
+            # Public routes take no credential, but one that is presented is
+            # still checked — a wrong token should read as wrong, not silently
+            # as anonymous.
+            public_principal = (
+                store.authenticate(token) if token is not None else None
+            )
+            if token is not None and public_principal is None:
+                return error_response(
+                    "authentication_required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            request.state.principal = public_principal
+            return await call_next(request)
+
+        if (
+            settings.auth.dev_mode
+            and request.url.path.startswith(TELEPHONY_PREFIX)
+            and token is None
+        ):
+            # Dev-mode only. Twilio cannot present a bearer token — it signs
+            # webhooks with X-Twilio-Signature instead, which nothing here
+            # verifies — so requiring one rejects every inbound call before a
+            # stream is ever opened. Unreachable in production because the
+            # telephony router itself is only mounted when dev_mode is true
+            # (see _telephony_router_allowed).
+            request.state.principal = Principal(
+                name="twilio-webhook", role="admin"
+            )
+            return await call_next(request)
+
+        principal: Principal | None = store.authenticate(token)
         if principal is None:
             # One body for "no token" and "wrong token" — a difference between
             # them is an oracle for guessing valid credentials.
@@ -337,6 +389,53 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         page = STATIC_DIR / "test-call.html"
         return HTMLResponse(content=page.read_text(encoding="utf-8"))
 
+    @app.get("/login")
+    async def login(token: str | None = None, redirect_to: str = "/test-call"):
+        """Exchange a bearer token for an HttpOnly cookie, then redirect.
+
+        A browser cannot attach an Authorization header to a page load, so this
+        is the only way the HTML routes are reachable from a browser at all.
+        The token is never echoed back into the page or the URL after this
+        point — it lives in a cookie the page's JavaScript cannot read.
+
+        The route is public precisely so that it can be reached with no
+        credential whatsoever; it still refuses without one, because a session
+        is exactly what it is there to issue.
+        """
+        if not token:
+            return error_response(
+                "authentication_required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        principal = store.authenticate(token)
+        if principal is None:
+            return error_response(
+                "authentication_required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if not store.authorizes(principal, "calls:place"):
+            return error_response("insufficient_role")
+
+        # Only local paths: `next=https://evil.example` would turn a legitimate
+        # login into an open redirect.
+        target = (
+            redirect_to
+            if redirect_to.startswith("/") and not redirect_to.startswith("//")
+            else "/"
+        )
+
+        response = RedirectResponse(url=target, status_code=303)
+        response.set_cookie(
+            AUTH_COOKIE,
+            token,
+            httponly=True,
+            samesite="lax",
+            secure=settings.auth.dev_mode is False,
+            max_age=12 * 60 * 60,
+        )
+        return response
+
     @app.get("/api/v1/sessions")
     async def list_sessions() -> list[dict]:
         sessions = []
@@ -402,15 +501,8 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         session = await session_manager.get_or_create(call_sid)
         session.add_turn("user", message)
         from sefa.models.registry import registry
-        from sefa.pipeline.voice_pipeline import SYSTEM_PROMPT_TEMPLATE
         from sefa.tools.definitions import get_tool_definitions
-        system = SYSTEM_PROMPT_TEMPLATE.format(
-            language=session.language.value,
-            patient_name=session.patient_name or "Unknown",
-        )
-        messages = [{"role": "system", "content": system}]
-        for turn in session.history:
-            messages.append({"role": turn.role, "content": turn.content})
+        messages = build_messages(session)
         llm = await registry.get_llm()
         llm_result = await llm.generate(messages, tools=get_tool_definitions())
         session.add_turn("assistant", llm_result.text, llm_result.language)

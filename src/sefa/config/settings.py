@@ -71,6 +71,10 @@ class LLMConfig(StrictModel):
     temperature: float = 0.3
     max_tokens: int = 512
     system_prompt_file: str = "configs/prompts/system.md"
+    # Whether the model emits native OpenAI tool_calls. Local Gemma-2 (via
+    # Ollama) rejects any request carrying a `tools` array, so the pilot sets
+    # this false and books through the structured-JSON action router instead.
+    tool_calls: bool = True
 
 
 class LanguageDetectionConfig(StrictModel):
@@ -123,6 +127,12 @@ class TwilioConfig(StrictModel):
     @field_validator("media_stream_url")
     @classmethod
     def _media_stream_url_must_be_wss(cls, value: str) -> str:
+        # An unresolved "${VAR}" placeholder means the operator set nothing, so
+        # it validates as unset rather than as a malformed URL. `load_config`
+        # substitutes before validation; this only matters for callers that
+        # validate the raw YAML mapping directly.
+        if value.startswith("${") and value.endswith("}"):
+            return ""
         if value and not value.startswith("wss://"):
             raise ValueError(
                 "telephony.twilio.media_stream_url must start with wss:// "
@@ -191,12 +201,16 @@ class TelephonyConfig(StrictModel):
                     f"ring nowhere — set a non-*.twil.io media stream URL"
                 )
         if self.public_url:
-            parsed = urlparse(self.public_url)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                raise ValueError(
-                    "telephony.public_url must be an absolute http(s) URL "
-                    f"(got {self.public_url!r})"
-                )
+            # An unresolved "${VAR}" placeholder means unset, not malformed.
+            if self.public_url.startswith("${") and self.public_url.endswith("}"):
+                object.__setattr__(self, "public_url", "")
+            else:
+                parsed = urlparse(self.public_url)
+                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    raise ValueError(
+                        "telephony.public_url must be an absolute http(s) URL "
+                        f"(got {self.public_url!r})"
+                    )
         return self
 
 
@@ -243,6 +257,31 @@ class AuthConfig(StrictModel):
     bind_host: str = "127.0.0.1"
     principals: list[AuthPrincipalConfig] = Field(default_factory=list)
     roles: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("dev_mode", mode="before")
+    @classmethod
+    def _dev_mode_accepts_env_placeholder(cls, value: Any) -> Any:
+        """Let `dev_mode: "${DEV_MODE:-false}"` work while defaulting to false.
+
+        The shipped default stays safe with the variable unset. The
+        placeholder is rejected as a malformed bool by pydantic otherwise, both
+        for callers validating the raw YAML mapping and because the resolver
+        hands back a string.
+        """
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            body = value[2:-1]
+            var_name, sep, fallback = body.partition(":-")
+            if sep:
+                import os
+
+                return os.environ.get(var_name, fallback).strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                )
+            return False
+        return value
 
 
 class StorageConfig(StrictModel):
@@ -360,7 +399,7 @@ class ModelsConfig(StrictModel):
     LLM_PROVIDER_ADAPTER_TYPE: ClassVar[dict[str, str]] = {
         "openai": "openai_llm",
         "anthropic": "anthropic_llm",
-        "qwen_local": "openai_compatible_llm",
+        "local": "openai_compatible_llm",
     }
 
     def resolve_llm_adapter(self, provider: str) -> tuple[str, AdapterConfig]:
@@ -447,13 +486,39 @@ class AppConfig(StrictModel):
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
 
 
+def _strip_wrapping_quotes(value: str) -> str:
+    """Drop one matching pair of surrounding quotes.
+
+    `.env` lines commonly quote values (`TWILIO_ACCOUNT_SID="AC..."`). Without
+    this the quotes travel into the credential and Twilio rejects it as an
+    invalid username.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
 def _resolve_env_vars(obj: Any) -> Any:
-    """Recursively resolve ${ENV_VAR} references in config values."""
+    """Recursively resolve ${ENV_VAR} and ${ENV_VAR:-fallback} references.
+
+    The `:-` fallback matters: without it an unset variable resolves to the
+    literal `"${ENV_VAR}"` text, which then fails the field validators (a
+    `wss://` URL check, an absolute-http check) and makes an otherwise valid
+    default config refuse to start. `${PUBLIC_URL:-}` therefore means "empty
+    unless the operator set it".
+
+    Values are loaded from `.env` first (see `load_config`) and one matching
+    pair of surrounding quotes is stripped, because `.env` commonly quotes
+    values and a stray quote turns a valid credential into an invalid one.
+    """
     if isinstance(obj, str) and obj.startswith("${") and obj.endswith("}"):
         import os
 
-        var_name = obj[2:-1]
-        return os.environ.get(var_name, obj)
+        body = obj[2:-1]
+        var_name, sep, fallback = body.partition(":-")
+        if sep:
+            return _strip_wrapping_quotes(os.environ.get(var_name, fallback))
+        return _strip_wrapping_quotes(os.environ.get(var_name, obj))
     elif isinstance(obj, dict):
         return {k: _resolve_env_vars(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -464,6 +529,25 @@ def _resolve_env_vars(obj: Any) -> Any:
 def load_config(config_path: str | Path = "configs/default.yaml") -> AppConfig:
     """Load configuration from YAML file with env var resolution."""
     path = Path(config_path)
+
+    # `.env` is the documented home for TWILIO_ACCOUNT_SID and friends. Without
+    # loading it, every `${TWILIO_*}` reference stayed unresolved and the app
+    # ran with placeholder credentials that fail at the first API call.
+    # `override=False` so a real environment variable always wins.
+    #
+    # An explicit path is required: `load_dotenv()` with no argument walks the
+    # stack to find `.env` and raises an AssertionError when called from a
+    # REPL, a heredoc, or any non-file caller.
+    try:
+        from dotenv import load_dotenv
+
+        candidates = [Path(".env"), path.resolve().parent.parent / ".env"]
+        for candidate in candidates:
+            if candidate.is_file():
+                load_dotenv(candidate, override=False)
+                break
+    except ImportError:  # pragma: no cover - python-dotenv is a hard dependency
+        pass
     if path.exists():
         with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}

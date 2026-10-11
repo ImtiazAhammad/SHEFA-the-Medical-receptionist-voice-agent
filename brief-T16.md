@@ -1,0 +1,4 @@
+- [ ] **T16 (P2, human: ~4h / CC: ~1h)** — Child 0 — 41-item disposition table (in/re-scoped/dropped + rationale for T1/T2/T3/T6/T7/T8); promote T7 into Child 3
+  - Surfaced by: D-ENG19 (H9)
+  - Files: docs, README
+  - Verify: every original item mapped; nothing silently dropped

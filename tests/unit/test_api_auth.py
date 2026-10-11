@@ -209,6 +209,9 @@ class TestAuthorizedAccess:
         monkeypatch.setattr(
             main_module.settings.telephony.twilio, "phone_number", "+15551234567"
         )
+        # VERIFIED_NUMBER now wins because config loads `.env`. It has to be
+        # stubbed or the real number from the developer's `.env` is dialled.
+        monkeypatch.setenv("VERIFIED_NUMBER", "+15551234567")
 
         async def fake_call(number: str) -> dict:
             return {"status": "queued", "to": number}
@@ -399,3 +402,110 @@ class TestUnconfiguredAuthLocksEverything:
 
         with pytest.raises(TokenError):
             main_module.build_auth_store()
+
+
+class TestBrowserLogin:
+    """A browser cannot send an Authorization header on a page load.
+
+    `/login` trades a token for an HttpOnly cookie, which is the only way the
+    HTML routes are reachable from a browser at all. Without it `/test-call`
+    answers 401 to a correctly credentialed operator who simply opened it in
+    a tab.
+    """
+
+    def test_a_valid_token_becomes_a_cookie_and_redirects(self, client):
+        response = client.get(
+            "/login", params={"token": ADMIN_TOKEN}, follow_redirects=False
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/test-call"
+        cookie = response.headers.get("set-cookie", "")
+        assert main_module.AUTH_COOKIE in cookie
+        assert "HttpOnly" in cookie
+        assert "SameSite=lax" in cookie
+
+    def test_the_cookie_authenticates_a_page_load(self, client):
+        login = client.get(
+            "/login", params={"token": ADMIN_TOKEN}, follow_redirects=False
+        )
+        assert login.status_code == 303
+        client.cookies.set(main_module.AUTH_COOKIE, ADMIN_TOKEN)
+
+        response = client.get("/test-call")
+
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_a_page_load_without_any_credential_is_refused(self, client):
+        response = client.get("/test-call")
+
+        assert response.status_code in (401, 403)
+
+    def test_login_without_a_token_is_refused(self, client):
+        assert client.get("/login").status_code == 401
+
+    def test_login_with_a_bad_token_is_refused(self, client):
+        response = client.get(
+            "/login", params={"token": "wrong-token-aaaaaaaaaaaaaaaaaaaa"}
+        )
+
+        assert response.status_code == 401
+
+    def test_a_role_without_calling_privilege_cannot_log_in(self, client):
+        response = client.get(
+            "/login", params={"token": VIEWER_TOKEN}, follow_redirects=False
+        )
+
+        assert response.status_code == 403
+
+    def test_an_offsite_redirect_target_is_not_honoured(self, client):
+        """A legitimate login must not become an open redirect."""
+        response = client.get(
+            "/login",
+            params={"token": ADMIN_TOKEN, "redirect_to": "https://evil.example/"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/"
+        assert "evil.example" not in response.headers["location"]
+
+    def test_a_protocol_relative_redirect_is_not_honoured(self, client):
+        response = client.get(
+            "/login",
+            params={"token": ADMIN_TOKEN, "redirect_to": "//evil.example/"},
+            follow_redirects=False,
+        )
+
+        assert response.headers["location"] == "/"
+
+    def test_a_bad_cookie_does_not_admit_anyone(self, client):
+        client.cookies.set(main_module.AUTH_COOKIE, "wrong-token-aaaaaaaaaaaaaaaaaa")
+
+        assert client.get("/test-call").status_code in (401, 403)
+
+    def test_the_header_wins_over_a_stale_cookie(self, client):
+        """The per-request credential must not be shadowed by session state."""
+        client.cookies.set(main_module.AUTH_COOKIE, "wrong-token-aaaaaaaaaaaaaaaaaa")
+
+        response = client.get("/test-call", headers=_bearer(ADMIN_TOKEN))
+
+        assert response.status_code == 200
+
+    def test_a_malformed_authorization_header_falls_back_to_the_cookie(self, client):
+        """`Authorization: Bearer` with no credentials is not a credential."""
+        client.cookies.set(main_module.AUTH_COOKIE, ADMIN_TOKEN)
+
+        response = client.get("/test-call", headers={"Authorization": "Bearer"})
+
+        assert response.status_code == 200
+
+    def test_the_token_is_not_echoed_back_into_the_page(self, client):
+        login = client.get(
+            "/login", params={"token": ADMIN_TOKEN}, follow_redirects=False
+        )
+        client.cookies.set(main_module.AUTH_COOKIE, ADMIN_TOKEN)
+
+        assert ADMIN_TOKEN not in login.text
+        assert ADMIN_TOKEN not in client.get("/test-call").text

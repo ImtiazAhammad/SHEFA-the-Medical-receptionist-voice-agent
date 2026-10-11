@@ -6,16 +6,25 @@
 <title>Sefa — Test Center</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+/* Motion vocabulary, mirroring index.html so the two static pages stay in step.
+   See the reduced-motion block at the foot of this file. */
+:root{
+  --ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);
+  --dur-press:120ms;--dur-enter:180ms;
+}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0F172A;color:#E2E8F0;min-height:100vh}
 .topbar{background:#1E293B;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155}
 .topbar h1{font-size:1.1rem;color:#fff}
 .topbar a{color:#94A3B8;text-decoration:none;font-size:.85rem}
 .tabs{display:flex;gap:0;background:#1E293B;border-bottom:1px solid #334155;padding:0 24px}
-.tab{padding:12px 24px;cursor:pointer;color:#94A3B8;font-size:.875rem;font-weight:600;border-bottom:2px solid transparent;transition:all .15s}
+.tab{padding:12px 24px;cursor:pointer;color:#94A3B8;font-size:.875rem;font-weight:600;border-bottom:2px solid transparent;transition:color var(--dur-press) var(--ease-out),border-color var(--dur-press) var(--ease-out)}
 .tab:hover{color:#fff}
 .tab.active{color:#0D9488;border-bottom-color:#0D9488}
+/* Panel switch: was a bare display:none -> block teleport. Opacity only, for
+   the same reason as index.html — sibling panels have no spatial relationship. */
 .panel{display:none;padding:32px 24px;max-width:640px;margin:0 auto}
-.panel.active{display:block}
+.panel.active{display:block;transition:opacity var(--dur-enter) var(--ease-out)}
+@starting-style{.panel.active{opacity:0}}
 h2{font-size:1.25rem;color:#fff;margin-bottom:4px}
 .sub{color:#94A3B8;font-size:.85rem;margin-bottom:24px}
 .card{background:#1E293B;border-radius:12px;padding:24px;border:1px solid #334155}
@@ -23,14 +32,21 @@ h2{font-size:1.25rem;color:#fff;margin-bottom:4px}
 .status.ok{color:#22C55E}
 .status.err{color:#EF4444}
 .status.busy{color:#F59E0B}
-.btn{padding:12px 24px;border:none;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
+/* Press feedback, gated so touch never inherits a stuck pressed state. */
+@media(hover:hover) and (pointer:fine){
+  .btn:not(:disabled):active{transform:scale(.97)}
+}
 .btn-green{background:#22C55E;color:#fff}.btn-green:hover{background:#16A34A}
 .btn-red{background:#EF4444;color:#fff}.btn-red:hover{background:#DC2626}
 .btn-blue{background:#3B82F6;color:#fff}.btn-blue:hover{background:#2563EB}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .timer{font-size:2rem;font-weight:700;font-family:'SF Mono',monospace;color:#fff;margin:16px 0;text-align:center;min-height:48px}
 .visualizer{height:40px;display:flex;align-items:center;justify-content:center;gap:3px;margin:12px 0}
-.bar{width:4px;background:#0D9488;border-radius:2px;transition:height .08s}
+/* Fixed 32px track scaled by transform, never height: at 60fps, animating
+   height on 20 elements relayouts every frame. Resting scaleY .125 == 4px,
+   matching the bar height this visualizer used to hardcode. */
+.bar{width:4px;height:32px;background:#0D9488;border-radius:2px;transform:scaleY(.125);transform-origin:center}
 .transcript{max-height:300px;overflow-y:auto;background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;margin-top:16px}
 .turn{margin-bottom:8px}
 .role{font-weight:600;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em}
@@ -39,9 +55,22 @@ h2{font-size:1.25rem;color:#fff;margin-bottom:4px}
 .chat-input{display:flex;gap:8px;margin-top:16px}
 .chat-input input{flex:1;padding:10px 14px;border:1px solid #334155;border-radius:8px;background:#0F172A;color:#E2E8F0;font-size:.875rem;font-family:inherit}
 .chat-input input:focus{outline:none;border-color:#0D9488}
+/* Outbound result block: arrived cold via style.display. Same entrance as the
+   conversation card in index.html — opacity plus a 4px rise. */
+#o-result{display:none;opacity:0;translate:0 4px;background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;margin-top:12px;
+  transition:opacity var(--dur-enter) var(--ease-out),translate var(--dur-enter) var(--ease-out)}
+#o-result.open{display:block;opacity:1;translate:0 0}
+@starting-style{#o-result.open{opacity:0;translate:0 4px}}
 .info{background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;color:#94A3B8;margin-top:16px;line-height:1.6}
 .info strong{color:#E2E8F0}
 .cost{background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:12px;font-size:.8rem;color:#92400E;margin-top:12px}
+
+/* Reduced motion. This page previously had no block at all. Collapsing the
+   duration tokens covers every transition here in one place; gentler, not
+   zero, so colours and opacity still resolve without anything travelling. */
+@media(prefers-reduced-motion:reduce){
+  :root{--dur-press:1ms;--dur-enter:1ms}
+}
 </style>
 </head>
 <body>
@@ -85,7 +114,7 @@ h2{font-size:1.25rem;color:#fff;margin-bottom:4px}
     <div style="text-align:center;margin:16px 0">
       <button class="btn btn-blue" id="o-btn" onclick="outboundCall()">&#128222; Call Me Now</button>
     </div>
-    <div id="o-result" style="display:none;background:#0F172A;border-radius:8px;padding:12px;font-size:.8rem;margin-top:12px"></div>
+    <div id="o-result"></div>
   </div>
   <div class="cost">
     <strong>Cost warning:</strong> This uses Twilio credits. Outbound from US number to Bangladesh ~$0.05-0.15/min. You have $15 trial credit.
@@ -123,12 +152,54 @@ function switchTab(name) {
   document.getElementById('panel-'+name).classList.add('active');
 }
 
-// Visualizer
-const vizEl = document.getElementById('viz');
-for(let i=0;i<20;i++){const b=document.createElement('div');b.className='bar';b.style.height='4px';vizEl.appendChild(b);}
+// Visualizer. These bars used to be built once at 4px and never touched again —
+// dead UI implying audio metering the page does not do. They are now driven by an
+// AnalyserNode tapped off the same MediaStreamSource that feeds the upload
+// processor, so they track the operator's real local speaking level.
+const VIZ_REST=.125, VIZ_BARS=20;
+const vizEl=document.getElementById('viz');
+const vVizBars=[];
+for(let i=0;i<VIZ_BARS;i++){
+  const b=document.createElement('div');
+  b.className='bar';
+  // Opacity ramp peaks at the centre bars so it reads as a level meter rather
+  // than a solid block when everything is loud.
+  b.style.opacity=(0.35+0.65*Math.sin((i+0.5)/VIZ_BARS*Math.PI)).toFixed(2);
+  vizEl.appendChild(b);vVizBars.push(b);
+}
+let vAnalyser=null,vVizData=null,vVizRaf=null;
+function vVizStart(src){
+  vAnalyser=vCtx.createAnalyser();
+  vAnalyser.fftSize=64;vAnalyser.smoothingTimeConstant=.6;
+  src.connect(vAnalyser);
+  vVizData=new Uint8Array(vAnalyser.frequencyBinCount);
+  // Reduced motion throttles to ~10fps rather than freezing the meter. Freezing
+  // would make the readout lie; a lower update rate keeps the information and
+  // drops the motion density.
+  const step=matchMedia('(prefers-reduced-motion:reduce)').matches?100:0;
+  let last=0;
+  const tick=now=>{
+    if(!vAnalyser)return;
+    if(now-last>=step){
+      last=now;
+      vAnalyser.getByteFrequencyData(vVizData);
+      for(let i=0;i<vVizBars.length;i++){
+        const lvl=vVizData[Math.floor(i*vVizData.length/vVizBars.length)]/255;
+        vVizBars[i].style.transform='scaleY('+(VIZ_REST+lvl*(1-VIZ_REST)).toFixed(3)+')';
+      }
+    }
+    vVizRaf=requestAnimationFrame(tick);
+  };
+  vVizRaf=requestAnimationFrame(tick);
+}
+function vVizStop(){
+  vAnalyser=null;
+  if(vVizRaf){cancelAnimationFrame(vVizRaf);vVizRaf=null;}
+  vVizBars.forEach(b=>b.style.transform='scaleY('+VIZ_REST+')');
+}
 
 // ==================== VOICE (FREE) ====================
-let vWs=null,vCtx=null,vStream=null,vProc=null,vConnected=false,vTimer=null,vStart=0;
+let vWs=null,vCtx=null,vStream=null,vProc=null,vConnected=false,vTimer=null,vStart=0,vOutCtx=null;
 
 function vAddTurn(role,text){
   const d=document.createElement('div');d.className='turn';
@@ -147,7 +218,13 @@ async function voiceToggle(){
     const src=vCtx.createMediaStreamSource(vStream);
     vProc=vCtx.createScriptProcessor(4096,1,1);
     const callSid='browser-'+Date.now();
-    vWs=new WebSocket(`ws://${location.host}/api/v1/telephony/media-stream/${callSid}`);
+    // The Stream SID is what the server must address outbound audio by; the
+    // server reads it from `start`, so it has to be sent or no playback is
+    // deliverable. Media format must be declared too, or the server assumes
+    // Twilio's mu-law/8k and decodes our PCM as garbage.
+    const streamSid='MZ-browser-'+Date.now();
+    const proto=location.protocol==='https:'?'wss':'ws';
+    vWs=new WebSocket(`${proto}://${location.host}/api/v1/telephony/media-stream/${callSid}`);
     vWs.onopen=()=>{
       vConnected=true;
       document.getElementById('v-btn').className='btn btn-red';
@@ -155,7 +232,10 @@ async function voiceToggle(){
       document.getElementById('v-btn').disabled=false;
       vStartTimer();vStatus('Connected — speak now','ok');
       vWs.send(JSON.stringify({event:'connected'}));
-      vWs.send(JSON.stringify({event:'start',start:{sampleRate:16000,format:'pcm',channels:1}}));
+      vWs.send(JSON.stringify({event:'start',start:{
+        callSid,streamSid,
+        mediaFormat:{encoding:'audio/x-l16',sampleRate:16000,channels:1}
+      }}));
       vProc.onaudioprocess=e=>{
         if(!vConnected||!vWs||vWs.readyState!==1)return;
         const buf=e.inputBuffer.getChannelData(0);
@@ -166,10 +246,11 @@ async function voiceToggle(){
         vWs.send(JSON.stringify({event:'media',media:{payload:b64}}));
       };
       src.connect(vProc);vProc.connect(vCtx.destination);
+      vVizStart(src);
     };
     vWs.onmessage=evt=>{
       const msg=JSON.parse(evt.data);
-      if(msg.event==='media'&&msg.media&&msg.media.payload)playWav(msg.media.payload);
+      if(msg.event==='media'&&msg.media&&msg.media.payload)playMulaw(msg.media.payload);
     };
     vWs.onerror=()=>{vStatus('Connection error','err');voiceHangup();};
     vWs.onclose=()=>{if(vConnected){vStatus('Disconnected','');voiceHangup();}};
@@ -177,6 +258,7 @@ async function voiceToggle(){
 }
 function voiceHangup(){
   vConnected=false;
+  vVizStop();
   if(vWs){try{vWs.close();}catch(e){}vWs=null;}
   if(vProc){vProc.disconnect();vProc=null;}
   if(vStream){vStream.getTracks().forEach(t=>t.stop());vStream=null;}
@@ -195,13 +277,13 @@ async function outboundCall(){
   const btn=document.getElementById('o-btn');
   const st=document.getElementById('o-status');
   const res=document.getElementById('o-result');
-  btn.disabled=true;st.textContent='Calling...';st.className='status busy';res.style.display='none';
+  btn.disabled=true;st.textContent='Calling...';st.className='status busy';res.classList.remove('open');
   try{
     const r=await fetch('/api/v1/calls/call-me',{method:'POST'});
     const d=await r.json();
     if(d.error){st.textContent='Error: '+d.error;st.className='status err';btn.disabled=false;return;}
     st.textContent='Call initiated! Phone ringing...';st.className='status ok';
-    res.style.display='block';
+    res.classList.add('open');
     res.innerHTML=`<strong>Call SID:</strong> ${d.call_sid}<br><strong>Status:</strong> ${d.status}<br><br>Answer your phone at <strong>+8801782737074</strong>`;
   }catch(e){st.textContent='Error: '+e.message;st.className='status err';}
   btn.disabled=false;
@@ -243,15 +325,27 @@ function downsample(buf,inRate,outRate){
   return res;
 }
 function floatToInt16(f){const i=new Int16Array(f.length);for(let j=0;j<f.length;j++){const s=Math.max(-1,Math.min(1,f[j]));i[j]=s<0?s*0x8000:s*0x7FFF;}return i;}
-function playWav(b64){
+// The server's playback wire format is mu-law 8k (what Twilio requires).
+// Reading it as s16le at 22050 produced pitched-up noise, so decode properly.
+function muLawToLinear(u8){
+  const u=(~u8)&0xff;
+  const negative=(u&0x80)!==0;
+  const exponent=(u&0x70)>>4;
+  const mantissa=u&0x0f;
+  let sample=((mantissa<<3)+0x84);
+  sample*=Math.pow(2,exponent);
+  sample-=0x84;
+  return negative?-sample:sample;
+}
+function playMulaw(b64){
   try{
     const raw=atob(b64);const bytes=new Uint8Array(raw.length);
-    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    const ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:22050});
-    const int16=new Int16Array(bytes.buffer);
-    const buf=ctx.createBuffer(1,int16.length,22050);
+    for(let i=0;i<bytes.length;i++)bytes[i]=raw.charCodeAt(i);
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    const ctx=vOutCtx||(vOutCtx=new Ctx());
+    const buf=ctx.createBuffer(1,bytes.length,8000);
     const data=buf.getChannelData(0);
-    for(let i=0;i<int16.length;i++)data[i]=int16[i]/(int16[i]<0?0x8000:0x7FFF);
+    for(let i=0;i<bytes.length;i++)data[i]=muLawToLinear(bytes[i])/0x8000;
     const src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);src.start();
   }catch(e){console.warn('Audio error:',e);}
 }

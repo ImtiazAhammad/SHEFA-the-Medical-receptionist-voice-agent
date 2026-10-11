@@ -17,7 +17,13 @@ from typing import Any
 import pytest
 
 from sefa.audio import AudioFrame
-from sefa.pipeline.voice_pipeline import speak_to
+from sefa.models.base import StreamEvent
+from sefa.pipeline.error_taxonomy import MalformedLLMOutputError
+from sefa.pipeline.voice_pipeline import (
+    VoicePipeline,
+    speak_to,
+    split_complete_sentences,
+)
 
 
 class FakeTTS:
@@ -175,3 +181,152 @@ class TestPipelineUsesTheHelper:
         source = inspect.getsource(vp.speak_to)
         assert "synthesize_stream" in source
         assert "synthesize(" not in source
+
+
+class StreamingLLM:
+    """Yields events as an adapter would, optionally gating mid-stream."""
+
+    def __init__(
+        self,
+        events: list[StreamEvent],
+        block_before: int | None = None,
+        gate: asyncio.Event | None = None,
+    ) -> None:
+        self.events = events
+        self.block_before = block_before
+        self.gate = gate
+
+    async def generate_events(self, messages: Any, tools: Any = None, **kwargs: Any):
+        for index, event in enumerate(self.events):
+            if index == self.block_before and self.gate is not None:
+                await self.gate.wait()
+            yield event
+
+
+class TestStreamReply:
+    @pytest.mark.asyncio
+    async def test_the_first_sentence_is_spoken_before_the_stream_finishes(self):
+        """The latency fix: first audio waits on the first sentence, not the last."""
+        gate = asyncio.Event()
+        llm = StreamingLLM(
+            [StreamEvent(text="Hello there. "), StreamEvent(text="How can I help?")],
+            block_before=1,
+            gate=gate,
+        )
+        tts = FakeTTS([b"a" * 4])
+        task = asyncio.create_task(
+            VoicePipeline()._stream_reply(llm, tts, [], [], "en", RecordingSink())
+        )
+        for _ in range(4):
+            await asyncio.sleep(0)
+
+        assert tts.stream_calls == ["Hello there."]
+        assert not task.done()
+
+        gate.set()
+        reply, tool_calls = await task
+
+        assert tts.stream_calls == ["Hello there.", "How can I help?"]
+        assert reply == "Hello there. How can I help?"
+        assert tool_calls == []
+
+    @pytest.mark.asyncio
+    async def test_the_unpunctuated_tail_is_flushed_when_the_stream_ends(self):
+        llm = StreamingLLM([StreamEvent(text="No full stop here")])
+        tts = FakeTTS([b"a" * 4])
+
+        reply, _ = await VoicePipeline()._stream_reply(
+            llm, tts, [], [], "en", RecordingSink()
+        )
+
+        assert tts.stream_calls == ["No full stop here"]
+        assert reply == "No full stop here"
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_are_returned_after_the_text_is_spoken(self):
+        call = {"id": "c1", "name": "book_appointment", "arguments": "{}"}
+        llm = StreamingLLM(
+            [
+                StreamEvent(text="One moment."),
+                StreamEvent(tool_calls=[call], finish_reason="tool_calls"),
+            ]
+        )
+        tts = FakeTTS([b"a" * 4])
+
+        reply, tool_calls = await VoicePipeline()._stream_reply(
+            llm, tts, [], [], "bn", RecordingSink()
+        )
+
+        assert reply == "One moment."
+        assert tool_calls == [call]
+        assert tts.stream_calls == ["One moment."]
+
+    @pytest.mark.asyncio
+    async def test_a_tool_only_stream_speaks_nothing(self):
+        call = {"id": "c1", "name": "book_appointment", "arguments": "{}"}
+        llm = StreamingLLM(
+            [StreamEvent(tool_calls=[call], finish_reason="tool_calls")]
+        )
+        tts = FakeTTS([b"a" * 4])
+
+        reply, tool_calls = await VoicePipeline()._stream_reply(
+            llm, tts, [], [], "en", RecordingSink()
+        )
+
+        assert reply == ""
+        assert tool_calls == [call]
+        assert tts.stream_calls == []
+
+    @pytest.mark.asyncio
+    async def test_an_empty_stream_is_malformed(self):
+        with pytest.raises(MalformedLLMOutputError):
+            await VoicePipeline()._stream_reply(
+                StreamingLLM([]), FakeTTS([]), [], [], "en", RecordingSink()
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_whitespace_only_stream_is_malformed(self):
+        with pytest.raises(MalformedLLMOutputError):
+            await VoicePipeline()._stream_reply(
+                StreamingLLM([StreamEvent(text="   ") ]),
+                FakeTTS([]),
+                [],
+                [],
+                "en",
+                RecordingSink(),
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_synthesis_failure_is_tagged_for_the_classifier(self):
+        from sefa.pipeline.voice_pipeline import _SynthesisError
+
+        class ExplodingTTS:
+            async def synthesize_stream(self, text: str, language: str = "en"):
+                raise RuntimeError("onnxruntime died")
+                yield  # pragma: no cover
+
+        with pytest.raises(_SynthesisError, match="onnxruntime died"):
+            await VoicePipeline()._emit(ExplodingTTS(), "hi", "en", RecordingSink())
+
+
+class TestSplitCompleteSentences:
+    def test_bangla_danda_splits_and_keeps_the_tail(self):
+        assert split_complete_sentences("আমি সাহায্য করব। আপনি কেমন") == (
+            ["আমি সাহায্য করব।"],
+            " আপনি কেমন",
+        )
+
+    def test_a_period_before_whitespace_splits(self):
+        assert split_complete_sentences("Hello. How are") == (["Hello."], " How are")
+
+    def test_a_trailing_period_is_a_complete_sentence(self):
+        assert split_complete_sentences("Done.") == (["Done."], "")
+
+    def test_a_decimal_point_is_not_a_boundary(self):
+        assert split_complete_sentences("It is 3.5 kg") == ([], "It is 3.5 kg")
+
+    def test_a_newline_is_a_boundary(self):
+        assert split_complete_sentences("a\nb") == (["a"], "b")
+
+    def test_text_without_a_boundary_is_all_tail(self):
+        assert split_complete_sentences("hello world") == ([], "hello world")

@@ -353,7 +353,16 @@ async def test_media_stream_cancels_the_pipeline_task_on_disconnect(monkeypatch)
     baseline = len(asyncio.all_tasks())
     task = asyncio.create_task(
         twilio.media_stream_ws(
-            _FakeWebSocket(events=[{"event": "connected"}], stop_after=0.1), "CA-task"
+            _FakeWebSocket(
+                events=[
+                    {"event": "connected"},
+                    # The pipeline starts on `start`, which is where Twilio
+                    # finally reveals the call SID.
+                    {"event": "start", "start": {"callSid": "CA-task", "streamSid": "MZ-task"}},
+                ],
+                stop_after=0.1,
+            ),
+            "CA-task",
         )
     )
     await asyncio.wait_for(started.wait(), timeout=2)

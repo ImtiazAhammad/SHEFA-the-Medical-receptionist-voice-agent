@@ -45,7 +45,16 @@ class ModelRegistry:
         if provider == "whisper_local":
             from sefa.models.stt.whisper_local import WhisperLocalSTT
 
-            return WhisperLocalSTT()
+            # Read model_size/device/compute_type from the resolved adapter.
+            # WhisperLocalSTT defaults to large-v3 on cuda/float16, so calling it
+            # with no arguments silently ignored the configured model and OOM'd on
+            # any machine whose GPU was not exclusively free.
+            adapter = settings.models.adapters.get("stt_whisper_local")
+            return WhisperLocalSTT(
+                model_size=(adapter.model_size if adapter else None) or "large-v3",
+                device=getattr(adapter, "device", None),
+                compute_type=getattr(adapter, "compute_type", None),
+            )
         if provider == "elevenlabs":
             from sefa.models.stt.elevenlabs_stt import ElevenLabsSTT
 
@@ -94,7 +103,7 @@ class ModelRegistry:
                 model=adapter.model,
                 temperature=temperature,
             )
-        if provider == "qwen_local":
+        if provider == "local":
             from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 
             return OpenAICompatibleLLM(
