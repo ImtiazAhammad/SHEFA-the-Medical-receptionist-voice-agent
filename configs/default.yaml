@@ -250,10 +250,12 @@ auth:
       - "sessions:read"
     clinician:
       - "sessions:read"
+      - "records:read"
       - "calls:place"
       - "chat:use"
     admin:
       - "sessions:read"
+      - "records:read"
       - "calls:place"
       - "chat:use"
       - "config:read"

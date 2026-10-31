@@ -35,3 +35,7 @@ def pop_context(call_sid: str) -> OutboundContext | None:
 
 def discard_context(call_sid: str) -> None:
     _pending.pop(call_sid, None)
+
+
+def has_context(call_sid: str) -> bool:
+    return call_sid in _pending

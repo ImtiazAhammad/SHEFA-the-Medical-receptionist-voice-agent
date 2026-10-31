@@ -142,7 +142,7 @@ class ClinicStore:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(self.path))
+        self.connection = sqlite3.connect(str(self.path), check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA synchronous=NORMAL")
@@ -525,8 +525,9 @@ class ClinicStore:
     def appointments_on(self, day: str, *, status: str = "booked") -> list[dict[str, Any]]:
         """Appointments on `day` with the patient's phone — what a reminder run needs."""
         rows = self.connection.execute(
-            "SELECT a.id, p.phone, p.name AS patient_name FROM appointments a"
-            " JOIN patients p ON p.id = a.patient_id WHERE a.date = ? AND a.status = ?"
+            "SELECT a.id, p.phone, p.name AS patient_name, d.name_en AS doctor_en"
+            " FROM appointments a JOIN patients p ON p.id = a.patient_id"
+            " JOIN doctors d ON d.id = a.doctor_id WHERE a.date = ? AND a.status = ?"
             " ORDER BY a.start_time",
             (day, status),
         ).fetchall()
@@ -535,6 +536,7 @@ class ClinicStore:
                 **self.get_appointment(r["id"]),
                 "phone": r["phone"],
                 "patient_name": r["patient_name"],
+                "doctor_en": r["doctor_en"],
             }
             for r in rows
         ]

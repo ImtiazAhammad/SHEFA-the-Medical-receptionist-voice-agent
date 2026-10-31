@@ -148,6 +148,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/chat"): "chat:use",
     ("GET", "/api/v1/config"): "config:read",
     ("GET", "/api/v1/tools"): "config:read",
+    ("GET", "/api/v1/calls"): "records:read",
+    ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
 }
 
@@ -519,6 +521,39 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "Telephony provider not configured (Twilio SID or Asterisk ARI password)",
             )
         return await place_call(verified)
+
+    @app.get("/api/v1/calls")
+    async def list_calls(limit: int = 50) -> list[dict]:
+        """Recent calls, newest first. Caller phone hashes are not exposed."""
+        from shefa.call_log import default_calls_store
+
+        rows = default_calls_store().list_calls()
+        rows = [r for r in rows if not r.get("deleted_at")]
+        keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        return [{k: r.get(k) for k in keys} for r in reversed(rows)][: max(1, min(limit, 500))]
+
+    @app.get("/api/v1/appointments")
+    async def list_appointments(date: str = "") -> list[dict]:
+        """Booked appointments for a day (default: today, clinic time), phones masked."""
+        from datetime import datetime
+
+        from shefa.call_log import mask_phone
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+
+        day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        return [
+            {
+                "appointment_id": a["appointment_id"],
+                "date": a["date"],
+                "start_time": a["start_time"],
+                "doctor": a["doctor_en"],
+                "patient_name": a["patient_name"],
+                "phone": mask_phone(a["phone"]),
+                "status": a["status"],
+            }
+            for a in default_clinic_store().appointments_on(day)
+        ]
 
     @app.post("/api/v1/chat")
     async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:

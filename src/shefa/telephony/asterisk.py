@@ -23,6 +23,7 @@ from shefa.audio import (
     s16le_16k_mono_to_slin8k,
     to_s16le_16k_mono,
 )
+from shefa.call_log import call_ended, call_started
 from shefa.config.settings import settings
 from shefa.telephony.audiosocket import (
     KIND_AUDIO,
@@ -32,6 +33,7 @@ from shefa.telephony.audiosocket import (
     encode_frame,
     read_frame,
 )
+from shefa.telephony.call_context import has_context
 from shefa.telephony.control import CallLeg, control
 from shefa.telephony.twilio import make_media_queues
 
@@ -170,6 +172,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
     call_sid = str(uuid.UUID(bytes=first[1]))
     logger.info("AudioSocket call connected: %s", call_sid)
 
+    call_started(call_sid, "outbound" if has_context(call_sid) else "inbound")
     pipeline = pipeline_factory()
     queues = make_media_queues()
     control.register(AsteriskCallLeg(call_sid))
@@ -196,6 +199,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
         await asyncio.gather(*tasks, return_exceptions=True)
         await pipeline.cleanup(call_sid)
         control.release(call_sid)
+        call_ended(call_sid)
         with contextlib.suppress(ConnectionError, OSError):
             writer.write(encode_frame(KIND_HANGUP, b""))
             writer.close()

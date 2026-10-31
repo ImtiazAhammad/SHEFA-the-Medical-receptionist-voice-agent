@@ -16,6 +16,7 @@ from shefa.audio import (
     s16le_16k_mono_to_mulaw8k,
     to_s16le_16k_mono,
 )
+from shefa.call_log import call_ended, call_started
 from shefa.config.settings import settings
 from shefa.telephony.control import CallLeg, control
 
@@ -486,6 +487,7 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str = "") -> None:
                     media_format.get("sampleRate", MEDIA_STREAM_RATE),
                 )
                 control.register(TwilioCallLeg(call_sid))
+                call_started(call_sid, "inbound")
                 if _capture is None:
                     _capture = _make_capture(call_sid)
                 _start_pipeline()
@@ -523,6 +525,7 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str = "") -> None:
             )
         await pipeline.cleanup(call_sid)
         control.release(call_sid)
+        call_ended(call_sid)
         remove_call_handler(call_sid)
         if _capture is not None:
             _capture.close()

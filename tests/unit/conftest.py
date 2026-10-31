@@ -47,3 +47,15 @@ def _isolate_the_default_clinic_store(tmp_path):
     yield
     set_default_clinic_store(None)
     store.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_calls_store(tmp_path):
+    from shefa.call_log import set_default_calls_store
+    from shefa.store.calls import CallsStore
+
+    store = CallsStore(tmp_path / "default-calls.db")
+    set_default_calls_store(store)
+    yield
+    set_default_calls_store(None)
+    store.close()
