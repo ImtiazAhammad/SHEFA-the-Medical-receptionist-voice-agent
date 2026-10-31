@@ -162,6 +162,19 @@ class SipConfig(StrictModel):
     password: str = ""
 
 
+class AsteriskConfig(StrictModel):
+    """Self-hosted Asterisk: media over AudioSocket, control over ARI's REST API."""
+
+    ari_url: str = "http://127.0.0.1:8088/ari"
+    ari_user: str = "shefa"
+    ari_password: str = ""
+    audiosocket_host: str = "127.0.0.1"
+    audiosocket_port: int = 4573
+    trunk_endpoint: str = "PJSIP/trunk"
+    caller_id: str = ""
+    dial_context: str = "shefa-outbound"
+
+
 class WebSocketConfig(StrictModel):
     host: str = "0.0.0.0"
     port: int = 8765
@@ -171,6 +184,7 @@ class TelephonyConfig(StrictModel):
     provider: TelephonyProvider = TelephonyProvider.TWILIO
     twilio: TwilioConfig = Field(default_factory=TwilioConfig)
     sip: SipConfig | None = None
+    asterisk: AsteriskConfig = Field(default_factory=AsteriskConfig)
     websocket: WebSocketConfig = Field(default_factory=WebSocketConfig)
     # Explicit outbound ingress URL — the ngrok localhost scrape is deleted
     # (D-ENG25). Validated as an absolute http(s) URL when set.
