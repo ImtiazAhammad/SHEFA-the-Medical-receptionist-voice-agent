@@ -6,7 +6,7 @@ app:
   debug: true
 
 languages:
-  primary: "en"
+  primary: "bn"   # the language a call opens in; the caller can switch
   supported: ["en", "bn"]
   code_switching: true
   default_greeting:

@@ -274,6 +274,8 @@ def _confirm_doctors(result: dict[str, Any]) -> dict[str, str] | None:
     items = result.get("doctors") or []
     if not items or not isinstance(items[0], dict):
         return None
+    if len(items) == 1:
+        return _confirm_doctor_info(items[0])  # one match: give the whole card
     return {
         "en": "Our doctors are: "
         + ", ".join(

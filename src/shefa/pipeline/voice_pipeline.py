@@ -119,6 +119,8 @@ class VoicePipeline:
         session = await self._session_manager.get_or_create(call_sid)
 
         if session.state == "greeting":
+            if settings.languages.primary in {lang.value for lang in Language}:
+                session.language = Language(settings.languages.primary)
             greetings = settings.languages.default_greeting
             greeting = greetings.get(
                 session.language.value,
@@ -400,34 +402,30 @@ class VoicePipeline:
         """
         messages = build_messages(session)
         if not settings.pipeline.llm.tool_calls:
-            reply_text, _tool_calls = await self._stream_reply(
-                llm, tts, messages, [], session.language.value, put_playback
-            )
+            # Decide first, then speak. Streaming a free-form reply before the router runs
+            # played the model's guess and then the real answer over it, and the two could
+            # disagree. The router call costs the same either way; now only one answer is
+            # ever spoken: the template built from the tool result, or a reply grounded on it.
             action = await extract_action(llm, session)
-            if action is not None:
-                tool_result = await execute_tool(
-                    action.name, action.arguments, session
-                )
-                # Facts (date/time/doctor/ID) come from the tool result rendered
-                # in code, spoken verbatim; the model never gets to re-state
-                # them. Only untemplated tools fall back to a grounded model
-                # reply, with the result folded into the LEADING system message
-                # (gemma2's chat template reads a trailing one loosely).
-                fixed = confirmation_text(
-                    action.name, tool_result, session.language.value
-                )
-                if fixed is not None:
-                    await self._emit(
-                        tts, fixed, session.language.value, put_playback
-                    )
-                    return fixed
-                messages = build_messages(session)
-                messages[0]["content"] += "\n\n" + tool_result_note(
-                    action.name, tool_result
-                )
+            if action is None:
                 reply_text, _tool_calls = await self._stream_reply(
                     llm, tts, messages, [], session.language.value, put_playback
                 )
+                return reply_text
+            tool_result = await execute_tool(action.name, action.arguments, session)
+            # Facts (date/time/doctor/ID) come from the tool result rendered in code and
+            # spoken verbatim; the model never gets to re-state them. Only untemplated tools
+            # fall back to a grounded model reply, with the result folded into the LEADING
+            # system message (gemma2's chat template reads a trailing one loosely).
+            fixed = confirmation_text(action.name, tool_result, session.language.value)
+            if fixed is not None:
+                await self._emit(tts, fixed, session.language.value, put_playback)
+                return fixed
+            messages = build_messages(session)
+            messages[0]["content"] += "\n\n" + tool_result_note(action.name, tool_result)
+            reply_text, _tool_calls = await self._stream_reply(
+                llm, tts, messages, [], session.language.value, put_playback
+            )
             return reply_text
 
         tools = get_tool_definitions()

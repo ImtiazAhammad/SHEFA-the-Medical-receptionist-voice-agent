@@ -101,7 +101,7 @@ async def test_caller_hears_departments_and_doctors_from_the_directory(call):
     assert "Cardiology" in departments
 
     doctors = await call.say("Who is there?", {"tool": "list_doctors", "arguments": {}})
-    assert "Rahman (Cardiology)" in doctors
+    assert "Rahman sees patients in Cardiology" in doctors  # one doctor: the full card
 
     info = await call.say(
         "Tell me about Dr Rahman",

@@ -400,9 +400,10 @@ class TestGenerateReplyExtractMode:
         assert executed == [("book_appointment", {"date": "2026-12-01"})]
         assert "2026-12-01" in reply
         assert "APT-9" in reply
-        assert tts.spoken == ["এক মুহূর্ত।", reply]
-        # facts never go back through the model
-        assert len(llm.stream_calls) == 1
+        # only the templated fact is spoken: no free-form guess before it
+        assert tts.spoken == [reply]
+        # facts never go through the model
+        assert llm.stream_calls == []
 
     async def test_untemplated_tool_falls_back_to_a_grounded_model_reply(
         self, monkeypatch: pytest.MonkeyPatch
@@ -410,10 +411,7 @@ class TestGenerateReplyExtractMode:
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
         llm = _ScriptedLLM(
             routed_action={"tool": "verify_patient", "arguments": {"name": "রহিম"}},
-            replies=[
-                [StreamEvent(text="এক মুহূর্ত।")],
-                [StreamEvent(text="ধন্যবাদ, আপনি যাচাই হয়েছেন।")],
-            ],
+            replies=[[StreamEvent(text="ধন্যবাদ, আপনি যাচাই হয়েছেন।")]],
         )
 
         async def _fake_execute(name: str, arguments: dict, session: Any):
@@ -427,8 +425,8 @@ class TestGenerateReplyExtractMode:
         reply = await VoicePipeline()._generate_reply(llm, _FakeTTS(), session, _Sink())
 
         assert reply == "ধন্যবাদ, আপনি যাচাই হয়েছেন।"
-        assert len(llm.stream_calls) == 2
-        grounding = llm.stream_calls[1]["messages"][0]
+        assert len(llm.stream_calls) == 1
+        grounding = llm.stream_calls[0]["messages"][0]
         assert grounding["role"] == "system"
         assert "P1" in grounding["content"]
 
@@ -534,11 +532,10 @@ class TestDirectoryConfirmations:
         assert confirmation_text("list_departments", {"departments": []}, "en") is None
 
     def test_doctor_list_names_each_doctor_and_department(self):
-        text = confirmation_text("list_doctors", {"doctors": [self.DOCTOR]}, "en")
-        assert "Dr. Rahman (Cardiology)" in text
-        assert "ডা. রহমান (হৃদরোগ)" in confirmation_text(
-            "list_doctors", {"doctors": [self.DOCTOR]}, "bn"
-        )
+        two = {"doctors": [self.DOCTOR, {**self.DOCTOR, "name": "Dr. Sultana"}]}
+        text = confirmation_text("list_doctors", two, "en")
+        assert "Dr. Rahman (Cardiology)" in text and "Dr. Sultana (Cardiology)" in text
+        assert "ডা. রহমান (হৃদরোগ)" in confirmation_text("list_doctors", two, "bn")
 
     def test_empty_doctor_list_has_no_template(self):
         assert confirmation_text("list_doctors", {"doctors": []}, "en") is None
@@ -566,3 +563,9 @@ def test_a_tool_without_arguments_is_still_an_action():
         action = parse_action(text, {"list_departments"})
         assert action is not None
         assert action.arguments == {}
+
+
+def test_a_single_doctor_match_gets_the_full_schedule():
+    doctor = TestDirectoryConfirmations.DOCTOR
+    text = confirmation_text("list_doctors", {"doctors": [doctor]}, "en")
+    assert "sunday 09:00-12:00" in text and "800 taka" in text

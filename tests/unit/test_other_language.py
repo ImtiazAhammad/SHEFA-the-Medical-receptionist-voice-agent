@@ -165,6 +165,8 @@ class _FakeTTS:
 async def test_other_language_offers_warm_transfer_and_never_replies(monkeypatch):
     from shefa.config.settings import settings
 
+    monkeypatch.setattr(settings.languages, "primary", "en")  # pins the English fallback copy
+
     stt = _FakeSTT("नमस्ते, मुझे डॉक्टर देखना है")
     llm = _FakeLLM()
     tts = _FakeTTS()
