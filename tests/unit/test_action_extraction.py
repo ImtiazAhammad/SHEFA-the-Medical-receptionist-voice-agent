@@ -161,9 +161,7 @@ class TestResolveArguments:
 
     def test_free_text_date_is_left_as_is(self):
         args = {"date": "some time next month"}
-        assert resolve_arguments(args, date(2026, 10, 10)) == {
-            "date": "some time next month"
-        }
+        assert resolve_arguments(args, date(2026, 10, 10)) == {"date": "some time next month"}
 
     def test_does_not_mutate_the_input(self):
         args = {"date": "tomorrow"}
@@ -173,9 +171,7 @@ class TestResolveArguments:
 
 class TestToolResultNote:
     def test_grounds_the_confirmation_on_the_result(self):
-        note = tool_result_note(
-            "book_appointment", {"success": True, "appointment_id": "APT-1"}
-        )
+        note = tool_result_note("book_appointment", {"success": True, "appointment_id": "APT-1"})
         assert "book_appointment" in note
         assert '"success": true' in note
         assert "APT-1" in note
@@ -185,9 +181,7 @@ class TestToolResultNote:
 class TestExtractAction:
     async def test_swaps_the_system_prompt_and_asks_for_json(self):
         llm = _FakeRouterLLM(
-            text=json.dumps(
-                {"tool": "book_appointment", "arguments": {"date": "tomorrow"}}
-            )
+            text=json.dumps({"tool": "book_appointment", "arguments": {"date": "tomorrow"}})
         )
         session = _session(("user", "আমি কাল ১০টায় আসতে চাই"))
 
@@ -210,17 +204,13 @@ class TestExtractAction:
         assert await extract_action(llm, _session(("user", "হ্যালো"))) is None
 
     async def test_unknown_tool_from_the_router_is_no_action(self):
-        llm = _FakeRouterLLM(
-            text=json.dumps({"tool": "make_the_coffee", "arguments": {}})
-        )
+        llm = _FakeRouterLLM(text=json.dumps({"tool": "make_the_coffee", "arguments": {}}))
 
         assert await extract_action(llm, _session(("user", "কফি দাও"))) is None
 
     async def test_uses_the_supplied_tool_set(self):
         llm = _FakeRouterLLM(
-            text=json.dumps(
-                {"tool": "book_appointment", "arguments": {"date": "tomorrow"}}
-            )
+            text=json.dumps({"tool": "book_appointment", "arguments": {"date": "tomorrow"}})
         )
 
         action = await extract_action(llm, _session(("user", "বুক করুন")), tools=[_BOOK])
@@ -232,14 +222,10 @@ class TestExtractAction:
     async def test_relative_dates_are_absolute_before_the_action_returns(self):
         today = date(2026, 10, 10)
         llm = _FakeRouterLLM(
-            text=json.dumps(
-                {"tool": "book_appointment", "arguments": {"date": "আগামীকাল"}}
-            )
+            text=json.dumps({"tool": "book_appointment", "arguments": {"date": "আগামীকাল"}})
         )
 
-        action = await extract_action(
-            llm, _session(("user", "আগামীকাল বুক করুন")), today=today
-        )
+        action = await extract_action(llm, _session(("user", "আগামীকাল বুক করুন")), today=today)
 
         assert action is not None
         assert action.arguments == {"date": "2026-10-11"}
@@ -361,9 +347,7 @@ class TestConfirmationText:
         assert confirmation_text("book_appointment", {"error": "boom"}, "en") is None
 
     def test_failed_booking_returns_none(self):
-        assert (
-            confirmation_text("book_appointment", {"success": False}, "en") is None
-        )
+        assert confirmation_text("book_appointment", {"success": False}, "en") is None
 
 
 class TestGenerateReplyExtractMode:
@@ -390,9 +374,7 @@ class TestGenerateReplyExtractMode:
                 "doctor": "ডাক্তার করিম",
             }
 
-        monkeypatch.setattr(
-            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
-        )
+        monkeypatch.setattr("shefa.pipeline.voice_pipeline.execute_tool", _fake_execute)
         tts = _FakeTTS()
         session = _session(("user", "আমাকে কাল অ্যাপয়েন্টমেন্ট দিন"))
 
@@ -418,9 +400,7 @@ class TestGenerateReplyExtractMode:
         async def _fake_execute(name: str, arguments: dict, session: Any):
             return {"verified": True, "patient_id": "P1"}
 
-        monkeypatch.setattr(
-            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
-        )
+        monkeypatch.setattr("shefa.pipeline.voice_pipeline.execute_tool", _fake_execute)
         session = _session(("user", "আমার নাম রহিম"))
 
         reply = await VoicePipeline()._generate_reply(llm, _FakeTTS(), session, _Sink())
@@ -431,9 +411,7 @@ class TestGenerateReplyExtractMode:
         assert grounding["role"] == "system"
         assert "P1" in grounding["content"]
 
-    async def test_no_action_streams_a_single_reply(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_no_action_streams_a_single_reply(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
         llm = _ScriptedLLM(
             routed_action=None,
@@ -445,9 +423,7 @@ class TestGenerateReplyExtractMode:
             called.append(name)
             return {}
 
-        monkeypatch.setattr(
-            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
-        )
+        monkeypatch.setattr("shefa.pipeline.voice_pipeline.execute_tool", _fake_execute)
         session = _session(("user", "আপনি কেমন আছেন?"))
 
         reply = await VoicePipeline()._generate_reply(llm, _FakeTTS(), session, _Sink())
@@ -458,13 +434,9 @@ class TestGenerateReplyExtractMode:
 
 
 class TestGenerateReplyNativeMode:
-    async def test_executes_declared_tool_calls_and_confirms(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_executes_declared_tool_calls_and_confirms(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", True)
-        monkeypatch.setattr(
-            "shefa.pipeline.voice_pipeline.get_tool_definitions", lambda: _TOOLS
-        )
+        monkeypatch.setattr("shefa.pipeline.voice_pipeline.get_tool_definitions", lambda: _TOOLS)
         call = {"id": "c1", "name": "book_appointment", "arguments": {"date": "tomorrow"}}
         llm = _ScriptedLLM(
             routed_action=None,
@@ -482,9 +454,7 @@ class TestGenerateReplyNativeMode:
             executed.append(name)
             return {"success": True}
 
-        monkeypatch.setattr(
-            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
-        )
+        monkeypatch.setattr("shefa.pipeline.voice_pipeline.execute_tool", _fake_execute)
         session = _session(("user", "বুক করুন"))
 
         reply = await VoicePipeline()._generate_reply(llm, _FakeTTS(), session, _Sink())
@@ -603,3 +573,64 @@ class TestErrorText:
         assert error_text("x", {"success": True}, "en") is None
         assert error_text("x", {"transferred": True}, "en") is None
         assert error_text("x", "oops", "en") is None
+
+
+class TestSlotAnswers:
+    def _slots(self, *times):
+        return [{"time": t} for t in times]
+
+    def test_a_short_list_is_read_out(self):
+        text = confirmation_text(
+            "check_appointment_slots",
+            {
+                "date": "2026-11-03",
+                "doctor": "Rahman",
+                "available_slots": self._slots("09:00", "09:30"),
+            },
+            "en",
+        )
+        assert "09:00, 09:30" in text
+
+    def test_a_long_list_is_summarised_as_a_range(self):
+        times = [f"{h}:{m:02d}" for h in (16, 17, 18) for m in (0, 15, 30, 45)]
+        text = confirmation_text(
+            "check_appointment_slots",
+            {"date": "2026-11-03", "doctor": "Rahman", "available_slots": self._slots(*times)},
+            "en",
+        )
+        assert "from 16:00 to 18:45" in text and "17:15" not in text
+        assert "16:00 থেকে 18:45" in confirmation_text(
+            "check_appointment_slots",
+            {"date": "d", "doctor": "R", "available_slots": self._slots(*times)},
+            "bn",
+        )
+
+    def test_a_full_day_offers_the_next_free_time(self):
+        result = {
+            "date": "2026-11-02",
+            "doctor": "Rahman",
+            "available_slots": [],
+            "next_available": {"date": "2026-11-03", "time": "16:00"},
+        }
+        en = confirmation_text("check_appointment_slots", result, "en")
+        assert "no free time on 2026-11-02" in en and "2026-11-03 at 16:00" in en
+        assert "2026-11-03 তারিখে 16:00" in confirmation_text(
+            "check_appointment_slots", result, "bn"
+        )
+
+    def test_no_future_availability_says_so(self):
+        result = {"date": "d", "doctor": "Rahman", "available_slots": [], "next_available": None}
+        assert "coming weeks" in confirmation_text("check_appointment_slots", result, "en")
+
+    def test_a_broad_question_names_the_doctors_with_time(self):
+        result = {"date": "d", "doctors": [{"doctor": "Rahman"}, {"doctor": "Sultana"}]}
+        assert "Rahman, Sultana" in confirmation_text("check_appointment_slots", result, "en")
+        assert "Rahman, Sultana" in confirmation_text("check_appointment_slots", result, "bn")
+        empty = confirmation_text("check_appointment_slots", {"date": "d", "doctors": []}, "en")
+        assert "No doctor has free time" in empty
+        assert "খালি সময় নেই" in confirmation_text(
+            "check_appointment_slots", {"date": "d", "doctors": []}, "bn"
+        )
+
+    def test_a_result_without_slot_information_has_no_template(self):
+        assert confirmation_text("check_appointment_slots", {"date": "d"}, "en") is None

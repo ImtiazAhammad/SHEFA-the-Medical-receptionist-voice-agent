@@ -45,6 +45,7 @@ async def check_slots(
             {
                 "doctor": doctor["name_en"],
                 "available_slots": store.available_slots(doctor["id"], date),
+                "next_available": store.next_available(doctor["id"]),
             }
             for doctor in doctors
         ]

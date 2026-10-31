@@ -65,9 +65,7 @@ def resolve_relative_day(value: Any, today: date | None = None) -> str | None:
     return ((today or date.today()) + timedelta(days=offset)).isoformat()
 
 
-def resolve_arguments(
-    arguments: dict[str, Any], today: date | None = None
-) -> dict[str, Any]:
+def resolve_arguments(arguments: dict[str, Any], today: date | None = None) -> dict[str, Any]:
     """Copy ``arguments`` with any relative day terms made absolute.
 
     Only the known date argument keys are touched, and only when the value is a
@@ -83,14 +81,11 @@ def resolve_arguments(
     return resolved
 
 
-def extractor_system_prompt(
-    tools: list[ToolDefinition], today: date | None = None
-) -> str:
+def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = None) -> str:
     """Describe the available tools and the exact JSON shape to the router."""
     today = today or date.today()
     lines = "\n".join(
-        f"- {t.name}: {t.description} arguments="
-        + json.dumps(t.parameters, ensure_ascii=False)
+        f"- {t.name}: {t.description} arguments=" + json.dumps(t.parameters, ensure_ascii=False)
         for t in tools
     )
     return (
@@ -110,8 +105,7 @@ def extractor_system_prompt(
         "tomorrow, আজ, আগামীকাল, পরশু) into an absolute YYYY-MM-DD date in the "
         "arguments. Never use a date that is already in the past.\n"
         'Reply with ONLY a JSON object: {"tool": <name or null>, "arguments": {}}.\n'
-        "Available tools:\n"
-        + lines
+        "Available tools:\n" + lines
     )
 
 
@@ -218,15 +212,45 @@ def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
+    date = result.get("date", "")
+    if "doctors" in result:  # a broad question: who has any time that day
+        names = [d.get("doctor", "") for d in result["doctors"]]
+        if not names:
+            return {
+                "en": f"No doctor has free time on {date}. Would you like another day?",
+                "bn": f"{date} তারিখে কোনো ডাক্তারের খালি সময় নেই। অন্য দিন দেখব?",
+            }
+        joined = ", ".join(names)
+        return {
+            "en": f"On {date}, there is free time with {joined}. Which doctor would you like?",
+            "bn": f"{date} তারিখে খালি সময় আছে: {joined}। কোন ডাক্তারকে চান?",
+        }
     times = [
-        slot.get("time", "")
-        for slot in (result.get("available_slots") or [])
-        if slot.get("time")
+        slot.get("time", "") for slot in (result.get("available_slots") or []) if slot.get("time")
     ]
     if not times:
-        return None
+        if "available_slots" not in result:
+            return None
+        nxt = result.get("next_available") or {}
+        who = result.get("doctor", "")
+        if nxt.get("date") and nxt.get("time"):
+            return {
+                "en": f"{who} has no free time on {date}. The next free time is "
+                f"{nxt['date']} at {nxt['time']}. Shall I book that?",
+                "bn": f"{date} তারিখে {who}-এর খালি সময় নেই। পরবর্তী খালি সময় "
+                f"{nxt['date']} তারিখে {nxt['time']}-এ। সেটা বুক করব?",
+            }
+        return {
+            "en": f"{who} has no free time on {date} or in the coming weeks.",
+            "bn": f"{date} তারিখে বা আগামী কয়েক সপ্তাহে {who}-এর কোনো খালি সময় নেই।",
+        }
+    if len(times) > 6:  # reading sixteen times aloud is not a conversation
+        return {
+            "en": f"On {date} there are free times from {times[0]} to {times[-1]}. "
+            "What time would you like?",
+            "bn": f"{date} তারিখে {times[0]} থেকে {times[-1]} পর্যন্ত খালি সময় আছে। আপনি কোন সময় চান?",
+        }
     joined = ", ".join(times)
-    date = result.get("date", "")
     return {
         "en": f"Available times on {date} are {joined}. Which time works for you?",
         "bn": f"{date} তারিখে যে সময়গুলো পাওয়া যাচ্ছে: {joined}। আপনি কোন সময় চান?",
@@ -251,8 +275,7 @@ def _confirm_reschedule(result: dict[str, Any]) -> dict[str, str] | None:
     time = result.get("new_time", "")
     return {
         "en": f"Your appointment {ref} is rescheduled to {date} at {time}.",
-        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {ref} {date} তারিখে {time}-এ "
-        "পরিবর্তন করা হয়েছে।",
+        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {ref} {date} তারিখে {time}-এ পরিবর্তন করা হয়েছে।",
     }
 
 
@@ -278,9 +301,7 @@ def _confirm_doctors(result: dict[str, Any]) -> dict[str, str] | None:
         return _confirm_doctor_info(items[0])  # one match: give the whole card
     return {
         "en": "Our doctors are: "
-        + ", ".join(
-            f"{d.get('name', '')} ({d.get('department', '')})" for d in items
-        )
+        + ", ".join(f"{d.get('name', '')} ({d.get('department', '')})" for d in items)
         + ". Would you like to hear a doctor's schedule or book?",
         "bn": "আমাদের ডাক্তার: "
         + ", ".join(
@@ -332,9 +353,7 @@ _CONFIRMATIONS: dict[str, Any] = {
 }
 
 
-def confirmation_text(
-    tool_name: str, result: Any, language: str
-) -> str | None:
+def confirmation_text(tool_name: str, result: Any, language: str) -> str | None:
     """Render the tool's outcome as a fixed confirmation sentence, or None.
 
     None means the tool has no deterministic template (or the result carries an
@@ -351,6 +370,7 @@ def confirmation_text(
         return None
     text = phrases.get(language) or phrases.get("en")
     return text
+
 
 # A tool error is never handed to the model to paraphrase: given the raw error dict it read
 # "[internal tool result] book_appointment returned {...}" aloud to the caller. Every error
