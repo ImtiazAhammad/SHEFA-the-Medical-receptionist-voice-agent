@@ -275,7 +275,7 @@ models:
   adapters:
     stt_whisper_local:
       type: "whisper_local_stt"
-      model_size: "large-v3"
+      model_size: "models/stt/bangla-whisper-medium-ct2"   # python scripts/fetch_stt_model.py
       bangla_finetuned: true
     llm_qwen_local:
       type: "openai_compatible_llm"

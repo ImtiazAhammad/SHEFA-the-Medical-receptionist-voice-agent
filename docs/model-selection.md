@@ -18,7 +18,7 @@ there are some. Nobody on the team has yet listened to the TTS output.
 | Model | FLEURS clean | FLEURS phone | FLEURS phone + noise | Clinic phone + noise | VRAM |
 |---|---|---|---|---|---|
 | **OmiKhan/bangla-asr-whisper-medium** (Apache-2.0) | **16.5%** | **17.7%** | **22.7%** | 38.3%* | 1.6 GB |
-| Whisper large-v3, stock (what the product ships today) | 70.0% | 72.7% | 81.1% | 89.1% | 3.7 GB |
+| Whisper large-v3, stock (the old product default) | 70.0% | 72.7% | 81.1% | 89.1% | 3.7 GB |
 | Whisper small, stock | 109.8% | 113.4% | 111.1% | 107.4% | 0.6 GB |
 
 \* The noise in that cell is babble made from the same synthetic voice, which is unusually hard.
@@ -27,10 +27,11 @@ there are some. Nobody on the team has yet listened to the TTS output.
 (`large-v3`, `configs/default.yaml`) gets about 3 words in 4 wrong on Bengali. The fine-tune is about
 4x better and uses less GPU memory. Phone-band audio costs about 1 point of WER; clinic noise about 5.
 
-**Open problem (next task):** the fine-tune scores correctly through `transformers` + PyTorch, but
-the CTranslate2 conversion that faster-whisper needs produces garbage (tokenizer special tokens
-were checked and match, so the fault is in the converted weights). Until that is fixed the product
-can only run it through PyTorch, which `shefa` does not currently depend on.
+**Packaging (solved):** `python scripts/fetch_stt_model.py` downloads the fine-tune and converts it
+to CTranslate2 for faster-whisper (checked: 22% WER on 8 FLEURS clips, same text as the PyTorch path).
+The earlier "garbage" conversions were a wrong `tokenizer.json`, not bad weights: the fine-tune ships
+its own tokenizer, and a stray copy of Whisper's stock one made every output unreadable. The script
+now copies the fine-tune's tokenizer and refuses to run if it matches the stock one.
 
 ## Language model (router prompt in production JSON mode, 12 cases + free-text replies)
 

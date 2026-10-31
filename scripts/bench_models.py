@@ -241,31 +241,11 @@ def stt_model_path(name: str, models_dir: Path) -> str:
     if name == "omikhan":
         path = models_dir / "omikhan-ct2"
         if not (path / "model.bin").exists():
-            convert_omikhan(path)
+            from fetch_stt_model import convert
+
+            convert(path)
         return str(path)
     return name
-
-
-def convert_omikhan(target: Path) -> None:
-    """Convert OmiKhan/bangla-asr-whisper-medium to CTranslate2 for faster-whisper.
-
-    The fine-tune has its OWN tokenizer (token ids differ from base Whisper), so its
-    tokenizer.json must travel with the converted weights; pairing it with the base
-    tokenizer yields fluent-looking multilingual garbage. Only the 80-bin feature
-    extractor config, which the repo lacks, comes from the base model.
-    """
-    import shutil
-
-    from ctranslate2.converters import TransformersConverter
-    from huggingface_hub import hf_hub_download, snapshot_download
-
-    local = target.parent / "omikhan-src"
-    snapshot_download("OmiKhan/bangla-asr-whisper-medium", local_dir=str(local))
-    base_config = hf_hub_download("openai/whisper-medium", "preprocessor_config.json")
-    shutil.copy2(base_config, local / "preprocessor_config.json")
-    TransformersConverter(
-        str(local), copy_files=["tokenizer.json", "preprocessor_config.json"]
-    ).convert(str(target), quantization="float16", force=True)
 
 
 def vram_mib() -> int | None:

@@ -94,18 +94,18 @@ models:
       api_key: "${OPENAI_API_KEY}"
     stt_whisper_local:
       type: "whisper_local_stt"
-      # Bangla is the pilot language, so STT must be multilingual: whisper
-      # `small.en` is English-only and returned Devanagari gibberish for Bangla.
-      # `large-v3` is the accurate multilingual model. It is ~1.2s/utterance on
-      # GPU (float16) and ~10s on CPU (int8, the fallback below).
+      # Bangla is the pilot language. Stock `large-v3` gets ~70% of Bengali words wrong
+      # (docs/model-selection.md); the OmiKhan Bangla fine-tune (Apache-2.0) gets ~17%.
+      # Build it once with `python scripts/fetch_stt_model.py` (needs torch +
+      # transformers just for that step). ~1.6 GB VRAM, ~0.15x real time on GPU.
       #
       # GPU requires CUDA-12 runtime libs that this host does not ship (system
       # CUDA is 13). Install the cu12 wheels into the venv and put them on
       # LD_LIBRARY_PATH, or drop device to "cpu" for the slow-but-portable path.
-      model_size: "large-v3"
+      model_size: "models/stt/bangla-whisper-medium-ct2"
       device: "cuda"
       compute_type: "float16"
-      bangla_finetuned: false
+      bangla_finetuned: true
     stt_elevenlabs:
       type: "elevenlabs_stt"
       api_key: "${ELEVENLABS_API_KEY}"
