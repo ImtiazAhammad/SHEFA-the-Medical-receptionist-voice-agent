@@ -500,3 +500,14 @@ class TestConfigFlag:
         from shefa.config.settings import LLMConfig
 
         assert LLMConfig().tool_calls is True
+
+
+def test_parse_action_accepts_a_fenced_json_block():
+    from shefa.pipeline.actions import parse_action
+
+    fenced = '```json\n{"tool": "transfer_to_human", "arguments": {"reason": "chest pain"}}\n```'
+    action = parse_action(fenced, {"transfer_to_human"})
+    assert action is not None and action.name == "transfer_to_human"
+    bare = parse_action('```\n{"tool": null, "arguments": {}}\n```\n(note)', {"transfer_to_human"})
+    assert bare is None
+    assert parse_action("```json\nnot json\n```", {"transfer_to_human"}) is None

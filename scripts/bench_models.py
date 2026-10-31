@@ -4,8 +4,8 @@ Needs heavy dependencies that the product deliberately does not ship (torch,
 transformers, jiwer, datasets, coqui-tts), so run it from a throwaway venv:
 
     PYTHONPATH=src python scripts/bench_models.py data  --out bench-out
-    PYTHONPATH=src python scripts/bench_models.py stt   --out bench-out --models large-v3 small omikhan
-    PYTHONPATH=src python scripts/bench_models.py llm   --out bench-out --models gemma2:9b qwen3:8b
+    PYTHONPATH=src python scripts/bench_models.py stt   --out bench-out --models large-v3 omikhan
+    PYTHONPATH=src python scripts/bench_models.py llm   --out bench-out --models gemma2:9b
     PYTHONPATH=src python scripts/bench_models.py tts   --out bench-out
 
 Audio conditions, because a clinic phone is not a studio microphone:
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import time
 from datetime import date
 from pathlib import Path
@@ -52,22 +53,37 @@ TODAY = date(2026, 11, 2)  # a Monday, so "কাল" is 2026-11-03
 
 # (utterance, acceptable tools — None means "no tool", required argument checks)
 LLM_CASES: list[tuple[str, set[str | None], dict[str, str]]] = [
-    ("ডাক্তার রহমানের সাথে কাল সকাল নয়টায় অ্যাপয়েন্টমেন্ট দিন",
-     {"book_appointment", "check_appointment_slots", "verify_patient"}, {}),
+    (
+        "ডাক্তার রহমানের সাথে কাল সকাল নয়টায় অ্যাপয়েন্টমেন্ট দিন",
+        {"book_appointment", "check_appointment_slots", "verify_patient"},
+        {},
+    ),
     ("হৃদরোগ বিভাগে কোন কোন ডাক্তার আছেন?", {"list_departments", "list_doctors"}, {}),
     ("ডাক্তার সুলতানা কখন বসেন?", {"get_doctor_info", "list_doctors"}, {}),
-    ("কাল শিশু বিভাগে সিরিয়াল আছে?", {"check_appointment_slots", "list_doctors"},
-     {"date": "2026-11-03"}),
+    (
+        "কাল শিশু বিভাগে সিরিয়াল আছে?",
+        {"check_appointment_slots", "list_doctors"},
+        {"date": "2026-11-03"},
+    ),
     ("আমার বাবার বুকে খুব ব্যথা, শ্বাস নিতে পারছেন না", {"transfer_to_human"}, {}),
     ("আমি একজন মানুষের সাথে কথা বলতে চাই", {"transfer_to_human"}, {}),
     ("ধন্যবাদ", {None}, {}),
-    ("আমার অ্যাপয়েন্টমেন্ট APT-00042 বাতিল করুন, আমার আইডি ৭", {"cancel_appointment"},
-     {"appointment_id": "APT-00042"}),
-    ("Book me with Dr. Rahman tomorrow at 10:30",
-     {"book_appointment", "check_appointment_slots", "verify_patient"}, {}),
+    (
+        "আমার অ্যাপয়েন্টমেন্ট APT-00042 বাতিল করুন, আমার আইডি ৭",
+        {"cancel_appointment"},
+        {"appointment_id": "APT-00042"},
+    ),
+    (
+        "Book me with Dr. Rahman tomorrow at 10:30",
+        {"book_appointment", "check_appointment_slots", "verify_patient"},
+        {},
+    ),
     ("ক্লিনিকের ঠিকানা কী?", {None}, {}),
-    ("Doctor er appointment কাল কখন available?",
-     {"check_appointment_slots", "list_doctors", "list_departments"}, {}),
+    (
+        "Doctor er appointment কাল কখন available?",
+        {"check_appointment_slots", "list_doctors", "list_departments"},
+        {},
+    ),
     ("আমার জ্বর, কী ওষুধ খাব?", {None, "transfer_to_human"}, {}),
 ]
 
@@ -144,7 +160,9 @@ def fetch_real_speech(out: Path, count: int) -> list[dict[str, str]]:
     from huggingface_hub import hf_hub_download
 
     tsv = Path(hf_hub_download("google/fleurs", "data/bn_in/test.tsv", repo_type="dataset"))
-    tar = Path(hf_hub_download("google/fleurs", "data/bn_in/audio/test.tar.gz", repo_type="dataset"))
+    tar = Path(
+        hf_hub_download("google/fleurs", "data/bn_in/audio/test.tar.gz", repo_type="dataset")
+    )
     refs: dict[str, str] = {}
     for line in tsv.read_text(encoding="utf-8").splitlines():
         cols = line.split("\t")
@@ -176,8 +194,12 @@ def cmd_data(args: argparse.Namespace) -> None:
     if args.real:
         for row in fetch_real_speech(out, args.real):
             entries.append(
-                {"id": row["id"][:-4], "text": row["text"], "audio": read_wav(Path(row["wav"])),
-                 "source": "fleurs-bn"}
+                {
+                    "id": row["id"][:-4],
+                    "text": row["text"],
+                    "audio": read_wav(Path(row["wav"])),
+                    "source": "fleurs-bn",
+                }
             )
     babble = [e["audio"] for e in entries]
     for entry in entries:
@@ -231,9 +253,9 @@ def convert_omikhan(target: Path) -> None:
 
     repo = "OmiKhan/bangla-asr-whisper-medium"
     target.parent.mkdir(parents=True, exist_ok=True)
-    TransformersConverter(
-        repo, copy_files=["tokenizer.json", "preprocessor_config.json"]
-    ).convert(str(target), quantization="float16", force=True)
+    TransformersConverter(repo, copy_files=["tokenizer.json", "preprocessor_config.json"]).convert(
+        str(target), quantization="float16", force=True
+    )
     for name in ("tokenizer.json", "preprocessor_config.json"):
         if not (target / name).exists():
             fallback = hf_hub_download("openai/whisper-medium", name)
@@ -241,12 +263,12 @@ def convert_omikhan(target: Path) -> None:
 
 
 def vram_mib() -> int | None:
-    import subprocess
-
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout
         return int(out.splitlines()[0])
     except (OSError, ValueError, subprocess.CalledProcessError):
@@ -300,16 +322,22 @@ def bangla_ratio(text: str) -> float:
     return sum("ঀ" <= c <= "৿" for c in letters) / len(letters) if letters else 0.0
 
 
-def ollama_chat(model: str, messages: list[dict[str, str]], host: str) -> tuple[str, float]:
+def ollama_chat(
+    model: str, messages: list[dict[str, str]], host: str, json_mode: str | None = None
+) -> tuple[str, float]:
     import urllib.request
 
     body = json.dumps(
-        {"model": model, "messages": messages, "stream": False, "keep_alive": "2m",
-         "options": {"temperature": 0, "num_predict": 300}}
+        {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "keep_alive": "2m",
+            "format": json_mode,
+            "options": {"temperature": 0, "num_predict": 300},
+        }
     ).encode()
-    request = urllib.request.Request(
-        f"{host}/api/chat", body, {"Content-Type": "application/json"}
-    )
+    request = urllib.request.Request(f"{host}/api/chat", body, {"Content-Type": "application/json"})
     started = time.perf_counter()
     with urllib.request.urlopen(request, timeout=300) as response:  # noqa: S310
         payload = json.load(response)
@@ -327,6 +355,7 @@ def cmd_llm(args: argparse.Namespace) -> None:
     out = Path(args.out)
     results: dict[str, Any] = {}
     for model in args.models:
+        baseline_vram = vram_mib() or 0
         valid = right_tool = right_args = 0
         latencies: list[float] = []
         for utterance, acceptable, required in LLM_CASES:
@@ -334,11 +363,14 @@ def cmd_llm(args: argparse.Namespace) -> None:
                 model,
                 [{"role": "system", "content": router}, {"role": "user", "content": utterance}],
                 args.host,
+                json_mode="json",  # production sends response_format=json_object
             )
             latencies.append(seconds)
             action = parse_action(text, known)
-            parsed_ok = action is not None or '"tool": null' in text.replace("None", "null") or (
-                re.search(r'"tool"\s*:\s*null', text) is not None
+            parsed_ok = (
+                action is not None
+                or '"tool": null' in text.replace("None", "null")
+                or (re.search(r'"tool"\s*:\s*null', text) is not None)
             )
             valid += parsed_ok
             tool = action.name if action else None
@@ -351,8 +383,10 @@ def cmd_llm(args: argparse.Namespace) -> None:
             if re.search(r"[ঀ-৿]", utterance):
                 text, seconds = ollama_chat(
                     model,
-                    [{"role": "system", "content": system_prompt("bn", None)},
-                     {"role": "user", "content": utterance}],
+                    [
+                        {"role": "system", "content": system_prompt("bn", None)},
+                        {"role": "user", "content": utterance},
+                    ],
                     args.host,
                 )
                 replies.append(bangla_ratio(text))
@@ -365,8 +399,10 @@ def cmd_llm(args: argparse.Namespace) -> None:
             "bangla_purity": round(float(np.mean(replies)), 3),
             "median_s": round(float(np.median(latencies)), 2),
             "p95_s": round(float(np.percentile(latencies, 95)), 2),
-            "vram_mib": vram_mib(),
+            "vram_mib": (vram_mib() or 0) - baseline_vram,
         }
+        subprocess.run(["ollama", "stop", model], check=False, capture_output=True)
+        time.sleep(3)
         results[model] = row
         print(model, json.dumps(row, ensure_ascii=False))
     (out / "llm-results.json").write_text(json.dumps(results, ensure_ascii=False, indent=1))
@@ -381,9 +417,12 @@ def cmd_tts(args: argparse.Namespace) -> None:
 
     out = Path(args.out)
     (out / "tts").mkdir(parents=True, exist_ok=True)
-    stt = WhisperModel(stt_model_path(args.judge, out / "models"), device="cuda",
-                       compute_type="float16")
-    engines: dict[str, Any] = {"piper-bn_BD-google": lambda t: synthesize_piper(t, args.piper_voice)}
+    stt = WhisperModel(
+        stt_model_path(args.judge, out / "models"), device="cuda", compute_type="float16"
+    )
+    engines: dict[str, Any] = {
+        "piper-bn_BD-google": lambda t: synthesize_piper(t, args.piper_voice)
+    }
     for name in args.coqui:
         engines[name] = coqui_engine(name)
     results: dict[str, Any] = {}
@@ -423,7 +462,9 @@ def coqui_engine(repo: str):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument("step", choices=["data", "stt", "llm", "tts"])
     parser.add_argument("--out", default="bench-out")
     parser.add_argument("--models", nargs="+", default=["large-v3"])

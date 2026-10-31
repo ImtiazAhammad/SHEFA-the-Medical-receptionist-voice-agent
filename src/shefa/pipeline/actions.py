@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
@@ -113,10 +114,24 @@ def extractor_system_prompt(
     )
 
 
+_FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+
+
+def _unfence(text: str) -> str:
+    """The JSON inside a Markdown code fence, if the model wrapped its answer in one.
+
+    Ollama enforces JSON mode, but providers without it (e.g. Anthropic) often
+    reply with a fenced block, which would otherwise read as "no action" and
+    drop a booking or an emergency transfer.
+    """
+    match = _FENCE.match(text)
+    return match.group(1) if match else text
+
+
 def parse_action(text: str, known_tools: set[str]) -> ExtractedAction | None:
     """Validate the router's JSON output into an action, or None."""
     try:
-        payload = json.loads(text)
+        payload = json.loads(_unfence(text))
     except ValueError:
         logger.warning("Action router returned non-JSON: %r", text[:200])
         return None

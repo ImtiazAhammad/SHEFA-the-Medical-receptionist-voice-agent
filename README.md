@@ -1,6 +1,40 @@
 # SHEFA - Medical Voice Agent
 
-Privacy-first, fully open-source, bilingual (English / Bangla) voice AI receptionist for healthcare. Automates inbound patient calls, outbound reminders, appointment scheduling, and clinical triage routing with full code-switching support.
+Privacy-first, fully open-source, bilingual (English / Bangla) voice AI receptionist for clinics in
+Bangladesh. It answers patient calls, tells callers which doctors and departments are available and
+when, books / moves / cancels appointments, and calls patients back with reminders and follow-ups.
+Every model (speech-to-text, language model, text-to-speech) runs on the clinic's own machine.
+
+## Goal and status
+
+The goal is a **finished product**, built before any clinic is approached. Twilio is being replaced
+with a self-hosted Asterisk PBX behind a Bangladeshi SIP trunk (cheaper per minute and not tied to a
+foreign cloud). Roadmap, in build order:
+
+| # | Piece | Status |
+|---|-------|--------|
+| 1 | Clinic directory + booking engine (departments, doctors, schedules, leave, appointments; no double-booking) | **done** |
+| 2 | Voice flows: inbound booking, doctor / department / schedule questions | in progress |
+| 3 | Asterisk integration replacing Twilio (inbound, transfer to a human, DTMF fallback) | planned |
+| 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | planned |
+| 5 | Call log, owner console views, reliability (heartbeat, backups, load test) | planned |
+| 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress (see `scripts/bench_models.py`) |
+
+Twilio code remains as a development sink until step 3 lands. Carrier selection: see
+[`docs/carrier-inquiry.md`](docs/carrier-inquiry.md).
+
+## Clinic directory
+
+Describe the clinic once in YAML (see `configs/clinic.example.yaml`) and load it:
+
+```bash
+uv run shefa clinic import configs/clinic.example.yaml   # idempotent; never deletes appointments
+uv run shefa clinic show                                  # what the agent will say
+```
+
+Departments, doctors, weekly schedules and leave days live in SQLite (`storage.db_path`). Open slots
+are computed from the schedule minus leave minus existing bookings minus times already past, and a
+database constraint makes double-booking impossible even under concurrent calls.
 
 ## Architecture
 
@@ -184,7 +218,7 @@ flowchart LR
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - Redis (for session management in production)
-- Twilio account (for telephony)
+- A SIP trunk from a BTRC-licensed Bangladeshi provider (Twilio only as a development sink for now)
 - OpenAI API key (or local LLM endpoint)
 
 ## Quick Start
@@ -295,11 +329,11 @@ src/shefa/
 │   ├── definitions.py         # 9 LLM function-calling tool schemas
 │   └── executor.py            # Tool dispatch and execution
 ├── integrations/
-│   ├── calendar.py            # Google Calendar / custom booking
-│   ├── ehr.py                 # EHR patient data integration
+│   ├── calendar.py            # Slots and bookings, backed by the clinic store
+│   ├── ehr.py                 # Patients, doctors, departments, backed by the clinic store
 │   └── notifications.py       # Bilingual SMS/email templates
 └── utils/
-    ├── compliance.py          # HIPAA audit logging, PHI masking
+    ├── compliance.py          # Audit logging, PHI masking
     └── logging.py             # Structured logging (structlog)
 ```
 
@@ -329,13 +363,15 @@ src/shefa/
 
 | Tool | Description |
 |------|-------------|
-| `verify_patient` | Verify identity via name/DOB/phone/MRN |
+| `verify_patient` | Identify the caller by phone number (registers first-time patients) |
 | `check_appointment_slots` | Query available slots by date/doctor |
 | `book_appointment` | Book appointment for verified patient |
 | `cancel_appointment` | Cancel existing appointment |
 | `reschedule_appointment` | Move appointment to new date/time |
-| `get_doctor_info` | Doctor profile, availability, languages |
-| `lookup_patient_history` | Recent visits, medications, allergies |
+| `get_doctor_info` | Doctor profile, department, fee, weekly schedule, next free slot |
+| `list_departments` | Departments and the doctors in each |
+| `list_doctors` | Doctors (optionally per department) with schedule and next free slot |
+| `lookup_patient_history` | The patient's own appointments (no clinical records are stored) |
 | `send_confirmation` | Bilingual SMS/email confirmation |
 | `transfer_to_human` | Escalate to human receptionist |
 
@@ -402,8 +438,8 @@ CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8
 ## Production Checklist
 
 - [ ] Set `ENVIRONMENT=production` in `.env`
-- [ ] Configure HIPAA-compliant storage for call recordings
-- [ ] Set up BAA with cloud provider (Twilio, OpenAI, etc.)
+- [ ] Encrypt the disk holding call recordings and the SQLite database; set a retention period
+- [ ] Keep `shefa doctor` green with only local providers configured (no cloud STT / LLM / TTS)
 - [ ] Enable Prometheus metrics (`monitoring.prometheus_enabled: true`)
 - [ ] Configure Sentry DSN for error tracking
 - [ ] Set up log shipping (ELK/Loki) with PHI masking enabled
