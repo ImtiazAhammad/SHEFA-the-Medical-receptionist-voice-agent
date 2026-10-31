@@ -33,3 +33,6 @@ node_modules/
 
 # Rendered Asterisk config contains the trunk password
 deploy/asterisk/rendered/
+
+# Database backups hold patient data
+backups/

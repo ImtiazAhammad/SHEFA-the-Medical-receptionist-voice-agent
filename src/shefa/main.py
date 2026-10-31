@@ -401,8 +401,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
 
     @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "healthy", "version": "0.1.0"}
+    async def health() -> dict:
+        from shefa.health import health_report
+
+        return await health_report()
 
     @app.get("/")
     async def root() -> dict[str, str]:
