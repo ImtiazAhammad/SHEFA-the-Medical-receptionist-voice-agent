@@ -259,3 +259,16 @@ def to_s16le_16k_mono(
         ).astype(np.float32)
 
     return _from_float(signal)
+
+
+def s16le_16k_mono_to_slin8k(data: bytes) -> bytes:
+    """Downsample pipeline s16le 16k mono to the s16le 8k that AudioSocket plays."""
+    payload = strip_wav_header(data)
+    usable = len(payload) - (len(payload) % 2)
+    if usable <= 0:
+        return b""
+    samples = np.frombuffer(payload[:usable], dtype="<i2").astype(np.float64)
+    out_len = max(1, int(round(len(samples) * MULAW_RATE / TARGET_RATE)))
+    positions = np.arange(out_len, dtype=np.float64) * (len(samples) / out_len)
+    resampled = np.interp(positions, np.arange(len(samples), dtype=np.float64), samples)
+    return np.round(resampled).astype("<i2").tobytes()

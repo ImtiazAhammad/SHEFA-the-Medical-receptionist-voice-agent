@@ -22,8 +22,6 @@ from shefa.models.base import Language, StreamEvent
 from shefa.pipeline.voice_pipeline import VoicePipeline
 from shefa.session.manager import CallSession
 
-pytestmark = pytest.mark.asyncio
-
 _DIRECTORY = {
     "departments": [
         {
