@@ -59,6 +59,8 @@ LLM_CASES: list[tuple[str, set[str | None], dict[str, str]]] = [
         {},
     ),
     ("হৃদরোগ বিভাগে কোন কোন ডাক্তার আছেন?", {"list_departments", "list_doctors"}, {}),
+    ("আপনাদের কোন কোন বিভাগ আছে?", {"list_departments"}, {}),
+    ("What departments do you have?", {"list_departments"}, {}),
     ("ডাক্তার সুলতানা কখন বসেন?", {"get_doctor_info", "list_doctors"}, {}),
     (
         "কাল শিশু বিভাগে সিরিয়াল আছে?",

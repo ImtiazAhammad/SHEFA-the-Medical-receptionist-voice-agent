@@ -96,8 +96,9 @@ class TestParseAction:
     def test_json_non_object_is_no_action(self):
         assert parse_action('[{"tool": "book_appointment"}]', _KNOWN) is None
 
-    def test_missing_arguments_are_rejected(self):
-        assert parse_action(json.dumps({"tool": "book_appointment"}), _KNOWN) is None
+    def test_non_object_arguments_are_rejected(self):
+        payload = {"tool": "book_appointment", "arguments": "tomorrow"}
+        assert parse_action(json.dumps(payload), _KNOWN) is None
 
 
 class TestExtractorPrompt:
@@ -511,3 +512,57 @@ def test_parse_action_accepts_a_fenced_json_block():
     bare = parse_action('```\n{"tool": null, "arguments": {}}\n```\n(note)', {"transfer_to_human"})
     assert bare is None
     assert parse_action("```json\nnot json\n```", {"transfer_to_human"}) is None
+
+
+class TestDirectoryConfirmations:
+    DOCTOR = {
+        "name": "Dr. Rahman",
+        "name_bn": "ডা. রহমান",
+        "department": "Cardiology",
+        "department_bn": "হৃদরোগ",
+        "visit_fee": 800,
+        "schedule": ["sunday 09:00-12:00"],
+        "next_available": {"date": "2026-11-08", "time": "09:00"},
+    }
+
+    def test_departments_are_named_in_the_callers_language(self):
+        result = {"departments": [{"name": "Cardiology", "name_bn": "হৃদরোগ"}]}
+        assert "Cardiology" in confirmation_text("list_departments", result, "en")
+        assert "হৃদরোগ" in confirmation_text("list_departments", result, "bn")
+
+    def test_no_departments_falls_back_to_the_model(self):
+        assert confirmation_text("list_departments", {"departments": []}, "en") is None
+
+    def test_doctor_list_names_each_doctor_and_department(self):
+        text = confirmation_text("list_doctors", {"doctors": [self.DOCTOR]}, "en")
+        assert "Dr. Rahman (Cardiology)" in text
+        assert "ডা. রহমান (হৃদরোগ)" in confirmation_text(
+            "list_doctors", {"doctors": [self.DOCTOR]}, "bn"
+        )
+
+    def test_empty_doctor_list_has_no_template(self):
+        assert confirmation_text("list_doctors", {"doctors": []}, "en") is None
+
+    def test_doctor_info_speaks_schedule_next_slot_and_fee(self):
+        text = confirmation_text("get_doctor_info", self.DOCTOR, "en")
+        assert "sunday 09:00-12:00" in text
+        assert "2026-11-08 at 09:00" in text
+        assert "800 taka" in text
+        bn = confirmation_text("get_doctor_info", self.DOCTOR, "bn")
+        assert "ভিজিট ফি 800 টাকা" in bn
+        assert "2026-11-08" in bn
+
+    def test_doctor_info_with_no_free_time_says_so(self):
+        card = {**self.DOCTOR, "next_available": None, "visit_fee": 0}
+        assert "no free time" in confirmation_text("get_doctor_info", card, "en")
+        assert "টাকা" not in confirmation_text("get_doctor_info", card, "bn")
+
+    def test_doctor_info_without_a_name_has_no_template(self):
+        assert confirmation_text("get_doctor_info", {"schedule": []}, "en") is None
+
+
+def test_a_tool_without_arguments_is_still_an_action():
+    for text in ('{"tool": "list_departments"}', '{"tool": "list_departments", "arguments": null}'):
+        action = parse_action(text, {"list_departments"})
+        assert action is not None
+        assert action.arguments == {}

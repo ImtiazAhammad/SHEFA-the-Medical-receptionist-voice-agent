@@ -69,7 +69,7 @@ async def _cancel_appointment(args: dict[str, Any], session: CallSession) -> dic
 
     return await cancel_appointment(
         appointment_id=args["appointment_id"],
-        patient_id=args["patient_id"],
+        patient_id=args.get("patient_id", session.patient_id or ""),
         reason=args.get("reason", ""),
     )
 
@@ -79,7 +79,7 @@ async def _reschedule_appointment(args: dict[str, Any], session: CallSession) ->
 
     return await reschedule_appointment(
         appointment_id=args["appointment_id"],
-        patient_id=args["patient_id"],
+        patient_id=args.get("patient_id", session.patient_id or ""),
         new_date=args["new_date"],
         new_time=args["new_time"],
     )

@@ -97,8 +97,9 @@ def extractor_system_prompt(
         "You are the action router for SHEFA, a medical receptionist answering a "
         "phone call right now. Read the conversation and decide whether the "
         "patient's latest message requires calling a tool to do a real thing "
-        "(booking, checking slots, looking up a doctor, verifying identity, "
-        "sending a confirmation, transferring to a human). If one is needed, "
+        "(booking, checking slots, listing departments or doctors, looking up a "
+        "doctor, verifying identity, sending a confirmation, transferring to a "
+        "human). If one is needed, "
         "fill its arguments with exactly the values the patient gave or that "
         "were already established earlier in the call. Never invent names, "
         "dates, times, phone numbers, or IDs. If the patient is just chatting, "
@@ -144,6 +145,8 @@ def parse_action(text: str, known_tools: set[str]) -> ExtractedAction | None:
         logger.warning("Action router proposed %r, which is not a known tool", name)
         return None
     arguments = payload.get("arguments")
+    if arguments is None:
+        arguments = {}  # a tool with no parameters has nothing to say
     if not isinstance(arguments, dict):
         logger.warning("Action router returned non-dict arguments for %r", name)
         return None
@@ -253,6 +256,65 @@ def _confirm_reschedule(result: dict[str, Any]) -> dict[str, str] | None:
     }
 
 
+def _confirm_departments(result: dict[str, Any]) -> dict[str, str] | None:
+    items = result.get("departments") or []
+    if not items:
+        return None
+    return {
+        "en": "We have these departments: "
+        + ", ".join(d.get("name", "") for d in items)
+        + ". Which one do you need?",
+        "bn": "আমাদের বিভাগগুলো হলো: "
+        + ", ".join(d.get("name_bn") or d.get("name", "") for d in items)
+        + "। আপনি কোনটি চান?",
+    }
+
+
+def _confirm_doctors(result: dict[str, Any]) -> dict[str, str] | None:
+    items = result.get("doctors") or []
+    if not items or not isinstance(items[0], dict):
+        return None
+    return {
+        "en": "Our doctors are: "
+        + ", ".join(
+            f"{d.get('name', '')} ({d.get('department', '')})" for d in items
+        )
+        + ". Would you like to hear a doctor's schedule or book?",
+        "bn": "আমাদের ডাক্তার: "
+        + ", ".join(
+            f"{d.get('name_bn') or d.get('name', '')} "
+            f"({d.get('department_bn') or d.get('department', '')})"
+            for d in items
+        )
+        + "। কারও সময়সূচি জানতে বা অ্যাপয়েন্টমেন্ট নিতে চান?",
+    }
+
+
+def _confirm_doctor_info(result: dict[str, Any]) -> dict[str, str] | None:
+    name = result.get("name")
+    if not name:
+        return None
+    schedule = ", ".join(result.get("schedule") or []) or "by appointment"
+    nxt = result.get("next_available") or {}
+    soonest_en = (
+        f" The next free time is {nxt['date']} at {nxt['time']}."
+        if nxt.get("date") and nxt.get("time")
+        else " There is no free time in the next 30 days."
+    )
+    soonest_bn = (
+        f" পরবর্তী খালি সময় {nxt['date']} তারিখে {nxt['time']}-এ।"
+        if nxt.get("date") and nxt.get("time")
+        else " আগামী ৩০ দিনে কোনো খালি সময় নেই।"
+    )
+    fee = result.get("visit_fee")
+    return {
+        "en": f"{name} sees patients in {result.get('department', '')}: {schedule}."
+        f"{soonest_en}" + (f" The visit fee is {fee} taka." if fee else ""),
+        "bn": f"{result.get('name_bn') or name}, {result.get('department_bn') or ''}-এ বসেন: "
+        f"{schedule}।{soonest_bn}" + (f" ভিজিট ফি {fee} টাকা।" if fee else ""),
+    }
+
+
 # Facts the patient must never hear wrong (dates, times, IDs) are rendered here
 # from the tool result, in code, and spoken verbatim. The model writes warmth,
 # not arithmetic: gemma2 misread a tool date as a different month, and a
@@ -262,6 +324,9 @@ _CONFIRMATIONS: dict[str, Any] = {
     "check_appointment_slots": _confirm_slots,
     "cancel_appointment": _confirm_cancel,
     "reschedule_appointment": _confirm_reschedule,
+    "list_departments": _confirm_departments,
+    "list_doctors": _confirm_doctors,
+    "get_doctor_info": _confirm_doctor_info,
 }
 
 

@@ -97,14 +97,17 @@ def get_tool_definitions() -> list[ToolDefinition]:
         ),
         ToolDefinition(
             name="list_departments",
-            description="List the clinic's departments and the doctors in each.",
+            description=(
+                "Use when the patient asks which departments, specialties or services "
+                "the clinic has. Takes no arguments."
+            ),
             parameters={"type": "object", "properties": {}},
         ),
         ToolDefinition(
             name="list_doctors",
             description=(
-                "List doctors with their department, weekly schedule and next "
-                "available slot, optionally for one department."
+                "Use when the patient asks which doctors there are, in general or in one "
+                "department (with their schedule and next free slot)."
             ),
             parameters={
                 "type": "object",
