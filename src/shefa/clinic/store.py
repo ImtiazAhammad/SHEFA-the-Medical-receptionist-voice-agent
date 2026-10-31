@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE UNIQUE INDEX IF NOT EXISTS one_booking_per_slot
     ON appointments (doctor_id, date, start_time) WHERE status = 'booked';
 CREATE INDEX IF NOT EXISTS appointments_by_date ON appointments (date, status);
+CREATE TABLE IF NOT EXISTS reminders (
+    appointment_id INTEGER NOT NULL REFERENCES appointments(id),
+    kind           TEXT NOT NULL CHECK (kind IN ('reminder', 'followup')),
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    last_attempt   REAL,
+    last_outcome   TEXT NOT NULL DEFAULT '',
+    done           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (appointment_id, kind)
+);
 """
 
 
@@ -529,3 +538,107 @@ class ClinicStore:
             }
             for r in rows
         ]
+
+    # -- outbound reminders and follow-ups ---------------------------------
+
+    def mark_status(self, appointment_id: str | int, status: str) -> dict[str, Any]:
+        """Staff-side status change (e.g. a visit became 'completed' or 'no_show')."""
+        if status not in {"booked", "cancelled", "completed", "no_show"}:
+            raise ClinicError(f"Unknown appointment status: {status!r}")
+        row_id = parse_appointment_id(appointment_id)
+        self._appointment_row(row_id)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?",
+                (status, _time.time(), row_id),
+            )
+        return self.get_appointment(row_id)
+
+    def due_reminders(
+        self,
+        now: datetime,
+        *,
+        kind: str = "reminder",
+        lead_hours: int = 24,
+        followup_after_hours: int = 24,
+        followup_window_hours: int = 72,
+        max_attempts: int = 2,
+        retry_after_minutes: int = 90,
+    ) -> list[dict[str, Any]]:
+        """Appointments that should get a call right now.
+
+        A 'reminder' is a booked appointment starting within `lead_hours`; a 'followup' is a
+        completed visit that ended between `followup_after_hours` and `followup_window_hours`
+        ago. An appointment is never due again once answered, after `max_attempts`, or before
+        `retry_after_minutes` have passed since the last try.
+        """
+        now = now.astimezone(CLINIC_TZ)
+        status = "booked" if kind == "reminder" else "completed"
+        rows = self.connection.execute(
+            "SELECT a.id, a.date, a.start_time, a.end_time, p.phone, p.name AS patient_name,"
+            " p.id AS patient_id, d.name_en AS doctor_en, d.name_bn AS doctor_bn,"
+            " COALESCE(r.attempts, 0) AS attempts, r.last_attempt"
+            " FROM appointments a JOIN patients p ON p.id = a.patient_id"
+            " JOIN doctors d ON d.id = a.doctor_id"
+            " LEFT JOIN reminders r ON r.appointment_id = a.id AND r.kind = ?"
+            " WHERE a.status = ? AND COALESCE(r.done, 0) = 0 AND COALESCE(r.attempts, 0) < ?",
+            (kind, status, max_attempts),
+        ).fetchall()
+        due: list[dict[str, Any]] = []
+        for row in rows:
+            last = row["last_attempt"]
+            if last is not None and now.timestamp() - last < retry_after_minutes * 60:
+                continue
+            start = datetime.fromisoformat(f"{row['date']}T{row['start_time']}").replace(
+                tzinfo=CLINIC_TZ
+            )
+            end = datetime.fromisoformat(f"{row['date']}T{row['end_time']}").replace(
+                tzinfo=CLINIC_TZ
+            )
+            if kind == "reminder":
+                if not now < start <= now + timedelta(hours=lead_hours):
+                    continue
+            else:
+                age = now - end
+                if not timedelta(hours=followup_after_hours) <= age <= timedelta(
+                    hours=followup_window_hours
+                ):
+                    continue
+            due.append(
+                {
+                    **{k: v for k, v in dict(row).items() if k != "last_attempt"},
+                    "appointment_id": format_appointment_id(row["id"]),
+                    "kind": kind,
+                }
+            )
+        return sorted(due, key=lambda item: (item["date"], item["start_time"]))
+
+    def record_reminder_attempt(
+        self,
+        appointment_id: str | int,
+        kind: str,
+        outcome: str,
+        now: datetime,
+        *,
+        done: bool = False,
+    ) -> None:
+        row_id = parse_appointment_id(appointment_id)
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO reminders (appointment_id, kind, attempts, last_attempt, last_outcome,"
+                " done) VALUES (?, ?, 1, ?, ?, ?)"
+                " ON CONFLICT(appointment_id, kind) DO UPDATE SET attempts = attempts + 1,"
+                " last_attempt = excluded.last_attempt, last_outcome = excluded.last_outcome,"
+                " done = MAX(done, excluded.done)",
+                (row_id, kind, now.timestamp(), outcome, int(done)),
+            )
+
+    def mark_reminder_done(self, appointment_id: str | int, kind: str) -> None:
+        """The patient picked up and heard it: stop calling."""
+        row_id = parse_appointment_id(appointment_id)
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO reminders (appointment_id, kind, attempts, done) VALUES (?, ?, 0, 1)"
+                " ON CONFLICT(appointment_id, kind) DO UPDATE SET done = 1",
+                (row_id, kind),
+            )

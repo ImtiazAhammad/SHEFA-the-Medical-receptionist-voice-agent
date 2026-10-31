@@ -483,6 +483,17 @@ class IntegrationsConfig(StrictModel):
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
+class RemindersConfig(StrictModel):
+    """Outbound appointment reminders and post-visit follow-up calls."""
+
+    enabled: bool = False
+    interval_minutes: int = Field(default=10, ge=1)
+    language: str = "bn"
+    kinds: list[str] = Field(default_factory=lambda: ["reminder", "followup"])
+    quiet_start: str = "20:00"
+    quiet_end: str = "08:00"
+
+
 class AppConfig(StrictModel):
     """Root configuration loaded from YAML."""
 
@@ -498,6 +509,7 @@ class AppConfig(StrictModel):
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
+    reminders: RemindersConfig = Field(default_factory=RemindersConfig)
 
 
 def _strip_wrapping_quotes(value: str) -> str:

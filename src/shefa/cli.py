@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     render.add_argument("--out", default="deploy/asterisk/rendered", help="output directory")
 
+    reminders = sub.add_parser("reminders", help="outbound reminder and follow-up calls")
+    reminders_sub = reminders.add_subparsers(dest="reminders_command")
+    reminders_sub.add_parser("run-once", help="place every call that is due right now, then exit")
+
     token = sub.add_parser(
         "token", help="mint an API bearer token for a configured role"
     )
@@ -224,6 +228,40 @@ def run_clinic(args: argparse.Namespace) -> int:
     return 2
 
 
+def run_reminders(args: argparse.Namespace) -> int:
+    import asyncio
+    from datetime import datetime
+
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.store import CLINIC_TZ
+    from shefa.config.settings import settings
+    from shefa.reminders import run_reminder_cycle
+    from shefa.telephony.outbound import outbound_configured, place_call
+
+    if args.reminders_command != "run-once":
+        print("usage: shefa reminders run-once", file=sys.stderr)
+        return 2
+    if not outbound_configured():
+        print("Telephony is not configured for outbound calls (see docs/asterisk-setup.md)",
+              file=sys.stderr)
+        return 1
+    cfg = settings.reminders
+    placed = asyncio.run(
+        run_reminder_cycle(
+            default_clinic_store(),
+            place_call,
+            datetime.now(CLINIC_TZ),
+            language=cfg.language,
+            kinds=tuple(cfg.kinds),
+            quiet_start=cfg.quiet_start,
+            quiet_end=cfg.quiet_end,
+        )
+    )
+    ok = sum(1 for call in placed if call["ok"])
+    print(f"{ok} of {len(placed)} calls placed")
+    return 0 if ok == len(placed) else 1
+
+
 def run_asterisk(args: argparse.Namespace) -> int:
     import os
     from pathlib import Path
@@ -289,6 +327,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "clinic":
         return run_clinic(args)
+
+    if args.command == "reminders":
+        return run_reminders(args)
 
     if args.command == "asterisk":
         return run_asterisk(args)

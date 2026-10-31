@@ -348,9 +348,19 @@ async def _lifespan(_app: FastAPI):
         from shefa.telephony.asterisk import start_audiosocket_server
 
         server = await start_audiosocket_server()
+    reminder_task = None
+    if settings.reminders.enabled:
+        import asyncio
+
+        from shefa.clinic import default_clinic_store
+        from shefa.reminders import run_forever
+
+        reminder_task = asyncio.create_task(run_forever(default_clinic_store(), place_call))
     try:
         yield
     finally:
+        if reminder_task is not None:
+            reminder_task.cancel()
         if server is not None:
             server.close()
             await server.wait_closed()

@@ -36,6 +36,7 @@ from shefa.pipeline.language_detector import evaluate_transcript
 from shefa.pipeline.vad import EnergyVAD
 from shefa.session.manager import CallSession, SessionManager
 from shefa.session.messages import build_messages
+from shefa.telephony.call_context import pop_context
 from shefa.tools.definitions import get_tool_definitions
 from shefa.tools.executor import execute_tool
 
@@ -123,6 +124,15 @@ class VoicePipeline:
                 session.language.value,
                 greetings.get("en", ""),
             )
+            outbound = pop_context(call_sid)
+            if outbound is not None:
+                # An outbound call opens with what it is about, and already knows who it is.
+                greeting = outbound.greeting
+                session.language = Language(outbound.language)
+                session.patient_id = outbound.patient_id or None
+                session.patient_name = outbound.patient_name or None
+                if outbound.on_answered is not None:
+                    outbound.on_answered()
             tts = await registry.get_tts()
             await speak_to(tts, greeting, session.language.value, put_playback)
             session.add_turn("assistant", greeting)
