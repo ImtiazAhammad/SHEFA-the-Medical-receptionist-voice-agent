@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
@@ -15,6 +16,7 @@ from shefa.auth import AuthStore, Principal, TokenError
 from shefa.config.settings import TelephonyProvider, settings
 from shefa.session.manager import SessionManager
 from shefa.session.messages import build_messages
+from shefa.telephony.outbound import outbound_configured, place_call
 from shefa.telephony.twilio import app as telephony_app
 from shefa.tools.definitions import get_tool_definitions
 from shefa.utils.logging import setup_logging
@@ -321,6 +323,8 @@ def _telephony_router_allowed() -> bool:
     explicit red line: the webhooks take unauthenticated POSTs, so a public
     mount is an unauthenticated way to inject calls and read transcripts.
     """
+    if settings.telephony.provider == TelephonyProvider.ASTERISK:
+        return False  # Asterisk connects over AudioSocket; there are no webhooks to mount
     if settings.telephony.provider != TelephonyProvider.TWILIO:
         _provider = settings.telephony.provider
         logger.warning(
@@ -336,6 +340,22 @@ def _telephony_router_allowed() -> bool:
 
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Listen for Asterisk AudioSocket calls for as long as the server runs."""
+    server = None
+    if settings.telephony.provider == TelephonyProvider.ASTERISK:
+        from shefa.telephony.asterisk import start_audiosocket_server
+
+        server = await start_audiosocket_server()
+    try:
+        yield
+    finally:
+        if server is not None:
+            server.close()
+            await server.wait_closed()
+
+
 def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     """Create and configure the main FastAPI application.
 
@@ -344,6 +364,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     """
     store = auth_store if auth_store is not None else build_auth_store()
     app = FastAPI(
+        lifespan=_lifespan,
         title="SHEFA Receptionist",
         version="0.1.0",
         description="Privacy-first open-source bilingual voice AI medical receptionist",
@@ -463,11 +484,9 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     async def initiate_outbound(to_number: str = "") -> dict:
         if not to_number:
             raise_http_error("required_param", "to_number is required")
-        sid = settings.telephony.twilio.account_sid
-        if not sid:
-            raise_http_error("not_configured", "Twilio not configured")
-        from shefa.telephony.twilio import initiate_outbound_call as _call
-        return await _call(to_number)
+        if not outbound_configured():
+            raise_http_error("not_configured", "Telephony provider not configured")
+        return await place_call(to_number)
 
     @app.post("/api/v1/calls/call-me")
     async def call_me() -> dict:
@@ -484,14 +503,12 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "verified_number_missing",
                 "No verified number configured. Set VERIFIED_NUMBER.",
             )
-        sid = settings.telephony.twilio.account_sid
-        if not sid:
+        if not outbound_configured():
             raise_http_error(
-                "not_configured", "Twilio not configured. Set TWILIO_ACCOUNT_SID in .env"
+                "not_configured",
+                "Telephony provider not configured (Twilio SID or Asterisk ARI password)",
             )
-        from shefa.telephony.twilio import initiate_outbound_call as _call
-
-        return await _call(verified)
+        return await place_call(verified)
 
     @app.post("/api/v1/chat")
     async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:

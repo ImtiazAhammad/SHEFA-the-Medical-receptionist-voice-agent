@@ -188,3 +188,22 @@ async def test_server_starts_on_the_configured_port(monkeypatch):
     await server.wait_closed()
 
 
+
+
+async def test_app_lifespan_runs_the_audiosocket_server_for_asterisk(monkeypatch):
+    from shefa.config.settings import TelephonyProvider
+    from shefa.main import _lifespan
+
+    monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.ASTERISK)
+    monkeypatch.setattr(settings.telephony.asterisk, "audiosocket_port", 0)
+    async with _lifespan(None):
+        pass  # starts and stops cleanly
+
+
+async def test_app_lifespan_is_inert_for_twilio(monkeypatch):
+    from shefa.config.settings import TelephonyProvider
+    from shefa.main import _lifespan
+
+    monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.TWILIO)
+    async with _lifespan(None):
+        pass

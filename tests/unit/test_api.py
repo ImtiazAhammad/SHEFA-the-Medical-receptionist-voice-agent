@@ -51,7 +51,7 @@ def test_call_me_not_configured(client, auth, monkeypatch):
 
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "not_configured"
-    assert "Twilio not configured" in resp.json()["error"]["message"]
+    assert "not configured" in resp.json()["error"]["message"]
 
 
 def test_call_me_uses_verified_number(client, auth, monkeypatch):
