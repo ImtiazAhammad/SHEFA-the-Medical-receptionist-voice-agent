@@ -1,4 +1,4 @@
-"""Tests for `sefa bench` latency measurement and ABORT thresholds (T6).
+"""Tests for `shefa bench` latency measurement and ABORT thresholds (T6).
 
 A benchmark that reports a single mean cannot tell a healthy pipeline from one
 that is fast 90% of the time and unusable 10% of the time, and a patient on a
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from sefa.bench import (
+from shefa.bench import (
     BenchResult,
     Threshold,
     evaluate,
@@ -162,7 +162,7 @@ class TestVram:
     """No CUDA device, or a driver that will not answer, is neither pass nor fail."""
 
     def test_returns_none_when_nvidia_smi_is_absent(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         def missing(*args, **kwargs):
             raise FileNotFoundError("nvidia-smi")
@@ -172,21 +172,21 @@ class TestVram:
         assert bench.read_vram_fraction() is None
 
     def test_returns_none_on_unparseable_output(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench, "_run", _sequence("N/A\n"))
 
         assert bench.read_vram_fraction() is None
 
     def test_returns_none_when_total_is_zero(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench, "_run", _sequence("0\n", "0\n"))
 
         assert bench.read_vram_fraction() is None
 
     def test_returns_none_on_empty_output(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench, "_run", _sequence("\n", "\n", "\n"))
 
@@ -195,7 +195,7 @@ class TestVram:
     def test_survives_a_non_zero_exit(self, monkeypatch):
         import subprocess
 
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         def failing(*args, **kwargs):
             raise subprocess.CalledProcessError(1, "nvidia-smi")
@@ -205,7 +205,7 @@ class TestVram:
         assert bench.read_vram_fraction() is None
 
     def test_reads_the_first_gpu_when_several_are_present(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(
             bench, "_run", _sequence("8192\n16380\n", "0\n", "100\n")
@@ -219,7 +219,7 @@ class TestMeasure:
 
     @pytest.mark.asyncio
     async def test_separates_the_first_call_from_the_rest(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         class TimedTTS:
             def __init__(self):
@@ -239,7 +239,7 @@ class TestMeasure:
 
     @pytest.mark.asyncio
     async def test_a_single_call_is_reported_as_both_cold_and_warm(self):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         class TimedTTS:
             async def synthesize(self, text, language="en"):
@@ -252,7 +252,7 @@ class TestMeasure:
 
     @pytest.mark.asyncio
     async def test_no_texts_yields_no_samples(self):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         result = await bench.measure(object(), [], vram=False)
 
@@ -270,7 +270,7 @@ class TestVramAttribution:
     """
 
     def test_counts_only_this_process(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         # Another process holds 13722 MiB of a 16380 MiB card.
@@ -279,7 +279,7 @@ class TestVramAttribution:
         assert bench.read_vram_fraction() == pytest.approx(256 / 16380)
 
     def test_reports_zero_when_this_process_uses_no_gpu(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         monkeypatch.setattr(bench, "_run", _sequence("16380\n", "3526, 13722\n"))
@@ -287,7 +287,7 @@ class TestVramAttribution:
         assert bench.read_vram_fraction() == 0.0
 
     def test_falls_back_to_the_machine_total_without_pid_attribution(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         monkeypatch.setattr(bench, "_run", _sequence("16380\n", "no such field\n", "14013\n"))
@@ -296,7 +296,7 @@ class TestVramAttribution:
 
     def test_a_cpu_only_run_does_not_abort(self, monkeypatch):
         """Piper runs on CPU by default; a CPU-only process uses no VRAM."""
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         monkeypatch.setattr(bench, "_run", _sequence("16380\n", "3526, 13722\n"))
@@ -328,7 +328,7 @@ class TestNvidiaSmiInvocation:
     """
 
     def test_run_passes_a_timeout_and_raises_on_failure(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         captured = {}
 
@@ -349,7 +349,7 @@ class TestNvidiaSmiInvocation:
 
     def test_the_queries_ask_nvidia_smi_for_csv_without_units(self, monkeypatch):
         """A wrong flag makes nvidia-smi exit non-zero, which reads as 'no GPU'."""
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         seen: list[list[str]] = []
 
@@ -374,7 +374,7 @@ class TestNvidiaSmiInvocation:
             assert "--format=csv,nounits,noheader" in args
 
     def test_the_fallback_query_uses_the_same_format(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         seen: list[list[str]] = []
 
@@ -393,7 +393,7 @@ class TestNvidiaSmiInvocation:
     def test_a_non_zero_exit_propagates(self, monkeypatch):
         import subprocess
 
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         def run(args, **kwargs):
             raise subprocess.CalledProcessError(1, args)
@@ -405,7 +405,7 @@ class TestNvidiaSmiInvocation:
 
     def test_skips_a_malformed_compute_app_line(self, monkeypatch):
         """A driver that emits a header or a warning must not crash the parse."""
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         monkeypatch.setattr(
@@ -418,7 +418,7 @@ class TestNvidiaSmiInvocation:
 
     @pytest.mark.parametrize("empty", ["", "\n", "   \n"])
     def test_empty_driver_output_is_not_a_crash(self, monkeypatch, empty):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench, "_run", _sequence(empty, empty, empty))
 
@@ -434,7 +434,7 @@ class TestVramFallbackLadder:
     """
 
     def test_unattributable_process_and_empty_machine_reading_is_unmeasured(self, monkeypatch):
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         # Total is fine, per-process is unattributable, machine-used is empty.
         monkeypatch.setattr(bench, "_run", _sequence("16380\n", "no field\n", "\n"))
@@ -448,7 +448,7 @@ class TestVramFallbackLadder:
         parses as a process and every box reports its VRAM as that header's
         `used_memory`, which is not a number at all.
         """
-        import sefa.bench as bench
+        import shefa.bench as bench
 
         monkeypatch.setattr(bench.os, "getpid", lambda: 4242)
         monkeypatch.setattr(

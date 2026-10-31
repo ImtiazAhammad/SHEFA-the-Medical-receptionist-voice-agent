@@ -27,8 +27,8 @@ import httpx
 import openai
 import pytest
 
-from sefa.models.base import Language, ToolDefinition
-from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
+from shefa.models.base import Language, ToolDefinition
+from shefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 
 _ENDPOINT = "http://localhost:8001/v1/chat/completions"
 
@@ -115,7 +115,7 @@ async def test_a_rejected_tool_request_is_retried_once_without_tools(
     assert completions.calls[1]["messages"] == _MESSAGES
 
     assert any(
-        record.name == "sefa.models.llm.openai_compatible_llm"
+        record.name == "shefa.models.llm.openai_compatible_llm"
         and record.levelno == logging.WARNING
         for record in caplog.records
     )

@@ -18,8 +18,8 @@ from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
-from sefa import main as main_module
-from sefa.auth import AuthStore, hash_token
+from shefa import main as main_module
+from shefa.auth import AuthStore, hash_token
 
 ADMIN_TOKEN = "admin-token-abcdefghijklmnop"
 CLINICIAN_TOKEN = "clinician-token-abcdefghijklmno"

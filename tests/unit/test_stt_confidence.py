@@ -19,10 +19,10 @@ from dataclasses import dataclass
 import pytest
 from pydantic import ValidationError
 
-from sefa.config.settings import EscalationConfig, settings
-from sefa.models.base import Language
-from sefa.models.stt.whisper_local import WhisperLocalSTT
-from sefa.pipeline.language_detector import (
+from shefa.config.settings import EscalationConfig, settings
+from shefa.models.base import Language
+from shefa.models.stt.whisper_local import WhisperLocalSTT
+from shefa.pipeline.language_detector import (
     evaluate_transcript,
     is_emergency,
     needs_escalation,

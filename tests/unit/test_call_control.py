@@ -23,8 +23,8 @@ from typing import Any
 import pytest
 from fastapi import WebSocketDisconnect
 
-from sefa.config.settings import settings
-from sefa.telephony.control import CallControl, CallLeg
+from shefa.config.settings import settings
+from shefa.telephony.control import CallControl, CallLeg
 
 
 class RecordingLeg(CallLeg):
@@ -178,9 +178,9 @@ def _staffed_on_call(monkeypatch):
 
 async def test_transfer_to_human_tool_reaches_the_provider():
     """The regression: the tool reported a transfer that never happened."""
-    from sefa.session.manager import CallSession
-    from sefa.telephony.control import control as global_control
-    from sefa.tools.executor import execute_tool
+    from shefa.session.manager import CallSession
+    from shefa.telephony.control import control as global_control
+    from shefa.tools.executor import execute_tool
 
     leg = RecordingLeg("CA9")
     global_control.register(leg)
@@ -198,8 +198,8 @@ async def test_transfer_to_human_tool_reaches_the_provider():
 
 
 async def test_transfer_to_human_does_not_claim_success_without_a_leg():
-    from sefa.session.manager import CallSession
-    from sefa.tools.executor import execute_tool
+    from shefa.session.manager import CallSession
+    from shefa.tools.executor import execute_tool
 
     session = CallSession(call_sid="CA-noleg")
 
@@ -213,9 +213,9 @@ async def test_transfer_to_human_without_a_staffed_target_is_not_claimed(
     monkeypatch,
 ):
     """Blocker 5: an empty on-call list must not read as a successful handoff."""
-    from sefa.session.manager import CallSession
-    from sefa.telephony.control import control as global_control
-    from sefa.tools.executor import execute_tool
+    from shefa.session.manager import CallSession
+    from shefa.telephony.control import control as global_control
+    from shefa.tools.executor import execute_tool
 
     monkeypatch.setattr(settings.escalation, "on_call_numbers", [])
     leg = RecordingLeg("CA10")
@@ -234,7 +234,7 @@ async def test_transfer_to_human_without_a_staffed_target_is_not_claimed(
 
 async def test_emergency_transfer_plays_hold_then_releases_the_leg(monkeypatch):
     """Emergency end-to-end: hold audio, then the leg goes back to the pool."""
-    from sefa.telephony.control import control as global_control
+    from shefa.telephony.control import control as global_control
 
     leg = RecordingLeg("CA11")
     global_control.register(leg)
@@ -267,7 +267,7 @@ async def test_emergency_transfer_failure_is_reported_not_swallowed():
         async def dial(self, number: str) -> dict[str, Any]:
             return {"status": "dialing"}
 
-    from sefa.telephony.control import control as global_control
+    from shefa.telephony.control import control as global_control
 
     global_control.register(FailingLeg("CA12"))
     try:
@@ -280,9 +280,9 @@ async def test_emergency_transfer_failure_is_reported_not_swallowed():
 
 
 async def test_transfer_to_human_tool_reports_a_provider_failure():
-    from sefa.session.manager import CallSession
-    from sefa.telephony.control import control as global_control
-    from sefa.tools.executor import execute_tool
+    from shefa.session.manager import CallSession
+    from shefa.telephony.control import control as global_control
+    from shefa.tools.executor import execute_tool
 
     class FailingLeg(RecordingLeg):
         async def transfer(self, to: str) -> dict[str, Any]:
@@ -301,9 +301,9 @@ async def test_transfer_to_human_tool_reports_a_provider_failure():
 
 
 async def test_on_call_target_comes_from_config(monkeypatch):
-    from sefa.session.manager import CallSession
-    from sefa.telephony.control import control as global_control
-    from sefa.tools.executor import execute_tool
+    from shefa.session.manager import CallSession
+    from shefa.telephony.control import control as global_control
+    from shefa.tools.executor import execute_tool
 
     monkeypatch.setattr(
         settings.escalation, "on_call_numbers", ["+8801555000111", "+8801555000222"]
@@ -326,7 +326,7 @@ def test_on_call_list_is_config_driven():
 
 async def test_media_stream_cancels_the_pipeline_task_on_disconnect(monkeypatch):
     """Task-count baseline: a finished call leaves no live pipeline task."""
-    from sefa.telephony import twilio
+    from shefa.telephony import twilio
 
     started = asyncio.Event()
     finished = asyncio.Event()
@@ -348,7 +348,7 @@ async def test_media_stream_cancels_the_pipeline_task_on_disconnect(monkeypatch)
             self.cleaned = True
 
     pipeline = FakePipeline()
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", lambda: pipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", lambda: pipeline)
 
     baseline = len(asyncio.all_tasks())
     task = asyncio.create_task(
@@ -399,8 +399,8 @@ class _FakeWebSocket:
 
 async def test_media_stream_releases_the_leg_on_disconnect(monkeypatch):
     """A disconnected call must not stay in the active-leg pool."""
-    from sefa.telephony import twilio
-    from sefa.telephony.control import control as global_control
+    from shefa.telephony import twilio
+    from shefa.telephony.control import control as global_control
 
     class FakePipeline:
         async def process_audio_stream(self, call_sid, audio_queue, playback_queue):
@@ -409,7 +409,7 @@ async def test_media_stream_releases_the_leg_on_disconnect(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
     global_control.register(RecordingLeg("CA-ws"))
 
     await twilio.media_stream_ws(_FakeWebSocket(), "CA-ws")

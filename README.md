@@ -1,6 +1,6 @@
-# Sefa - Medical Voice Agent
+# SHEFA - Medical Voice Agent
 
-HIPAA-compliant, bilingual (English / Bangla) voice AI receptionist for healthcare. Automates inbound patient calls, outbound reminders, appointment scheduling, and clinical triage routing with full code-switching support.
+Privacy-first, fully open-source, bilingual (English / Bangla) voice AI receptionist for healthcare. Automates inbound patient calls, outbound reminders, appointment scheduling, and clinical triage routing with full code-switching support.
 
 ## Architecture
 
@@ -176,7 +176,7 @@ flowchart LR
 - **Hybrid Models**: Swap STT/TTS/LLM providers via YAML config — no code changes
 - **9 Tool Functions**: Patient verification, appointment CRUD, doctor lookup, history, confirmations, human escalation
 - **Real-time Pipeline**: Streaming STT with VAD, silence-based turn detection, barge-in support
-- **HIPAA Compliance**: PHI masking in logs, audit trails, AES-256 encryption support, consent-based recording
+- **Patient privacy**: PHI masking in logs, append-only audit trail, consent-based recording, all data and models stay on the clinic's own machine
 - **Emergency Detection**: Bilingual keyword detection with automatic human escalation
 
 ## Prerequisites
@@ -211,7 +211,7 @@ uv run ruff check src/ tests/
 uv run mypy src/
 
 # Start the server
-uv run uvicorn sefa.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn shefa.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Configuration
@@ -265,7 +265,7 @@ models:
 ## Project Structure
 
 ```
-src/sefa/
+src/shefa/
 ├── main.py                    # FastAPI application entry point
 ├── config/
 │   └── settings.py            # Pydantic settings from YAML + env vars
@@ -345,7 +345,7 @@ src/sefa/
 
 ```bash
 # Requires OPENAI_API_KEY in .env
-uv run uvicorn sefa.main:app --port 8000 --reload
+uv run uvicorn shefa.main:app --port 8000 --reload
 ```
 
 ### Option 2: Fully local (Qwen3 + Faster-Whisper)
@@ -362,7 +362,7 @@ vllm serve Qwen/Qwen3-8B --port 8080
 # pipeline.llm.provider: "qwen_local"
 # pipeline.tts.provider: "piper"
 
-uv run uvicorn sefa.main:app --port 8000 --reload
+uv run uvicorn shefa.main:app --port 8000 --reload
 ```
 
 ## Testing
@@ -372,7 +372,7 @@ uv run uvicorn sefa.main:app --port 8000 --reload
 uv run pytest tests/ -v
 
 # With coverage
-uv run pytest tests/ --cov=sefa --cov-report=html
+uv run pytest tests/ --cov=shefa --cov-report=html
 
 # Run specific test module
 uv run pytest tests/unit/test_language_detector.py -v
@@ -390,7 +390,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev
 COPY src/ src/
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "sefa.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### Kubernetes

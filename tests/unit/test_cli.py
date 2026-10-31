@@ -1,7 +1,7 @@
-"""Tests for the `sefa` command-line entry points.
+"""Tests for the `shefa` command-line entry points.
 
-`pyproject.toml` declared `sefa = "sefa.main:app"`, which resolves to a FastAPI
-application object: running `sefa bench` would have handed a string to a web
+`pyproject.toml` declared `shefa = "shefa.main:app"`, which resolves to a FastAPI
+application object: running `shefa bench` would have handed a string to a web
 server. The console script has to dispatch on a subcommand.
 
 T5 and T6 both verify through this CLI, so its exit codes are part of the
@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sefa import cli
+from shefa import cli
 
 
 class TestArgumentParsing:
@@ -39,7 +39,7 @@ class TestBenchCommand:
         monkeypatch.setattr(
             cli,
             "run_bench",
-            _bench_returning("sefa bench  warm p50 0.100s  p95 0.200s\nPASS", passed=True),
+            _bench_returning("shefa bench  warm p50 0.100s  p95 0.200s\nPASS", passed=True),
         )
 
         code = cli.main(["bench", "--iterations", "2"])
@@ -52,7 +52,7 @@ class TestBenchCommand:
             cli,
             "run_bench",
             _bench_returning(
-                "sefa bench\nABORT\n  - p50 1.500s exceeds 1.20s",
+                "shefa bench\nABORT\n  - p50 1.500s exceeds 1.20s",
                 passed=False,
             ),
         )
@@ -92,7 +92,7 @@ class TestBenchCommand:
 
         def run_bench(**kwargs):
             captured.append(kwargs["vram"])
-            return "sefa bench\nPASS", True
+            return "shefa bench\nPASS", True
 
         monkeypatch.setattr(cli, "run_bench", run_bench)
 
@@ -113,7 +113,7 @@ def _capturing_report(iterations: list[int], vram: list[bool] | None = None):
         iterations.append(kwargs["iterations"])
         if vram is not None:
             vram.append(kwargs["vram"])
-        return "sefa bench\nPASS", True
+        return "shefa bench\nPASS", True
 
     return run_bench
 
@@ -192,20 +192,20 @@ class TestRunBench:
 
     def test_awaits_the_registry_adapter_and_renders_a_pass(self, monkeypatch):
         tts = FakeTTS()
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(tts))
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: None)
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(tts))
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: None)
 
         text, passed = cli.run_bench(iterations=3, vram=False)
 
         assert passed is True
         assert "PASS" in text
-        assert "sefa bench" in text
+        assert "shefa bench" in text
         assert len(tts.texts) == 4
 
     def test_times_one_extra_utterance_to_separate_the_cold_start(self, monkeypatch):
         tts = FakeTTS()
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(tts))
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: None)
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(tts))
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: None)
 
         cli.run_bench(iterations=3, vram=False)
 
@@ -214,8 +214,8 @@ class TestRunBench:
 
     def test_cycles_through_the_bench_corpus(self, monkeypatch):
         tts = FakeTTS()
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(tts))
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: None)
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(tts))
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: None)
 
         iterations = len(cli.BENCH_TEXTS) + 2
         cli.run_bench(iterations=iterations, vram=False)
@@ -229,15 +229,15 @@ class TestRunBench:
     def test_reports_a_failure_when_a_threshold_is_missed(self, monkeypatch):
         # 0.5s per call is past the 1.2s p50 budget once averaged over the corpus.
         tts = FakeTTS(per_call_seconds=0.05)
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(tts))
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: None)
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(tts))
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: None)
 
         text, passed = cli.run_bench(iterations=2, vram=False)
 
         assert passed is True  # 50ms is genuinely inside budget
 
         slow = FakeTTS(per_call_seconds=1.5)
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(slow))
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(slow))
         text, passed = cli.run_bench(iterations=2, vram=False)
 
         assert passed is False
@@ -251,14 +251,14 @@ class TestDoctorReport:
     """`doctor` is the gate on the T5 blocker, so it has to be trustworthy."""
 
     def _patch_voice_path(self, monkeypatch, voice: str, *, max_transfer_attempts: int = 3) -> None:
-        """Patch the settings object behind the `sefa.config.settings` module.
+        """Patch the settings object behind the `shefa.config.settings` module.
 
-        `sefa/config/__init__.py` rebinds the name `settings` on the package to
-        the AppConfig instance, so a dotted `sefa.config.settings.settings` path
+        `shefa/config/__init__.py` rebinds the name `settings` on the package to
+        the AppConfig instance, so a dotted `shefa.config.settings.settings` path
         resolves to that instance. The module is still the import target used
         inside `doctor_report`, so that is what has to be patched.
         """
-        module = importlib.import_module("sefa.config.settings")
+        module = importlib.import_module("shefa.config.settings")
         monkeypatch.setattr(
             module,
             "settings",
@@ -275,7 +275,7 @@ class TestDoctorReport:
         (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
         self._patch_voice_path(monkeypatch, str(voice))
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
         monkeypatch.chdir(tmp_path)
 
@@ -288,7 +288,7 @@ class TestDoctorReport:
     def test_flags_a_missing_voice_file(self, monkeypatch, tmp_path):
         self._patch_voice_path(monkeypatch, str(tmp_path / "gone.onnx"))
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
 
         text, ok = cli.doctor_report()
@@ -301,7 +301,7 @@ class TestDoctorReport:
         voice.write_bytes(b"stub")
         self._patch_voice_path(monkeypatch, str(voice))
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
         monkeypatch.chdir(tmp_path)  # no Bangla model here
 
@@ -317,7 +317,7 @@ class TestDoctorReport:
         (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
         self._patch_voice_path(monkeypatch, str(voice))
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
         monkeypatch.chdir(tmp_path)
 
@@ -338,7 +338,7 @@ class TestDoctorReport:
                 raise RuntimeError("corrupt onnx graph")
 
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": BrokenVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": BrokenVoice})
         )
 
         text, ok = cli.doctor_report()
@@ -354,7 +354,7 @@ class TestDoctorReport:
         (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
         self._patch_voice_path(monkeypatch, str(voice))
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
         monkeypatch.chdir(tmp_path)
 
@@ -370,7 +370,7 @@ class TestDoctorReport:
         (tmp_path / "models" / "piper" / "bn_BD.nf_cycgan.onnx").write_bytes(b"stub")
         self._patch_voice_path(monkeypatch, str(voice), max_transfer_attempts=0)
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
+            "shefa.models.tts.piper_tts.PiperVoice", type("V", (), {"load": FakeVoice})
         )
         monkeypatch.chdir(tmp_path)
 
@@ -389,7 +389,7 @@ def _returns(value):
 
 
 class TestTokenCommand:
-    """`sefa token` is how an operator onboard a principal without touching code.
+    """`shefa token` is how an operator onboard a principal without touching code.
 
     T7 removed the fake `.env` keys, so a token has to come from somewhere safe;
     from the CLI it is printed once and stored as a PBKDF2 record, never as the
@@ -418,7 +418,7 @@ class TestTokenCommand:
         self._patch_roles(
             monkeypatch, {"clinician": ["sessions:read", "calls:place", "chat:use"]}
         )
-        monkeypatch.setattr("sefa.auth.generate_token", lambda *_: "s" * 40)
+        monkeypatch.setattr("shefa.auth.generate_token", lambda *_: "s" * 40)
 
         code = cli.main(["token", "--name", "front-desk", "--role", "clinician"])
 
@@ -434,7 +434,7 @@ class TestTokenCommand:
         Minting a token and hashing a different one would hand the operator a
         credential that fails on the first request.
         """
-        from sefa.auth import verify_token
+        from shefa.auth import verify_token
 
         token, record = cli.token_mint("front-desk", "clinician")
 
@@ -460,17 +460,17 @@ class TestTokenCommand:
     def _patch_roles(monkeypatch, roles: dict) -> None:
         import importlib
 
-        module = importlib.import_module("sefa.config.settings")
+        module = importlib.import_module("shefa.config.settings")
         monkeypatch.setattr(
             module, "settings", SimpleNamespace(auth=SimpleNamespace(roles=roles))
         )
 
 
 class TestModuleEntryPoint:
-    """`python -m sefa.cli` is how the bench gets run on a target box."""
+    """`python -m shefa.cli` is how the bench gets run on a target box."""
 
     def test_dispatches_through_run_path(self, monkeypatch, capsys):
-        """Execute the file the way `python -m sefa.cli` does.
+        """Execute the file the way `python -m shefa.cli` does.
 
         `run_path` rather than `run_module`: the module is already imported by
         this test file, and re-running it as a module makes runpy warn that
@@ -479,25 +479,25 @@ class TestModuleEntryPoint:
         import runpy
         from pathlib import Path
 
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: None)
-        monkeypatch.setattr("sefa.models.registry.registry._create_tts", _returns(FakeTTS()))
-        monkeypatch.setattr(sys, "argv", ["sefa", "bench", "--iterations", "1", "--no-vram"])
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: None)
+        monkeypatch.setattr("shefa.models.registry.registry._create_tts", _returns(FakeTTS()))
+        monkeypatch.setattr(sys, "argv", ["shefa", "bench", "--iterations", "1", "--no-vram"])
 
         with pytest.raises(SystemExit) as exit_request:
             runpy.run_path(str(Path(cli.__file__)), run_name="__main__")
 
         assert exit_request.value.code == 0
-        assert "sefa bench" in capsys.readouterr().out
+        assert "shefa bench" in capsys.readouterr().out
 
     def test_a_failing_benchmark_exits_non_zero_from_the_command_line(self, monkeypatch, capsys):
         import runpy
         from pathlib import Path
 
-        monkeypatch.setattr("sefa.bench.read_vram_fraction", lambda: 0.99)
+        monkeypatch.setattr("shefa.bench.read_vram_fraction", lambda: 0.99)
         monkeypatch.setattr(
-            "sefa.models.registry.registry._create_tts", _returns(FakeTTS())
+            "shefa.models.registry.registry._create_tts", _returns(FakeTTS())
         )
-        monkeypatch.setattr(sys, "argv", ["sefa", "bench", "--iterations", "1"])
+        monkeypatch.setattr(sys, "argv", ["shefa", "bench", "--iterations", "1"])
 
         with pytest.raises(SystemExit) as exit_request:
             runpy.run_path(str(Path(cli.__file__)), run_name="__main__")

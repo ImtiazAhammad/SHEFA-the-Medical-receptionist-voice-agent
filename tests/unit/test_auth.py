@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from sefa.auth import (
+from shefa.auth import (
     DEFAULT_ITERATIONS,
     KDF_ALGORITHM,
     MIN_TOKEN_LENGTH,
@@ -185,7 +185,7 @@ class TestAuthStoreAuthentication:
         store.authenticate(token)
 
         calls = []
-        import sefa.auth as auth
+        import shefa.auth as auth
 
         real = auth.verify_token
         monkeypatch.setattr(

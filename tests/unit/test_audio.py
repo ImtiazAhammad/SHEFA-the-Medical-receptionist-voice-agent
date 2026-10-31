@@ -21,8 +21,8 @@ from io import BytesIO
 
 import pytest
 
-from sefa.audio import AudioFrame, strip_wav_header, to_s16le_16k_mono
-from sefa.models.base import TTSResult
+from shefa.audio import AudioFrame, strip_wav_header, to_s16le_16k_mono
+from shefa.models.base import TTSResult
 
 
 def _pcm16(samples: list[int]) -> bytes:
@@ -248,6 +248,6 @@ class TestPcmDataOffsetWithoutAudio:
         Reporting an offset anyway would hand the caller the middle of the
         header as if it were PCM, and the result plays as noise.
         """
-        from sefa.audio import pcm_data_offset
+        from shefa.audio import pcm_data_offset
 
         assert pcm_data_offset(b"RIFF\x00\x00\x00\x00WAVEfmt ") is None

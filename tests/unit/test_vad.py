@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, StreamEvent, STTResult
+from shefa.audio import AudioFrame
+from shefa.models.base import Language, LLMResult, StreamEvent, STTResult
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "noisy_clinic.wav"
 
@@ -59,13 +59,13 @@ def _warmup_noise(vad) -> None:
 
 class TestEnergyVADUnit:
     def test_rejects_non_s16le_sample_width(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         with pytest.raises(ValueError, match="s16le"):
             EnergyVAD(sample_width=1)
 
     def test_empty_and_odd_chunks_are_silence(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         assert vad.update(b"").rms == 0.0
@@ -73,7 +73,7 @@ class TestEnergyVADUnit:
         assert vad.update(b"").flush is False
 
     def test_floor_seeds_from_first_audio_after_a_silent_warmup(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         for _ in range(10):
@@ -85,7 +85,7 @@ class TestEnergyVADUnit:
         assert vad.noise_floor == pytest.approx(100.0, rel=0.05)
 
     def test_silence_alone_never_marks_speech_or_flushes(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         decisions = [vad.update(b"\x00" * 1600) for _ in range(40)]
@@ -94,7 +94,7 @@ class TestEnergyVADUnit:
         assert all(not d.flush for d in decisions)
 
     def test_warmup_calibrates_the_noise_floor(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         for seed in range(10):
@@ -103,7 +103,7 @@ class TestEnergyVADUnit:
         assert 0.5 * 600 < vad.noise_floor < 1.5 * 600
 
     def test_speech_over_noise_flushes_on_trailing_silence(self):
-        from sefa.pipeline.vad import FLUSH_SILENCE, EnergyVAD
+        from shefa.pipeline.vad import FLUSH_SILENCE, EnergyVAD
 
         vad = EnergyVAD()
         _warmup_noise(vad)
@@ -123,7 +123,7 @@ class TestEnergyVADUnit:
         assert flushed.reason == FLUSH_SILENCE
 
     def test_a_short_quiet_gap_is_not_a_turn_boundary_yet(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         _warmup_noise(vad)
@@ -139,7 +139,7 @@ class TestEnergyVADUnit:
         assert flushed.flush is True
 
     def test_a_brief_blip_is_discarded_not_transcribed(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD()
         _warmup_noise(vad)
@@ -154,7 +154,7 @@ class TestEnergyVADUnit:
         assert vad.buffered_seconds < 0.4, "the discarded blip must not linger"
 
     def test_continuous_noise_alone_never_fires_a_turn(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD(max_buffer_s=120.0)
         flushed = False
@@ -165,7 +165,7 @@ class TestEnergyVADUnit:
         assert flushed is False
 
     def test_max_buffer_flush_bounds_total_accumulation(self):
-        from sefa.pipeline.vad import FLUSH_MAX_BUFFER, EnergyVAD
+        from shefa.pipeline.vad import FLUSH_MAX_BUFFER, EnergyVAD
 
         vad = EnergyVAD(max_buffer_s=2.0)
         reasons: list[str] = []
@@ -181,7 +181,7 @@ class TestEnergyVADUnit:
         assert all(r == FLUSH_MAX_BUFFER for r in reasons)
 
     def test_the_noise_floor_chases_a_rising_hum(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         vad = EnergyVAD(max_buffer_s=120.0)
         saw_speech = False
@@ -209,7 +209,7 @@ class TestClinicFixture:
         return [vad.update(chunk) for chunk in self.chunks]
 
     def test_fixture_marks_only_the_utterance_as_speech(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         decisions = self._run(EnergyVAD())
         speech_seconds = [i * 0.1 for i, d in enumerate(decisions) if d.is_speech]
@@ -218,7 +218,7 @@ class TestClinicFixture:
         assert all(s >= 0.9 for s in speech_seconds), f"noise marked as speech: {speech_seconds}"
 
     def test_fixture_does_not_flush_on_the_pa_bursts(self):
-        from sefa.pipeline.vad import EnergyVAD
+        from shefa.pipeline.vad import EnergyVAD
 
         decisions = self._run(EnergyVAD())
         burst_window = {0.6, 0.7, 1.9}  # 0.55-0.75s and 1.80-2.00s, rounded to ticks
@@ -228,7 +228,7 @@ class TestClinicFixture:
             )
 
     def test_fixture_flushes_so_transcribe_can_fire_in_noise(self):
-        from sefa.pipeline.vad import FLUSH_SILENCE, EnergyVAD
+        from shefa.pipeline.vad import FLUSH_SILENCE, EnergyVAD
 
         decisions = self._run(EnergyVAD())
         flushes = [(i * 0.1, d.reason) for i, d in enumerate(decisions) if d.flush]
@@ -244,7 +244,7 @@ class TestPipelineUsesTheVad:
     def test_fifteen_tick_timeout_is_gone(self):
         from pathlib import Path
 
-        from sefa.pipeline import voice_pipeline as vp
+        from shefa.pipeline import voice_pipeline as vp
 
         source = Path(vp.__file__).read_text(encoding="utf-8")
         assert "silence_threshold" not in source
@@ -252,7 +252,7 @@ class TestPipelineUsesTheVad:
     def test_pipeline_constructs_the_energy_vad(self):
         from pathlib import Path
 
-        from sefa.pipeline import voice_pipeline as vp
+        from shefa.pipeline import voice_pipeline as vp
 
         source = Path(vp.__file__).read_text(encoding="utf-8")
         assert "EnergyVAD" in source
@@ -266,7 +266,7 @@ class TestPipelineUsesTheVad:
 
         from pathlib import Path
 
-        from sefa.pipeline import voice_pipeline as vp
+        from shefa.pipeline import voice_pipeline as vp
 
         source = Path(vp.__file__).read_text(encoding="utf-8")
         assert "vad_filter" in source
@@ -287,8 +287,8 @@ class _RecordingSink:
 class TestPipelineTranscribesTheFixture:
     @pytest.mark.asyncio
     async def test_fixture_drives_a_real_transcription(self, monkeypatch):
-        from sefa.models.registry import registry
-        from sefa.pipeline.voice_pipeline import VoicePipeline
+        from shefa.models.registry import registry
+        from shefa.pipeline.voice_pipeline import VoicePipeline
 
         transcripts: list[bytes] = []
 

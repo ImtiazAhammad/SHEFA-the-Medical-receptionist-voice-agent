@@ -1,7 +1,7 @@
 [project]
-name = "sefa-medical-voice-agent"
+name = "shefa-medical-voice-agent"
 version = "0.1.0"
-description = "HIPAA-compliant bilingual (EN/BN) voice AI medical receptionist - Sefa"
+description = "Privacy-first open-source bilingual (EN/BN) voice AI medical receptionist - SHEFA"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -61,14 +61,14 @@ local-tts = [
 ]
 
 [project.scripts]
-sefa = "sefa.cli:main"
+shefa = "shefa.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sefa"]
+packages = ["src/shefa"]
 
 [tool.ruff]
 target-version = "py311"
@@ -86,16 +86,16 @@ plugins = ["pydantic.mypy"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 # Bare `pytest` enforces the coverage floor (D-ENG27). The floor lives in
-# `sefa.coverage_policy.RATCHET_FLOOR` and is ratcheted upward per child;
+# `shefa.coverage_policy.RATCHET_FLOOR` and is ratcheted upward per child;
 # `tests/unit/test_coverage_policy.py` asserts the two agree.
-addopts = "--cov=sefa --cov-report=term-missing --cov-report=json:.coverage.json"
+addopts = "--cov=shefa --cov-report=term-missing --cov-report=json:.coverage.json"
 
 [tool.coverage.report]
 # The measured floor, not an aspirational number. Keep this equal to
-# `sefa.coverage_policy.RATCHET_FLOOR`.
+# `shefa.coverage_policy.RATCHET_FLOOR`.
 fail_under = 88
 skip_covered = true
 show_missing = true
 
 [tool.coverage.run]
-source = ["sefa"]
+source = ["shefa"]

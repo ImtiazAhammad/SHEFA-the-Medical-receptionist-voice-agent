@@ -1,0 +1,559 @@
+﻿"""Application settings loaded from YAML config and environment variables.
+
+Every model inherits `StrictModel`, so a key that no model declares is a
+validation error rather than a silent drop. Config drift is only detectable if
+it is loud: the previous flat `MonitoringConfig` read `log_level` while the
+shipped YAML nested it under `logging:`, and pydantic's default of "INFO"
+matched the file, so the mismatch stayed invisible.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from pathlib import Path
+from typing import Annotated, Any, ClassVar, Literal
+from urllib.parse import urlparse
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class Language(StrEnum):
+    ENGLISH = "en"
+    BANGLA = "bn"
+
+
+class TelephonyProvider(StrEnum):
+    """The single provider knob (D-ENG13). SIP trunk credentials live under
+    `telephony.sip.*` and never select a provider — there is exactly one knob."""
+
+    TWILIO = "twilio"
+    ASTERISK = "asterisk"
+    FREESWITCH = "freeswitch"
+
+
+class StrictModel(BaseModel):
+    """Base for every settings model: unknown keys are errors, not drops."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AppInfoConfig(StrictModel):
+    name: str = "SHEFA Receptionist"
+    version: str = "0.1.0"
+    environment: str = "development"
+    debug: bool = True
+
+
+class STTConfig(StrictModel):
+    provider: str = "openai"
+    model: str = "whisper-1"
+    language: str = "auto"
+    temperature: float = 0.0
+    enable_vad: bool = True
+    streaming: bool = True
+
+
+class TTSConfig(StrictModel):
+    provider: str = "elevenlabs"
+    model: str = "eleven_multilingual_v2"
+    voice_path: str = "models/piper/en_US-lessac-medium.onnx"
+    voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    stability: float = 0.5
+    similarity_boost: float = 0.75
+    speed: float = 1.0
+    sample_rate: int = 24000
+
+
+class LLMConfig(StrictModel):
+    provider: str = "openai"
+    model: str = "gpt-4o"
+    temperature: float = 0.3
+    max_tokens: int = 512
+    system_prompt_file: str = "configs/prompts/system.md"
+    # Whether the model emits native OpenAI tool_calls. Local Gemma-2 (via
+    # Ollama) rejects any request carrying a `tools` array, so the pilot sets
+    # this false and books through the structured-JSON action router instead.
+    tool_calls: bool = True
+
+
+class LanguageDetectionConfig(StrictModel):
+    provider: str = "simple"
+    confidence_threshold: float = 0.6
+
+
+class MediaQueueConfig(StrictModel):
+    """Bounds on the per-call media queues (D-ENG21).
+
+    Queue depth is a deployment property — a clinic box and a trunk bridge
+    have different headroom — so these are config keys, not constants. An
+    unbounded queue converts a stalled consumer into a silent memory leak
+    instead of a visible timeout.
+    """
+
+    audio_queue_maxsize: int = Field(default=256, gt=0)
+    playback_queue_maxsize: int = Field(default=256, gt=0)
+    audio_put_timeout_s: float = Field(default=5.0, gt=0)
+    playback_put_timeout_s: float = Field(default=5.0, gt=0)
+
+
+class PipelineConfig(StrictModel):
+    stt: STTConfig = Field(default_factory=STTConfig)
+    tts: TTSConfig = Field(default_factory=TTSConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    media: MediaQueueConfig = Field(default_factory=MediaQueueConfig)
+    language_detection: LanguageDetectionConfig = Field(
+        default_factory=LanguageDetectionConfig
+    )
+
+
+class LanguagesConfig(StrictModel):
+    primary: str = "en"
+    supported: list[str] = Field(default_factory=lambda: ["en", "bn"])
+    code_switching: bool = True
+    default_greeting: dict[str, str] = Field(default_factory=dict)
+
+
+class TwilioConfig(StrictModel):
+    account_sid: str = ""
+    auth_token: str = ""
+    phone_number: str = ""
+    voice: str = "Polly.Matthew"
+    max_call_duration: int = 1800
+    # wss:// Media Stream endpoint. Empty = derive
+    # `wss://<account_sid>.twil.io/media-stream` (D-ENG25).
+    media_stream_url: str = ""
+
+    @field_validator("media_stream_url")
+    @classmethod
+    def _media_stream_url_must_be_wss(cls, value: str) -> str:
+        # An unresolved "${VAR}" placeholder means the operator set nothing, so
+        # it validates as unset rather than as a malformed URL. `load_config`
+        # substitutes before validation; this only matters for callers that
+        # validate the raw YAML mapping directly.
+        if value.startswith("${") and value.endswith("}"):
+            return ""
+        if value and not value.startswith("wss://"):
+            raise ValueError(
+                "telephony.twilio.media_stream_url must start with wss:// "
+                f"(raw Twilio media streams accept no other scheme; got {value!r})"
+            )
+        return value
+
+    @property
+    def effective_media_stream_url(self) -> str:
+        """The URL TwiML points the media stream at, derived when unset."""
+        if self.media_stream_url:
+            return self.media_stream_url
+        return f"wss://{self.account_sid}.twil.io/media-stream"
+
+
+class SipConfig(StrictModel):
+    """SIP trunk credentials ONLY (D-ENG13).
+
+    Provider selection is the single `telephony.provider` knob; a `provider`
+    key under `sip` is the removed two-key state and is rejected at startup —
+    `StrictModel` forbids it and `TelephonyConfig` names it explicitly.
+    """
+
+    host: str = ""
+    port: int = 5060
+    username: str = ""
+    password: str = ""
+
+
+class WebSocketConfig(StrictModel):
+    host: str = "0.0.0.0"
+    port: int = 8765
+
+
+class TelephonyConfig(StrictModel):
+    provider: TelephonyProvider = TelephonyProvider.TWILIO
+    twilio: TwilioConfig = Field(default_factory=TwilioConfig)
+    sip: SipConfig | None = None
+    websocket: WebSocketConfig = Field(default_factory=WebSocketConfig)
+    # Explicit outbound ingress URL — the ngrok localhost scrape is deleted
+    # (D-ENG25). Validated as an absolute http(s) URL when set.
+    public_url: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_two_provider_knobs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            sip = data.get("sip")
+            if isinstance(sip, dict) and "provider" in sip:
+                raise ValueError(
+                    "telephony.sip.provider is removed (D-ENG13): provider "
+                    "selection is the single knob telephony.provider "
+                    "(twilio|asterisk|freeswitch)"
+                )
+        return data
+
+    @model_validator(mode="after")
+    def _validate_cross_field_knobs(self) -> TelephonyConfig:
+        if self.provider != TelephonyProvider.TWILIO:
+            stream = self.twilio.effective_media_stream_url
+            host = urlparse(stream).hostname or ""
+            if host == "twil.io" or host.endswith(".twil.io"):
+                raise ValueError(
+                    f"provider={self.provider.value} but media_stream_url "
+                    f"resolves to a Twilio host ({stream!r}); calls would "
+                    f"ring nowhere — set a non-*.twil.io media stream URL"
+                )
+        if self.public_url:
+            # An unresolved "${VAR}" placeholder means unset, not malformed.
+            if self.public_url.startswith("${") and self.public_url.endswith("}"):
+                object.__setattr__(self, "public_url", "")
+            else:
+                parsed = urlparse(self.public_url)
+                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    raise ValueError(
+                        "telephony.public_url must be an absolute http(s) URL "
+                        f"(got {self.public_url!r})"
+                    )
+        return self
+
+
+class SessionConfig(StrictModel):
+    backend: str = "redis"
+    ttl_seconds: int = 3600
+    max_history_turns: int = 50
+
+
+class EscalationConfig(StrictModel):
+    repeat_threshold: float = 0.5
+    max_transfer_attempts: int = 3
+    on_call_numbers: list[str] = Field(default_factory=list)
+    hold_audio_url: str = ""
+    emergency_keywords: dict[str, list[str]] = Field(default_factory=dict)
+    transfer_greeting: dict[str, str] = Field(default_factory=dict)
+    repeat_prompt: dict[str, str] = Field(default_factory=dict)
+    terminal_prompt: dict[str, str] = Field(default_factory=dict)
+    other_language_prompt: dict[str, str] = Field(default_factory=dict)
+
+
+class AuthPrincipalConfig(StrictModel):
+    """One bearer-token holder.
+
+    `token_hash` is a `pbkdf2_sha256$iterations$salt$digest` record, never the
+    token itself: a config file is copied, backed up, and committed by accident,
+    and a plaintext token in it is a live credential for whoever reads it.
+    """
+
+    name: str
+    role: str
+    token_hash: str
+
+
+class AuthConfig(StrictModel):
+    """Authentication and exposure controls for the whole service.
+
+    `bind_host` defaults to loopback and `dev_mode` to false, so the safe
+    posture is what you get by doing nothing. Both must be actively loosened,
+    which means the decision is visible in the config diff.
+    """
+
+    dev_mode: bool = False
+    bind_host: str = "127.0.0.1"
+    principals: list[AuthPrincipalConfig] = Field(default_factory=list)
+    roles: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("dev_mode", mode="before")
+    @classmethod
+    def _dev_mode_accepts_env_placeholder(cls, value: Any) -> Any:
+        """Let `dev_mode: "${DEV_MODE:-false}"` work while defaulting to false.
+
+        The shipped default stays safe with the variable unset. The
+        placeholder is rejected as a malformed bool by pydantic otherwise, both
+        for callers validating the raw YAML mapping and because the resolver
+        hands back a string.
+        """
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            body = value[2:-1]
+            var_name, sep, fallback = body.partition(":-")
+            if sep:
+                import os
+
+                return os.environ.get(var_name, fallback).strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                )
+            return False
+        return value
+
+
+class StorageConfig(StrictModel):
+    """Where the durable stores live.
+
+    One SQLite file backs both the `calls` table and the append-only `audit_log`
+    (T9): a single backup or verification covers the whole evidence trail.
+    """
+
+    db_path: str = "data/shefa.db"
+
+
+class ComplianceConfig(StrictModel):
+    hipaa_enabled: bool = True
+    encryption_algorithm: str = "AES-256-GCM"
+    audit_log_enabled: bool = True
+    call_recording_consent_required: bool = True
+    data_retention_days: int = 2555
+    phi_access_logging: bool = True
+    max_session_ttl: int = 3600
+
+
+class PrometheusConfig(StrictModel):
+    enabled: bool = True
+    port: int = 9090
+
+
+class SentryConfig(StrictModel):
+    enabled: bool = False
+    dsn: str = ""
+
+
+class LoggingConfig(StrictModel):
+    level: str = "INFO"
+    format: str = "json"
+    phi_masking: bool = True
+
+
+class MonitoringConfig(StrictModel):
+    prometheus: PrometheusConfig = Field(default_factory=PrometheusConfig)
+    sentry: SentryConfig = Field(default_factory=SentryConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+
+class OpenAIAdapterConfig(StrictModel):
+    type: Literal["openai_stt", "openai_llm"]
+    api_key: str = ""
+    model: str = ""
+
+
+class AnthropicAdapterConfig(StrictModel):
+    type: Literal["anthropic_llm"]
+    api_key: str = ""
+    model: str = ""
+
+
+class OpenAICompatibleAdapterConfig(StrictModel):
+    type: Literal["openai_compatible_llm"]
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+
+
+class ElevenLabsSTTAdapterConfig(StrictModel):
+    type: Literal["elevenlabs_stt"]
+    api_key: str = ""
+
+
+class ElevenLabsTTSAdapterConfig(StrictModel):
+    type: Literal["elevenlabs_tts"]
+    api_key: str = ""
+
+
+class WhisperLocalAdapterConfig(StrictModel):
+    type: Literal["whisper_local_stt"]
+    model_size: str = "large-v3"
+    device: str = "cuda"
+    compute_type: str = "float16"
+    bangla_finetuned: bool = True
+
+
+class PiperAdapterConfig(StrictModel):
+    type: Literal["piper_tts"]
+    model_path: str = ""
+
+
+class VITSAdapterConfig(StrictModel):
+    type: Literal["vits_tts"]
+    model_path: str = ""
+AdapterConfig = Annotated[
+    OpenAIAdapterConfig
+    | AnthropicAdapterConfig
+    | OpenAICompatibleAdapterConfig
+    | ElevenLabsSTTAdapterConfig
+    | ElevenLabsTTSAdapterConfig
+    | WhisperLocalAdapterConfig
+    | PiperAdapterConfig
+    | VITSAdapterConfig,
+    Field(discriminator="type"),
+]
+
+class RoutingConfig(StrictModel):
+    strategy: str = "config"
+    fallback_provider: str = "openai"
+
+
+class ModelsConfig(StrictModel):
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
+    adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
+
+    # D-ENG20: `models.adapters` is the single model-config source. Each
+    # pipeline LLM provider maps to exactly one adapter type, and the registry
+    # reads its model/base_url from the resolved adapter — never a hardcoded
+    # literal (the deleted `http://localhost:11434/v1` default).
+    LLM_PROVIDER_ADAPTER_TYPE: ClassVar[dict[str, str]] = {
+        "openai": "openai_llm",
+        "anthropic": "anthropic_llm",
+        "local": "openai_compatible_llm",
+    }
+
+    def resolve_llm_adapter(self, provider: str) -> tuple[str, AdapterConfig]:
+        """Return the single (key, adapter) backing an LLM provider.
+
+        A provider must resolve to exactly one adapter of its declared type;
+        zero or several is a config error, never a silent guess.
+        """
+        adapter_type = self.LLM_PROVIDER_ADAPTER_TYPE.get(provider)
+        if adapter_type is None:
+            raise ValueError(
+                f"No models.adapters type registered for LLM provider {provider!r}"
+            )
+        matches = {
+            key: adapter
+            for key, adapter in self.adapters.items()
+            if getattr(adapter, "type", None) == adapter_type
+        }
+        if len(matches) != 1:
+            raise ValueError(
+                f"LLM provider {provider!r} requires exactly one models.adapters "
+                f"entry of type {adapter_type!r}; found {len(matches)}: "
+                f"{sorted(matches)}"
+            )
+        return next(iter(matches.items()))
+
+
+class GoogleCalendarConfig(StrictModel):
+    credentials_path: str = ""
+    calendar_id: str = "primary"
+
+
+class CalendarConfig(StrictModel):
+    provider: str = "google"
+    google: GoogleCalendarConfig = Field(default_factory=GoogleCalendarConfig)
+
+
+class CustomEHRConfig(StrictModel):
+    base_url: str = ""
+    api_key: str = ""
+
+
+class EHRConfig(StrictModel):
+    provider: str = "custom"
+    custom: CustomEHRConfig = Field(default_factory=CustomEHRConfig)
+
+
+class SMSChannelConfig(StrictModel):
+    provider: str = "twilio"
+
+
+class EmailChannelConfig(StrictModel):
+    provider: str = "smtp"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    from_address: str = ""
+
+
+class NotificationsConfig(StrictModel):
+    sms: SMSChannelConfig = Field(default_factory=SMSChannelConfig)
+    email: EmailChannelConfig = Field(default_factory=EmailChannelConfig)
+
+
+class IntegrationsConfig(StrictModel):
+    calendar: CalendarConfig = Field(default_factory=CalendarConfig)
+    ehr: EHRConfig = Field(default_factory=EHRConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+
+
+class AppConfig(StrictModel):
+    """Root configuration loaded from YAML."""
+
+    app: AppInfoConfig = Field(default_factory=AppInfoConfig)
+    languages: LanguagesConfig = Field(default_factory=LanguagesConfig)
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    telephony: TelephonyConfig = Field(default_factory=TelephonyConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
+    escalation: EscalationConfig = Field(default_factory=EscalationConfig)
+    compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    models: ModelsConfig = Field(default_factory=ModelsConfig)
+    integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    """Drop one matching pair of surrounding quotes.
+
+    `.env` lines commonly quote values (`TWILIO_ACCOUNT_SID="AC..."`). Without
+    this the quotes travel into the credential and Twilio rejects it as an
+    invalid username.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
+def _resolve_env_vars(obj: Any) -> Any:
+    """Recursively resolve ${ENV_VAR} and ${ENV_VAR:-fallback} references.
+
+    The `:-` fallback matters: without it an unset variable resolves to the
+    literal `"${ENV_VAR}"` text, which then fails the field validators (a
+    `wss://` URL check, an absolute-http check) and makes an otherwise valid
+    default config refuse to start. `${PUBLIC_URL:-}` therefore means "empty
+    unless the operator set it".
+
+    Values are loaded from `.env` first (see `load_config`) and one matching
+    pair of surrounding quotes is stripped, because `.env` commonly quotes
+    values and a stray quote turns a valid credential into an invalid one.
+    """
+    if isinstance(obj, str) and obj.startswith("${") and obj.endswith("}"):
+        import os
+
+        body = obj[2:-1]
+        var_name, sep, fallback = body.partition(":-")
+        if sep:
+            return _strip_wrapping_quotes(os.environ.get(var_name, fallback))
+        return _strip_wrapping_quotes(os.environ.get(var_name, obj))
+    elif isinstance(obj, dict):
+        return {k: _resolve_env_vars(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_resolve_env_vars(i) for i in obj]
+    return obj
+
+
+def load_config(config_path: str | Path = "configs/default.yaml") -> AppConfig:
+    """Load configuration from YAML file with env var resolution."""
+    path = Path(config_path)
+
+    # `.env` is the documented home for TWILIO_ACCOUNT_SID and friends. Without
+    # loading it, every `${TWILIO_*}` reference stayed unresolved and the app
+    # ran with placeholder credentials that fail at the first API call.
+    # `override=False` so a real environment variable always wins.
+    #
+    # An explicit path is required: `load_dotenv()` with no argument walks the
+    # stack to find `.env` and raises an AssertionError when called from a
+    # REPL, a heredoc, or any non-file caller.
+    try:
+        from dotenv import load_dotenv
+
+        candidates = [Path(".env"), path.resolve().parent.parent / ".env"]
+        for candidate in candidates:
+            if candidate.is_file():
+                load_dotenv(candidate, override=False)
+                break
+    except ImportError:  # pragma: no cover - python-dotenv is a hard dependency
+        pass
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        resolved = _resolve_env_vars(raw)
+        return AppConfig(**resolved)
+    return AppConfig()
+
+
+settings = load_config()

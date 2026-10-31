@@ -19,17 +19,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.base import (
+from shefa.audio import AudioFrame
+from shefa.models.base import (
     Language,
     LLMResult,
     StreamEvent,
     STTResult,
     language_from_code,
 )
-from sefa.models.registry import registry
-from sefa.pipeline.language_detector import detect_language
-from sefa.pipeline.voice_pipeline import VoicePipeline
+from shefa.models.registry import registry
+from shefa.pipeline.language_detector import detect_language
+from shefa.pipeline.voice_pipeline import VoicePipeline
 
 NOISE_RMS = 200.0
 SPEECH_RMS = 3000.0
@@ -92,7 +92,7 @@ class _FakeWhisper:
     ],
 )
 async def test_whisper_local_maps_tags_to_language_or_other(monkeypatch, tag, expected):
-    from sefa.models.stt.whisper_local import WhisperLocalSTT
+    from shefa.models.stt.whisper_local import WhisperLocalSTT
 
     stt = WhisperLocalSTT(device="cpu", compute_type="int8")
     stt._model = _FakeWhisper(tag)
@@ -163,7 +163,7 @@ class _FakeTTS:
 
 @pytest.mark.asyncio
 async def test_other_language_offers_warm_transfer_and_never_replies(monkeypatch):
-    from sefa.config.settings import settings
+    from shefa.config.settings import settings
 
     stt = _FakeSTT("नमस्ते, मुझे डॉक्टर देखना है")
     llm = _FakeLLM()

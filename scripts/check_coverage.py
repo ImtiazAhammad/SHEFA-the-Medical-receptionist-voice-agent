@@ -17,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-from sefa.coverage_policy import RATCHET_FLOOR, check_report, load_report
+from shefa.coverage_policy import RATCHET_FLOOR, check_report, load_report
 
 DEFAULT_REPORT = Path(".coverage.json")
 

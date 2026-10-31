@@ -15,8 +15,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from sefa.models.base import Language
-from sefa.models.stt.whisper_local import (
+from shefa.models.base import Language
+from shefa.models.stt.whisper_local import (
     WhisperLocalSTT,
     _combine_confidence,
     _preload_cuda_libraries,
@@ -33,7 +33,7 @@ def _no_real_cuda_preload(monkeypatch):
     that exercise the preload call it directly, through their own binding.
     """
     monkeypatch.setattr(
-        "sefa.models.stt.whisper_local._preload_cuda_libraries", lambda: None
+        "shefa.models.stt.whisper_local._preload_cuda_libraries", lambda: None
     )
 
 
@@ -85,7 +85,7 @@ def test_a_cpu_load_does_not_preload_cuda(monkeypatch):
     stt = WhisperLocalSTT(device="cpu", compute_type="int8")
     called = []
     monkeypatch.setattr(
-        "sefa.models.stt.whisper_local._preload_cuda_libraries",
+        "shefa.models.stt.whisper_local._preload_cuda_libraries",
         lambda: called.append(True),
     )
     monkeypatch.setitem(
@@ -346,13 +346,13 @@ async def test_transcribe_loads_the_model_on_first_use(monkeypatch):
 
 
 def test_empty_text_detects_english_with_zero_confidence():
-    from sefa.pipeline.language_detector import detect_language
+    from shefa.pipeline.language_detector import detect_language
 
     assert detect_language("   ") == (Language.ENGLISH, 0.0)
 
 
 def test_text_without_letters_returns_neutral_english():
-    from sefa.pipeline.language_detector import detect_language
+    from shefa.pipeline.language_detector import detect_language
 
     assert detect_language("12345 !!!") == (Language.ENGLISH, 0.5)
 

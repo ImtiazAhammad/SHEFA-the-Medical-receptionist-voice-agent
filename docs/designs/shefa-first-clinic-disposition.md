@@ -34,7 +34,7 @@ reason. Nothing is silently dropped.
    lookup, discover-then-build HMS gate, push-selling outbound deferred.
 8. **Multi-branch / fleet** — post-first-yes per-clinic deployment playbook.
 
-Plus **Child 0 "Developer loop"** (`sefa doctor`/`replay`/`bench`/`serve`),
+Plus **Child 0 "Developer loop"** (`shefa doctor`/`replay`/`bench`/`serve`),
 which ships first.
 
 ## Original plan items — disposition

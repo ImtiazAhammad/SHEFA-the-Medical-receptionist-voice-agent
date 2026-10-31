@@ -4,9 +4,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from sefa.config.settings import settings
-from sefa.telephony import twilio
-from sefa.telephony.twilio import app
+from shefa.config.settings import settings
+from shefa.telephony import twilio
+from shefa.telephony.twilio import app
 
 TWILIO_CALLS_URL = "https://api.twilio.com/2010-04-01/Accounts/AC123/Calls.json"
 

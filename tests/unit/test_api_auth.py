@@ -14,8 +14,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from sefa import main as main_module
-from sefa.auth import AuthStore, TokenError, hash_token
+from shefa import main as main_module
+from shefa.auth import AuthStore, TokenError, hash_token
 
 ADMIN_TOKEN = "admin-token-abcdefghijklmnop"
 CLINICIAN_TOKEN = "clinician-token-abcdefghijklmno"
@@ -216,7 +216,7 @@ class TestAuthorizedAccess:
         async def fake_call(number: str) -> dict:
             return {"status": "queued", "to": number}
 
-        monkeypatch.setattr("sefa.telephony.twilio.initiate_outbound_call", fake_call)
+        monkeypatch.setattr("shefa.telephony.twilio.initiate_outbound_call", fake_call)
 
         response = client.post("/api/v1/calls/call-me", headers=_bearer(CLINICIAN_TOKEN))
 
@@ -256,7 +256,7 @@ class TestAuthorizedAccess:
         assert response.text.strip() != ""
 
     def test_list_sessions_round_trips_a_created_session(self, client, monkeypatch):
-        from sefa.session.manager import CallSession
+        from shefa.session.manager import CallSession
 
         main_module.session_manager._sessions["SID-1"] = CallSession(
             call_sid="SID-1", patient_id="PAT-1", patient_name="Tester"
@@ -298,7 +298,7 @@ class TestAuthorizedAccess:
         async def fake_call(number: str) -> dict:
             return {"status": "queued", "to": number}
 
-        monkeypatch.setattr("sefa.telephony.twilio.initiate_outbound_call", fake_call)
+        monkeypatch.setattr("shefa.telephony.twilio.initiate_outbound_call", fake_call)
 
         response = client.post(
             "/api/v1/calls/outbound",
@@ -340,7 +340,7 @@ class TestUnconfiguredAuthLocksEverything:
         self, monkeypatch
     ):
         """Production entry point has to trust the config when no store is passed."""
-        from sefa.config.settings import AuthPrincipalConfig
+        from shefa.config.settings import AuthPrincipalConfig
 
         monkeypatch.setattr(
             main_module.settings.auth,
@@ -363,7 +363,7 @@ class TestUnconfiguredAuthLocksEverything:
 
     def test_build_auth_store_reads_the_configured_principals(self, monkeypatch):
         """The store comes from config, so an operator can onboard without code."""
-        from sefa.config.settings import AuthPrincipalConfig
+        from shefa.config.settings import AuthPrincipalConfig
 
         monkeypatch.setattr(
             main_module.settings.auth,
@@ -385,10 +385,10 @@ class TestUnconfiguredAuthLocksEverything:
         """A bad record must be a loud startup failure, not a silent 401.
 
         Operators debug a locked API; they do not debug a 401 that looks like a
-        wrong password. `sefa doctor` is where this should be caught, and the
+        wrong password. `shefa doctor` is where this should be caught, and the
         import must not paper over it either.
         """
-        from sefa.config.settings import AuthPrincipalConfig
+        from shefa.config.settings import AuthPrincipalConfig
 
         monkeypatch.setattr(
             main_module.settings.auth,

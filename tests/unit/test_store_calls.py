@@ -12,13 +12,13 @@ import sqlite3
 
 import pytest
 
-from sefa.store import utc_day
-from sefa.store.calls import CallsStore
+from shefa.store import utc_day
+from shefa.store.calls import CallsStore
 
 
 @pytest.fixture
 def calls(tmp_path) -> CallsStore:
-    return CallsStore(tmp_path / "sefa.db")
+    return CallsStore(tmp_path / "shefa.db")
 
 
 def _row(status: str = "completed", disposition: str = "answered") -> dict:
@@ -70,7 +70,7 @@ class TestDurableDeleteTombstones:
     def test_tombstone_survives_a_fresh_connection_to_the_same_file(
         self, tmp_path
     ):
-        path = tmp_path / "sefa.db"
+        path = tmp_path / "shefa.db"
         first = CallsStore(path)
         first.upsert_call(_row())
         first.close()
@@ -88,7 +88,7 @@ class TestDurableDeleteTombstones:
         assert calls.tombstone("CAX", user="auditor") is False
 
     def test_an_upsert_cannot_resurrect_a_tombstoned_call(self, tmp_path):
-        path = tmp_path / "sefa.db"
+        path = tmp_path / "shefa.db"
         first = CallsStore(path)
         first.upsert_call(_row())
         first.close()

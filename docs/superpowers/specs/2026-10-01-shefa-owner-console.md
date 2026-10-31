@@ -164,7 +164,7 @@ Instead, the shell is served **behind the existing gate**:
 2. The page ships with **no** bundle dependency. Its CSS is inlined and it needs no
    static assets, so nothing new is published and `/static/*` stays protected (the
    existing test at `:123-126` keeps passing untouched).
-3. The owner pastes a token minted by `sefa token mint` (`cli.py:162`). The form
+3. The owner pastes a token minted by `shefa token mint` (`cli.py:162`). The form
    **verifies it before storing it** by calling an existing authenticated endpoint
    (`/api/v1/config`, which requires `config:read` at `main.py:141`). Wrong token → 401
    → clear error, nothing stored. Correct token → held in a JS variable only.

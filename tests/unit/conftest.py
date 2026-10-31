@@ -18,8 +18,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolate_the_default_audit_store(tmp_path, monkeypatch):
-    from sefa.store import audit as audit_module
-    from sefa.store.audit import AuditStore
+    from shefa.store import audit as audit_module
+    from shefa.store.audit import AuditStore
 
     holder: dict[str, AuditStore | None] = {"store": None}
     store = AuditStore(tmp_path / "default-audit.db")

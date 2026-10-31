@@ -18,8 +18,8 @@ from typing import Any
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.tts.piper_tts import PiperTTS
+from shefa.audio import AudioFrame
+from shefa.models.tts.piper_tts import PiperTTS
 
 
 @dataclass
@@ -76,7 +76,7 @@ class FakePiperVoice:
 def fake_voice(monkeypatch):
     FakePiperVoice.instances = []
     FakePiperVoice.load_delay = 0.0
-    monkeypatch.setattr("sefa.models.tts.piper_tts.PiperVoice", FakePiperVoice)
+    monkeypatch.setattr("shefa.models.tts.piper_tts.PiperVoice", FakePiperVoice)
     return FakePiperVoice
 
 
@@ -121,7 +121,7 @@ class TestPersistentSession:
         FakePiperVoice.load_delay = 0.0
         ticks = iter([0.0, 0.75, 0.80, 0.81, 0.82])
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.time.perf_counter", lambda: next(ticks)
+            "shefa.models.tts.piper_tts.time.perf_counter", lambda: next(ticks)
         )
         tts = _tts()
 
@@ -158,7 +158,7 @@ class TestPersistentSession:
                 raise FileNotFoundError(model_path)
             return FakePiperVoice(model_path)
 
-        monkeypatch.setattr("sefa.models.tts.piper_tts.PiperVoice.load", staticmethod(flaky_load))
+        monkeypatch.setattr("shefa.models.tts.piper_tts.PiperVoice.load", staticmethod(flaky_load))
         tts = _tts()
 
         with pytest.raises(FileNotFoundError):
@@ -448,7 +448,7 @@ class TestLoadIsOffloadedAndRaceFree:
             return FakePiperVoice(model_path)
 
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice",
+            "shefa.models.tts.piper_tts.PiperVoice",
             type("V", (), {"load": staticmethod(slow_load)}),
         )
 
@@ -482,7 +482,7 @@ class TestLoadIsOffloadedAndRaceFree:
             return FakePiperVoice(model_path)
 
         monkeypatch.setattr(
-            "sefa.models.tts.piper_tts.PiperVoice",
+            "shefa.models.tts.piper_tts.PiperVoice",
             type("V", (), {"load": staticmethod(counting_load)}),
         )
 

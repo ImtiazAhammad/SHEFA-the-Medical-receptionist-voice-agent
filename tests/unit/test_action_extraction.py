@@ -9,10 +9,10 @@ from typing import Any
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.config.settings import settings
-from sefa.models.base import Language, StreamEvent, ToolDefinition
-from sefa.pipeline.actions import (
+from shefa.audio import AudioFrame
+from shefa.config.settings import settings
+from shefa.models.base import Language, StreamEvent, ToolDefinition
+from shefa.pipeline.actions import (
     confirmation_text,
     extract_action,
     extractor_system_prompt,
@@ -21,8 +21,8 @@ from sefa.pipeline.actions import (
     resolve_relative_day,
     tool_result_note,
 )
-from sefa.pipeline.voice_pipeline import VoicePipeline
-from sefa.session.manager import CallSession
+from shefa.pipeline.voice_pipeline import VoicePipeline
+from shefa.session.manager import CallSession
 
 _BOOK = ToolDefinition(
     name="book_appointment",
@@ -389,7 +389,7 @@ class TestGenerateReplyExtractMode:
             }
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.execute_tool", _fake_execute
+            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
         )
         tts = _FakeTTS()
         session = _session(("user", "আমাকে কাল অ্যাপয়েন্টমেন্ট দিন"))
@@ -419,7 +419,7 @@ class TestGenerateReplyExtractMode:
             return {"verified": True, "patient_id": "P1"}
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.execute_tool", _fake_execute
+            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
         )
         session = _session(("user", "আমার নাম রহিম"))
 
@@ -446,7 +446,7 @@ class TestGenerateReplyExtractMode:
             return {}
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.execute_tool", _fake_execute
+            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
         )
         session = _session(("user", "আপনি কেমন আছেন?"))
 
@@ -463,7 +463,7 @@ class TestGenerateReplyNativeMode:
     ):
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", True)
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.get_tool_definitions", lambda: _TOOLS
+            "shefa.pipeline.voice_pipeline.get_tool_definitions", lambda: _TOOLS
         )
         call = {"id": "c1", "name": "book_appointment", "arguments": {"date": "tomorrow"}}
         llm = _ScriptedLLM(
@@ -483,7 +483,7 @@ class TestGenerateReplyNativeMode:
             return {"success": True}
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.execute_tool", _fake_execute
+            "shefa.pipeline.voice_pipeline.execute_tool", _fake_execute
         )
         session = _session(("user", "বুক করুন"))
 
@@ -497,6 +497,6 @@ class TestGenerateReplyNativeMode:
 
 class TestConfigFlag:
     def test_tool_calls_defaults_true(self):
-        from sefa.config.settings import LLMConfig
+        from shefa.config.settings import LLMConfig
 
         assert LLMConfig().tool_calls is True

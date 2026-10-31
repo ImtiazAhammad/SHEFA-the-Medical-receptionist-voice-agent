@@ -62,7 +62,7 @@ hard-capped ~$10 trial week.
 media-stream WebSocket feeds `voice_pipeline.py:85` per `audio_queue`/`playback_queue`.
 `system.md` unwired. No `sip` config section.
 
-**Proposed Change**: Add `src/sefa/telephony/sip.py` with a `MediaBridge` interface and two
+**Proposed Change**: Add `src/shefa/telephony/sip.py` with a `MediaBridge` interface and two
 adapters (Asterisk ARI over WebSocket; FreeSWITCH ESL), selected by `telephony.sip.provider`;
 bridge PSTN leg ↔ pipeline queues; wire `system.md` into `/api/v1/chat`; keep Twilio as
 additive dev sink (Q5) via config flag.
@@ -229,11 +229,11 @@ line says yes"). Kept in scope as playbook-seed, not build.
 <!-- /autoplan-accepted:design -->
 
 <!-- autoplan-accepted:dx -->
-- A Child 0 "Developer loop" ships before Children 1-3 build: a working `sefa` CLI (`[project.scripts] sefa = "sefa.cli:main"`, argparse) with `serve`, `doctor`, `replay <wav>`, and `bench`; `doctor` preflights config, artifacts (incl. the Bangla Piper voice), on-call allow-list, and spend-cap reachability with problem+cause+fix per error; `replay` runs STT→LLM→TTS on a WAV, writes a real `calls` row, and renders it on the dashboard with NO trunk/PBX/GPU required; `bench` is the owned latency benchmark (p50+p95 parse-to-reply + VRAM peak + per-stage budget). TTHW = first successful `sefa replay` on a fresh clone.
+- A Child 0 "Developer loop" ships before Children 1-3 build: a working `shefa` CLI (`[project.scripts] shefa = "shefa.cli:main"`, argparse) with `serve`, `doctor`, `replay <wav>`, and `bench`; `doctor` preflights config, artifacts (incl. the Bangla Piper voice), on-call allow-list, and spend-cap reachability with problem+cause+fix per error; `replay` runs STT→LLM→TTS on a WAV, writes a real `calls` row, and renders it on the dashboard with NO trunk/PBX/GPU required; `bench` is the owned latency benchmark (p50+p95 parse-to-reply + VRAM peak + per-stage budget). TTHW = first successful `shefa replay` on a fresh clone.
 - The config substrate is fixed before any new config lands: `AppConfig` sets `model_config = ConfigDict(extra="forbid")` and declares every block the app reads (incl. `models.adapters`, `integrations.notifications`, `telephony.sip`, emergency on-call allow-list, spend, dashboard); provider fields become StrEnum with startup validation listing valid values; unset `${ENV_VAR}` and missing/unknown config keys fail startup loudly naming the variable/key; `load_config` takes an explicit path and fails loudly when the file is missing (no silent default); `.env.example` matches the plan's config surface with required-vs-optional + fallback per var.
 - The Q12 regression asserts RESOLVED AppConfig values (`settings.pipeline.llm.model == "qwen2.5:7b"` and the adapter key it actually reads), so it can fail on the two-key drift; it stops asserting a YAML key under a dropped block.
 - Q9-Q12 are resolved by this plan's own decision blocks (ceo: ARI-first + trunk-as-pilot-dependency; calls-table source of truth; ≤2s median + p95 benchmark; resolved-key model pin) and plan line 202 cites them in-plan; no external `/spec` artifact is authoritative.
-- Safety-path errors get startup preflight + inline contracts: `sefa doctor` catches empty on-call allow-list, unset `${VAR}`, missing `system.md`, missing model files, spend-cap unreachable — each with symptom/cause/fix/verify; an inline 4-part error stub ships inside Child 1's DoD; the full error registry and HTTP error-response schema stay in Child 5.
+- Safety-path errors get startup preflight + inline contracts: `shefa doctor` catches empty on-call allow-list, unset `${VAR}`, missing `system.md`, missing model files, spend-cap unreachable — each with symptom/cause/fix/verify; an inline 4-part error stub ships inside Child 1's DoD; the full error registry and HTTP error-response schema stay in Child 5.
 - PHI masking is per-sink, not global: the emergency fail-safe SMS deliberately carries the caller's number (PHI) and does NOT get masked; CDR poll, desk notification, and transcripts mask per `monitoring.phi_masking`.
 - Headline constants become named config keys with env override: DTMF key map, 50%/90% spend alerts, emergency-release seconds, max call duration; retention splits into `compliance.data_retention_days` (compliance posture) vs `dashboard.transcript_retention_days` (T+14 verified delete) so the retention contradiction (default.yaml 2555 vs T+14) is resolved in behavior, not prose.
 - All side-effecting paths (emergency SMS, desk notification, on-call transfer) get a `DRY_RUN` rehearsal flag that logs the intended action without firing.
@@ -248,8 +248,8 @@ line says yes"). Kept in scope as playbook-seed, not build.
 - STT confidence is derived from segment evidence (`avg_logprob` → exp or `no_speech_prob`), NEVER from `language_probability` (which today computes the inverse of language certainty and fires transfer when Whisper is certain); the escalation knob splits into `is_emergency(text)` (keywords + intent router) and `needs_repeat(confidence)` (STT quality); `escalation.confidence_threshold` is re-keyed/deleted; a regression test asserting a high-certainty utterance does NOT transfer lands FIRST, before adjacent code converges (D-ENG2).
 - A `CallControl` plane ships inside Child 1's media artifacts, separate from `MediaBridge`: `transfer(target)`, `play_file(uri)`, `hangup(reason)`, `dial()`; `MediaBridge` exposes a `CallLeg` handle so `VoicePipeline` stops owning adapter lifecycle; the pipeline task handle is retained, a sentinel is pushed to `audio_queue` on disconnect, and adapters cancel the task in `finally` — the orphaned `asyncio.create_task` (twilio.py:142-151) and its spinning `while True` are fixed and covered by a task-count-baseline test (D-ENG3).
 - The audio contract is made real and lands in Child 1, not Child 4: an explicit `AudioFrame(rate, width, channels)` type; a codec-normalizing boundary (ulaw/alaw/pcm → s16le 16000 Hz mono) at adapter ingress; WAV/RIFF headers stripped at TTS egress; one authoritative `sample_rate`; a golden-fixture test (known WAV in → known PCM out) becomes a Child 1 acceptance criterion (D-ENG4).
-- Bangla voice is a NAMED BLOCKER parallel to SIP-trunk procurement (owner + licensing + quality bar): obtain `models/piper/bn_BD.nf_cycgan.onnx` (or a licensed equivalent) BEFORE `sefa bench`/`replay` gates pass; the registry consumes `models.adapters` (tts_piper model path, device, compute_type) instead of no-arg `PiperTTS()`/`WhisperLocalSTT()` defaults; `sefa doctor` asserts the RESOLVED adapter's model path is the Bangla voice, not just that a file exists (D-ENG5).
-- TTS is made streamable and the benchmark becomes an abort gate: `piper` runs as a persistent/onnxruntime session (no per-utterance `create_subprocess_exec` + temp WAV); `synthesize_stream` feeds `playback_queue`; `sefa bench` ABORTS the epic if warm p50 > 1.2s, p95 > 2.0s, or peak VRAM > 80% of the target card before Children 1-3 spend; cold-start first-turn latency is reported SEPARATELY from warm p50/p95, and models are warmed at `sefa serve` preflight (D-ENG6, D-ENG18).
+- Bangla voice is a NAMED BLOCKER parallel to SIP-trunk procurement (owner + licensing + quality bar): obtain `models/piper/bn_BD.nf_cycgan.onnx` (or a licensed equivalent) BEFORE `shefa bench`/`replay` gates pass; the registry consumes `models.adapters` (tts_piper model path, device, compute_type) instead of no-arg `PiperTTS()`/`WhisperLocalSTT()` defaults; `shefa doctor` asserts the RESOLVED adapter's model path is the Bangla voice, not just that a file exists (D-ENG5).
+- TTS is made streamable and the benchmark becomes an abort gate: `piper` runs as a persistent/onnxruntime session (no per-utterance `create_subprocess_exec` + temp WAV); `synthesize_stream` feeds `playback_queue`; `shefa bench` ABORTS the epic if warm p50 > 1.2s, p95 > 2.0s, or peak VRAM > 80% of the target card before Children 1-3 spend; cold-start first-turn latency is reported SEPARATELY from warm p50/p95, and models are warmed at `shefa serve` preflight (D-ENG6, D-ENG18).
 - Authentication/authorization is a Child 0 prerequisite, not a Child 3 afterthought: bearer-token authn + role authz middleware applied to ALL routes including the telephony router; the Twilio router mounts only when `provider == "twilio"` AND dev mode AND binds 127.0.0.1; `/api/v1/calls/outbound` and `/call-me` require auth AND the Child 1 spend guard; the hardcoded `VERIFIED_NUMBER="+8801782737074"` default is deleted (explicit config, no default); fake `JWT_SECRET_KEY`/`ENCRYPTION_KEY` are removed from `.env.example` until they mean something; `validate_phi_access` is either implemented against the real key or DELETED — never a stub that logs `authorized: True` (D-ENG7).
 - PHI masking is BD/E.164-shaped and actually wired: `mask_phi` gains `\+\d{8,15}` → keep-last-4 (the US 10-digit `_PHONE_RE` misses every BD caller ID); the configured structlog logger (with `phi_masking`) is the ONLY server logger — today `logging.basicConfig` in `main.py` bypasses it and `monitoring.phi_masking` is not config-driven; YAML flattened; a test asserts `mask_phi("+8801712345678")` is masked (D-ENG8).
 - A durable audit substrate replaces stdout structlog: an append-only SQLite `audit_log` table (same file, WAL, monotonic sequence) backs audited-delete tombstones, daily integrity `COUNT` reconciliation against the heartbeat row, and the D5 zero-log alert; `audit_log()` writes there; the delete path writes a durable tombstone, not a log line (D-ENG9).
@@ -265,10 +265,10 @@ line says yes"). Kept in scope as playbook-seed, not build.
 - Concurrency is bounded and asserted: the two media queues are bounded with `put()` timeouts (the playback worker currently `break`s on send errors and silently accumulates); the N=2 / 3rd+=CDR tests assert task count returns to baseline and `playback_queue.qsize() == 0` after each call; `ModelRegistry` adapters move from class attrs to instance attrs with an autouse reset fixture so the suite is order-independent (D-ENG21, D-ENG22).
 - The coverage bar matches reality: land `--cov-fail-under=47` (today's measured floor, 39 tests, adapters 0%) now and ratchet per child; REWRITTEN modules (pipeline, adapters, call-control, auth) must hit 100% themselves while the legacy tail converges; the AGENTS.md `=100` DoD stays for new modules (D-ENG27).
 - Prompt assembly is one loader, one precedence chain: jinja2 renders both `SYSTEM_PROMPT_TEMPLATE` placeholders and file prompts (a plain `system.md` load today silently drops `{language}`/`{patient_name}` interpolation); `prompts/<clinic_id>/system.md` overrides the config default; hot-reload uses write-temp-then-`os.replace` with an mtime+size-keyed cache; a `prompt_manifest` test asserts every referenced prompt file exists and renders (D-ENG24).
-- Dependency and secret hygiene: unused deps (`redis`, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `prometheus-client`, `sentry-sdk`) are dropped or justified; plaintext default URLs (`REDIS_URL`, `postgresql+asyncpg://medvoice:medvoice@…`) are removed from `.env.example`; what the box actually runs is documented and verified by `sefa doctor` (D-ENG23).
+- Dependency and secret hygiene: unused deps (`redis`, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `prometheus-client`, `sentry-sdk`) are dropped or justified; plaintext default URLs (`REDIS_URL`, `postgresql+asyncpg://shefa:shefa@…`) are removed from `.env.example`; what the box actually runs is documented and verified by `shefa doctor` (D-ENG23).
 - `${ENV_VAR}` resolution is full-string: `re.sub` over every occurrence (`${HOST}:${PORT}` must interpolate), failing startup while listing EVERY unresolved var with its config key path — no literal `${…}` ships (D-ENG26).
 - The demand check gets a stop point: the demand verdict (≥5 clinics, ≥3 trials) is assessed before any Child 6 demo spend; a negative verdict halts trunk-linked build regardless of code stage (D-ENG28, ceo D11 retained).
-- Brand strings collapse to one config-driven source ("Sefa Clinic" / "মেডভয়েস ক্লিনিক" / "MedVoice Receptionist" / package name) so the greeting brand can never diverge again; the plan's `plan:27` cross-reference is corrected to a stable label; the console-script change to `sefa.cli:main` is called out as a breaking change in Child 0 (M4/M12).
+- Brand strings collapse to one config-driven source ("SHEFA Clinic" / "শেফা ক্লিনিক" / "SHEFA Receptionist" / package name) so the greeting brand can never diverge again; the plan's `plan:27` cross-reference is corrected to a stable label; the console-script change to `shefa.cli:main` is called out as a breaking change in Child 0 (M4/M12).
 <!-- /autoplan-accepted:eng -->
 ## Review record
 
@@ -530,9 +530,9 @@ User Challenge classification applies — headroom retained until a second model
 
 | Pass | Dimension | Score | Issue → Correction |
 |---|---|---|---|
-| 1 | Getting started / TTHW | 2/10 | First ACs need trunk+PBX+softphone+GPU+Piper; no hello world → `sefa replay <wav>` loopback = first success; TTHW ~minutes on fresh clone |
-| 2 | API / CLI ergonomics | 3/10 | `sefa` CLI crashes; config drops `models:`/`integrations:` silently; Q12 tests a dead key → working CLI + `extra="forbid"` + StrEnum providers + startup validation |
-| 3 | Error handling | 2/10 | No error contracts on safety paths; unset `${VAR}` passes through literally; 3am allow-list failure → `sefa doctor` preflight + inline 4-part error stub in Child 1 |
+| 1 | Getting started / TTHW | 2/10 | First ACs need trunk+PBX+softphone+GPU+Piper; no hello world → `shefa replay <wav>` loopback = first success; TTHW ~minutes on fresh clone |
+| 2 | API / CLI ergonomics | 3/10 | `shefa` CLI crashes; config drops `models:`/`integrations:` silently; Q12 tests a dead key → working CLI + `extra="forbid"` + StrEnum providers + startup validation |
+| 3 | Error handling | 2/10 | No error contracts on safety paths; unset `${VAR}` passes through literally; 3am allow-list failure → `shefa doctor` preflight + inline 4-part error stub in Child 1 |
 | 4 | Documentation | 4/10 | Q9-Q12 cited as phantom artifact; docs after code; README contradicts the plan → resolve in-plan; README v1 + error stub in Child 1; bash-block CI runner |
 | 5 | Escape hatches | 3/10 | No telephony-free mode; monolithic prompt pack; unconfigurable constants → loopback replay; per-clinic `system.md` override; named config keys + DRY_RUN |
 | 6 | Upgrade & migration | 4/10 | Two call-read APIs no deprecation; retention 2555 vs T+14 contradiction → deprecate `/api/v1/sessions` (410); split `data_retention_days` vs `transcript_retention_days` |
@@ -542,14 +542,14 @@ User Challenge classification applies — headroom retained until a second model
 
 | # | Finding | Severity | Auto-decision (principle) | Surfaced at gate? |
 |---|---|---|---|---|
-| D-DX1 | No hello world; first success requires procured trunk + PBX + GPU + vLLM + Piper (G1) | critical | Adopt: Child 0 "Developer loop" — `sefa doctor` (config/artifacts preflight), `sefa replay <wav>` (loopback, real `calls` row, dashboard render, no trunk), `sefa bench` (owned latency benchmark). Thwarts Children 1-3 (P1, P5) | No |
-| D-DX2 | `default.yaml` references missing `bn_BD` Piper voice; fresh-clone benchmark impossible (G2, reproduced: only `en_US-lessac` on disk) | critical | Adopt: model fetch/verify is a `sefa doctor` step; benchmark gates on artifacts the plan actually ships (P1) | No |
-| D-DX3 | Latency benchmark owned by nobody, sits outside every child (G3) | high | Adopt: becomes `sefa bench` inside Child 0 ACs (D-DX1), with owned checkbox (P1) | No |
+| D-DX1 | No hello world; first success requires procured trunk + PBX + GPU + vLLM + Piper (G1) | critical | Adopt: Child 0 "Developer loop" — `shefa doctor` (config/artifacts preflight), `shefa replay <wav>` (loopback, real `calls` row, dashboard render, no trunk), `shefa bench` (owned latency benchmark). Thwarts Children 1-3 (P1, P5) | No |
+| D-DX2 | `default.yaml` references missing `bn_BD` Piper voice; fresh-clone benchmark impossible (G2, reproduced: only `en_US-lessac` on disk) | critical | Adopt: model fetch/verify is a `shefa doctor` step; benchmark gates on artifacts the plan actually ships (P1) | No |
+| D-DX3 | Latency benchmark owned by nobody, sits outside every child (G3) | high | Adopt: becomes `shefa bench` inside Child 0 ACs (D-DX1), with owned checkbox (P1) | No |
 | D-DX4 | README vLLM model (Qwen3-8B) contradicts `default.yaml` qwen2.5:7b (G4, reproduced) | high | Adopt: README v1 rewrite in Child 1 aligns one model truth; drop server-scale claims (HIPAA/K8s/Redis/Postgres/50+) (P1, P6) | No |
-| D-DX5 | `sefa` console script crashes; no CLI surface for X8 "test-call command" (G5, reproduced live) | critical | Adopt: `[project.scripts] sefa = "sefa.cli:main"` (argparse): `serve`, `doctor`, `replay`, `bench` (P1) | No |
+| D-DX5 | `shefa` console script crashes; no CLI surface for X8 "test-call command" (G5, reproduced live) | critical | Adopt: `[project.scripts] shefa = "shefa.cli:main"` (argparse): `serve`, `doctor`, `replay`, `bench` (P1) | No |
 | D-DX6 | README advertises opposite of plan: server-scale, wrong clone command (G6) | high | Adopt: README v1 rewrite per D-DX4; correct clone; single-clinic on-prem SQLite T+14 posture (P1) | No |
-| D-DX7 | `.env.example` lacks SIP/ARI/ESL/allow-list/desk/CDR/spend keys; wrong shape (G7) | high | Adopt: `.env.example` matches plan config surface; required-vs-optional per var + fallback; covered by `sefa doctor` (P1) | No |
-| D-DX8 | No single-command dev loop; no preflight (G8) | medium | Adopt: `sefa doctor` + Makefile-style `make dev` ordering, preflight-first (P5) | No |
+| D-DX7 | `.env.example` lacks SIP/ARI/ESL/allow-list/desk/CDR/spend keys; wrong shape (G7) | high | Adopt: `.env.example` matches plan config surface; required-vs-optional per var + fallback; covered by `shefa doctor` (P1) | No |
+| D-DX8 | No single-command dev loop; no preflight (G8) | medium | Adopt: `shefa doctor` + Makefile-style `make dev` ordering, preflight-first (P5) | No |
 | D-DX9 | `AppConfig` silently drops `models:`/`integrations:`/`telephony.websocket`; Q12 regression tests dead key (A1/A2, reproduced) | critical | Adopt: `extra="forbid"` + full key coverage; Q12 asserts RESOLVED AppConfig values so it can fail; new `telephony.sip` + desk-notification config land only on fixed substrate (P1) | No |
 | D-DX10 | Provider = bare `str`, late `ValueError`, no valid-values list; new 3rd dimension same shape (A3) | medium | Adopt: StrEnum providers + startup validation listing valid values (P5, P1) | No |
 | D-DX11 | Import-time, CWD-relative settings; silent default on missing file; every new tool inherits it (A5) | high | Adopt: `load_config` explicit path + fail-loud on missing; relocation rules documented (P1, P6) | No |
@@ -562,19 +562,19 @@ User Challenge classification applies — headroom retained until a second model
 | D-DX18 | Docs written after 4 code children; canonical build spec from memory (D3) | high | Adopt: doc stubs early (README v1, error stub, config table) in Child 1; full docs Child 5 (P5) | No |
 | D-DX19 | Zero copy-paste commands; no executable-docs gate (D4) | high | Adopt: bash-block execution in CI for README/dev/ops docs (P1, P6) | No |
 | D-DX20 | Per-child test DoD below repo's own AGENTS.md standard (D5) | high | Adopt: per-child = new-fn test, both branches, regression per bug, `--cov-fail-under=100`; exception taxonomy (STT/empty/malformed/TTS) (P1, P6) | No |
-| D-DX21 | No telephony-free mode (X1) | critical | Adopt: `sefa replay` = offline prove-the-loop path (D-DX1); dashboard `calls` row rendered without any trunk (P5) | No |
+| D-DX21 | No telephony-free mode (X1) | critical | Adopt: `shefa replay` = offline prove-the-loop path (D-DX1); dashboard `calls` row rendered without any trunk (P5) | No |
 | D-DX22 | Monolithic un-overridable prompt pack; Child 8 multi-clinic = code fork (X2) | high | Adopt: `prompts/<clinic_id>/system.md` + `clinic.current`, hot-reload without restart (P6) | No |
 | D-DX23 | Hardcoded DTMF map, alerts, release seconds, max duration (X3) | high | Adopt: named config keys + env override on all (P6, P5) | No |
 | D-DX24 | Retention contradiction: 2555 (settings.py + YAML) vs T+14 delete (X4) | high | Adopt: split `compliance.data_retention_days` from `dashboard.transcript_retention_days` (T+14); documented (P2, P6) | No |
-| D-DX25 | Median latency gate satisfiable by p99 of 30s; no per-stage budget (X5) | medium | Adopt: `sefa bench` reports p50+p95+per-stage budget (D-DX1) (P1) | No |
+| D-DX25 | Median latency gate satisfiable by p99 of 30s; no per-stage budget (X5) | medium | Adopt: `shefa bench` reports p50+p95+per-stage budget (D-DX1) (P1) | No |
 | D-DX26 | No dry-run for SMS/transfer (X6) | high | Adopt: `DRY_RUN` rehearsal flag on all side-effecting paths (P2) | No |
-| D-DX27 | No mechanism for the $10/approval gate (X7) | medium | Adopt: gate expressed as env/config flag + `sefa doctor` check; owner approval documented (P6) | No |
+| D-DX27 | No mechanism for the $10/approval gate (X7) | medium | Adopt: gate expressed as env/config flag + `shefa doctor` check; owner approval documented (P6) | No |
 | D-DX28 | Two call-read APIs no deprecation; naming inconsistent (A6/A7) | medium | Adopt: deprecate `/api/v1/sessions` → 410 + pointer to SQLite read; state one endpoint convention (P5, P6) | No |
 
 ## DX forwarders to Eng
 
 - Child 0 "Developer loop" ships first and gates Children 1-3 (D-DX1); the ceo obligation's
-  "latency benchmark runs before Children 1-3" is satisfied by `sefa bench`.
+  "latency benchmark runs before Children 1-3" is satisfied by `shefa bench`.
 - Config-substrate fix (`extra="forbid"`, StrEnum providers, fail-loud `load_config`,
   `.env.example`, README v1) is a precondition wired into Child 1's tasks, not deferred.
 - Q9-Q12 resolutions bind to ceo decision lines 202-221 + design D-DES1; plan line 202 must
@@ -587,7 +587,7 @@ User Challenge classification applies — headroom retained until a second model
 
 | Area | Status |
 |---|---|
-| Developer loop | Child 0: `sefa doctor` / `replay` / `bench` / `serve` — first success without trunk/GPU |
+| Developer loop | Child 0: `shefa doctor` / `replay` / `bench` / `serve` — first success without trunk/GPU |
 | Config substrate | `extra="forbid"`, StrEnum, fail-loud load, full `.env.example`, README v1 (Child 1) |
 | Error handling | Startup preflight + inline 4-part stub in Child 1; per-sink PHI masking rule |
 | Escape hatches | Loopback replay; per-clinic prompt override; `DRY_RUN`; retention keys split |
@@ -595,11 +595,11 @@ User Challenge classification applies — headroom retained until a second model
 | Deprecations | `/api/v1/sessions` → 410 + SQLite pointer with dashboard API (Child 4) |
 
 <!-- autoplan-accepted:dx -->
-- A Child 0 "Developer loop" ships before Children 1-3 build: a working `sefa` CLI (`[project.scripts] sefa = "sefa.cli:main"`, argparse) with `serve`, `doctor`, `replay <wav>`, and `bench`; `doctor` preflights config, artifacts (incl. the Bangla Piper voice), on-call allow-list, and spend-cap reachability with problem+cause+fix per error; `replay` runs STT→LLM→TTS on a WAV, writes a real `calls` row, and renders it on the dashboard with NO trunk/PBX/GPU required; `bench` is the owned latency benchmark (p50+p95 parse-to-reply + VRAM peak + per-stage budget). TTHW = first successful `sefa replay` on a fresh clone.
+- A Child 0 "Developer loop" ships before Children 1-3 build: a working `shefa` CLI (`[project.scripts] shefa = "shefa.cli:main"`, argparse) with `serve`, `doctor`, `replay <wav>`, and `bench`; `doctor` preflights config, artifacts (incl. the Bangla Piper voice), on-call allow-list, and spend-cap reachability with problem+cause+fix per error; `replay` runs STT→LLM→TTS on a WAV, writes a real `calls` row, and renders it on the dashboard with NO trunk/PBX/GPU required; `bench` is the owned latency benchmark (p50+p95 parse-to-reply + VRAM peak + per-stage budget). TTHW = first successful `shefa replay` on a fresh clone.
 - The config substrate is fixed before any new config lands: `AppConfig` sets `model_config = ConfigDict(extra="forbid")` and declares every block the app reads (incl. `models.adapters`, `integrations.notifications`, `telephony.sip`, emergency on-call allow-list, spend, dashboard); provider fields become StrEnum with startup validation listing valid values; unset `${ENV_VAR}` and missing/unknown config keys fail startup loudly naming the variable/key; `load_config` takes an explicit path and fails loudly when the file is missing (no silent default); `.env.example` matches the plan's config surface with required-vs-optional + fallback per var.
 - The Q12 regression asserts RESOLVED AppConfig values (`settings.pipeline.llm.model == "qwen2.5:7b"` and the adapter key it actually reads), so it can fail on the two-key drift; it stops asserting a YAML key under a dropped block.
 - Q9-Q12 are resolved by this plan's own decision blocks (ceo: ARI-first + trunk-as-pilot-dependency; calls-table source of truth; ≤2s median + p95 benchmark; resolved-key model pin) and plan line 202 cites them in-plan; no external `/spec` artifact is authoritative.
-- Safety-path errors get startup preflight + inline contracts: `sefa doctor` catches empty on-call allow-list, unset `${VAR}`, missing `system.md`, missing model files, spend-cap unreachable — each with symptom/cause/fix/verify; an inline 4-part error stub ships inside Child 1's DoD; the full error registry and HTTP error-response schema stay in Child 5.
+- Safety-path errors get startup preflight + inline contracts: `shefa doctor` catches empty on-call allow-list, unset `${VAR}`, missing `system.md`, missing model files, spend-cap unreachable — each with symptom/cause/fix/verify; an inline 4-part error stub ships inside Child 1's DoD; the full error registry and HTTP error-response schema stay in Child 5.
 - PHI masking is per-sink, not global: the emergency fail-safe SMS deliberately carries the caller's number (PHI) and does NOT get masked; CDR poll, desk notification, and transcripts mask per `monitoring.phi_masking`.
 - Headline constants become named config keys with env override: DTMF key map, 50%/90% spend alerts, emergency-release seconds, max call duration; retention splits into `compliance.data_retention_days` (compliance posture) vs `dashboard.transcript_retention_days` (T+14 verified delete) so the retention contradiction (default.yaml 2555 vs T+14) is resolved in behavior, not prose.
 - All side-effecting paths (emergency SMS, desk notification, on-call transfer) get a `DRY_RUN` rehearsal flag that logs the intended action without firing.
@@ -659,7 +659,7 @@ Challenge classification applies — headroom retained until a second model conf
 Baseline measured on branch `feat/first-clinic-shefa` (HEAD `bb455ac`): 39 tests pass,
 47% coverage; `voice_pipeline.py` 17%, `registry.py` 28%, every model adapter **0%**,
 `twilio.py` 64% (lines 107-152, the entire media path, untested); no `--cov-fail-under`
-in `pyproject.toml`; no `add_middleware`/`Depends(`/`HTTPBearer` anywhere in `src/sefa`;
+in `pyproject.toml`; no `add_middleware`/`Depends(`/`HTTPBearer` anywhere in `src/shefa`;
 `models/piper/` holds only `en_US-lessac-medium.onnx`.
 
 ## ENG DUAL VOICES — CONSENSUS TABLE
@@ -714,7 +714,7 @@ block; scope challenge never reduced (P2).
 
 ```
                        ┌─────────────────────────────────────────────┐
-                       │  sefa (uvicorn)  main.py                     │
+                       │  shefa (uvicorn)  main.py                     │
                        │  create_app(): routers + middleware          │
                        │  authn/authz middleware (Child 0, ALL routes)│
                        └───────┬───────────────────────┬──────────────┘
@@ -750,7 +750,7 @@ Artifact: `~/.gstack/projects/ImtiazAhammad-SHEFA-the-Medical-receptionist-voice
 
 Every new UX flow / data flow / codepath / branch from Children 0-8 is mapped to
 required test type, existence, and gap in that artifact. Headline gaps (all absent
-today): `sefa doctor` per-check; `sefa replay` row→dashboard render; `extra="forbid"`
+today): `shefa doctor` per-check; `shefa replay` row→dashboard render; `extra="forbid"`
 boot import; `${VAR}` full-string failure; single-knob startup rejection; CallControl
 ops; task-lifecycle sentinel; AudioFrame golden fixture; confidence-inversion
 regression; two-directional emergency suite; OTHER-language route; N+1 failure
@@ -808,55 +808,55 @@ test can dial it), C3 (tombstone asserted durably, not log-line).
 
 - [ ] **T1 (P1, human: ~1d / CC: ~2h)** — Child 0 — config reshape + `extra="forbid"` on every sub-model, boots last, module-import boot test
   - Surfaced by: D-ENG1 (B1)
-  - Files: configs/default.yaml, src/sefa/config/settings.py, tests/unit/test_config.py
-  - Verify: `pytest` + fresh import of every module; `sefa doctor` passes
+  - Files: configs/default.yaml, src/shefa/config/settings.py, tests/unit/test_config.py
+  - Verify: `pytest` + fresh import of every module; `shefa doctor` passes
 - [ ] **T2 (P1, human: ~4h / CC: ~1h)** — Child 0 — confidence from segment evidence; split `is_emergency`/`needs_repeat`; re-key threshold; REGRESSION FIRST
   - Surfaced by: D-ENG2 (B2)
-  - Files: src/sefa/models/stt/whisper_local.py, src/sefa/pipeline/language_detector.py, configs/default.yaml
+  - Files: src/shefa/models/stt/whisper_local.py, src/shefa/pipeline/language_detector.py, configs/default.yaml
   - Verify: high-certainty fixture → no transfer
 - [ ] **T3 (P1, human: ~6h / CC: ~2h)** — Child 1 — `CallControl` + `CallLeg` (transfer/play_file/hangup/dial); adapter lifecycle (sentinel + finally-cancel, retained handle)
   - Surfaced by: D-ENG3 (B3)
-  - Files: src/sefa/telephony/sip.py, src/sefa/telephony/twilio.py, src/sefa/pipeline/voice_pipeline.py
+  - Files: src/shefa/telephony/sip.py, src/shefa/telephony/twilio.py, src/shefa/pipeline/voice_pipeline.py
   - Verify: task-count baseline return test; emergency end-to-end hold→release
 - [ ] **T4 (P1, human: ~6h / CC: ~2h)** — Child 1 — `AudioFrame(rate,width,channels)` + codec boundary 8k/16k→s16le-16k mono + WAV strip on TTS egress + golden fixture
   - Surfaced by: D-ENG4 (B4)
-  - Files: src/sefa/telephony/sip.py, src/sefa/models/tts/piper_tts.py, tests
+  - Files: src/shefa/telephony/sip.py, src/shefa/models/tts/piper_tts.py, tests
   - Verify: golden-fixture test is a Child 1 AC
-- [ ] **T5 (P1, owner + licensing; CC: research)** — Blocker (parallel to trunk) — obtain a licensed Bangla Piper voice; `sefa doctor` asserts RESOLVED adapter path is the bn voice
+- [ ] **T5 (P1, owner + licensing; CC: research)** — Blocker (parallel to trunk) — obtain a licensed Bangla Piper voice; `shefa doctor` asserts RESOLVED adapter path is the bn voice
   - Surfaced by: D-ENG5 (B5)
-  - Files: models/piper/, src/sefa/models/registry.py, .env.example
-  - Verify: `sefa doctor` resolved-path pass; `sefa replay <bn.wav>` in Bangla
+  - Files: models/piper/, src/shefa/models/registry.py, .env.example
+  - Verify: `shefa doctor` resolved-path pass; `shefa replay <bn.wav>` in Bangla
 - [ ] **T6 (P1, human: ~6h / CC: ~2h)** — Child 0 — TTS persistent session + `synthesize_stream` into `playback_queue` + benchmark ABORT thresholds + cold-start separate
   - Surfaced by: D-ENG6 (B6), D-ENG18 (H8)
-  - Files: src/sefa/models/tts/piper_tts.py, src/sefa/cli.py, src/sefa/pipeline/voice_pipeline.py
-  - Verify: `sefa bench` p50≤1.2s/p95≤2.0s warm, VRAM≤80%, cold-start line
+  - Files: src/shefa/models/tts/piper_tts.py, src/shefa/cli.py, src/shefa/pipeline/voice_pipeline.py
+  - Verify: `shefa bench` p50≤1.2s/p95≤2.0s warm, VRAM≤80%, cold-start line
 - [ ] **T7 (P1, human: ~4h / CC: ~1.5h)** — Child 0 — authn/authz middleware on ALL routes; gate Twilio router (dev_mode + 127.0.0.1); delete hardcoded VERIFIED_NUMBER; delete fake .env keys; `validate_phi_access` real-or-deleted
   - Surfaced by: D-ENG7 (C1)
-  - Files: src/sefa/main.py, src/sefa/utils/compliance.py, .env.example, src/sefa/telephony/twilio.py
+  - Files: src/shefa/main.py, src/shefa/utils/compliance.py, .env.example, src/shefa/telephony/twilio.py
   - Verify: unauthenticated request → 401/403 on every route; no dialable default
 - [ ] **T8 (P1, human: ~3h / CC: ~1h)** — Child 0 — BD/E.164 PHI masking + configured logger is the ONLY server logger + `monitoring.phi_masking` configurable
   - Surfaced by: D-ENG8 (C2)
-  - Files: src/sefa/utils/compliance.py, src/sefa/utils/logging.py, src/sefa/main.py, configs/default.yaml
+  - Files: src/shefa/utils/compliance.py, src/shefa/utils/logging.py, src/shefa/main.py, configs/default.yaml
   - Verify: `mask_phi("+8801712345678")` masked test
 - [ ] **T9 (P1, human: ~1d / CC: ~3h)** — Child 0/3 — SQLite `audit_log` (append-only, WAL, seq) + daily COUNT reconcile + durable delete tombstones
   - Surfaced by: D-ENG9 (C3), D-DX24
-  - Files: src/sefa/store/{calls,audit}.py, src/sefa/utils/compliance.py
+  - Files: src/shefa/store/{calls,audit}.py, src/shefa/utils/compliance.py
   - Verify: tombstone survives restart; zero-log alert reads audit store
 - [ ] **T10 (P2, human: ~6h / CC: ~2h)** — Child 0 — error envelope + status map (4xx) + HTTPException migration list
   - Surfaced by: D-ENG14 (H4)
-  - Files: src/sefa/main.py, tests
+  - Files: src/shefa/main.py, tests
   - Verify: required-param → 4xx, not 200+error body
 - [ ] **T11 (P2, human: ~4h / CC: ~1h)** — Child 0 — RMS VAD + noise floor + max-buffer flush + noisy-clinic fixture
   - Surfaced by: D-ENG11 (H1)
-  - Files: src/sefa/pipeline/vad.py (new), voice_pipeline.py
+  - Files: src/shefa/pipeline/vad.py (new), voice_pipeline.py
   - Verify: fixture triggers transcribe in noisy room
 - [ ] **T12 (P2, human: ~3h / CC: ~1h)** — Child 0 — error taxonomy + per-call counters + backoff + terminal transition; consume `max_transfer_attempts`; N+1 test
   - Surfaced by: D-ENG12 (H2)
-  - Files: src/sefa/pipeline/voice_pipeline.py, src/sefa/cli.py
+  - Files: src/shefa/pipeline/voice_pipeline.py, src/shefa/cli.py
   - Verify: N+1 failures → call closed via courtesy+DTMF/transfer
 - [ ] **T13 (P2, human: ~3h / CC: ~1h)** — Child 0 — turn-group truncation + boundary tests; OTHER-language route + fixtures
   - Surfaced by: D-ENG15 (H5), D-ENG16 (H6)
-  - Files: src/sefa/session/manager.py, voice_pipeline.py
+  - Files: src/shefa/session/manager.py, voice_pipeline.py
   - Verify: no orphaned tool turns; Hindi/Urdu → warm transfer
 - [ ] **T14 (P2, human: ~3h / CC: ~1h)** — Child 0 — extend emergency phrase set (clinician review via sign-off) + bidirectional corpus + substring trap
   - Surfaced by: D-ENG17 (H7)
@@ -884,15 +884,15 @@ test can dial it), C3 (tombstone asserted durably, not log-line).
   - Verify: `pytest` green with floor
 - [ ] **T20 (P2, human: ~3h / CC: ~1h)** — Child 0 — one jinja2 prompt loader + precedence chain + `prompt_manifest` test + mtime/size hot-reload
   - Surfaced by: D-ENG24 (M5)
-  - Files: src/sefa/pipeline/prompts.py (new), system.md, CLI
+  - Files: src/shefa/pipeline/prompts.py (new), system.md, CLI
   - Verify: every referenced prompt exists + renders
 - [ ] **T21 (P2, human: ~2h / CC: ~30m)** — Child 0 — prune unused deps + delete REDIS_URL/DATABASE_URL plaintext defaults
   - Surfaced by: D-ENG23 (M3)
   - Files: pyproject.toml, .env.example
-  - Verify: `sefa doctor` + import test green; no plaintext cred defaults
+  - Verify: `shefa doctor` + import test green; no plaintext cred defaults
 - [ ] **T22 (P2, human: ~1h / CC: ~15m)** — Child 0 — full-string `${VAR}` interpolation + fail naming every unresolved var/key path
   - Surfaced by: D-ENG26 (M9)
-  - Files: src/sefa/config/settings.py, tests
+  - Files: src/shefa/config/settings.py, tests
   - Verify: `${HOST}:${PORT}` interpolation test
 - [ ] **T23 (P2, human: ~1h / CC: ~15m)** — Child 0 — four brand strings → one config-driven source; `plan:27` reference corrected; console-script breaking change noted
   - Surfaced by: M4/M12 + ceo brand obligation
@@ -947,8 +947,8 @@ _No new tasks from consensus section — single-model phase, all findings folded
 - STT confidence is derived from segment evidence (`avg_logprob` → exp or `no_speech_prob`), NEVER from `language_probability` (which today computes the inverse of language certainty and fires transfer when Whisper is certain); the escalation knob splits into `is_emergency(text)` (keywords + intent router) and `needs_repeat(confidence)` (STT quality); `escalation.confidence_threshold` is re-keyed/deleted; a regression test asserting a high-certainty utterance does NOT transfer lands FIRST, before adjacent code converges (D-ENG2).
 - A `CallControl` plane ships inside Child 1's media artifacts, separate from `MediaBridge`: `transfer(target)`, `play_file(uri)`, `hangup(reason)`, `dial()`; `MediaBridge` exposes a `CallLeg` handle so `VoicePipeline` stops owning adapter lifecycle; the pipeline task handle is retained, a sentinel is pushed to `audio_queue` on disconnect, and adapters cancel the task in `finally` — the orphaned `asyncio.create_task` (twilio.py:142-151) and its spinning `while True` are fixed and covered by a task-count-baseline test (D-ENG3).
 - The audio contract is made real and lands in Child 1, not Child 4: an explicit `AudioFrame(rate, width, channels)` type; a codec-normalizing boundary (ulaw/alaw/pcm → s16le 16000 Hz mono) at adapter ingress; WAV/RIFF headers stripped at TTS egress; one authoritative `sample_rate`; a golden-fixture test (known WAV in → known PCM out) becomes a Child 1 acceptance criterion (D-ENG4).
-- Bangla voice is a NAMED BLOCKER parallel to SIP-trunk procurement (owner + licensing + quality bar): obtain `models/piper/bn_BD.nf_cycgan.onnx` (or a licensed equivalent) BEFORE `sefa bench`/`replay` gates pass; the registry consumes `models.adapters` (tts_piper model path, device, compute_type) instead of no-arg `PiperTTS()`/`WhisperLocalSTT()` defaults; `sefa doctor` asserts the RESOLVED adapter's model path is the Bangla voice, not just that a file exists (D-ENG5).
-- TTS is made streamable and the benchmark becomes an abort gate: `piper` runs as a persistent/onnxruntime session (no per-utterance `create_subprocess_exec` + temp WAV); `synthesize_stream` feeds `playback_queue`; `sefa bench` ABORTS the epic if warm p50 > 1.2s, p95 > 2.0s, or peak VRAM > 80% of the target card before Children 1-3 spend; cold-start first-turn latency is reported SEPARATELY from warm p50/p95, and models are warmed at `sefa serve` preflight (D-ENG6, D-ENG18).
+- Bangla voice is a NAMED BLOCKER parallel to SIP-trunk procurement (owner + licensing + quality bar): obtain `models/piper/bn_BD.nf_cycgan.onnx` (or a licensed equivalent) BEFORE `shefa bench`/`replay` gates pass; the registry consumes `models.adapters` (tts_piper model path, device, compute_type) instead of no-arg `PiperTTS()`/`WhisperLocalSTT()` defaults; `shefa doctor` asserts the RESOLVED adapter's model path is the Bangla voice, not just that a file exists (D-ENG5).
+- TTS is made streamable and the benchmark becomes an abort gate: `piper` runs as a persistent/onnxruntime session (no per-utterance `create_subprocess_exec` + temp WAV); `synthesize_stream` feeds `playback_queue`; `shefa bench` ABORTS the epic if warm p50 > 1.2s, p95 > 2.0s, or peak VRAM > 80% of the target card before Children 1-3 spend; cold-start first-turn latency is reported SEPARATELY from warm p50/p95, and models are warmed at `shefa serve` preflight (D-ENG6, D-ENG18).
 - Authentication/authorization is a Child 0 prerequisite, not a Child 3 afterthought: bearer-token authn + role authz middleware applied to ALL routes including the telephony router; the Twilio router mounts only when `provider == "twilio"` AND dev mode AND binds 127.0.0.1; `/api/v1/calls/outbound` and `/call-me` require auth AND the Child 1 spend guard; the hardcoded `VERIFIED_NUMBER="+8801782737074"` default is deleted (explicit config, no default); fake `JWT_SECRET_KEY`/`ENCRYPTION_KEY` are removed from `.env.example` until they mean something; `validate_phi_access` is either implemented against the real key or DELETED — never a stub that logs `authorized: True` (D-ENG7).
 - PHI masking is BD/E.164-shaped and actually wired: `mask_phi` gains `\+\d{8,15}` → keep-last-4 (the US 10-digit `_PHONE_RE` misses every BD caller ID); the configured structlog logger (with `phi_masking`) is the ONLY server logger — today `logging.basicConfig` in `main.py` bypasses it and `monitoring.phi_masking` is not config-driven; YAML flattened; a test asserts `mask_phi("+8801712345678")` is masked (D-ENG8).
 - A durable audit substrate replaces stdout structlog: an append-only SQLite `audit_log` table (same file, WAL, monotonic sequence) backs audited-delete tombstones, daily integrity `COUNT` reconciliation against the heartbeat row, and the D5 zero-log alert; `audit_log()` writes there; the delete path writes a durable tombstone, not a log line (D-ENG9).
@@ -964,10 +964,10 @@ _No new tasks from consensus section — single-model phase, all findings folded
 - Concurrency is bounded and asserted: the two media queues are bounded with `put()` timeouts (the playback worker currently `break`s on send errors and silently accumulates); the N=2 / 3rd+=CDR tests assert task count returns to baseline and `playback_queue.qsize() == 0` after each call; `ModelRegistry` adapters move from class attrs to instance attrs with an autouse reset fixture so the suite is order-independent (D-ENG21, D-ENG22).
 - The coverage bar matches reality: land `--cov-fail-under=47` (today's measured floor, 39 tests, adapters 0%) now and ratchet per child; REWRITTEN modules (pipeline, adapters, call-control, auth) must hit 100% themselves while the legacy tail converges; the AGENTS.md `=100` DoD stays for new modules (D-ENG27).
 - Prompt assembly is one loader, one precedence chain: jinja2 renders both `SYSTEM_PROMPT_TEMPLATE` placeholders and file prompts (a plain `system.md` load today silently drops `{language}`/`{patient_name}` interpolation); `prompts/<clinic_id>/system.md` overrides the config default; hot-reload uses write-temp-then-`os.replace` with an mtime+size-keyed cache; a `prompt_manifest` test asserts every referenced prompt file exists and renders (D-ENG24).
-- Dependency and secret hygiene: unused deps (`redis`, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `prometheus-client`, `sentry-sdk`) are dropped or justified; plaintext default URLs (`REDIS_URL`, `postgresql+asyncpg://medvoice:medvoice@…`) are removed from `.env.example`; what the box actually runs is documented and verified by `sefa doctor` (D-ENG23).
+- Dependency and secret hygiene: unused deps (`redis`, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `prometheus-client`, `sentry-sdk`) are dropped or justified; plaintext default URLs (`REDIS_URL`, `postgresql+asyncpg://shefa:shefa@…`) are removed from `.env.example`; what the box actually runs is documented and verified by `shefa doctor` (D-ENG23).
 - `${ENV_VAR}` resolution is full-string: `re.sub` over every occurrence (`${HOST}:${PORT}` must interpolate), failing startup while listing EVERY unresolved var with its config key path — no literal `${…}` ships (D-ENG26).
 - The demand check gets a stop point: the demand verdict (≥5 clinics, ≥3 trials) is assessed before any Child 6 demo spend; a negative verdict halts trunk-linked build regardless of code stage (D-ENG28, ceo D11 retained).
-- Brand strings collapse to one config-driven source ("Sefa Clinic" / "মেডভয়েস ক্লিনিক" / "MedVoice Receptionist" / package name) so the greeting brand can never diverge again; the plan's `plan:27` cross-reference is corrected to a stable label; the console-script change to `sefa.cli:main` is called out as a breaking change in Child 0 (M4/M12).
+- Brand strings collapse to one config-driven source ("SHEFA Clinic" / "শেফা ক্লিনিক" / "SHEFA Receptionist" / package name) so the greeting brand can never diverge again; the plan's `plan:27` cross-reference is corrected to a stable label; the console-script change to `shefa.cli:main` is called out as a breaking change in Child 0 (M4/M12).
 <!-- /autoplan-accepted:eng -->
 
 ---

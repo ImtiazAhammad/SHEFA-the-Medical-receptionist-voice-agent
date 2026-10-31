@@ -25,11 +25,11 @@ why it was deferred, current state, where to start, and what unblocks it.
 ## From DX review (Phase 2.5)
 
 - **Bangla Piper voice** (`bn_BD.nf_cycgan.onnx`) — **promoted to a named blocker (eng B5)**, parallel to SIP-trunk procurement. Own:
-  acquisition/licensing + quality bar; `sefa doctor` asserts resolved adapter path is the bn voice.
+  acquisition/licensing + quality bar; `shefa doctor` asserts resolved adapter path is the bn voice.
 - **`/api/v1/sessions` deprecation (410 + SQLite pointer)** — lands with dashboard API (Child 4).
 - **Full error registry + HTTP error-response schema** — stays Child 5 (inline 4-part stub ships in Child 1).
 - **Per-clinic `prompts/<clinic_id>/system.md` hot-reload** — Child 8 config, not code fork; precedence chain via one loader (eng M5).
-- **Drop unused deps** (`redis`, `sqlalchemy`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `sentry-sdk`, `prometheus-client`) + remove `REDIS_URL`/`DATABASE_URL` defaults — verify `sefa doctor` (eng M3).
+- **Drop unused deps** (`redis`, `sqlalchemy`, `asyncpg`, `alembic`, `langchain-*`, `langgraph`, `sentry-sdk`, `prometheus-client`) + remove `REDIS_URL`/`DATABASE_URL` defaults — verify `shefa doctor` (eng M3).
 
 ## From Eng review (Phase 3)
 

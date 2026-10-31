@@ -19,16 +19,16 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, StreamEvent, STTResult
-from sefa.models.registry import registry
-from sefa.pipeline.error_taxonomy import (
+from shefa.audio import AudioFrame
+from shefa.models.base import Language, LLMResult, StreamEvent, STTResult
+from shefa.models.registry import registry
+from shefa.pipeline.error_taxonomy import (
     FailureKind,
     MalformedLLMOutputError,
     backoff_delay,
     require_llm_result,
 )
-from sefa.pipeline.voice_pipeline import VoicePipeline
+from shefa.pipeline.voice_pipeline import VoicePipeline
 
 NOISE_RMS = 200.0
 SPEECH_RMS = 3000.0
@@ -128,7 +128,7 @@ class _CallHarness:
         monkeypatch.setattr(registry, "_stt", stt)
         monkeypatch.setattr(registry, "_llm", llm)
         monkeypatch.setattr(registry, "_tts", tts)
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(
             settings.escalation, "max_transfer_attempts", max_transfer_attempts
@@ -282,7 +282,7 @@ class TestPipelineRescuePaths:
 
     @pytest.mark.asyncio
     async def test_malformed_llm_output_creates_no_hot_loop(self, monkeypatch):
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", True)
         done = _CallHarness(
@@ -303,7 +303,7 @@ class TestPipelineRescuePaths:
     async def test_malformed_stream_in_extract_mode_backs_off_once(self, monkeypatch):
         """With native tool calls off, each turn also polls the JSON router, so
         a broken stream costs one stream call plus one router call per rescue."""
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
         done = _CallHarness(

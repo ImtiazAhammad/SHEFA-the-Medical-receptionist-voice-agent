@@ -1,8 +1,8 @@
 ﻿"""Tests for compliance utilities."""
 
-from sefa.auth import AuthStore, hash_token
-from sefa.store.audit import AuditStore
-from sefa.utils.compliance import (
+from shefa.auth import AuthStore, hash_token
+from shefa.store.audit import AuditStore
+from shefa.utils.compliance import (
     audit_log,
     hash_identifier,
     mask_phi,

@@ -23,9 +23,9 @@ from typing import Any
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.registry import ModelRegistry, registry
-from sefa.telephony.twilio import (
+from shefa.audio import AudioFrame
+from shefa.models.registry import ModelRegistry, registry
+from shefa.telephony.twilio import (
     PlaybackWorker,
     make_media_queues,
 )

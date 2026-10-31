@@ -3,8 +3,8 @@
 import sys
 import types
 
-from sefa.config.settings import settings
-from sefa.session.manager import CallSession, SessionManager
+from shefa.config.settings import settings
+from shefa.session.manager import CallSession, SessionManager
 
 
 def _set_backend(monkeypatch, backend: str) -> None:
