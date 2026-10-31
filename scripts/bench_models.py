@@ -247,19 +247,25 @@ def stt_model_path(name: str, models_dir: Path) -> str:
 
 
 def convert_omikhan(target: Path) -> None:
-    """Convert OmiKhan/bangla-asr-whisper-medium to CTranslate2 for faster-whisper."""
-    from ctranslate2.converters import TransformersConverter
-    from huggingface_hub import hf_hub_download
+    """Convert OmiKhan/bangla-asr-whisper-medium to CTranslate2 for faster-whisper.
 
-    repo = "OmiKhan/bangla-asr-whisper-medium"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    TransformersConverter(repo, copy_files=["tokenizer.json", "preprocessor_config.json"]).convert(
-        str(target), quantization="float16", force=True
-    )
-    for name in ("tokenizer.json", "preprocessor_config.json"):
-        if not (target / name).exists():
-            fallback = hf_hub_download("openai/whisper-medium", name)
-            (target / name).write_bytes(Path(fallback).read_bytes())
+    The fine-tune has its OWN tokenizer (token ids differ from base Whisper), so its
+    tokenizer.json must travel with the converted weights; pairing it with the base
+    tokenizer yields fluent-looking multilingual garbage. Only the 80-bin feature
+    extractor config, which the repo lacks, comes from the base model.
+    """
+    import shutil
+
+    from ctranslate2.converters import TransformersConverter
+    from huggingface_hub import hf_hub_download, snapshot_download
+
+    local = target.parent / "omikhan-src"
+    snapshot_download("OmiKhan/bangla-asr-whisper-medium", local_dir=str(local))
+    base_config = hf_hub_download("openai/whisper-medium", "preprocessor_config.json")
+    shutil.copy2(base_config, local / "preprocessor_config.json")
+    TransformersConverter(
+        str(local), copy_files=["tokenizer.json", "preprocessor_config.json"]
+    ).convert(str(target), quantization="float16", force=True)
 
 
 def vram_mib() -> int | None:
@@ -275,17 +281,67 @@ def vram_mib() -> int | None:
         return None
 
 
-def cmd_stt(args: argparse.Namespace) -> None:
+def make_transcriber(name: str, models_dir: Path):
+    """A `audio -> text` callable. `hf:<repo>` runs a transformers checkpoint directly.
+
+    CTranslate2 (faster-whisper) is what the product ships; `hf:` exists because a
+    fine-tune that converts badly must still be measurable on its own merits.
+    """
+    if name.startswith("hf:"):
+        import torch
+        from transformers import (
+            WhisperFeatureExtractor,
+            WhisperForConditionalGeneration,
+            WhisperProcessor,
+            WhisperTokenizer,
+        )
+
+        repo = name[3:]
+        processor = WhisperProcessor(
+            feature_extractor=WhisperFeatureExtractor.from_pretrained("openai/whisper-medium"),
+            tokenizer=WhisperTokenizer.from_pretrained(repo),
+        )
+        model = (
+            WhisperForConditionalGeneration.from_pretrained(repo, torch_dtype=torch.float16)
+            .to("cuda")
+            .eval()
+        )
+
+        def run_hf(audio: np.ndarray) -> str:
+            features = processor(audio, sampling_rate=RATE, return_tensors="pt").input_features
+            with torch.no_grad():
+                ids = model.generate(
+                    features.to("cuda", torch.float16),
+                    language="bn",
+                    task="transcribe",
+                    num_beams=5,
+                    max_new_tokens=200,
+                )
+            return processor.batch_decode(ids, skip_special_tokens=True)[0]
+
+        return run_hf
+
     from faster_whisper import WhisperModel
 
+    model = WhisperModel(stt_model_path(name, models_dir), device="cuda", compute_type="float16")
+
+    def run_ct2(audio: np.ndarray) -> str:
+        segments, _ = model.transcribe(
+            audio, language="bn", beam_size=5, condition_on_previous_text=False
+        )
+        return " ".join(s.text.strip() for s in segments)
+
+    return run_ct2
+
+
+def cmd_stt(args: argparse.Namespace) -> None:
     out = Path(args.out)
     manifest = json.loads((out / "manifest.json").read_text())
-    results: dict[str, Any] = {}
+    results_path = out / "stt-results.json"
+    results: dict[str, Any] = json.loads(results_path.read_text()) if results_path.exists() else {}
     for name in args.models:
         baseline = vram_mib() or 0
-        model = WhisperModel(
-            stt_model_path(name, out / "models"), device="cuda", compute_type="float16"
-        )
+        transcribe = make_transcriber(name, out / "models")
         row: dict[str, Any] = {"vram_mib": (vram_mib() or 0) - baseline}
         for source in sorted({m["source"] for m in manifest}):
             for condition in ("clean", "phone", "phone_noise"):
@@ -293,10 +349,7 @@ def cmd_stt(args: argparse.Namespace) -> None:
                 for item in (m for m in manifest if m["source"] == source):
                     audio = read_wav(Path(item["files"][condition]))
                     started = time.perf_counter()
-                    segments, _ = model.transcribe(
-                        audio, language="bn", beam_size=5, condition_on_previous_text=False
-                    )
-                    hypothesis = " ".join(s.text.strip() for s in segments)
+                    hypothesis = transcribe(audio)
                     secs += time.perf_counter() - started
                     audio_secs += len(audio) / RATE
                     wer, cer = error_rates(item["text"], hypothesis)
@@ -309,9 +362,9 @@ def cmd_stt(args: argparse.Namespace) -> None:
                     "n": len(wers),
                 }
         results[name] = row
-        print(name, json.dumps(row, ensure_ascii=False))
-        del model
-    (out / "stt-results.json").write_text(json.dumps(results, ensure_ascii=False, indent=1))
+        print(name, json.dumps(row, ensure_ascii=False), flush=True)
+        del transcribe
+        results_path.write_text(json.dumps(results, ensure_ascii=False, indent=1))
 
 
 # ----------------------------------------------------------------------------- LLM
@@ -413,13 +466,9 @@ def cmd_llm(args: argparse.Namespace) -> None:
 
 def cmd_tts(args: argparse.Namespace) -> None:
     """Round-trip intelligibility: synthesize, transcribe with a fixed STT, compare."""
-    from faster_whisper import WhisperModel
-
     out = Path(args.out)
     (out / "tts").mkdir(parents=True, exist_ok=True)
-    stt = WhisperModel(
-        stt_model_path(args.judge, out / "models"), device="cuda", compute_type="float16"
-    )
+    transcribe = make_transcriber(args.judge, out / "models")
     engines: dict[str, Any] = {
         "piper-bn_BD-google": lambda t: synthesize_piper(t, args.piper_voice)
     }
@@ -434,8 +483,7 @@ def cmd_tts(args: argparse.Namespace) -> None:
             elapsed = time.perf_counter() - started
             rtfs.append(elapsed / max(len(audio) / RATE, 1e-9))
             write_wav(out / "tts" / f"{name.replace('/', '_')}-{i:02d}.wav", audio)
-            segments, _ = stt.transcribe(audio, language="bn", beam_size=5)
-            wers.append(error_rates(text, " ".join(s.text.strip() for s in segments))[0])
+            wers.append(error_rates(text, transcribe(audio))[0])
         results[name] = {
             "roundtrip_wer": round(float(np.mean(wers)), 3),
             "rtf": round(float(np.mean(rtfs)), 3),
@@ -471,7 +519,11 @@ def main() -> None:
     parser.add_argument("--piper-voice", default="models/piper/bn_BD-google-medium.onnx")
     parser.add_argument("--real", type=int, default=30, help="FLEURS clips (data step)")
     parser.add_argument("--host", default="http://localhost:11434")
-    parser.add_argument("--judge", default="large-v3", help="STT model that scores TTS output")
+    parser.add_argument(
+        "--judge",
+        default="hf:OmiKhan/bangla-asr-whisper-medium",
+        help="STT model that scores TTS output",
+    )
     parser.add_argument("--coqui", nargs="*", default=[], help="HF repos of Coqui VITS voices")
     args = parser.parse_args()
     {"data": cmd_data, "stt": cmd_stt, "llm": cmd_llm, "tts": cmd_tts}[args.step](args)
