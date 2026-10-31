@@ -270,3 +270,20 @@ async def test_reschedule_moves_the_only_booking(call):
         {"tool": "reschedule_appointment", "arguments": {"new_date": "x", "new_time": "y"}},
     )
     assert problem  # a bad date is answered with a fixed sentence, not a crash
+
+
+async def test_null_optional_arguments_from_the_router_do_not_break_booking(call):
+    await _identify(call)
+    reply = await call.say(
+        "book Rahman tomorrow 9",
+        {
+            "tool": "book_appointment",
+            "arguments": {
+                "date": _tomorrow(),
+                "time": "09:00",
+                "doctor_name": "Rahman",
+                "reason": None,
+            },
+        },
+    )
+    assert "APT-00001" in reply

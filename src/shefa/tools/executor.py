@@ -92,8 +92,8 @@ async def _book_appointment(args: dict[str, Any], session: CallSession) -> dict[
         patient_id=_acting_patient(session),
         date=args["date"],
         time=args["time"],
-        doctor_name=args.get("doctor_name", ""),
-        reason=args.get("reason", ""),
+        doctor_name=args.get("doctor_name") or "",
+        reason=args.get("reason") or "",
     )
 
 
@@ -106,7 +106,7 @@ async def _cancel_appointment(args: dict[str, Any], session: CallSession) -> dic
     return await cancel_appointment(
         appointment_id=appointment_id,
         patient_id=_acting_patient(session),
-        reason=args.get("reason", ""),
+        reason=args.get("reason") or "",
     )
 
 

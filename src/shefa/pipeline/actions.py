@@ -104,6 +104,13 @@ def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = No
         "any relative day the patient uses (today, tomorrow, the day after "
         "tomorrow, আজ, আগামীকাল, পরশু) into an absolute YYYY-MM-DD date in the "
         "arguments. Never use a date that is already in the past.\n"
+        "When the patient names a doctor, a day AND a time and asks to book, call "
+        "book_appointment with that date and the time as 24-hour HH:MM (বিকেল চারটা = "
+        "16:00, সকাল নয়টা = 09:00); use check_appointment_slots only when they ask what "
+        "times are free. To move or change an existing appointment call "
+        "reschedule_appointment with new_date and new_time; to cancel one call "
+        "cancel_appointment. Omit arguments you do not know; do not put patient_id in "
+        "arguments.\n"
         'Reply with ONLY a JSON object: {"tool": <name or null>, "arguments": {}}.\n'
         "Available tools:\n" + lines
     )
