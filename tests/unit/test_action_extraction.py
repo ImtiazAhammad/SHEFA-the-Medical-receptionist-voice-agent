@@ -641,3 +641,12 @@ def test_ambiguous_and_missing_appointments_have_their_own_sentences():
     assert "একাধিক" in which
     none = error_text("cancel_appointment", {"error": "No upcoming appointment found"}, "bn")
     assert "আসন্ন" in none
+
+
+def test_routing_hints_appear_only_for_tools_that_exist():
+    from shefa.tools.definitions import get_tool_definitions
+
+    full = extractor_system_prompt(get_tool_definitions())
+    assert "reschedule_appointment with new_date" in full and "24-hour HH:MM" in full
+    assert "patient_id" in full
+    assert "24-hour" not in extractor_system_prompt([_BOOK])
