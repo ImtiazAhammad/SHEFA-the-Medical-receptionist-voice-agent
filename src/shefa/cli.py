@@ -63,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     importer.add_argument("file", help="path to the clinic YAML (see configs/clinic.example.yaml)")
     clinic_sub.add_parser("show", help="print the directory as the agent sees it")
 
+    asterisk = sub.add_parser("asterisk", help="Asterisk telephony setup")
+    asterisk_sub = asterisk.add_subparsers(dest="asterisk_command")
+    render = asterisk_sub.add_parser(
+        "render", help="write Asterisk config files from deploy/asterisk and the environment"
+    )
+    render.add_argument("--out", default="deploy/asterisk/rendered", help="output directory")
+
     token = sub.add_parser(
         "token", help="mint an API bearer token for a configured role"
     )
@@ -217,6 +224,29 @@ def run_clinic(args: argparse.Namespace) -> int:
     return 2
 
 
+def run_asterisk(args: argparse.Namespace) -> int:
+    import os
+    from pathlib import Path
+
+    from shefa.telephony.asterisk_config import render_asterisk_config
+
+    if args.asterisk_command != "render":
+        print("usage: shefa asterisk render [--out DIR]", file=sys.stderr)
+        return 2
+    try:
+        files = render_asterisk_config(os.environ)
+    except (ValueError, OSError) as exc:
+        print(f"Cannot render Asterisk config: {exc}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, text in files.items():
+        (out / name).write_text(text, encoding="utf-8")
+    out.chmod(0o700)
+    print(f"Wrote {len(files)} files to {out} (contains the trunk password; keep it private)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -259,6 +289,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "clinic":
         return run_clinic(args)
+
+    if args.command == "asterisk":
+        return run_asterisk(args)
 
     parser.print_help()
     return 2

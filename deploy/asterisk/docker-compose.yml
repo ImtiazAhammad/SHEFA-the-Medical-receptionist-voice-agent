@@ -1,0 +1,16 @@
+# Asterisk with host networking (SIP + RTP behave badly behind Docker NAT).
+# 1. export SIP_TRUNK_HOST=... SIP_TRUNK_USER=... SIP_TRUNK_PASSWORD=... ARI_PASSWORD=...
+# 2. shefa asterisk render --out deploy/asterisk/rendered
+# 3. docker compose -f deploy/asterisk/docker-compose.yml up -d
+# Use an Asterisk 20+ image that ships res_audiosocket and ARI.
+services:
+  asterisk:
+    image: andrius/asterisk:20
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./rendered/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./rendered/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./rendered/ari.conf:/etc/asterisk/ari.conf:ro
+      - ./rendered/http.conf:/etc/asterisk/http.conf:ro
+      - ./rendered/modules.conf:/etc/asterisk/modules.conf:ro

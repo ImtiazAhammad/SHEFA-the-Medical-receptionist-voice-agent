@@ -1,0 +1,14 @@
+; Calls reach SHEFA over AudioSocket (8 kHz signed linear). SHEFA_UUID is how SHEFA
+; finds this channel again through ARI for transfer and hang-up.
+[shefa-inbound]
+exten => _X.,1,NoOp(Inbound call from ${CALLERID(num)})
+ same => n,Answer()
+ same => n,Set(SHEFA_UUID=${UUID()})
+ same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
+ same => n,Hangup()
+
+; Outbound calls (reminders): ARI originates through the trunk, then lands here once answered.
+[shefa-outbound]
+exten => s,1,NoOp(Outbound answered, uuid ${SHEFA_UUID})
+ same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
+ same => n,Hangup()
