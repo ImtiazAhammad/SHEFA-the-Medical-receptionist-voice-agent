@@ -156,11 +156,11 @@ class _CallHarness:
     async def warmup_and_start(self) -> None:
         for _ in range(2):
             await asyncio.sleep(0)
-        for _ in range(5):
+        for _ in range(10):  # 0.5 s of room noise (the VAD warm-up is in seconds)
             await self.audio_queue.put(_pcm_chunk(NOISE_RMS, seed=0))
 
     async def utterance(self, speech_seed: int = 1) -> None:
-        for _ in range(6):
+        for _ in range(12):  # 0.6 s of speech
             await self.audio_queue.put(_pcm_chunk(SPEECH_RMS, seed=speech_seed))
             await asyncio.sleep(0.01)
         # 0.6s of speech ticks + a 0.8s end-of-utterance silence window before

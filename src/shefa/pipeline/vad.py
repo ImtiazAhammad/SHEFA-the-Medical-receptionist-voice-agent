@@ -70,20 +70,24 @@ class EnergyVAD:
         self._sample_rate = sample_rate
         self._byte_rate = sample_rate * channels * sample_width
         self.tick_s = tick_s
-        self._warmup_ticks = max(1, round(warmup_s / tick_s))
-        self._end_silence_ticks = max(1, round((end_silence_ms / 1000.0) / tick_s))
+        # All durations are accumulated in seconds from the audio itself. Counting chunks
+        # assumed every chunk lasted `tick_s`, but telephony delivers 20 ms frames: an
+        # "800 ms" end-of-turn window was 8 chunks, i.e. 160 ms, and cut sentences at
+        # the first breath.
+        self._warmup_s = max(tick_s, warmup_s)
+        self._end_silence_s = max(tick_s, end_silence_ms / 1000.0)
+        self._min_speech_s = min_speech_ticks * tick_s
         self.max_buffer_s = max_buffer_s
         self._energy_ratio = energy_ratio
         self._rms_gate = rms_gate
         self._floor_alpha = floor_alpha
-        self._min_speech_ticks = min_speech_ticks
 
         self.noise_floor = 0.0
         self._buffered_s = 0.0
-        self._silence_ticks = 0
+        self._silence_s = 0.0
         self._segment_active = False
-        self._segment_speech_ticks = 0
-        self._warmup_left = self._warmup_ticks
+        self._segment_speech_s = 0.0
+        self._warmup_left_s = self._warmup_s
 
     @property
     def buffered_seconds(self) -> float:
@@ -105,23 +109,23 @@ class EnergyVAD:
     def _tick(self, rms: float, elapsed: float) -> VADDecision:
         self._buffered_s += elapsed
 
-        if self._warmup_left > 0:
+        if self._warmup_left_s > 1e-9:
             # Calibrate the floor on the opening audio, which we assume is
             # the quiet room; never treat the warmup itself as speech.
             if rms > 0:
                 self.noise_floor = rms
-            self._warmup_left -= 1
+            self._warmup_left_s -= elapsed
             return VADDecision(rms=rms, noise_floor=self.noise_floor)
 
         threshold = max(self.noise_floor * self._energy_ratio, self._rms_gate)
         is_speech = rms > threshold
 
         if is_speech:
-            self._silence_ticks = 0
+            self._silence_s = 0.0
             self._segment_active = True
-            self._segment_speech_ticks += 1
+            self._segment_speech_s += elapsed
         else:
-            self._silence_ticks += 1
+            self._silence_s += elapsed
             # The floor adapts only when we are NOT in speech, so a loud
             # patient cannot inflate their own threshold mid-utterance.
             if rms > 0 and self.noise_floor > 0:
@@ -132,8 +136,8 @@ class EnergyVAD:
         if self._buffered_s >= self.max_buffer_s:
             return self._flush(FLUSH_MAX_BUFFER, rms, is_speech)
 
-        if self._segment_active and self._silence_ticks >= self._end_silence_ticks:
-            if self._segment_speech_ticks >= self._min_speech_ticks:
+        if self._segment_active and self._silence_s >= self._end_silence_s - 1e-9:
+            if self._segment_speech_s >= self._min_speech_s - 1e-9:
                 decision = self._flush(FLUSH_SILENCE, rms, is_speech)
             else:
                 self._reset_segment()
@@ -156,9 +160,9 @@ class EnergyVAD:
     def _reset_segment(self) -> None:
         """Reset buffered/segment counters but keep the adapted noise floor."""
         self._buffered_s = 0.0
-        self._silence_ticks = 0
+        self._silence_s = 0.0
         self._segment_active = False
-        self._segment_speech_ticks = 0
+        self._segment_speech_s = 0.0
 
 
 def _rms(chunk: bytes) -> float:

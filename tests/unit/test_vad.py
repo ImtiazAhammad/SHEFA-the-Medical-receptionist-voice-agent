@@ -143,8 +143,7 @@ class TestEnergyVADUnit:
 
         vad = EnergyVAD()
         _warmup_noise(vad)
-        for _ in range(2):  # only 0.2s of "speech": below min_speech_ticks (3)
-            vad.update(_tone_chunk(3400.0))
+        vad.update(_tone_chunk(3400.0))  # one 0.2 s chunk of "speech": under the 0.3 s minimum
 
         flushed = None
         for _ in range(10):
@@ -325,7 +324,8 @@ class TestPipelineTranscribesTheFixture:
 
         with wave.open(str(FIXTURE), "rb") as w:
             raw = w.readframes(w.getnframes())
-        chunks = [raw[i : i + 1600] for i in range(0, len(raw) - len(raw) % 1600, 1600)]
+        # 100 ms of the pipeline's 16 kHz audio per chunk
+        chunks = [raw[i : i + 3200] for i in range(0, len(raw) - len(raw) % 3200, 3200)]
         for chunk in chunks:
             await audio_queue.put(chunk)
             await asyncio.sleep(0.01)
@@ -336,3 +336,51 @@ class TestPipelineTranscribesTheFixture:
         assert transcripts, "the pipeline never sent audio to STT"
         assert len(transcripts[-1]) > 1600, "the transcribed buffer was not a real utterance"
         assert transcripts[-1] != b"\x00" * len(transcripts[-1])
+
+class TestTurnTimingIsMeasuredInSeconds:
+    """Telephony delivers 20 ms frames. Counting chunks instead of seconds made the 800 ms
+    end-of-turn window 160 ms long, cutting sentences at the first breath."""
+
+    FRAME = 640  # 20 ms of s16le at 16 kHz
+
+    def _vad(self):
+        from shefa.pipeline.vad import EnergyVAD
+
+        vad = EnergyVAD(sample_rate=16000)
+        for seed in range(30):  # 0.6 s of room noise
+            vad.update(_noise_chunk(100.0, n=self.FRAME // 2, seed=seed))
+        return vad
+
+    def _speak(self, vad, seconds):
+        for seed in range(round(seconds / 0.02)):
+            vad.update(_noise_chunk(3000.0, n=self.FRAME // 2, seed=100 + seed))
+
+    def _silence(self, vad, seconds):
+        decisions = []
+        for _ in range(round(seconds / 0.02)):
+            decisions.append(vad.update(b"\x00" * self.FRAME))
+        return decisions
+
+    def test_a_700ms_pause_inside_a_sentence_does_not_end_the_turn(self):
+        vad = self._vad()
+        self._speak(vad, 1.0)
+        assert not any(d.flush for d in self._silence(vad, 0.7))
+
+    def test_the_turn_ends_after_800ms_of_silence(self):
+        vad = self._vad()
+        self._speak(vad, 1.0)
+        decisions = self._silence(vad, 0.9)
+        assert any(d.flush for d in decisions)
+        first = next(i for i, d in enumerate(decisions) if d.flush)
+        assert 0.78 <= (first + 1) * 0.02 <= 0.84
+
+    def test_max_buffer_is_real_seconds_not_half_of_them(self):
+        from shefa.pipeline.vad import EnergyVAD
+
+        vad = EnergyVAD(sample_rate=16000, max_buffer_s=1.0)
+        flushed_at = None
+        for i in range(80):
+            if vad.update(_noise_chunk(3000.0, n=self.FRAME // 2, seed=i)).flush:
+                flushed_at = (i + 1) * 0.02
+                break
+        assert flushed_at is not None and 0.95 <= flushed_at <= 1.05

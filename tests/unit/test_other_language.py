@@ -188,9 +188,9 @@ async def test_other_language_offers_warm_transfer_and_never_replies(monkeypatch
 
     for _ in range(2):
         await asyncio.sleep(0)
-    for _ in range(5):
+    for _ in range(10):  # 0.5 s of room noise: the VAD's warm-up is measured in seconds
         await audio_queue.put(_pcm_chunk(NOISE_RMS, seed=0))
-    for _ in range(6):
+    for _ in range(12):  # 0.6 s of speech
         await audio_queue.put(_pcm_chunk(SPEECH_RMS, seed=1))
         await asyncio.sleep(0.01)
     await asyncio.sleep(2.0)

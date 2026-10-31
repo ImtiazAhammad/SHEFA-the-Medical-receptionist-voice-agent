@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     # here turns a stalled playback consumer into a call that hangs forever.
     PlaybackSink = Callable[[AudioFrame], Awaitable[None]]
 
+from shefa.audio import TARGET_RATE
 from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
@@ -158,7 +159,10 @@ class VoicePipeline:
         # begins, using an adaptive noise floor and an explicit max_buffer
         # flush so a noisy clinic room can neither stall a turn nor grow the
         # buffer without bound.
-        vad = EnergyVAD()
+        # Pipeline audio is s16le 16 kHz. The detector defaults to 8 kHz, which made it count
+        # every chunk as twice its length: the 800 ms end-of-turn window was really 400 ms
+        # and sentences were cut at the first natural pause.
+        vad = EnergyVAD(sample_rate=TARGET_RATE)
 
         while True:
             try:

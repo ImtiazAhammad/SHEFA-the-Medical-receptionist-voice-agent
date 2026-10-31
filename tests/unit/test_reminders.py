@@ -286,3 +286,42 @@ async def test_app_lifespan_runs_the_reminder_scheduler_when_enabled(monkeypatch
     monkeypatch.setattr(reminders, "run_forever", fake_forever)
     async with _lifespan(None):
         await asyncio.wait_for(started.wait(), 1)
+
+
+async def test_pipeline_builds_its_vad_for_16khz_audio(monkeypatch):
+    """The detector's default is 8 kHz; the pipeline's audio is 16 kHz. A mismatch makes the
+    end-of-turn window half as long as configured and cuts sentences at the first pause."""
+    import asyncio
+
+    from shefa.models.registry import registry
+    from shefa.pipeline import voice_pipeline
+    from shefa.pipeline.voice_pipeline import VoicePipeline
+
+    seen = {}
+
+    class SpyVAD(voice_pipeline.EnergyVAD):
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+            super().__init__(**kwargs)
+
+    class Tts:
+        async def synthesize_stream(self, text, language="en"):
+            return
+            yield
+
+    async def get(value):
+        return value
+
+    monkeypatch.setattr(voice_pipeline, "EnergyVAD", SpyVAD)
+    monkeypatch.setattr(registry, "get_tts", lambda: get(Tts()))
+    monkeypatch.setattr(registry, "get_stt", lambda: get(object()))
+    monkeypatch.setattr(registry, "get_llm", lambda: get(object()))
+
+    async def sink(frame):
+        return None
+
+    task = asyncio.create_task(VoicePipeline().process_audio_stream("vad-1", asyncio.Queue(), sink))
+    await asyncio.sleep(0.2)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert seen["sample_rate"] == 16000

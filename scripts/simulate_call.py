@@ -25,6 +25,7 @@ from shefa.clinic.loader import import_directory_file
 from shefa.config.settings import TelephonyProvider, settings
 from shefa.telephony import asterisk
 from shefa.telephony.audiosocket import KIND_AUDIO, KIND_HANGUP, KIND_UUID, encode_frame, read_frame
+from shefa.telephony.call_context import OutboundContext, set_context
 
 FRAME = 320
 
@@ -58,7 +59,7 @@ async def listen(reader: asyncio.StreamReader, quiet_after: float) -> tuple[floa
     return first or -1.0, frames * 0.02
 
 
-async def run(utterances: list[str], voice: str) -> None:
+async def run(utterances: list[str], voice: str, caller: str) -> None:
     from shefa.models.tts.piper_tts import PiperTTS
 
     tmp = Path(tempfile.mkdtemp(prefix="shefa-sim-"))
@@ -75,8 +76,11 @@ async def run(utterances: list[str], voice: str) -> None:
 
     tts = PiperTTS(model_path=voice)
     server = await asterisk.start_audiosocket_server()
-    reader, writer = await asyncio.open_connection("127.0.0.1", 45731)
     call_uuid = uuid.uuid4()
+    if caller:  # what Asterisk's caller ID gives the real server
+        patient = store.upsert_patient(caller)
+        set_context(str(call_uuid), OutboundContext(patient_id=str(patient)))
+    reader, writer = await asyncio.open_connection("127.0.0.1", 45731)
     writer.write(encode_frame(KIND_UUID, call_uuid.bytes))
     print(f"call {call_uuid} connected")
 
@@ -112,9 +116,10 @@ async def run(utterances: list[str], voice: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("utterances", nargs="+")
+    parser.add_argument("--caller", default="", help="caller ID to pretend Asterisk supplied")
     parser.add_argument("--voice", default="models/piper/bn_BD-google-medium.onnx")
     args = parser.parse_args()
-    asyncio.run(run(args.utterances, args.voice))
+    asyncio.run(run(args.utterances, args.voice, args.caller))
 
 
 if __name__ == "__main__":
