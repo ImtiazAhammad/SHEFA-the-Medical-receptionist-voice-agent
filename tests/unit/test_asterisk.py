@@ -207,3 +207,62 @@ async def test_app_lifespan_is_inert_for_twilio(monkeypatch):
     monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.TWILIO)
     async with _lifespan(None):
         pass
+
+
+def _ari_with_caller(monkeypatch, caller: str | None, call_sid: str):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/ari/channels":
+            return httpx.Response(200, json=[{"id": "chan-1"}])
+        variable = request.url.params.get("variable")
+        if variable == "SHEFA_UUID":
+            return httpx.Response(200, json={"value": call_sid})
+        if caller is None:
+            return httpx.Response(404)
+        return httpx.Response(200, json={"value": caller})
+
+    _ari(monkeypatch, handler)
+
+
+async def test_inbound_caller_is_recognised_from_caller_id(monkeypatch, pipeline):
+    from shefa.clinic import default_clinic_store
+    from shefa.telephony.call_context import pop_context
+
+    sid = str(CALL_UUID)
+    _ari_with_caller(monkeypatch, "+8801711000123", sid)
+    server, port = await _serve()
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(encode_frame(KIND_UUID, CALL_UUID.bytes))
+    await writer.drain()
+    for _ in range(100):
+        if control.get(sid):
+            break
+        await asyncio.sleep(0.01)
+
+    context = pop_context(sid)
+    assert context is not None and context.greeting == "" and context.language == ""
+    patient = default_clinic_store().get_patient(int(context.patient_id))
+    assert patient["phone"] == "01711000123"  # +880 form normalised
+    writer.write(encode_frame(KIND_HANGUP, b""))
+    await writer.drain()
+    writer.close()
+    server.close()
+
+
+async def test_hidden_caller_id_leaves_the_call_unidentified(monkeypatch, pipeline):
+    from shefa.telephony.call_context import has_context
+
+    sid = str(CALL_UUID)
+    _ari_with_caller(monkeypatch, None, sid)
+    server, port = await _serve()
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(encode_frame(KIND_UUID, CALL_UUID.bytes))
+    await writer.drain()
+    for _ in range(100):
+        if control.get(sid):
+            break
+        await asyncio.sleep(0.01)
+    assert not has_context(sid)
+    writer.write(encode_frame(KIND_HANGUP, b""))
+    await writer.drain()
+    writer.close()
+    server.close()

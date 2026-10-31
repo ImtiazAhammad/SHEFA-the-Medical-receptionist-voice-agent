@@ -26,7 +26,12 @@ if TYPE_CHECKING:
 from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
-from shefa.pipeline.actions import confirmation_text, extract_action, tool_result_note
+from shefa.pipeline.actions import (
+    confirmation_text,
+    error_text,
+    extract_action,
+    tool_result_note,
+)
 from shefa.pipeline.error_taxonomy import (
     FailureKind,
     MalformedLLMOutputError,
@@ -129,8 +134,9 @@ class VoicePipeline:
             outbound = pop_context(call_sid)
             if outbound is not None:
                 # An outbound call opens with what it is about, and already knows who it is.
-                greeting = outbound.greeting
-                session.language = Language(outbound.language)
+                greeting = outbound.greeting or greeting
+                if outbound.language:
+                    session.language = Language(outbound.language)
                 session.patient_id = outbound.patient_id or None
                 session.patient_name = outbound.patient_name or None
                 if outbound.on_answered is not None:
@@ -417,7 +423,10 @@ class VoicePipeline:
             # spoken verbatim; the model never gets to re-state them. Only untemplated tools
             # fall back to a grounded model reply, with the result folded into the LEADING
             # system message (gemma2's chat template reads a trailing one loosely).
-            fixed = confirmation_text(action.name, tool_result, session.language.value)
+            language = session.language.value
+            fixed = confirmation_text(action.name, tool_result, language) or error_text(
+                action.name, tool_result, language
+            )
             if fixed is not None:
                 await self._emit(tts, fixed, session.language.value, put_playback)
                 return fixed

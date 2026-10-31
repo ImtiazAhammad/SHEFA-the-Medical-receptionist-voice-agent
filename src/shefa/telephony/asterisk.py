@@ -33,7 +33,7 @@ from shefa.telephony.audiosocket import (
     encode_frame,
     read_frame,
 )
-from shefa.telephony.call_context import has_context
+from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.control import CallLeg, control
 from shefa.telephony.twilio import make_media_queues
 
@@ -80,6 +80,19 @@ class AsteriskCallLeg(CallLeg):
                 self.channel_id = channel["id"]
                 return self.channel_id
         raise LookupError(f"No Asterisk channel for call {self.call_sid}")
+
+    async def caller_number(self) -> str:
+        """The caller's number as Asterisk saw it (set by the dialplan), or "" if unknown."""
+        try:
+            async with client_factory() as client:
+                channel = await self._channel(client)
+                reply = await client.get(
+                    f"/channels/{channel}/variable", params={"variable": "SHEFA_CALLER"}
+                )
+                reply.raise_for_status()
+                return str(reply.json().get("value") or "")
+        except (httpx.HTTPError, LookupError, ValueError):
+            return ""
 
     async def transfer(self, to: str) -> dict[str, Any]:
         endpoint = f"{settings.telephony.asterisk.trunk_endpoint}/{to}"
@@ -162,6 +175,30 @@ class _Playback:
                 await asyncio.sleep(max(0.0, deadline - time.monotonic()))
 
 
+async def _identify_caller(call_sid: str, leg: AsteriskCallLeg) -> None:
+    """Recognise an inbound caller by their caller ID so they never have to dictate a number.
+
+    Best effort and bounded: if ARI is slow or the number is hidden the call simply starts
+    unidentified, exactly as before.
+    """
+    from shefa.clinic import default_clinic_store
+
+    try:
+        phone = await asyncio.wait_for(leg.caller_number(), timeout=2.0)
+        if not phone:
+            return
+        store = default_clinic_store()
+        patient_id = store.upsert_patient(phone)
+        patient = store.get_patient(patient_id) or {}
+    except Exception:
+        logger.warning("Could not identify the caller of %s", call_sid)
+        return
+    set_context(
+        call_sid,
+        OutboundContext(patient_id=str(patient_id), patient_name=patient.get("name", "")),
+    )
+
+
 async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     """One call: identify it, run the pipeline, tear everything down on hang-up."""
     first = await read_frame(reader)
@@ -172,10 +209,13 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
     call_sid = str(uuid.UUID(bytes=first[1]))
     logger.info("AudioSocket call connected: %s", call_sid)
 
+    leg = AsteriskCallLeg(call_sid)
+    if not has_context(call_sid):
+        await _identify_caller(call_sid, leg)
     call_started(call_sid, "outbound" if has_context(call_sid) else "inbound")
     pipeline = pipeline_factory()
     queues = make_media_queues()
-    control.register(AsteriskCallLeg(call_sid))
+    control.register(leg)
     playback = _Playback(writer, queues.playback)
     tasks = [
         asyncio.create_task(

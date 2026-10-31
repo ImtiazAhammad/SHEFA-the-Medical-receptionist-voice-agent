@@ -18,6 +18,7 @@ def test_renders_trunk_audiosocket_and_ari():
     assert "server_uri=sip:sip.carrier.example:5060" in files["pjsip.conf"]
     assert "username=clinic01" in files["pjsip.conf"]
     assert "AudioSocket(${SHEFA_UUID},127.0.0.1:4573)" in files["extensions.conf"]
+    assert "SHEFA_CALLER=${CALLERID(num)}" in files["extensions.conf"]
     assert "password=ari-pass" in files["ari.conf"]
     assert "bindaddr=127.0.0.1" in files["http.conf"]
     assert "{{" not in "".join(files.values())  # every placeholder was filled

@@ -14,6 +14,7 @@ from shefa.config.settings import settings
 from shefa.models.base import Language, StreamEvent, ToolDefinition
 from shefa.pipeline.actions import (
     confirmation_text,
+    error_text,
     extract_action,
     extractor_system_prompt,
     parse_action,
@@ -569,3 +570,36 @@ def test_a_single_doctor_match_gets_the_full_schedule():
     doctor = TestDirectoryConfirmations.DOCTOR
     text = confirmation_text("list_doctors", {"doctors": [doctor]}, "en")
     assert "sunday 09:00-12:00" in text and "800 taka" in text
+
+
+class TestErrorText:
+    @pytest.mark.parametrize(
+        ("error", "needle_en"),
+        [
+            ("A verified patient is required before booking", "phone number"),
+            ("Which doctor would the patient like to see?", "Which doctor"),
+            ("09:00 on 2026-11-02 is not an open slot", "not available"),
+            ("09:00 on 2026-11-02 was just taken", "not available"),
+            ("No doctor matching 'X'", "could not find"),
+            ("Unknown appointment id: 'APT-9'", "reference number"),
+            ("Appointment is already cancelled", "already closed"),
+            ("No on_call target is configured", "front desk"),
+            ("Boom", "once more"),
+        ],
+    )
+    def test_each_failure_has_a_fixed_sentence_that_never_echoes_the_error(self, error, needle_en):
+        text = error_text("book_appointment", {"error": error}, "en")
+        assert needle_en in text
+        assert "internal" not in text and error not in text
+
+    def test_bangla_and_language_fallback(self):
+        assert "ফোন নম্বর" in error_text("x", {"error": "verified patient"}, "bn")
+        assert "once more" in error_text("x", {"error": "Boom"}, "fr")
+
+    def test_a_failed_transfer_is_an_error_even_without_an_error_key(self):
+        assert "front desk" in error_text("transfer_to_human", {"transferred": False}, "en")
+
+    def test_success_and_non_dicts_have_no_error_text(self):
+        assert error_text("x", {"success": True}, "en") is None
+        assert error_text("x", {"transferred": True}, "en") is None
+        assert error_text("x", "oops", "en") is None

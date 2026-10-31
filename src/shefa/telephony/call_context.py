@@ -18,8 +18,8 @@ _pending: dict[str, OutboundContext] = {}
 
 @dataclass
 class OutboundContext:
-    greeting: str
-    language: str = "bn"
+    greeting: str = ""  # empty: use the clinic's normal greeting
+    language: str = ""  # empty: keep the clinic's primary language
     patient_id: str = ""
     patient_name: str = ""
     on_answered: Callable[[], None] | None = field(default=None, repr=False)

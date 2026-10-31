@@ -4,6 +4,7 @@
 exten => _X.,1,NoOp(Inbound call from ${CALLERID(num)})
  same => n,Answer()
  same => n,Set(SHEFA_UUID=${UUID()})
+ same => n,Set(SHEFA_CALLER=${CALLERID(num)})
  same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
  same => n,Hangup()
 

@@ -351,3 +351,79 @@ def confirmation_text(
         return None
     text = phrases.get(language) or phrases.get("en")
     return text
+
+# A tool error is never handed to the model to paraphrase: given the raw error dict it read
+# "[internal tool result] book_appointment returned {...}" aloud to the caller. Every error
+# is spoken from one of these fixed sentences instead.
+_ERRORS: tuple[tuple[tuple[str, ...], dict[str, str]], ...] = (
+    (
+        ("verified patient", "phone number is required", "unknown patient"),
+        {
+            "en": "I need your phone number to do that. Could you tell me your name and number?",
+            "bn": "এটা করতে আপনার ফোন নম্বর লাগবে। আপনার নাম ও ফোন নম্বরটা বলবেন?",
+        },
+    ),
+    (
+        ("which doctor",),
+        {
+            "en": "Which doctor would you like to see?",
+            "bn": "আপনি কোন ডাক্তারের কাছে যেতে চান?",
+        },
+    ),
+    (
+        ("not an open slot", "was just taken"),
+        {
+            "en": "Sorry, that time is not available. Shall I read out the free times?",
+            "bn": "দুঃখিত, ওই সময়টি খালি নেই। আমি কি খালি সময়গুলো বলব?",
+        },
+    ),
+    (
+        ("no doctor matching", "no department matching"),
+        {
+            "en": "Sorry, I could not find that. Would you like to hear our doctors?",
+            "bn": "দুঃখিত, ওটা খুঁজে পাইনি। আমাদের ডাক্তারদের নাম বলব?",
+        },
+    ),
+    (
+        ("unknown appointment",),
+        {
+            "en": "I could not find that appointment. Could you say the reference number again?",
+            "bn": "ওই অ্যাপয়েন্টমেন্টটি খুঁজে পাইনি। রেফারেন্স নম্বরটা আবার বলবেন?",
+        },
+    ),
+    (
+        ("already",),
+        {
+            "en": "That appointment is already closed, so I cannot change it.",
+            "bn": "ওই অ্যাপয়েন্টমেন্টটি আগেই শেষ বা বাতিল হয়েছে, তাই পরিবর্তন করা যাবে না।",
+        },
+    ),
+    (
+        ("no on_call target", "no active call leg", "transfer"),
+        {
+            "en": "Sorry, I could not connect you to the front desk just now. "
+            "Please call the clinic's main number.",
+            "bn": "দুঃখিত, এখন আপনাকে রিসেপশনে সংযোগ দিতে পারলাম না। "
+            "অনুগ্রহ করে ক্লিনিকের মূল নম্বরে ফোন করুন।",
+        },
+    ),
+)
+
+_GENERIC_ERROR = {
+    "en": "Sorry, I could not do that. Could you say it once more?",
+    "bn": "দুঃখিত, এটা করতে পারলাম না। আরেকবার বলবেন?",
+}
+
+
+def error_text(tool_name: str, result: Any, language: str) -> str | None:
+    """A fixed spoken sentence for a failed tool, or None when the result is not a failure."""
+    if not isinstance(result, dict):
+        return None
+    failed = bool(result.get("error")) or result.get("transferred") is False
+    if not failed:
+        return None
+    message = str(result.get("error") or "transfer").lower()
+    for needles, phrases in _ERRORS:
+        if any(needle in message for needle in needles):
+            return phrases.get(language) or phrases["en"]
+    return _GENERIC_ERROR.get(language) or _GENERIC_ERROR["en"]

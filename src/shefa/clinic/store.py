@@ -116,6 +116,19 @@ def parse_appointment_id(value: str | int) -> int:
     return int(text)
 
 
+def normalize_phone(raw: str) -> str:
+    """Bangladeshi mobiles in one form: `+8801711000000`, `8801711000000`, `1711000000`
+    and `01711 000000` all become `01711000000`. Anything else is kept, digits only."""
+    text = raw.strip()
+    plus = text.startswith("+")
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits.startswith("880") and len(digits) == 13:
+        return "0" + digits[3:]
+    if len(digits) == 10 and digits.startswith("1"):
+        return "0" + digits
+    return ("+" if plus and not digits.startswith("0") else "") + digits
+
+
 def _to_minutes(hhmm: str) -> int:
     try:
         hours, minutes = hhmm.split(":")
@@ -381,7 +394,7 @@ class ClinicStore:
 
     def upsert_patient(self, phone: str, name: str = "") -> int:
         """Find a patient by phone, adding them (or filling a missing name)."""
-        digits = phone.strip()
+        digits = normalize_phone(phone)
         if not digits:
             raise ClinicError("A phone number is required")
         with self.connection:

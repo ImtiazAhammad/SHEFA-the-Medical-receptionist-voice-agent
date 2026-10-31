@@ -244,7 +244,7 @@ def test_patient_and_day_listings_for_reminders(clinic):
 
     day = clinic.appointments_on(MONDAY)
     assert [a["start_time"] for a in day] == ["09:00", "16:00"]
-    assert day[0]["phone"] == "+8801711000001"
+    assert day[0]["phone"] == "01711000001"  # stored in normalised local form
     assert day[0]["patient_name"] == "Karim"
     assert clinic.appointments_on(NEXT_MONDAY) == []
 
@@ -300,3 +300,15 @@ def test_the_default_store_opens_lazily_at_the_configured_path(tmp_path, monkeyp
     finally:
         first.close()
         set_default_clinic_store(None)
+
+
+def test_phone_numbers_are_normalised_so_one_person_is_one_patient(tmp_path):
+    from shefa.clinic.store import ClinicStore, normalize_phone
+
+    for raw in ("+8801711000123", "8801711000123", "01711 000123", "1711000123", "01711-000123"):
+        assert normalize_phone(raw) == "01711000123"
+    assert normalize_phone("+14155550100") == "+14155550100"
+    store = ClinicStore(tmp_path / "p.db")
+    first = store.upsert_patient("+8801711000123", "Karim")
+    assert store.upsert_patient("01711000123") == first
+    store.close()
