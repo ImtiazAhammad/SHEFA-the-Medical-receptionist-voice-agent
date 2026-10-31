@@ -1,4 +1,4 @@
-"""shefa Receptionist - Main application entry point."""
+"""SHEFA Receptionist - Main application entry point."""
 
 from __future__ import annotations
 
@@ -344,7 +344,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     """
     store = auth_store if auth_store is not None else build_auth_store()
     app = FastAPI(
-        title="shefa Receptionist",
+        title="SHEFA Receptionist",
         version="0.1.0",
         description="Privacy-first open-source bilingual voice AI medical receptionist",
     )
@@ -374,7 +374,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     @app.get("/")
     async def root() -> dict[str, str]:
         return {
-            "service": "shefa Receptionist",
+            "service": "SHEFA Receptionist",
             "version": "0.1.0",
             "languages": ",".join(settings.languages.supported),
         }

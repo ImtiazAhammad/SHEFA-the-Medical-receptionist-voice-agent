@@ -9,7 +9,7 @@ be a new import cycle. This module is a leaf: nothing imports it in return.
 from __future__ import annotations
 
 SYSTEM_PROMPT_TEMPLATE = (
-    "You are shefa Receptionist, a professional bilingual "
+    "You are SHEFA Receptionist, a professional bilingual "
     "(English/Bangla) medical receptionist AI for a clinic in Bangladesh.\n\n"
     "## Core Rules\n"
     "- Always respond in the SAME LANGUAGE the patient is speaking. If the "

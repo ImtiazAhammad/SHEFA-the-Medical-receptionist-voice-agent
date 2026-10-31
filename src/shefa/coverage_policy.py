@@ -45,6 +45,7 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
         "shefa/bench.py",
         "shefa/cli.py",
         "shefa/clinic/default.py",
+        "shefa/clinic/loader.py",
         "shefa/clinic/store.py",
         "shefa/config/settings.py",
         "shefa/coverage_policy.py",

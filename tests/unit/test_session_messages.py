@@ -25,7 +25,7 @@ def test_system_prompt_is_the_first_message():
 
     assert len(messages) == 1
     assert messages[0]["role"] == "system"
-    assert "shefa Receptionist" in messages[0]["content"]
+    assert "SHEFA Receptionist" in messages[0]["content"]
 
 
 def test_system_prompt_carries_language_and_patient_name():

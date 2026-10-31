@@ -177,6 +177,55 @@ class ClinicStore:
             )
         return int(cur.lastrowid)
 
+    def upsert_department(self, name_en: str, name_bn: str = "") -> int:
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO departments (name_en, name_bn) VALUES (?, ?)"
+                " ON CONFLICT(name_en) DO UPDATE SET name_bn = excluded.name_bn",
+                (name_en, name_bn),
+            )
+        row = self.connection.execute(
+            "SELECT id FROM departments WHERE name_en = ?", (name_en,)
+        ).fetchone()
+        return int(row[0])
+
+    def upsert_doctor(
+        self,
+        name_en: str,
+        department_id: int,
+        *,
+        name_bn: str = "",
+        qualification: str = "",
+        visit_fee: int | None = None,
+    ) -> int:
+        """Update the doctor with this English name, or add them. Never deletes."""
+        row = self.connection.execute(
+            "SELECT id FROM doctors WHERE lower(name_en) = lower(?)", (name_en,)
+        ).fetchone()
+        if row is None:
+            return self.add_doctor(
+                name_en,
+                department_id,
+                name_bn=name_bn,
+                qualification=qualification,
+                visit_fee=visit_fee,
+            )
+        with self.connection:
+            self.connection.execute(
+                "UPDATE doctors SET name_bn = ?, department_id = ?, qualification = ?,"
+                " visit_fee = ?, active = 1 WHERE id = ?",
+                (name_bn, department_id, qualification, visit_fee, row[0]),
+            )
+        return int(row[0])
+
+    def clear_schedule_and_leave(self, doctor_id: int) -> None:
+        """Forget a doctor's weekly windows and leave, so an import can restate them."""
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM doctor_schedules WHERE doctor_id = ?", (doctor_id,)
+            )
+            self.connection.execute("DELETE FROM doctor_leaves WHERE doctor_id = ?", (doctor_id,))
+
     def add_schedule(
         self,
         doctor_id: int,

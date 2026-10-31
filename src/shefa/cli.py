@@ -55,6 +55,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check that the configured adapters actually load")
 
+    clinic = sub.add_parser("clinic", help="manage the clinic directory")
+    clinic_sub = clinic.add_subparsers(dest="clinic_command")
+    importer = clinic_sub.add_parser(
+        "import", help="load departments, doctors and schedules from a YAML file"
+    )
+    importer.add_argument("file", help="path to the clinic YAML (see configs/clinic.example.yaml)")
+    clinic_sub.add_parser("show", help="print the directory as the agent sees it")
+
     token = sub.add_parser(
         "token", help="mint an API bearer token for a configured role"
     )
@@ -176,6 +184,39 @@ def token_mint(name: str, role: str) -> tuple[str, str]:
     return token, hash_token(token)
 
 
+def run_clinic(args: argparse.Namespace) -> int:
+    import yaml
+
+    from shefa.clinic import ClinicError, default_clinic_store
+    from shefa.clinic.loader import import_directory_file
+
+    store = default_clinic_store()
+    if args.clinic_command == "import":
+        try:
+            counts = import_directory_file(store, args.file)
+        except (ClinicError, OSError, ValueError, yaml.YAMLError) as exc:
+            print(f"import failed: {exc}", file=sys.stderr)
+            return 1
+        print(
+            "imported {departments} departments, {doctors} doctors, "
+            "{windows} schedule windows, {leaves} leave periods".format(**counts)
+        )
+        return 0
+    if args.clinic_command == "show":
+        for doctor in store.doctors():
+            hours = ", ".join(
+                f"{s['day'][:3]} {s['start_time']}-{s['end_time']}"
+                for s in store.doctor_schedule(doctor["id"])
+            )
+            print(
+                f"{doctor['department_en']:<14} Dr. {doctor['name_en']:<12} "
+                f"{hours or 'no schedule'}"
+            )
+        return 0
+    print("usage: shefa clinic {import,show}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -215,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
             f"    token_hash: {record}"
         )
         return 0
+
+    if args.command == "clinic":
+        return run_clinic(args)
 
     parser.print_help()
     return 2
