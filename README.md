@@ -433,7 +433,7 @@ CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8
 
 - Horizontal pod autoscaler based on concurrent call count
 - Redis for session state (shared across pods)
-- HIPAA-eligible cloud: AWS GovCloud, Azure Healthcare, or GCP Healthcare API
+- Keep patient data on-premises or in a Bangladeshi data centre you control; the pipeline needs no cloud service
 
 ## Production Checklist
 
