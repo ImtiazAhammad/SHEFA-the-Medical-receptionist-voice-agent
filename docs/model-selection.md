@@ -41,9 +41,13 @@ now copies the fine-tune's tokenizer and refuses to run if it matches the stock 
 | qwen2.5:7b | 12/12 | 9/12 | 9/12 | 98% | 1.6 s / 4.1 s | 4.9 GB |
 | TigerLLM-9B (Bangla fine-tune) | 12/12 | 9/12 | 9/12 | 75% | 1.0 s / 2.4 s | 10.0 GB |
 | aya-expanse:8b | 12/12 | 6/12 | 6/12 | 80% | 2.3 s / 6.4 s | 6.0 GB |
+| gemma-3-12b-it (Q4_K_M) | 12/12 | 11/12 | 11/12 | **99.6%** | 0.9 s / 2.5 s | 10.3 GB |
+| Qwen3-8B (Q4_K_M, default thinking) | 11/12 | 10/12 | 9/12 | 7% | 4.4 s / 6.5 s | 5.3 GB |
 
-**Decision: keep gemma2:9b.** Not yet measured: Gemma 3 12B and Qwen3 8B (Ollama 0.22 cannot pull
-the registry tags; the Hugging Face GGUF downloads are queued). Note Gemma's licence is Google's
+**Decision: keep gemma2:9b.** It picks the right tool most reliably and fits in 7 GB. Gemma 3 12B is
+a close second with cleaner Bangla (99.6% vs 95%) but needs 3 GB more and missed one tool; worth
+re-testing on more cases before switching. Qwen3-8B was run with its default thinking mode on, which
+costs seconds per reply and leaked English; a no-think run is untested. Gemma's licence is Google's
 own terms, not OSI open source; Qwen3 is Apache-2.0 if that ever matters.
 
 ## Text-to-speech
