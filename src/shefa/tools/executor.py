@@ -91,6 +91,18 @@ async def _get_doctor_info(args: dict[str, Any], session: CallSession) -> dict[s
     return await get_doctor_info(args["doctor_name"])
 
 
+async def _list_departments(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
+    from shefa.integrations.ehr import list_departments
+
+    return await list_departments()
+
+
+async def _list_doctors(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
+    from shefa.integrations.ehr import list_doctors
+
+    return await list_doctors(args.get("department"))
+
+
 async def _lookup_patient_history(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.ehr import get_patient_history
 
@@ -155,6 +167,8 @@ _HANDLERS: dict[str, Any] = {
     "cancel_appointment": _cancel_appointment,
     "reschedule_appointment": _reschedule_appointment,
     "get_doctor_info": _get_doctor_info,
+    "list_departments": _list_departments,
+    "list_doctors": _list_doctors,
     "lookup_patient_history": _lookup_patient_history,
     "send_confirmation": _send_confirmation,
     "transfer_to_human": _transfer_to_human,

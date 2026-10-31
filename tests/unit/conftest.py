@@ -36,3 +36,14 @@ def _isolate_the_default_audit_store(tmp_path, monkeypatch):
     monkeypatch.setattr(audit_module, "set_default_audit_store", _set_default)
     yield
     store.close()
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_clinic_store(tmp_path):
+    """Same rule as the audit store: no test may reach the repo's `data/` directory."""
+    from shefa.clinic import ClinicStore, set_default_clinic_store
+
+    store = ClinicStore(tmp_path / "default-clinic.db")
+    set_default_clinic_store(store)
+    yield
+    set_default_clinic_store(None)
+    store.close()

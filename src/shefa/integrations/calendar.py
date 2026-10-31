@@ -1,28 +1,58 @@
-﻿"""Calendar integration (Google Calendar / custom)."""
+"""Appointment scheduling backed by the clinic directory (real slots, real bookings)."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
+from shefa.clinic import ClinicError, ClinicStore, default_clinic_store
+
 logger = logging.getLogger(__name__)
+
+
+def _patient_id(value: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ClinicError("A verified patient is required before booking") from exc
+
+
+def _resolve_doctor(
+    store: ClinicStore, doctor_name: str | None, specialty: str | None = None
+) -> list[dict[str, Any]]:
+    """The doctors a request refers to: one by name, a department's, or everyone."""
+    if doctor_name:
+        doctor = store.find_doctor(doctor_name)
+        if doctor is None:
+            raise ClinicError(f"No doctor matching {doctor_name!r}")
+        return [doctor]
+    if specialty:
+        department = store.find_department(specialty)
+        if department is None:
+            raise ClinicError(f"No department matching {specialty!r}")
+        return store.doctors(department_id=department["id"])
+    return store.doctors()
 
 
 async def check_slots(
     date: str, doctor_name: str | None = None, specialty: str | None = None
 ) -> dict[str, Any]:
-    """Check available appointment slots."""
-    # Placeholder: integrate with Google Calendar API or custom DB
-    return {
-        "date": date,
-        "doctor": doctor_name,
-        "available_slots": [
-            {"time": "09:00", "duration_minutes": 30},
-            {"time": "10:30", "duration_minutes": 30},
-            {"time": "14:00", "duration_minutes": 30},
-            {"time": "15:30", "duration_minutes": 45},
-        ],
-    }
+    """Open slots on `date` for one doctor, or per doctor when the request is broader."""
+    store = default_clinic_store()
+    try:
+        doctors = _resolve_doctor(store, doctor_name, specialty)
+        listings = [
+            {
+                "doctor": doctor["name_en"],
+                "available_slots": store.available_slots(doctor["id"], date),
+            }
+            for doctor in doctors
+        ]
+    except ClinicError as exc:
+        return {"error": str(exc)}
+    if len(listings) == 1:
+        return {"date": date, **listings[0]}
+    return {"date": date, "doctors": [item for item in listings if item["available_slots"]]}
 
 
 async def book_appointment(
@@ -32,13 +62,20 @@ async def book_appointment(
     doctor_name: str = "",
     reason: str = "",
 ) -> dict[str, Any]:
-    """Book an appointment."""
+    store = default_clinic_store()
+    try:
+        doctors = _resolve_doctor(store, doctor_name or None)
+        if len(doctors) != 1:
+            return {"error": "Which doctor would the patient like to see?"}
+        booked = store.book(_patient_id(patient_id), doctors[0]["id"], date, time, reason=reason)
+    except ClinicError as exc:
+        return {"error": str(exc)}
     return {
         "success": True,
-        "appointment_id": "APT-20260713-001",
-        "date": date,
-        "time": time,
-        "doctor": doctor_name,
+        "appointment_id": booked["appointment_id"],
+        "date": booked["date"],
+        "time": booked["start_time"],
+        "doctor": booked["doctor_en"],
         "patient_id": patient_id,
     }
 
@@ -46,14 +83,22 @@ async def book_appointment(
 async def cancel_appointment(
     appointment_id: str, patient_id: str, reason: str = ""
 ) -> dict[str, Any]:
-    """Cancel an existing appointment."""
+    store = default_clinic_store()
+    try:
+        store.cancel(appointment_id, _patient_id(patient_id))
+    except ClinicError as exc:
+        return {"error": str(exc)}
     return {"success": True, "appointment_id": appointment_id, "cancelled": True}
 
 
 async def reschedule_appointment(
     appointment_id: str, patient_id: str, new_date: str, new_time: str
 ) -> dict[str, Any]:
-    """Reschedule an appointment."""
+    store = default_clinic_store()
+    try:
+        store.reschedule(appointment_id, _patient_id(patient_id), new_date, new_time)
+    except ClinicError as exc:
+        return {"error": str(exc)}
     return {
         "success": True,
         "appointment_id": appointment_id,

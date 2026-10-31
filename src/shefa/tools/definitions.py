@@ -96,6 +96,24 @@ def get_tool_definitions() -> list[ToolDefinition]:
             },
         ),
         ToolDefinition(
+            name="list_departments",
+            description="List the clinic's departments and the doctors in each.",
+            parameters={"type": "object", "properties": {}},
+        ),
+        ToolDefinition(
+            name="list_doctors",
+            description=(
+                "List doctors with their department, weekly schedule and next "
+                "available slot, optionally for one department."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "department": {"type": "string", "description": "Department (optional)"},
+                },
+            },
+        ),
+        ToolDefinition(
             name="lookup_patient_history",
             description="Retrieve basic patient history (recent visits, medications).",
             parameters={
