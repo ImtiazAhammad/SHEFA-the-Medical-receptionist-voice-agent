@@ -14,13 +14,13 @@ foreign cloud). Roadmap, in build order:
 | # | Piece | Status |
 |---|-------|--------|
 | 1 | Clinic directory + booking engine (departments, doctors, schedules, leave, appointments; no double-booking) | **done** |
-| 2 | Voice flows: inbound booking, doctor / department / schedule questions | in progress |
-| 3 | Asterisk integration replacing Twilio (inbound, transfer to a human, DTMF fallback) | planned |
-| 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | planned |
-| 5 | Call log, owner console views, reliability (heartbeat, backups, load test) | planned |
+| 2 | Voice flows: inbound booking, doctor / department / schedule questions | **done** (tested end to end against the real store) |
+| 3 | Asterisk integration replacing Twilio (AudioSocket media, ARI control, config kit) | **built**, needs a live trunk to verify: [`docs/asterisk-setup.md`](docs/asterisk-setup.md) |
+| 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
+| 5 | Call log, owner console views, reliability | **partly done**: call log, `/api/v1/calls`, `/api/v1/appointments`, dependency health, `scripts/backup_db.py`; load test and a browser console still to do |
 | 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress (see `scripts/bench_models.py`) |
 
-Twilio code remains as a development sink until step 3 lands. Carrier selection: see
+Twilio code remains as a development sink. Carrier selection: see
 [`docs/carrier-inquiry.md`](docs/carrier-inquiry.md).
 
 ## Clinic directory
@@ -451,3 +451,17 @@ CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8
 ## License
 
 Proprietary. All rights reserved.
+
+## Reminders and follow-ups
+
+```yaml
+reminders:
+  enabled: true          # the server then calls patients ~24h before an appointment
+  language: bn           # reminder language
+  quiet_start: "20:00"   # never ring between 20:00 and 08:00 clinic time
+  quiet_end: "08:00"
+```
+
+Each appointment gets at most two reminder attempts (90 minutes apart) and none once the patient
+has answered. Completed visits get one follow-up call 1-3 days later. Run one cycle by hand with
+`shefa reminders run-once`. The patient can confirm, cancel or move the appointment by voice.

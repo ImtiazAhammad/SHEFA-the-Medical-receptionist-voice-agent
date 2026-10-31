@@ -504,3 +504,29 @@ class TestModuleEntryPoint:
 
         assert exit_request.value.code == 1
         assert "ABORT" in capsys.readouterr().out
+
+
+class TestDoctorSpeechModel:
+    def _setup(self, monkeypatch, tmp_path, built: bool):
+        from shefa.cli import doctor_report
+        from shefa.config.settings import settings
+
+        model = tmp_path / "ct2"
+        if built:
+            model.mkdir()
+            (model / "model.bin").write_bytes(b"x")
+        monkeypatch.setattr(settings.pipeline.stt, "provider", "whisper_local")
+        monkeypatch.setattr(
+            settings.models.adapters["stt_whisper_local"], "model_size", str(model)
+        )
+        return doctor_report()[0]
+
+    def test_reports_the_built_speech_model(self, monkeypatch, tmp_path):
+        assert "ok       speech model found" in self._setup(monkeypatch, tmp_path, True)
+
+    def test_blocks_on_a_missing_speech_model_and_says_how_to_build_it(
+        self, monkeypatch, tmp_path
+    ):
+        text = self._setup(monkeypatch, tmp_path, False)
+        assert "BLOCKER  speech model missing" in text
+        assert "fetch_stt_model.py" in text

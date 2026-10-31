@@ -138,6 +138,21 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
     else:
         lines.append(f"  ok       bn voice found: {bn_voices[0]}")
 
+    models = getattr(settings, "models", None)
+    stt_adapter = models.adapters.get("stt_whisper_local") if models else None
+    stt_model = getattr(stt_adapter, "model_size", "") or ""
+    stt_config = getattr(getattr(settings, "pipeline", None), "stt", None)
+    stt_provider = getattr(stt_config, "provider", "")
+    if stt_provider == "whisper_local" and "/" in stt_model:
+        if (Path(stt_model) / "model.bin").exists():
+            lines.append(f"  ok       speech model found: {stt_model}")
+        else:
+            lines.append(
+                f"  BLOCKER  speech model missing: {stt_model} "
+                "(build it once with: python scripts/fetch_stt_model.py)"
+            )
+            ok = False
+
     tts = PiperTTS(model_path=str(voice))
     try:
         asyncio.run(tts.synthesize("test"))
