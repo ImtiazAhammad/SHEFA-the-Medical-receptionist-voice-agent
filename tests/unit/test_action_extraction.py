@@ -634,3 +634,10 @@ class TestSlotAnswers:
 
     def test_a_result_without_slot_information_has_no_template(self):
         assert confirmation_text("check_appointment_slots", {"date": "d"}, "en") is None
+
+
+def test_ambiguous_and_missing_appointments_have_their_own_sentences():
+    which = error_text("cancel_appointment", {"error": "Which appointment? several"}, "bn")
+    assert "একাধিক" in which
+    none = error_text("cancel_appointment", {"error": "No upcoming appointment found"}, "bn")
+    assert "আসন্ন" in none

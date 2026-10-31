@@ -405,6 +405,21 @@ _ERRORS: tuple[tuple[tuple[str, ...], dict[str, str]], ...] = (
         },
     ),
     (
+        ("which appointment",),
+        {
+            "en": "You have more than one appointment. Which one? Tell me the reference "
+            "number or the date.",
+            "bn": "আপনার একাধিক অ্যাপয়েন্টমেন্ট আছে। কোনটি? রেফারেন্স নম্বর বা তারিখ বলবেন?",
+        },
+    ),
+    (
+        ("no upcoming appointment",),
+        {
+            "en": "I could not find an upcoming appointment for you.",
+            "bn": "আপনার কোনো আসন্ন অ্যাপয়েন্টমেন্ট খুঁজে পাইনি।",
+        },
+    ),
+    (
         ("unknown appointment",),
         {
             "en": "I could not find that appointment. Could you say the reference number again?",

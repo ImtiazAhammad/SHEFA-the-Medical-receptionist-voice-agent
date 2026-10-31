@@ -172,3 +172,101 @@ async def test_second_caller_cannot_take_a_booked_slot_or_touch_it(call):
     )
     appointment = store.get_appointment(1)
     assert appointment["status"] == "booked"  # someone else's booking is untouched
+
+
+async def _identify(call, phone="01711000000", name="Karim"):
+    await call.say(
+        "it's me",
+        {"tool": "verify_patient", "arguments": {"phone": phone, "name": name}},
+    )
+
+
+async def test_the_model_cannot_choose_who_is_booked(call):
+    """A patient_id in the routed arguments is ignored: the verified caller is who acts."""
+    store = default_clinic_store()
+    other = store.upsert_patient("01999999999", "Someone Else")
+    await _identify(call)
+    await call.say(
+        "09:00",
+        {
+            "tool": "book_appointment",
+            "arguments": {
+                "date": _tomorrow(),
+                "time": "09:00",
+                "doctor_name": "Rahman",
+                "patient_id": str(other),
+            },
+        },
+    )
+    booked = store.get_appointment(1)
+    assert booked["patient_id"] == int(call.session.patient_id) != other
+
+
+async def test_cancel_without_a_reference_cancels_the_callers_only_booking(call):
+    await _identify(call)
+    await call.say(
+        "09:00",
+        {
+            "tool": "book_appointment",
+            "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
+        },
+    )
+    reply = await call.say("cancel my appointment", {"tool": "cancel_appointment", "arguments": {}})
+    assert "APT-00001" in reply and "cancelled" in reply
+    assert default_clinic_store().get_appointment(1)["status"] == "cancelled"
+
+
+async def test_cancel_with_two_bookings_asks_which_and_with_none_says_so(call):
+    await _identify(call)
+    none = await call.say("cancel it", {"tool": "cancel_appointment", "arguments": {}})
+    assert "could not find an upcoming appointment" in none
+
+    for time in ("09:00", "09:30"):
+        await call.say(
+            time,
+            {
+                "tool": "book_appointment",
+                "arguments": {"date": _tomorrow(), "time": time, "doctor_name": "Rahman"},
+            },
+        )
+    which = await call.say("cancel it", {"tool": "cancel_appointment", "arguments": {}})
+    assert "more than one appointment" in which
+    assert {default_clinic_store().get_appointment(i)["status"] for i in (1, 2)} == {"booked"}
+
+
+async def test_an_unidentified_caller_is_asked_for_a_number_not_acted_for(call):
+    reply = await call.say("cancel it", {"tool": "cancel_appointment", "arguments": {}})
+    assert "phone number" in reply
+    reply = await call.say(
+        "book",
+        {
+            "tool": "book_appointment",
+            "arguments": {"date": _tomorrow(), "time": "09:00", "patient_id": "1"},
+        },
+    )
+    assert "phone number" in reply
+
+
+async def test_reschedule_moves_the_only_booking(call):
+    await _identify(call)
+    await call.say(
+        "09:00",
+        {
+            "tool": "book_appointment",
+            "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
+        },
+    )
+    reply = await call.say(
+        "move it to 09:30",
+        {
+            "tool": "reschedule_appointment",
+            "arguments": {"new_date": _tomorrow(), "new_time": "09:30"},
+        },
+    )
+    assert "rescheduled" in reply and "09:30" in reply
+    assert default_clinic_store().get_appointment(1)["start_time"] == "09:30"
+    problem = await call.say(
+        "move it",
+        {"tool": "reschedule_appointment", "arguments": {"new_date": "x", "new_time": "y"}},
+    )
+    assert problem  # a bad date is answered with a fixed sentence, not a crash

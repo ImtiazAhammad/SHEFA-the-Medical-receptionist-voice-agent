@@ -1,4 +1,4 @@
-﻿"""Tool execution engine. Routes tool calls to actual implementations."""
+"""Tool execution engine. Routes tool calls to actual implementations."""
 
 from __future__ import annotations
 
@@ -52,11 +52,44 @@ async def _check_appointment_slots(args: dict[str, Any], session: CallSession) -
     )
 
 
+def _acting_patient(session: CallSession) -> str:
+    """Who is acting: the verified caller, never an id the model supplied.
+
+    The router fills tool arguments from the transcript. Trusting its `patient_id` let a
+    hallucinated or injected value override the caller who was identified by caller ID, and
+    would let one caller cancel another's booking.
+    """
+    return session.patient_id or ""
+
+
+def _target_appointment(args: dict[str, Any], session: CallSession) -> tuple[str, dict | None]:
+    """The appointment a cancel/reschedule means: the one named, else the caller's only one."""
+    named = str(args.get("appointment_id") or "").strip()
+    if named:
+        return named, None
+    if not session.patient_id:
+        return "", {"error": "A verified patient is required before changing an appointment"}
+    from datetime import datetime
+
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.store import CLINIC_TZ
+
+    today = datetime.now(CLINIC_TZ).date().isoformat()
+    upcoming = default_clinic_store().appointments_for_patient(
+        int(session.patient_id), upcoming_from=today
+    )
+    if not upcoming:
+        return "", {"error": "No upcoming appointment found for this caller"}
+    if len(upcoming) > 1:
+        return "", {"error": "Which appointment? The caller has several upcoming appointments"}
+    return upcoming[0]["appointment_id"], None
+
+
 async def _book_appointment(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.calendar import book_appointment
 
     return await book_appointment(
-        patient_id=args.get("patient_id", session.patient_id or ""),
+        patient_id=_acting_patient(session),
         date=args["date"],
         time=args["time"],
         doctor_name=args.get("doctor_name", ""),
@@ -67,9 +100,12 @@ async def _book_appointment(args: dict[str, Any], session: CallSession) -> dict[
 async def _cancel_appointment(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.calendar import cancel_appointment
 
+    appointment_id, problem = _target_appointment(args, session)
+    if problem:
+        return problem
     return await cancel_appointment(
-        appointment_id=args["appointment_id"],
-        patient_id=args.get("patient_id", session.patient_id or ""),
+        appointment_id=appointment_id,
+        patient_id=_acting_patient(session),
         reason=args.get("reason", ""),
     )
 
@@ -77,9 +113,12 @@ async def _cancel_appointment(args: dict[str, Any], session: CallSession) -> dic
 async def _reschedule_appointment(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.calendar import reschedule_appointment
 
+    appointment_id, problem = _target_appointment(args, session)
+    if problem:
+        return problem
     return await reschedule_appointment(
-        appointment_id=args["appointment_id"],
-        patient_id=args.get("patient_id", session.patient_id or ""),
+        appointment_id=appointment_id,
+        patient_id=_acting_patient(session),
         new_date=args["new_date"],
         new_time=args["new_time"],
     )
