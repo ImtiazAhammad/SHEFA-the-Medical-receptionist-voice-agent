@@ -17,11 +17,25 @@ foreign cloud). Roadmap, in build order:
 | 2 | Voice flows: inbound booking, doctor / department / schedule questions | **done** (tested end to end against the real store) |
 | 3 | Asterisk integration replacing Twilio (AudioSocket media, ARI control, config kit) | **built**, needs a live trunk to verify: [`docs/asterisk-setup.md`](docs/asterisk-setup.md) |
 | 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
-| 5 | Call log, owner console views, reliability | **partly done**: call log, `/api/v1/calls`, `/api/v1/appointments`, dependency health, `scripts/backup_db.py`; load test and a browser console still to do |
+| 5 | Call log, owner console, reliability | **done**: web console (`/console`), call log, appointments, dependency health, `scripts/backup_db.py`; load test still to do |
 | 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress (see `scripts/bench_models.py`) |
 
 Twilio code remains as a development sink. Carrier selection: see
 [`docs/carrier-inquiry.md`](docs/carrier-inquiry.md).
+
+## Quick start (5 minutes, no phone line needed)
+
+```bash
+uv sync
+uv run shefa setup            # makes your access token, turns on the console, loads a sample clinic
+uv run python scripts/fetch_stt_model.py    # one-time: the Bangla speech model (needs torch + transformers)
+uv run shefa serve            # then open http://127.0.0.1:8000/console and paste the token
+```
+The console lets you **talk to the agent from the browser** (tap the phone button), have the agent
+**call you** ("Have the agent call me", and reminders ring there too), see the day's appointments,
+the call log and the clinic directory. For your phone's browser: `shefa serve --host 0.0.0.0 --https`
+and open the printed `https://<ip>:8000/console` (browsers only allow the microphone over https).
+For real phone calls see [`docs/asterisk-setup.md`](docs/asterisk-setup.md).
 
 ## Clinic directory
 

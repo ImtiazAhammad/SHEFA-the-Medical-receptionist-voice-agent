@@ -13,3 +13,12 @@ exten => _X.,1,NoOp(Inbound call from ${CALLERID(num)})
 exten => s,1,NoOp(Outbound answered, uuid ${SHEFA_UUID})
  same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
  same => n,Hangup()
+
+; A softphone on a staff phone (Linphone/Zoiper over Wi-Fi): dial 1000 to reach the agent.
+[shefa-local]
+exten => 1000,1,NoOp(Softphone call from ${CALLERID(num)})
+ same => n,Answer()
+ same => n,Set(SHEFA_UUID=${UUID()})
+ same => n,Set(SHEFA_CALLER=${CALLERID(num)})
+ same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
+ same => n,Hangup()

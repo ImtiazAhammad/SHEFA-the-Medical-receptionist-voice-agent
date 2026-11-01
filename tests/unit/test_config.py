@@ -432,8 +432,9 @@ def test_twil_io_media_stream_rejected_when_provider_is_not_twilio():
                 "twilio": {"media_stream_url": "wss://AC123.twil.io/media-stream"},
             }
         )
-    with pytest.raises(ValidationError, match="twil.io"):
-        TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    # A leftover Twilio account is not a misroute; only an explicit Twilio URL is.
+    kept = TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    assert kept.provider.value == "freeswitch"
     ok = TelephonyConfig.model_validate(
         {
             "provider": "asterisk",
@@ -674,3 +675,9 @@ def test_a_clean_non_twilio_config_is_valid():
     """No Twilio account and no stream URL: asterisk and browser must load."""
     for provider in ("asterisk", "browser"):
         assert TelephonyConfig.model_validate({"provider": provider}).provider.value == provider
+
+
+def test_no_files_at_all_gives_the_built_in_defaults(tmp_path):
+    from shefa.config.settings import load_config
+
+    assert load_config(tmp_path / "absent.yaml").telephony.provider.value == "twilio"

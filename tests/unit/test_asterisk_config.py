@@ -38,6 +38,14 @@ def test_missing_variables_are_all_named():
     assert "ARI_PASSWORD" in str(error.value)
 
 
+def test_without_a_trunk_only_the_ari_password_is_needed_and_no_trunk_is_rendered():
+    files = render_asterisk_config({"ARI_PASSWORD": "a", "SOFTPHONE_PASSWORD": "p"})
+    assert "[trunk" not in files["pjsip.conf"] and "registration" not in files["pjsip.conf"]
+    assert "[1001]" in files["pjsip.conf"] and "{{" not in files["pjsip.conf"]
+    with pytest.raises(ValueError, match="ARI_PASSWORD"):
+        render_asterisk_config({})
+
+
 def test_cli_writes_the_files_privately(tmp_path, monkeypatch, capsys):
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)
@@ -52,7 +60,7 @@ def test_cli_reports_missing_credentials(tmp_path, monkeypatch, capsys):
     for key in ENV:
         monkeypatch.delenv(key, raising=False)
     assert main(["asterisk", "render", "--out", str(tmp_path / "x")]) == 1
-    assert "SIP_TRUNK_HOST" in capsys.readouterr().err
+    assert "ARI_PASSWORD" in capsys.readouterr().err
 
 
 def test_cli_requires_a_subcommand(capsys):
@@ -65,3 +73,11 @@ def test_the_kit_in_the_repo_never_contains_a_password():
     for path in template_dir().iterdir():
         if path.suffix in {".tmpl", ".conf", ".yml"}:
             assert "s3cret" not in path.read_text()
+
+
+def test_softphone_extension_is_rendered_only_when_a_password_is_given():
+    plain = render_asterisk_config(ENV)
+    assert "[1001]" not in plain["pjsip.conf"] and "{{" not in plain["pjsip.conf"]
+    phone = render_asterisk_config({**ENV, "SOFTPHONE_PASSWORD": "phone-pass"})
+    assert "username=1001" in phone["pjsip.conf"] and "password=phone-pass" in phone["pjsip.conf"]
+    assert "exten => 1000,1" in phone["extensions.conf"]

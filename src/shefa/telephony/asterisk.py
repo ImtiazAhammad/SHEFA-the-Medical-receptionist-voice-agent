@@ -133,8 +133,10 @@ async def originate_call(
     """Dial `number` through the trunk and connect the answered call to SHEFA."""
     cfg = settings.telephony.asterisk
     call_uuid = call_uuid or str(uuid.uuid4())
+    # A short number is a local extension (a staff softphone); anything longer goes out the trunk.
+    endpoint = f"PJSIP/{number}" if len(number) <= 5 else f"{cfg.trunk_endpoint}/{number}"
     body: dict[str, Any] = {
-        "endpoint": f"{cfg.trunk_endpoint}/{number}",
+        "endpoint": endpoint,
         "extension": "s",
         "context": cfg.dial_context,
         "priority": 1,

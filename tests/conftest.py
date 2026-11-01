@@ -1,6 +1,11 @@
-﻿"""Shared test fixtures."""
+"""Shared test fixtures."""
+
+import os
 
 import pytest
+
+# This machine's configs/local.yaml (tokens, provider) must not change what tests see.
+os.environ.setdefault("SHEFA_IGNORE_LOCAL_CONFIG", "1")
 
 
 @pytest.fixture

@@ -8,6 +8,27 @@ patient phone ── carrier ── SIP trunk ── Asterisk ──AudioSocket 
                                             └──────ARI REST (127.0.0.1:8088)── SHEFA (hang up, transfer, dial)
 ```
 
+## 0. Use your own phone today (no carrier needed)
+
+Install a free softphone app on your phone (Linphone or Zoiper) and let it join your Asterisk over
+Wi-Fi. Then you can call the agent, and the agent can call you.
+
+```bash
+sudo apt install asterisk                       # Asterisk 20+ (needs res_audiosocket and ARI)
+export ARI_PASSWORD=$(openssl rand -hex 12) SOFTPHONE_PASSWORD=$(openssl rand -hex 6)
+echo "ARI_PASSWORD=$ARI_PASSWORD  SOFTPHONE_PASSWORD=$SOFTPHONE_PASSWORD"     # keep these
+shefa asterisk render --out deploy/asterisk/rendered
+sudo cp deploy/asterisk/rendered/* /etc/asterisk/ && sudo systemctl restart asterisk
+```
+Put `telephony.provider: asterisk` and `telephony.asterisk.ari_password: <ARI_PASSWORD>` in
+`configs/local.yaml`, then `shefa serve`.
+
+In the phone app add a SIP account: **username `1001`**, **password = SOFTPHONE_PASSWORD**,
+**domain = this computer's Wi-Fi IP**, transport UDP.
+
+- **Phone calls the agent:** dial `1000`.
+- **Agent calls the phone:** console, Talk tab, "Have the agent call me" (or reminders; use number `1001`).
+
 ## 1. Get a trunk
 Send `docs/carrier-inquiry.md` to at least three providers and fill the comparison table.
 You need: host/port, username + password (or your server's IP whitelisted), a DID, the

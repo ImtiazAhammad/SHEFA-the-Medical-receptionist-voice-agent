@@ -5,6 +5,7 @@ protocol=udp
 bind=0.0.0.0:5060
 {{EXTERNAL_ADDRESS}}
 
+; --- trunk ---
 [trunk-auth]
 type=auth
 auth_type=userpass
@@ -44,3 +45,6 @@ dtmf_mode=rfc4733
 type=identify
 endpoint=trunk
 match={{SIP_TRUNK_HOST}}
+; --- end trunk ---
+
+{{SOFTPHONE_BLOCK}}

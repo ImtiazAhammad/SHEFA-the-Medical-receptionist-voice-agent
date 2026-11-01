@@ -9,6 +9,7 @@ matched the file, so the mismatch stayed invisible.
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
@@ -207,10 +208,10 @@ class TelephonyConfig(StrictModel):
 
     @model_validator(mode="after")
     def _validate_cross_field_knobs(self) -> TelephonyConfig:
-        # With no Twilio account and no explicit URL there is nothing Twilio-shaped to
-        # misroute; the derived "wss://.twil.io" of an empty SID made every non-Twilio
-        # provider (asterisk, browser) fail validation.
-        has_twilio_target = bool(self.twilio.media_stream_url or self.twilio.account_sid)
+        # Only an explicitly configured Twilio stream URL is a mistake here. The URL derived
+        # from a leftover TWILIO_ACCOUNT_SID is just unused: operators keep Twilio credentials
+        # in .env while trying asterisk or the browser console, and must not be blocked for it.
+        has_twilio_target = bool(self.twilio.media_stream_url)
         if self.provider != TelephonyProvider.TWILIO and has_twilio_target:
             stream = self.twilio.effective_media_stream_url
             host = urlparse(stream).hostname or ""
@@ -587,7 +588,9 @@ def load_config(config_path: str | Path = "configs/default.yaml") -> AppConfig:
     # `local.yaml` beside the main file holds this machine's choices (tokens, provider) and is
     # gitignored; it is merged over the shipped defaults key by key.
     local = path.with_name("local.yaml")
-    if local.exists():
+    is_default = path == Path("configs/default.yaml")
+    skip_local = bool(os.environ.get("SHEFA_IGNORE_LOCAL_CONFIG")) and is_default
+    if local.exists() and not skip_local:
         with open(local, encoding="utf-8") as f:
             raw = _deep_merge(raw, yaml.safe_load(f) or {})
     if raw:

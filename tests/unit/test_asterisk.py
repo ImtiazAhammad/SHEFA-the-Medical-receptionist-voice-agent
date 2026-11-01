@@ -266,3 +266,19 @@ async def test_hidden_caller_id_leaves_the_call_unidentified(monkeypatch, pipeli
     await writer.drain()
     writer.close()
     server.close()
+
+
+async def test_short_numbers_ring_a_local_extension_not_the_trunk(monkeypatch):
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.read())
+        return httpx.Response(200, json={})
+
+    _ari(monkeypatch, handler)
+    await originate_call("1001")
+    await originate_call("01711000000")
+    import json
+
+    assert json.loads(bodies[0])["endpoint"] == "PJSIP/1001"
+    assert json.loads(bodies[1])["endpoint"] == "PJSIP/trunk/01711000000"
