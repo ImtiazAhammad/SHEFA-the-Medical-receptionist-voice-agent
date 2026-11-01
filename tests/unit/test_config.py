@@ -22,7 +22,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from sefa.config.settings import (
+from shefa.config.settings import (
     AnthropicAdapterConfig,
     AppConfig,
     AppInfoConfig,
@@ -432,8 +432,9 @@ def test_twil_io_media_stream_rejected_when_provider_is_not_twilio():
                 "twilio": {"media_stream_url": "wss://AC123.twil.io/media-stream"},
             }
         )
-    with pytest.raises(ValidationError, match="twil.io"):
-        TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    # A leftover Twilio account is not a misroute; only an explicit Twilio URL is.
+    kept = TelephonyConfig(provider="freeswitch", twilio=TwilioConfig(account_sid="AC123"))
+    assert kept.provider.value == "freeswitch"
     ok = TelephonyConfig.model_validate(
         {
             "provider": "asterisk",
@@ -486,7 +487,7 @@ def test_default_yaml_telephony_section_has_no_provider_key_under_sip():
 
 
 def test_config_boots_from_a_fresh_interpreter():
-    """`sefa doctor`'s precondition: a cold import must load real config.
+    """`shefa doctor`'s precondition: a cold import must load real config.
 
     A fresh subprocess is the only honest way to prove module-import boot —
     an already-imported module would pass on whatever a prior test left in
@@ -494,8 +495,8 @@ def test_config_boots_from_a_fresh_interpreter():
     """
     script = textwrap.dedent(
         """
-        import sefa
-        from sefa.config.settings import settings
+        import shefa
+        from shefa.config.settings import settings
         assert settings.app.name, "config did not boot"
         print("BOOT_OK")
         """
@@ -511,13 +512,13 @@ def test_config_boots_from_a_fresh_interpreter():
 
 
 def test_every_module_imports_cleanly():
-    """Fresh-interpreter import of every sefa module (module-import boot test)."""
+    """Fresh-interpreter import of every shefa module (module-import boot test)."""
     script = textwrap.dedent(
         """
         import importlib, pkgutil, sys
-        import sefa
+        import shefa
         failures = []
-        for mod in pkgutil.walk_packages(sefa.__path__, "sefa."):
+        for mod in pkgutil.walk_packages(shefa.__path__, "shefa."):
             try:
                 importlib.import_module(mod.name)
             except Exception as exc:
@@ -540,7 +541,7 @@ def test_every_module_imports_cleanly():
 
 # --- T17 / D-ENG20: models.adapters is the single model-config source ---
 
-REGISTRY_PY = REPO_ROOT / "src" / "sefa" / "models" / "registry.py"
+REGISTRY_PY = REPO_ROOT / "src" / "shefa" / "models" / "registry.py"
 
 
 def test_q12_resolved_model_key_is_single_source():
@@ -574,7 +575,7 @@ async def test_local_registry_uses_adapter_base_url_and_model():
     The endpoint is the Ollama server on :11434, whose gemma2:9b is the Bangla
     pilot's brain. It used to assert the vLLM AWQ server on :8001, whose
     Qwen2.5 checkpoint could not hold Bangla."""
-    from sefa.models.registry import registry
+    from shefa.models.registry import registry
 
     llm = await registry._create_llm()
     assert llm.model == "gemma2:9b"
@@ -606,11 +607,11 @@ def test_resolve_llm_adapter_rejects_unregistered_provider():
 async def test_llm_provider_branches_build_from_resolved_adapter(monkeypatch):
     """Registry's openai/anthropic/qwen branches all consume models.adapters —
     each provider resolves its type and the adapter's model, never a literal."""
-    from sefa.config.settings import settings
-    from sefa.models.llm.anthropic_llm import AnthropicLLM
-    from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
-    from sefa.models.llm.openai_llm import OpenAILLM
-    from sefa.models.registry import registry
+    from shefa.config.settings import settings
+    from shefa.models.llm.anthropic_llm import AnthropicLLM
+    from shefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
+    from shefa.models.llm.openai_llm import OpenAILLM
+    from shefa.models.registry import registry
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
@@ -647,8 +648,8 @@ async def test_llm_provider_branches_build_from_resolved_adapter(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unknown_llm_provider_raises(monkeypatch):
-    from sefa.config.settings import settings
-    from sefa.models.registry import registry
+    from shefa.config.settings import settings
+    from shefa.models.registry import registry
 
     monkeypatch.setattr(settings.pipeline.llm, "provider", "not_a_provider")
     with pytest.raises(ValueError, match="registered"):
@@ -663,8 +664,20 @@ def test_dev_mode_placeholder_without_a_fallback_is_not_dev_mode(monkeypatch):
     refused rather than silently read as truthy — a non-empty string would
     otherwise be a truthy dev_mode.
     """
-    monkeypatch.setenv("SEFA_DEV_MODE_TEST", "true")
+    monkeypatch.setenv("SHEFA_DEV_MODE_TEST", "true")
 
     # The variable is deliberately irrelevant: without `:-` there is no
     # fallback to read, so the placeholder cannot become a bool by being set.
-    assert AuthConfig(dev_mode="${SEFA_DEV_MODE_TEST}").dev_mode is False
+    assert AuthConfig(dev_mode="${SHEFA_DEV_MODE_TEST}").dev_mode is False
+
+
+def test_a_clean_non_twilio_config_is_valid():
+    """No Twilio account and no stream URL: asterisk and browser must load."""
+    for provider in ("asterisk", "browser"):
+        assert TelephonyConfig.model_validate({"provider": provider}).provider.value == provider
+
+
+def test_no_files_at_all_gives_the_built_in_defaults(tmp_path):
+    from shefa.config.settings import load_config
+
+    assert load_config(tmp_path / "absent.yaml").telephony.provider.value == "twilio"

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sefa.models.base import BaseLLM, Language, LLMResult, StreamEvent
+from shefa.models.base import BaseLLM, Language, LLMResult, StreamEvent
 
 _CALL = {"id": "c1", "name": "book_appointment", "arguments": "{}"}
 

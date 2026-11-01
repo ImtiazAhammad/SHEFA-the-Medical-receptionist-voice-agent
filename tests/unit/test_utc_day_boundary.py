@@ -15,15 +15,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sefa.store.audit import AuditStore
-from sefa.store.calls import CallsStore
+from shefa.store.audit import AuditStore
+from shefa.store.calls import CallsStore
 
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 @pytest.fixture
 def audit(tmp_path) -> AuditStore:
-    store = AuditStore(tmp_path / "sefa.db")
+    store = AuditStore(tmp_path / "shefa.db")
     yield store
     store.close()
 

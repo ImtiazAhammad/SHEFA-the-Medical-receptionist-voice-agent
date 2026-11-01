@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from sefa.coverage_policy import (
+from shefa.coverage_policy import (
     CONVERGING_MODULES,
     MUST_BE_FULLY_COVERED,
     RATCHET_FLOOR,
@@ -135,12 +135,12 @@ class TestPolicySets:
         assert not set(MUST_BE_FULLY_COVERED) & set(CONVERGING_MODULES)
 
     def test_report_files_normalizes_the_src_prefix(self):
-        report = {"files": {"src/sefa/audio.py": {"summary": {"percent_covered": 100.0}}}}
-        assert report_files(report) == {"sefa/audio.py": 100.0}
+        report = {"files": {"src/shefa/audio.py": {"summary": {"percent_covered": 100.0}}}}
+        assert report_files(report) == {"shefa/audio.py": 100.0}
 
     def test_report_files_leaves_bare_package_paths_alone(self):
-        report = {"files": {"sefa/audio.py": {"summary": {"percent_covered": 100.0}}}}
-        assert report_files(report) == {"sefa/audio.py": 100.0}
+        report = {"files": {"shefa/audio.py": {"summary": {"percent_covered": 100.0}}}}
+        assert report_files(report) == {"shefa/audio.py": 100.0}
 
 
 class TestCheckCoverageScript:

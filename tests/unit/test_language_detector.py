@@ -1,7 +1,7 @@
 ﻿"""Tests for language detection."""
 
-from sefa.models.base import Language
-from sefa.pipeline.language_detector import (
+from shefa.models.base import Language
+from shefa.pipeline.language_detector import (
     detect_language,
     is_emergency,
     needs_escalation,

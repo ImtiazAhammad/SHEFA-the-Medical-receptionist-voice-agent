@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SHEFA Console</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f6f4;--panel:#fff;--fg:#14211d;--mute:#66756f;--line:#dde3df;--accent:#0b7a63;--accent-fg:#fff;--warn:#b45309;--bad:#c0392b;--ok:#15803d;--chip:#e8efeb;--r:14px}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1513;--panel:#16201d;--fg:#e7eeeb;--mute:#91a39b;--line:#26332e;--accent:#38b89c;--accent-fg:#06231c;--warn:#f0a44b;--bad:#ef6b5b;--ok:#4ade80;--chip:#1e2b27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Bengali",sans-serif;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;gap:10px;padding:14px 16px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0;flex:1}header h1 span{color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute)}.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+main{max-width:760px;margin:0 auto;padding:16px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
+nav button{flex:1;background:none;border:0;color:var(--mute);padding:12px 4px;font:inherit;font-size:12px;cursor:pointer}
+nav button b{display:block;font-size:20px;line-height:1.2}nav button.on{color:var(--accent);font-weight:600}
+section{display:none}section.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
+.btn{border:0;border-radius:12px;padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
+.btn.alt{background:var(--chip);color:var(--fg)}.btn.red{background:var(--bad);color:#fff}.btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}.btn:disabled{opacity:.5}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}
+.call{display:grid;place-items:center;text-align:center;padding:26px 16px}
+.orb{width:116px;height:116px;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
+.orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:#fff}
+@keyframes pulse{70%{box-shadow:0 0 0 26px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media(prefers-reduced-motion:reduce){.orb.live{animation:none}}
+#state{margin-top:14px;font-weight:600}#hint{color:var(--mute);font-size:14px;margin-top:2px;min-height:1.4em}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:4px 0}
+.msg{max-width:86%;padding:9px 12px;border-radius:14px;background:var(--chip);word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-fg)}.msg small{display:block;opacity:.65;font-size:11px}
+.ring{background:var(--accent);color:var(--accent-fg);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;display:none;gap:10px;align-items:center}
+.ring.on{display:flex}.ring b{flex:1}.ring .btn{background:#fff;color:#0b4d3f}
+table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--mute);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--chip);font-size:12px}.tag.booked{background:color-mix(in srgb,var(--accent) 20%,transparent)}.tag.cancelled,.tag.no_show{background:color-mix(in srgb,var(--bad) 20%,transparent)}
+.doc{padding:10px 0;border-top:1px solid var(--line)}.doc:first-of-type{border-top:0}.doc small{color:var(--mute)}
+.empty{color:var(--mute);text-align:center;padding:18px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}.kv span:nth-child(odd){color:var(--mute)}
+#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:9;max-width:90vw}
+</style>
+</head>
+<body>
+<header><h1><span>SHEFA</span> console</h1><span id="hdot" class="dot" title="server health"></span></header>
+<main>
+<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:#0b4d3f;color:#fff">Decline</button></div>
+
+<section id="talk" class="on">
+  <div class="card call">
+    <button id="orb" class="orb" aria-label="Call the agent">📞</button>
+    <div id="state">Tap to call the agent</div>
+    <div id="hint">Speak Bangla or English. Allow the microphone when asked.</div>
+  </div>
+  <div class="card">
+    <h2>Conversation</h2>
+    <div id="chat" class="chat"><div class="empty" id="chatempty">Nothing yet. The conversation appears here.</div></div>
+  </div>
+  <div class="card">
+    <h2>Call setup</h2>
+    <label for="phone">Your phone number (so the agent knows who you are)</label>
+    <input id="phone" inputmode="tel" placeholder="01711000000" autocomplete="tel">
+    <div class="row" style="margin-top:12px"><button class="btn alt" id="ringme">Have the agent call me</button></div>
+  </div>
+</section>
+
+<section id="today">
+  <div class="card"><div class="row"><div><label for="day">Day</label><input id="day" type="date"></div><button class="btn alt" id="reload" style="flex:0 0 auto;align-self:end">Refresh</button></div></div>
+  <div class="card"><h2>Appointments</h2><div id="appts"></div></div>
+</section>
+
+<section id="calls">
+  <div class="card"><h2>Recent calls</h2><div id="calllist"></div></div>
+</section>
+
+<section id="clinic">
+  <div id="dirview"></div>
+  <div class="card"><p class="empty" style="padding:0">Edit the directory with <code>shefa clinic import clinic.yaml</code>. Changes appear here at once.</p></div>
+</section>
+
+<section id="status">
+  <div class="card"><h2>System</h2><div class="kv" id="sys"></div></div>
+  <div class="card"><h2>Reminders</h2><p style="margin-top:0;color:var(--mute)">Calls patients about appointments in the next 24 hours, and follows up on recent visits. Never between 20:00 and 08:00.</p><button class="btn" id="runrem">Run reminders now</button><div id="remout" style="margin-top:10px;color:var(--mute)"></div></div>
+</section>
+</main>
+<nav>
+  <button data-tab="talk" class="on"><b>🎙️</b>Talk</button>
+  <button data-tab="today"><b>📅</b>Today</button>
+  <button data-tab="calls"><b>📋</b>Calls</button>
+  <button data-tab="clinic"><b>🏥</b>Clinic</button>
+  <button data-tab="status"><b>⚙️</b>Status</button>
+</nav>
+<div id="toast" role="status"></div>
+<script>
+const $=id=>document.getElementById(id);
+const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',3500)}
+async function api(path,opt={}){const r=await fetch(path,{credentials:'same-origin',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});
+  if(r.status===401){location.reload();throw new Error('signed out')}
+  if(!r.ok){let m=r.statusText;try{const j=await r.json();m=j.error?.message||j.detail?.message||m}catch{}throw new Error(m)}return r.json()}
+
+/* tabs */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button,section').forEach(e=>e.classList.remove('on'));
+  b.classList.add('on');$(b.dataset.tab).classList.add('on');({today:loadAppts,calls:loadCalls,clinic:loadDir,status:loadStatus}[b.dataset.tab]||(()=>{}))()});
+
+/* ---------- voice call ---------- */
+let ws=null,ctx=null,micStream=null,node=null,playAt=0,agentUntil=0,callUuid='';
+$('phone').value=store.get('phone');$('phone').onchange=()=>store.set('phone',$('phone').value.trim());
+const WORKLET=`class P extends AudioWorkletProcessor{constructor(){super();this.b=[];this.n=0;this.r=sampleRate/16000}
+process(i){const c=i[0][0];if(!c)return true;for(let k=0;k<c.length;k++){this.b.push(c[k]);}
+const need=Math.floor(this.b.length/this.r);if(need>=1600){const o=new Int16Array(need);for(let j=0;j<need;j++){let a=0,s=Math.floor(j*this.r),e=Math.floor((j+1)*this.r);for(let k=s;k<e;k++)a+=this.b[k];a/=Math.max(1,e-s);o[j]=Math.max(-1,Math.min(1,a))*32767}
+this.b=this.b.slice(Math.floor(need*this.r));this.port.postMessage(o.buffer,[o.buffer])}return true}}registerProcessor('p',P);`;
+function setState(s,h){$('state').textContent=s;$('hint').textContent=h||''}
+function addMsg(role,text){$('chatempty')?.remove();const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'');d.innerHTML='<small>'+(role==='user'?'You':'Agent')+'</small>'+esc(text);$('chat').appendChild(d);$('chat').scrollTop=1e9}
+async function startCall(uuid){
+  if(ws)return;
+  if(!navigator.mediaDevices?.getUserMedia){setState('Microphone unavailable','Open this page over https (or localhost).');return}
+  try{micStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}})}
+  catch{setState('Microphone blocked','Allow microphone access in the browser and try again.');return}
+  ctx=new (window.AudioContext||window.webkitAudioContext)();await ctx.resume();
+  const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));await ctx.audioWorklet.addModule(url);
+  node=new AudioWorkletNode(ctx,'p');ctx.createMediaStreamSource(micStream).connect(node);
+  const q=new URLSearchParams();if(uuid)q.set('uuid',uuid);if($('phone').value.trim())q.set('phone',$('phone').value.trim());
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/call?'+q);ws.binaryType='arraybuffer';
+  ws.onopen=()=>{$('orb').classList.add('live','red');$('orb').textContent='⏹';setState('Connected','Speak now. Pause when you finish a sentence.')};
+  ws.onmessage=e=>{if(typeof e.data==='string'){const m=JSON.parse(e.data);if(m.type==='turn')addMsg(m.role,m.text);return}play(e.data)};
+  ws.onclose=ev=>{endCall(ev.code===4401?'Not allowed. Sign in again.':'Call ended')};
+  node.port.onmessage=e=>{if(ws?.readyState!==1)return;
+    // half duplex: while the agent is talking, send silence so it cannot hear itself
+    if(ctx.currentTime<agentUntil+0.25)ws.send(new Int16Array(e.data.byteLength/2).buffer);else ws.send(e.data)};
+}
+function play(buf){const s=new Int16Array(buf),f=new Float32Array(s.length);for(let i=0;i<s.length;i++)f[i]=s[i]/32768;
+  const b=ctx.createBuffer(1,f.length,16000);b.copyToChannel(f,0);const src=ctx.createBufferSource();src.buffer=b;src.connect(ctx.destination);
+  playAt=Math.max(playAt,ctx.currentTime+0.05);src.start(playAt);playAt+=b.duration;agentUntil=playAt}
+function endCall(msg){try{ws&&ws.close()}catch{}ws=null;node&&node.disconnect();micStream?.getTracks().forEach(t=>t.stop());ctx?.close();ctx=null;node=null;playAt=agentUntil=0;
+  $('orb').classList.remove('live','red');$('orb').textContent='📞';setState(msg||'Call ended','Tap to call again.')}
+$('orb').onclick=()=>ws?endCall('Call ended'):startCall('');
+$('ringme').onclick=async()=>{try{await api('/api/v1/calls/ring',{method:'POST',body:JSON.stringify({phone:$('phone').value.trim()})});toast('The agent is calling you…');pollRing()}catch(e){toast(e.message)}};
+let ringTimer=null;async function pollRing(){try{const r=await api('/api/v1/calls/ringing');const el=$('ring');
+  if(r.length&&!ws){callUuid=r[0].call_uuid;$('ringlabel').textContent='📞 '+(r[0].label||'SHEFA')+' is calling';el.classList.add('on')}else el.classList.remove('on')}catch{}}
+$('answer').onclick=()=>{$('ring').classList.remove('on');document.querySelector('[data-tab=talk]').click();startCall(callUuid)};
+$('decline').onclick=async()=>{$('ring').classList.remove('on');try{await api('/api/v1/calls/ringing/'+callUuid+'/decline',{method:'POST'})}catch{}};
+setInterval(pollRing,2500);pollRing();
+
+/* ---------- records ---------- */
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+$('day').value=today();$('day').onchange=loadAppts;$('reload').onclick=loadAppts;
+async function loadAppts(){const box=$('appts');try{const a=await api('/api/v1/appointments?date='+$('day').value);
+  box.innerHTML=a.length?'<table><tr><th>Time</th><th>Patient</th><th>Doctor</th><th></th></tr>'+a.map(x=>`<tr><td>${esc(x.start_time)}<br><small class="tag ${x.status}">${esc(x.status)}</small></td><td>${esc(x.patient_name||'—')}<br><small>${esc(x.phone)}</small></td><td>${esc(x.doctor)}<br><small>${esc(x.appointment_id)}</small></td><td><div class="row" style="flex-direction:column;gap:6px"><button class="btn sm alt" onclick="setStatus('${x.appointment_id}','completed')">Done</button><button class="btn sm alt" onclick="setStatus('${x.appointment_id}','no_show')">No-show</button><button class="btn sm alt" onclick="setStatus('${x.appointment_id}','cancelled')">Cancel</button></div></td></tr>`).join('')+'</table>':'<div class="empty">No booked appointments on this day.</div>'}catch(e){box.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
+async function setStatus(id,s){if(s==='cancelled'&&!confirm('Cancel '+id+'?'))return;try{await api('/api/v1/appointments/'+id+'/status',{method:'POST',body:JSON.stringify({status:s})});toast(id+' → '+s);loadAppts()}catch(e){toast(e.message)}}
+async function loadCalls(){const box=$('calllist');try{const c=await api('/api/v1/calls?limit=50');
+  box.innerHTML=c.length?'<table><tr><th>When</th><th>Direction</th><th>Length</th><th>Status</th></tr>'+c.map(x=>`<tr><td>${x.started_at?new Date(x.started_at*1000).toLocaleString():'—'}</td><td>${esc(x.direction)}</td><td>${x.duration_seconds!=null?Math.round(x.duration_seconds)+' s':'—'}</td><td><span class="tag">${esc(x.status)}</span></td></tr>`).join('')+'</table>':'<div class="empty">No calls yet.</div>'}catch(e){box.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
+async function loadDir(){const v=$('dirview');try{const d=await api('/api/v1/directory');
+  v.innerHTML=d.length?d.map(x=>`<div class="card"><h2>${esc(x.name)} ${x.name_bn?'· '+esc(x.name_bn):''}</h2>`+x.doctors.map(o=>`<div class="doc"><b>${esc(o.name)}</b> ${o.name_bn?'<small>'+esc(o.name_bn)+'</small>':''}<br><small>${esc(o.qualification||'')} ${o.visit_fee?'· ৳'+esc(o.visit_fee):''}</small><br><small>${esc((o.schedule||[]).join(' · ')||'No schedule')}</small>${o.next_available?'<br><small>Next free: '+esc(o.next_available.date)+' '+esc(o.next_available.time)+'</small>':''}</div>`).join('')+'</div>').join(''):'<div class="card empty">The directory is empty. Run <code>shefa clinic import configs/clinic.example.yaml</code>.</div>'}catch(e){v.innerHTML='<div class="card empty">'+esc(e.message)+'</div>'}}
+async function loadStatus(){try{const h=await api('/health');const rows=[['Overall',h.status],['Database',h.database],['Asterisk',h.asterisk],['Version',h.version]];
+  $('sys').innerHTML=rows.map(r=>`<span>${r[0]}</span><span>${esc(r[1])}</span>`).join('');$('hdot').className='dot '+(h.status==='healthy'?'ok':'bad')}catch(e){$('sys').innerHTML='<span>Error</span><span>'+esc(e.message)+'</span>';$('hdot').className='dot bad'}}
+$('runrem').onclick=async()=>{$('runrem').disabled=true;try{const r=await api('/api/v1/reminders/run',{method:'POST'});$('remout').textContent=r.placed?r.placed+' call(s) placed.':'Nothing is due right now.'}catch(e){$('remout').textContent=e.message}$('runrem').disabled=false};
+loadStatus();
+</script>
+</body>
+</html>

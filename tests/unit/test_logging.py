@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 import structlog
 
-from sefa.config.settings import settings
-from sefa.utils.logging import setup_logging
+from shefa.config.settings import settings
+from shefa.utils.logging import setup_logging
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ class TestSetupLoggingChoosesTheRendererByStream:
 
 class TestMainWiresTheConfiguredLogger:
     def test_main_registers_no_parallel_logger(self):
-        source = Path(importlib.import_module("sefa.main").__file__).read_text(
+        source = Path(importlib.import_module("shefa.main").__file__).read_text(
             encoding="utf-8"
         )
         assert "basicConfig" not in source
@@ -101,9 +101,9 @@ class TestMainWiresTheConfiguredLogger:
         assert "phi_masking" in source
 
     def test_main_logger_is_a_structlog_bound_logger(self):
-        import sefa.main
+        import shefa.main
 
-        assert sefa.main.logger.__class__.__module__.startswith("structlog")
+        assert shefa.main.logger.__class__.__module__.startswith("structlog")
 
     def test_main_passes_the_config_flag_to_setup(self, monkeypatch):
         """main's module body must call setup with the *config* flag, so an
@@ -115,9 +115,9 @@ class TestMainWiresTheConfiguredLogger:
             calls.append((level, phi_masking))
 
         monkeypatch.setattr(
-            "sefa.utils.logging.setup_logging", fake_setup_logging
+            "shefa.utils.logging.setup_logging", fake_setup_logging
         )
-        importlib.reload(importlib.import_module("sefa.main"))
+        importlib.reload(importlib.import_module("shefa.main"))
 
         assert calls == [(settings.monitoring.logging.level, True)]
 

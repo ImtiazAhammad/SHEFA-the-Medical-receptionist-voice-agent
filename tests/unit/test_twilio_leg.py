@@ -17,11 +17,11 @@ import httpx
 import numpy as np
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.config.settings import settings
-from sefa.telephony import twilio
-from sefa.telephony.control import control
-from sefa.telephony.twilio import TwilioCallLeg
+from shefa.audio import AudioFrame
+from shefa.config.settings import settings
+from shefa.telephony import twilio
+from shefa.telephony.control import control
+from shefa.telephony.twilio import TwilioCallLeg
 
 
 class _StubClient:
@@ -169,7 +169,7 @@ def test_media_stream_enqueues_inbound_audio(monkeypatch):
             seen["cleaned"] = call_sid
 
     seen["consumed"] = asyncio.Event()
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
     # A real mu-law frame, because the stream is fixed at audio/x-mulaw 8k.
     # 0xFF is mu-law digital silence.
     payload = base64.b64encode(b"\xff" * 160).decode()
@@ -212,7 +212,7 @@ def test_media_stream_stops_on_a_stop_event(monkeypatch):
         async def cleanup(self, call_sid):
             cleaned.append(call_sid)
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
     control.register(TwilioCallLeg("CA-stop"))
 
     asyncio.run(
@@ -254,7 +254,7 @@ def test_playback_worker_converts_audio_to_the_socket_format(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", S24kPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", S24kPipeline)
 
     async def _drive():
         await asyncio.wait_for(
@@ -293,7 +293,7 @@ def test_playback_worker_skips_an_empty_frame(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", EmptyThenRealPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", EmptyThenRealPipeline)
 
     async def _drive():
         await asyncio.wait_for(
@@ -338,7 +338,7 @@ def test_playback_worker_forwards_queued_audio_to_the_socket(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", IdlePipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", IdlePipeline)
 
     async def _drive():
         task = asyncio.create_task(twilio.media_stream_ws(ws, "CA-play"))
@@ -381,7 +381,7 @@ def test_playback_worker_stops_when_the_socket_fails(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
 
     ws = BrokenWebSocket(events=[
         {"event": "connected"},
@@ -423,7 +423,7 @@ def test_playback_worker_propagates_cancellation(monkeypatch):
         async def cleanup(self, call_sid):
             return None
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", ChattyPipeline)
 
     async def _drive():
         ws = BlockingWebSocket(events=[
@@ -462,7 +462,7 @@ def test_media_stream_does_not_leak_the_leg_when_the_pipeline_task_dies(monkeypa
         async def cleanup(self, call_sid):
             cleaned.append(call_sid)
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", CrashingPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", CrashingPipeline)
     control.register(TwilioCallLeg("CA-crash"))
 
     asyncio.run(
@@ -480,7 +480,7 @@ def test_media_stream_does_not_leak_the_leg_on_a_provider_error(monkeypatch):
         def __init__(self) -> None:
             raise RuntimeError("adapter init failed")
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", BoomPipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", BoomPipeline)
     control.register(TwilioCallLeg("CA-boom"))
 
     with pytest.raises(RuntimeError):
@@ -522,7 +522,7 @@ def test_the_pipeline_is_handed_a_sink_not_a_raw_playback_queue(monkeypatch):
                 yield raw
                 seen["consumed"].set()
 
-    monkeypatch.setattr("sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
+    monkeypatch.setattr("shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline)
 
     async def _drive():
         task = asyncio.create_task(
@@ -551,8 +551,8 @@ def test_a_stalled_playback_consumer_times_out_instead_of_hanging():
     A full playback queue with a dead consumer used to park the pipeline
     forever: no audio, no error, a call that simply stops. Now it raises.
     """
-    from sefa.pipeline.voice_pipeline import speak_to
-    from sefa.telephony.twilio import MediaQueues
+    from shefa.pipeline.voice_pipeline import speak_to
+    from shefa.telephony.twilio import MediaQueues
 
     class StubTTS:
         async def synthesize_stream(self, text, language):

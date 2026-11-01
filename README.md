@@ -1,6 +1,54 @@
-# Sefa - Medical Voice Agent
+# SHEFA - Medical Voice Agent
 
-HIPAA-compliant, bilingual (English / Bangla) voice AI receptionist for healthcare. Automates inbound patient calls, outbound reminders, appointment scheduling, and clinical triage routing with full code-switching support.
+Privacy-first, fully open-source, bilingual (English / Bangla) voice AI receptionist for clinics in
+Bangladesh. It answers patient calls, tells callers which doctors and departments are available and
+when, books / moves / cancels appointments, and calls patients back with reminders and follow-ups.
+Every model (speech-to-text, language model, text-to-speech) runs on the clinic's own machine.
+
+## Goal and status
+
+The goal is a **finished product**, built before any clinic is approached. Twilio is being replaced
+with a self-hosted Asterisk PBX behind a Bangladeshi SIP trunk (cheaper per minute and not tied to a
+foreign cloud). Roadmap, in build order:
+
+| # | Piece | Status |
+|---|-------|--------|
+| 1 | Clinic directory + booking engine (departments, doctors, schedules, leave, appointments; no double-booking) | **done** |
+| 2 | Voice flows: inbound booking, doctor / department / schedule questions | **done** (tested end to end against the real store) |
+| 3 | Asterisk integration replacing Twilio (AudioSocket media, ARI control, config kit) | **built**, needs a live trunk to verify: [`docs/asterisk-setup.md`](docs/asterisk-setup.md) |
+| 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
+| 5 | Call log, owner console, reliability | **done**: web console (`/console`), call log, appointments, dependency health, `scripts/backup_db.py`; load test still to do |
+| 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress (see `scripts/bench_models.py`) |
+
+Twilio code remains as a development sink. Carrier selection: see
+[`docs/carrier-inquiry.md`](docs/carrier-inquiry.md).
+
+## Quick start (5 minutes, no phone line needed)
+
+```bash
+uv sync
+uv run shefa setup            # makes your access token, turns on the console, loads a sample clinic
+uv run python scripts/fetch_stt_model.py    # one-time: the Bangla speech model (needs torch + transformers)
+uv run shefa serve            # then open http://127.0.0.1:8000/console and paste the token
+```
+The console lets you **talk to the agent from the browser** (tap the phone button), have the agent
+**call you** ("Have the agent call me", and reminders ring there too), see the day's appointments,
+the call log and the clinic directory. For your phone's browser: `shefa serve --host 0.0.0.0 --https`
+and open the printed `https://<ip>:8000/console` (browsers only allow the microphone over https).
+For real phone calls see [`docs/asterisk-setup.md`](docs/asterisk-setup.md).
+
+## Clinic directory
+
+Describe the clinic once in YAML (see `configs/clinic.example.yaml`) and load it:
+
+```bash
+uv run shefa clinic import configs/clinic.example.yaml   # idempotent; never deletes appointments
+uv run shefa clinic show                                  # what the agent will say
+```
+
+Departments, doctors, weekly schedules and leave days live in SQLite (`storage.db_path`). Open slots
+are computed from the schedule minus leave minus existing bookings minus times already past, and a
+database constraint makes double-booking impossible even under concurrent calls.
 
 ## Architecture
 
@@ -176,7 +224,7 @@ flowchart LR
 - **Hybrid Models**: Swap STT/TTS/LLM providers via YAML config — no code changes
 - **9 Tool Functions**: Patient verification, appointment CRUD, doctor lookup, history, confirmations, human escalation
 - **Real-time Pipeline**: Streaming STT with VAD, silence-based turn detection, barge-in support
-- **HIPAA Compliance**: PHI masking in logs, audit trails, AES-256 encryption support, consent-based recording
+- **Patient privacy**: PHI masking in logs, append-only audit trail, consent-based recording, all data and models stay on the clinic's own machine
 - **Emergency Detection**: Bilingual keyword detection with automatic human escalation
 
 ## Prerequisites
@@ -184,7 +232,7 @@ flowchart LR
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - Redis (for session management in production)
-- Twilio account (for telephony)
+- A SIP trunk from a BTRC-licensed Bangladeshi provider (Twilio only as a development sink for now)
 - OpenAI API key (or local LLM endpoint)
 
 ## Quick Start
@@ -211,7 +259,7 @@ uv run ruff check src/ tests/
 uv run mypy src/
 
 # Start the server
-uv run uvicorn sefa.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn shefa.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Configuration
@@ -241,7 +289,7 @@ models:
   adapters:
     stt_whisper_local:
       type: "whisper_local_stt"
-      model_size: "large-v3"
+      model_size: "models/stt/bangla-whisper-medium-ct2"   # python scripts/fetch_stt_model.py
       bangla_finetuned: true
     llm_qwen_local:
       type: "openai_compatible_llm"
@@ -265,7 +313,7 @@ models:
 ## Project Structure
 
 ```
-src/sefa/
+src/shefa/
 ├── main.py                    # FastAPI application entry point
 ├── config/
 │   └── settings.py            # Pydantic settings from YAML + env vars
@@ -295,11 +343,11 @@ src/sefa/
 │   ├── definitions.py         # 9 LLM function-calling tool schemas
 │   └── executor.py            # Tool dispatch and execution
 ├── integrations/
-│   ├── calendar.py            # Google Calendar / custom booking
-│   ├── ehr.py                 # EHR patient data integration
+│   ├── calendar.py            # Slots and bookings, backed by the clinic store
+│   ├── ehr.py                 # Patients, doctors, departments, backed by the clinic store
 │   └── notifications.py       # Bilingual SMS/email templates
 └── utils/
-    ├── compliance.py          # HIPAA audit logging, PHI masking
+    ├── compliance.py          # Audit logging, PHI masking
     └── logging.py             # Structured logging (structlog)
 ```
 
@@ -329,13 +377,15 @@ src/sefa/
 
 | Tool | Description |
 |------|-------------|
-| `verify_patient` | Verify identity via name/DOB/phone/MRN |
+| `verify_patient` | Identify the caller by phone number (registers first-time patients) |
 | `check_appointment_slots` | Query available slots by date/doctor |
 | `book_appointment` | Book appointment for verified patient |
 | `cancel_appointment` | Cancel existing appointment |
 | `reschedule_appointment` | Move appointment to new date/time |
-| `get_doctor_info` | Doctor profile, availability, languages |
-| `lookup_patient_history` | Recent visits, medications, allergies |
+| `get_doctor_info` | Doctor profile, department, fee, weekly schedule, next free slot |
+| `list_departments` | Departments and the doctors in each |
+| `list_doctors` | Doctors (optionally per department) with schedule and next free slot |
+| `lookup_patient_history` | The patient's own appointments (no clinical records are stored) |
 | `send_confirmation` | Bilingual SMS/email confirmation |
 | `transfer_to_human` | Escalate to human receptionist |
 
@@ -345,7 +395,7 @@ src/sefa/
 
 ```bash
 # Requires OPENAI_API_KEY in .env
-uv run uvicorn sefa.main:app --port 8000 --reload
+uv run uvicorn shefa.main:app --port 8000 --reload
 ```
 
 ### Option 2: Fully local (Qwen3 + Faster-Whisper)
@@ -362,7 +412,7 @@ vllm serve Qwen/Qwen3-8B --port 8080
 # pipeline.llm.provider: "qwen_local"
 # pipeline.tts.provider: "piper"
 
-uv run uvicorn sefa.main:app --port 8000 --reload
+uv run uvicorn shefa.main:app --port 8000 --reload
 ```
 
 ## Testing
@@ -372,7 +422,7 @@ uv run uvicorn sefa.main:app --port 8000 --reload
 uv run pytest tests/ -v
 
 # With coverage
-uv run pytest tests/ --cov=sefa --cov-report=html
+uv run pytest tests/ --cov=shefa --cov-report=html
 
 # Run specific test module
 uv run pytest tests/unit/test_language_detector.py -v
@@ -390,20 +440,20 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev
 COPY src/ src/
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "sefa.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### Kubernetes
 
 - Horizontal pod autoscaler based on concurrent call count
 - Redis for session state (shared across pods)
-- HIPAA-eligible cloud: AWS GovCloud, Azure Healthcare, or GCP Healthcare API
+- Keep patient data on-premises or in a Bangladeshi data centre you control; the pipeline needs no cloud service
 
 ## Production Checklist
 
 - [ ] Set `ENVIRONMENT=production` in `.env`
-- [ ] Configure HIPAA-compliant storage for call recordings
-- [ ] Set up BAA with cloud provider (Twilio, OpenAI, etc.)
+- [ ] Encrypt the disk holding call recordings and the SQLite database; set a retention period
+- [ ] Keep `shefa doctor` green with only local providers configured (no cloud STT / LLM / TTS)
 - [ ] Enable Prometheus metrics (`monitoring.prometheus_enabled: true`)
 - [ ] Configure Sentry DSN for error tracking
 - [ ] Set up log shipping (ELK/Loki) with PHI masking enabled
@@ -415,3 +465,17 @@ CMD ["uv", "run", "uvicorn", "sefa.main:app", "--host", "0.0.0.0", "--port", "80
 ## License
 
 Proprietary. All rights reserved.
+
+## Reminders and follow-ups
+
+```yaml
+reminders:
+  enabled: true          # the server then calls patients ~24h before an appointment
+  language: bn           # reminder language
+  quiet_start: "20:00"   # never ring between 20:00 and 08:00 clinic time
+  quiet_end: "08:00"
+```
+
+Each appointment gets at most two reminder attempts (90 minutes apart) and none once the patient
+has answered. Completed visits get one follow-up call 1-3 days later. Run one cycle by hand with
+`shefa reminders run-once`. The patient can confirm, cancel or move the appointment by voice.

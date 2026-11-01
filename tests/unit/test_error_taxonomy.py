@@ -19,16 +19,16 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.base import Language, LLMResult, StreamEvent, STTResult
-from sefa.models.registry import registry
-from sefa.pipeline.error_taxonomy import (
+from shefa.audio import AudioFrame
+from shefa.models.base import Language, LLMResult, StreamEvent, STTResult
+from shefa.models.registry import registry
+from shefa.pipeline.error_taxonomy import (
     FailureKind,
     MalformedLLMOutputError,
     backoff_delay,
     require_llm_result,
 )
-from sefa.pipeline.voice_pipeline import VoicePipeline
+from shefa.pipeline.voice_pipeline import VoicePipeline
 
 NOISE_RMS = 200.0
 SPEECH_RMS = 3000.0
@@ -128,7 +128,7 @@ class _CallHarness:
         monkeypatch.setattr(registry, "_stt", stt)
         monkeypatch.setattr(registry, "_llm", llm)
         monkeypatch.setattr(registry, "_tts", tts)
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(
             settings.escalation, "max_transfer_attempts", max_transfer_attempts
@@ -156,11 +156,11 @@ class _CallHarness:
     async def warmup_and_start(self) -> None:
         for _ in range(2):
             await asyncio.sleep(0)
-        for _ in range(5):
+        for _ in range(10):  # 0.5 s of room noise (the VAD warm-up is in seconds)
             await self.audio_queue.put(_pcm_chunk(NOISE_RMS, seed=0))
 
     async def utterance(self, speech_seed: int = 1) -> None:
-        for _ in range(6):
+        for _ in range(12):  # 0.6 s of speech
             await self.audio_queue.put(_pcm_chunk(SPEECH_RMS, seed=speech_seed))
             await asyncio.sleep(0.01)
         # 0.6s of speech ticks + a 0.8s end-of-utterance silence window before
@@ -282,7 +282,7 @@ class TestPipelineRescuePaths:
 
     @pytest.mark.asyncio
     async def test_malformed_llm_output_creates_no_hot_loop(self, monkeypatch):
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", True)
         done = _CallHarness(
@@ -303,7 +303,7 @@ class TestPipelineRescuePaths:
     async def test_malformed_stream_in_extract_mode_backs_off_once(self, monkeypatch):
         """With native tool calls off, each turn also polls the JSON router, so
         a broken stream costs one stream call plus one router call per rescue."""
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
         done = _CallHarness(

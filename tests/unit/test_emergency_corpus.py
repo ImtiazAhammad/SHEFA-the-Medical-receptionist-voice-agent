@@ -19,8 +19,8 @@ Matcher contract this file pins down:
 
 import pytest
 
-from sefa.models.base import Language
-from sefa.pipeline.language_detector import (
+from shefa.models.base import Language
+from shefa.pipeline.language_detector import (
     evaluate_transcript,
     is_emergency,
 )
@@ -172,7 +172,7 @@ def test_empty_or_whitespace_utterance_never_escalates():
 
 
 def test_a_language_with_no_configured_keywords_never_escalates(monkeypatch):
-    from sefa.config.settings import settings
+    from shefa.config.settings import settings
 
     monkeypatch.setattr(
         settings.escalation, "emergency_keywords",
@@ -188,7 +188,7 @@ def test_keyword_hits_only_add_the_escalation_path():
     exactly emergency content — a hit is never converted into a hide-able
     repeat prompt (which would end the call asking for a repeat) and the
     decision carries no hang-up signal of its own."""
-    from sefa.config.settings import settings
+    from shefa.config.settings import settings
 
     for language in (Language.ENGLISH, Language.BANGLA):
         for keyword in settings.escalation.emergency_keywords.get(language.value, []):
@@ -202,7 +202,7 @@ def test_keyword_hits_only_add_the_escalation_path():
 def test_no_emergency_keyword_ships_inside_the_terminal_hangup_prompt():
     """A keyword may never resurface in the courtesy prompt that ends the call
     after repeated failures — the two paths must not share vocabulary."""
-    from sefa.config.settings import settings
+    from shefa.config.settings import settings
 
     hangup_text = " ".join(
         settings.escalation.terminal_prompt.get(k, "")

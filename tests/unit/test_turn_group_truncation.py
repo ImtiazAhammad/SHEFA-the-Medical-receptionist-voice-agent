@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import pytest
 
-from sefa.models.base import Language
-from sefa.session.manager import CallSession, Turn, truncate_history
-from sefa.session.messages import build_messages
+from shefa.models.base import Language
+from shefa.session.manager import CallSession, Turn, truncate_history
+from shefa.session.messages import build_messages
 
 
 def _tc(call_id: str, name: str = "find_slots") -> list[dict]:
@@ -154,7 +154,7 @@ def test_noop_when_history_is_within_budget():
 
 @pytest.mark.parametrize("max_turns", [1, 2, 3, 4, 5])
 def test_add_turn_truncates_through_the_session(max_turns, monkeypatch):
-    from sefa.config.settings import settings
+    from shefa.config.settings import settings
 
     monkeypatch.setattr(settings.session, "max_history_turns", max_turns)
     session = CallSession(call_sid="x")

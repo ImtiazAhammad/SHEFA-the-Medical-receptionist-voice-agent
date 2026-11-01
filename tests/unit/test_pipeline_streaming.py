@@ -16,10 +16,10 @@ from typing import Any
 
 import pytest
 
-from sefa.audio import AudioFrame
-from sefa.models.base import StreamEvent
-from sefa.pipeline.error_taxonomy import MalformedLLMOutputError
-from sefa.pipeline.voice_pipeline import (
+from shefa.audio import AudioFrame
+from shefa.models.base import StreamEvent
+from shefa.pipeline.error_taxonomy import MalformedLLMOutputError
+from shefa.pipeline.voice_pipeline import (
     VoicePipeline,
     speak_to,
     split_complete_sentences,
@@ -152,7 +152,7 @@ class TestPipelineUsesTheHelper:
         or one of them silently goes back to blocking on a full utterance."""
         import inspect
 
-        import sefa.pipeline.voice_pipeline as vp
+        import shefa.pipeline.voice_pipeline as vp
 
         source = inspect.getsource(vp.VoicePipeline)
 
@@ -161,7 +161,7 @@ class TestPipelineUsesTheHelper:
     def test_every_speak_site_pushes_through_the_helper(self):
         import inspect
 
-        import sefa.pipeline.voice_pipeline as vp
+        import shefa.pipeline.voice_pipeline as vp
 
         source = inspect.getsource(vp.VoicePipeline)
         assert "playback_queue.put" not in source, (
@@ -176,7 +176,7 @@ class TestPipelineUsesTheHelper:
     def test_the_helper_streams_rather_than_buffering(self):
         import inspect
 
-        import sefa.pipeline.voice_pipeline as vp
+        import shefa.pipeline.voice_pipeline as vp
 
         source = inspect.getsource(vp.speak_to)
         assert "synthesize_stream" in source
@@ -298,7 +298,7 @@ class TestStreamReply:
 
     @pytest.mark.asyncio
     async def test_a_synthesis_failure_is_tagged_for_the_classifier(self):
-        from sefa.pipeline.voice_pipeline import _SynthesisError
+        from shefa.pipeline.voice_pipeline import _SynthesisError
 
         class ExplodingTTS:
             async def synthesize_stream(self, text: str, language: str = "en"):

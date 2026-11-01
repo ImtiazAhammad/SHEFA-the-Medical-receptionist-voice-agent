@@ -1,0 +1,780 @@
+"""SHEFA Receptionist - Main application entry point."""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import structlog
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from shefa.auth import AuthStore, Principal, TokenError
+from shefa.config.settings import TelephonyProvider, settings
+from shefa.session.manager import SessionManager
+from shefa.session.messages import build_messages
+from shefa.telephony.outbound import outbound_configured, place_call
+from shefa.telephony.twilio import app as telephony_app
+from shefa.tools.definitions import get_tool_definitions
+from shefa.utils.logging import setup_logging
+
+# The configured structlog pipeline is the ONLY server logger. Its PHI
+# masking lives behind `monitoring.logging.phi_masking`, so every event in
+# the process shares the same gate — no parallel renderer can unmask a
+# number that this one already redacted.
+setup_logging(
+    level=settings.monitoring.logging.level,
+    phi_masking=settings.monitoring.logging.phi_masking,
+)
+
+logger = structlog.get_logger("shefa")
+
+session_manager = SessionManager()
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+# --------------------------------------------------------------------------
+# Error envelope + status map (D-ENG14).
+#
+# Every failure renders as `{"error": {"code": str, "message": str}}` on a
+# non-2xx status. The map is the single source of truth between a stable
+# machine code and the HTTP status, so an endpoint cannot drift back into
+# the old 200-with-`{"error": ...}` style.
+#
+# HTTPException migration list — endpoints that used to smuggle an error out
+# on a 200 status, now raised via `raise_http_error` and rendered by the
+# shared exception handler:
+#   GET  /api/v1/sessions/{sid}   session-not-found  200 -> 404
+#   POST /api/v1/calls/outbound   required to_number 200 -> 422
+#   POST /api/v1/calls/outbound   twilio unconfigured 200 -> 503
+#   POST /api/v1/calls/call-me    no verified number 200 -> 503
+#   POST /api/v1/calls/call-me    twilio unconfigured 200 -> 503
+#   POST /api/v1/chat             required message   200 -> 422
+# Routes are deliberately NOT auto-listed here; adding one to Child 1 means
+# adding its code to the map and test_error_envelope.py coverage.
+ERROR_STATUS_MAP: dict[str, int] = {
+    "authentication_required": 401,
+    "insufficient_role": 403,
+    "route_not_authorized": 403,
+    "session_not_found": 404,
+    "validation": 422,
+    "required_param": 422,
+    "not_configured": 503,
+    "verified_number_missing": 503,
+}
+
+DEFAULT_ERROR_MESSAGES: dict[str, str] = {
+    "authentication_required": "Authentication required.",
+    "insufficient_role": "Insufficient role for this resource.",
+    "route_not_authorized": "This route is not authorized.",
+    "session_not_found": "Session not found",
+    "validation": "Request validation failed.",
+    "required_param": "Required parameter missing.",
+    "not_configured": "Dependency not configured.",
+    "verified_number_missing": "No verified number configured.",
+}
+
+
+def error_response(
+    code: str,
+    message: str | None = None,
+    *,
+    details: object = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    """Render one error in the shared envelope on its mapped status."""
+    envelope_body = {
+        "error": {
+            "code": code,
+            "message": message or DEFAULT_ERROR_MESSAGES.get(code, code),
+        }
+    }
+    if details is not None:
+        envelope_body["error"]["details"] = details
+    return JSONResponse(
+        status_code=ERROR_STATUS_MAP.get(code, 500),
+        content=envelope_body,
+        headers=headers,
+    )
+
+
+def raise_http_error(code: str, message: str | None = None) -> None:
+    """Raise the HTTP error the shared handler renders for `code`."""
+    raise HTTPException(
+        status_code=ERROR_STATUS_MAP.get(code, 500),
+        detail={"code": code, "message": message or DEFAULT_ERROR_MESSAGES.get(code, code)},
+    )
+
+
+def _http_error_handler(request, exc: HTTPException) -> JSONResponse:
+    detail = exc.detail
+    if isinstance(detail, dict) and "code" in detail:
+        return JSONResponse(
+            status_code=exc.status_code, content={"error": detail}
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": "http_error", "message": str(detail)}},
+    )
+
+
+def _validation_error_handler(request, exc: RequestValidationError) -> JSONResponse:
+    return error_response("validation", details=exc.errors())
+
+# The permission each route requires, keyed by (method, path).
+# A permission value meaning "reachable without a credential". Distinct from
+# `None`, which means "undeclared, therefore refused": naming a route with this
+# is the deliberate, reviewable exception to "every route is protected".
+PUBLIC_PERMISSION = "<public>"
+
+#
+# This map lives in code rather than config on purpose: config can grant a
+# permission to a role, but it cannot un-protect a route. A route absent from
+# this map is refused (see `required_permission`), so adding a route means
+# adding its permission here as a deliberate act — `test_every_route_declares_
+# its_required_permission` fails until you do.
+ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
+    ("GET", "/health"): "sessions:read",
+    ("GET", "/"): "sessions:read",
+    ("GET", "/dashboard"): "sessions:read",
+    ("GET", "/test-call"): "calls:place",
+    ("GET", "/api/v1/sessions"): "sessions:read",
+    ("GET", "/api/v1/sessions/{call_sid}"): "sessions:read",
+    ("POST", "/api/v1/calls/outbound"): "calls:place",
+    ("POST", "/api/v1/calls/call-me"): "calls:place",
+    ("POST", "/api/v1/chat"): "chat:use",
+    ("GET", "/api/v1/config"): "config:read",
+    ("GET", "/api/v1/tools"): "config:read",
+    ("GET", "/api/v1/calls"): "records:read",
+    ("GET", "/console"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/login"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/calls/ring"): "calls:place",
+    ("GET", "/api/v1/calls/ringing"): "calls:place",
+    ("POST", "/api/v1/calls/ringing/{call_uuid}/decline"): "calls:place",
+    ("GET", "/api/v1/directory"): "records:read",
+    ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
+    ("POST", "/api/v1/reminders/run"): "records:write",
+    ("GET", "/api/v1/appointments"): "records:read",
+    ("GET", "/login"): PUBLIC_PERMISSION,
+}
+
+
+# Any telephony route, whatever the provider mounts. Matched by prefix so a new
+# webhook cannot escape authorization by living under a different path.
+TELEPHONY_PREFIX = "/api/v1/telephony"
+TELEPHONY_PERMISSION = "calls:place"
+
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+# HttpOnly session cookie set by /login. HttpOnly keeps page script from reading
+# it; SameSite=Lax keeps it off cross-site requests.
+AUTH_COOKIE = "shefa_token"
+
+
+def required_permission(app: FastAPI, method: str, path: str) -> str | None:
+    """The permission a route needs, or None if it is not protected.
+
+    None means "refuse", not "allow": an undeclared route is a route nobody has
+    thought about, and failing open on it is how a debug endpoint ends up serving
+    transcripts.
+
+    `path` is the concrete request path; the permission map is keyed on the
+    route *template* (Starlette uses `/api/v1/sessions/{call_sid}`, not the
+    concrete `/api/v1/sessions/SID-1`), so the route's compiled regex is what
+    matches here.
+    """
+    if path.startswith(TELEPHONY_PREFIX):
+        return TELEPHONY_PERMISSION
+    if path == "/static" or path.startswith("/static/"):
+        return "sessions:read"
+    if path.startswith(("/docs", "/redoc", "/openapi")):
+        return "config:read"
+
+    for route in app.routes:
+        template = getattr(route, "path", None)
+        pattern = getattr(route, "path_regex", None)
+        methods = getattr(route, "methods", None) or ()
+        if not template or not pattern:
+            continue
+        if method not in methods:
+            continue
+        if pattern.match(path):
+            return ROUTE_PERMISSIONS.get((method, template))
+    return None
+
+
+def build_auth_store() -> AuthStore:
+    """Build the store from config, refusing to start on a broken record.
+
+    A principal whose hash will not parse is a config fault. Letting it through
+    would leave an operator staring at a 401 that looks exactly like a wrong
+    password, with nothing in the logs to say otherwise.
+    """
+    auth = settings.auth
+    for principal in auth.principals:
+        # Parse eagerly so a bad record raises here, not on the first request.
+        from shefa.auth import _parse_record
+
+        try:
+            _parse_record(principal.token_hash)
+        except TokenError as error:
+            raise TokenError(
+                f"auth principal {principal.name!r} has an unusable token_hash: {error}"
+            ) from error
+    return AuthStore(
+        [
+            (principal.name, principal.role, principal.token_hash)
+            for principal in auth.principals
+        ],
+        dict(auth.roles),
+    )
+
+
+def _bearer_token(header: str | None, cookies: dict[str, str] | None = None) -> str | None:
+    """Pull a bearer token out of an Authorization header or the auth cookie.
+
+    The header wins because it is the deliberate, per-request credential. The
+    cookie exists only so a browser can hold a session: a page load cannot set
+    an Authorization header, so without it every HTML route would be a 401 that
+    no amount of correct credentials could get past.
+    """
+    if header:
+        scheme, _, credentials = header.partition(" ")
+        if scheme.lower() == "bearer":
+            token = credentials.strip()
+            if token:
+                return token
+    cookie = (cookies or {}).get(AUTH_COOKIE)
+    return cookie or None
+
+
+def _install_auth(app: FastAPI, store: AuthStore) -> None:
+    """Require a valid token and a sufficient role on every request.
+
+    Implemented as middleware rather than per-route dependencies on purpose: a
+    dependency is opt-in, and a route added without one is public. Middleware has
+    no such hole.
+    """
+
+    @app.middleware("http")
+    async def enforce_auth(request, call_next):
+        permission = required_permission(
+            app, request.method, request.url.path
+        )
+
+        if permission is None:
+            # Undeclared route: refuse rather than guess.
+            return error_response("route_not_authorized")
+
+        token = _bearer_token(
+            request.headers.get("Authorization"), request.cookies
+        )
+
+        if permission == PUBLIC_PERMISSION:
+            # Public routes take no credential, but one that is presented is
+            # still checked — a wrong token should read as wrong, not silently
+            # as anonymous.
+            public_principal = (
+                store.authenticate(token) if token is not None else None
+            )
+            if token is not None and public_principal is None:
+                return error_response(
+                    "authentication_required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            request.state.principal = public_principal
+            return await call_next(request)
+
+        if (
+            settings.auth.dev_mode
+            and request.url.path.startswith(TELEPHONY_PREFIX)
+            and token is None
+        ):
+            # Dev-mode only. Twilio cannot present a bearer token — it signs
+            # webhooks with X-Twilio-Signature instead, which nothing here
+            # verifies — so requiring one rejects every inbound call before a
+            # stream is ever opened. Unreachable in production because the
+            # telephony router itself is only mounted when dev_mode is true
+            # (see _telephony_router_allowed).
+            request.state.principal = Principal(
+                name="twilio-webhook", role="admin"
+            )
+            return await call_next(request)
+
+        principal: Principal | None = store.authenticate(token)
+        if principal is None:
+            # One body for "no token" and "wrong token" — a difference between
+            # them is an oracle for guessing valid credentials.
+            return error_response(
+                "authentication_required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not store.authorizes(principal, permission):
+            return error_response("insufficient_role")
+
+        request.state.principal = principal
+        return await call_next(request)
+
+    if not store.is_configured:
+        logger.error(
+            "no auth principals configured; every request will be refused. "
+            "Run `shefa token mint` and add the result to auth.principals."
+        )
+
+
+def _telephony_router_allowed() -> bool:
+    """The telephony router is dev-only and loopback-only.
+
+    Mounting live telephony routes on a routable interface is the plan's
+    explicit red line: the webhooks take unauthenticated POSTs, so a public
+    mount is an unauthenticated way to inject calls and read transcripts.
+    """
+    if settings.telephony.provider == TelephonyProvider.ASTERISK:
+        return False  # Asterisk connects over AudioSocket; there are no webhooks to mount
+    if settings.telephony.provider != TelephonyProvider.TWILIO:
+        _provider = settings.telephony.provider
+        logger.warning(
+            "telephony.provider=%s: no adapter is implemented; the telephony "
+            "router stays unmounted. A live trunk on another provider would "
+            "silently lose calls until it is wired up.",
+            getattr(_provider, "value", _provider),
+        )
+        return False
+    if not settings.auth.dev_mode:
+        return False
+    return settings.auth.bind_host in LOOPBACK_HOSTS
+
+
+
+class LoginBody(BaseModel):
+    token: str
+
+
+class RingBody(BaseModel):
+    message: str = ""
+    phone: str = ""
+
+
+class StatusBody(BaseModel):
+    status: str
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Listen for Asterisk AudioSocket calls for as long as the server runs."""
+    server = None
+    if settings.telephony.provider == TelephonyProvider.ASTERISK:
+        from shefa.telephony.asterisk import start_audiosocket_server
+
+        server = await start_audiosocket_server()
+    warm_task = None
+    from shefa import warmup
+
+    if warmup.warmup_enabled():
+        import asyncio
+
+        warm_task = asyncio.create_task(warmup.run_forever())
+    reminder_task = None
+    if settings.reminders.enabled:
+        import asyncio
+
+        from shefa.clinic import default_clinic_store
+        from shefa.reminders import run_forever
+
+        reminder_task = asyncio.create_task(run_forever(default_clinic_store(), place_call))
+    try:
+        yield
+    finally:
+        if reminder_task is not None:
+            reminder_task.cancel()
+        if warm_task is not None:
+            warm_task.cancel()
+        if server is not None:
+            server.close()
+            await server.wait_closed()
+
+
+def create_app(auth_store: AuthStore | None = None) -> FastAPI:
+    """Create and configure the main FastAPI application.
+
+    `auth_store` is injectable so tests can supply their own principals instead
+    of depending on whatever the config happens to contain.
+    """
+    store = auth_store if auth_store is not None else build_auth_store()
+    app = FastAPI(
+        lifespan=_lifespan,
+        title="SHEFA Receptionist",
+        version="0.1.0",
+        description="Privacy-first open-source bilingual voice AI medical receptionist",
+    )
+    app.add_exception_handler(HTTPException, _http_error_handler)
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)
+
+    _install_auth(app, store)
+
+    if _telephony_router_allowed():
+        app.include_router(
+            telephony_app.router, prefix=TELEPHONY_PREFIX, tags=["telephony"]
+        )
+    else:
+        logger.warning(
+            "telephony router not mounted: requires provider=twilio, "
+            "auth.dev_mode=true, and a loopback bind_host"
+        )
+
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+    @app.get("/health")
+    async def health() -> dict:
+        from shefa.health import health_report
+
+        return await health_report()
+
+    @app.get("/")
+    async def root() -> dict[str, str]:
+        return {
+            "service": "SHEFA Receptionist",
+            "version": "0.1.0",
+            "languages": ",".join(settings.languages.supported),
+        }
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    async def dashboard() -> HTMLResponse:
+        index = STATIC_DIR / "index.html"
+        return HTMLResponse(content=index.read_text(encoding="utf-8"))
+
+    @app.get("/test-call", response_class=HTMLResponse)
+    async def test_call() -> HTMLResponse:
+        page = STATIC_DIR / "test-call.html"
+        return HTMLResponse(content=page.read_text(encoding="utf-8"))
+
+    @app.get("/login")
+    async def login(token: str | None = None, redirect_to: str = "/test-call"):
+        """Exchange a bearer token for an HttpOnly cookie, then redirect.
+
+        A browser cannot attach an Authorization header to a page load, so this
+        is the only way the HTML routes are reachable from a browser at all.
+        The token is never echoed back into the page or the URL after this
+        point — it lives in a cookie the page's JavaScript cannot read.
+
+        The route is public precisely so that it can be reached with no
+        credential whatsoever; it still refuses without one, because a session
+        is exactly what it is there to issue.
+        """
+        if not token:
+            return error_response(
+                "authentication_required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        principal = store.authenticate(token)
+        if principal is None:
+            return error_response(
+                "authentication_required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if not store.authorizes(principal, "calls:place"):
+            return error_response("insufficient_role")
+
+        # Only local paths: `next=https://evil.example` would turn a legitimate
+        # login into an open redirect.
+        target = (
+            redirect_to
+            if redirect_to.startswith("/") and not redirect_to.startswith("//")
+            else "/"
+        )
+
+        response = RedirectResponse(url=target, status_code=303)
+        response.set_cookie(
+            AUTH_COOKIE,
+            token,
+            httponly=True,
+            samesite="lax",
+            secure=settings.auth.dev_mode is False,
+            max_age=12 * 60 * 60,
+        )
+        return response
+
+    @app.get("/api/v1/sessions")
+    async def list_sessions() -> list[dict]:
+        sessions = []
+        for call_sid, session in session_manager._sessions.items():
+            sessions.append({
+                "call_sid": call_sid,
+                "patient_id": session.patient_id,
+                "patient_name": session.patient_name,
+                "language": session.language.value,
+                "state": session.state,
+                "turns": len(session.history),
+                "created_at": session.created_at,
+                "last_activity": session.last_activity,
+            })
+        return sessions
+
+    @app.get("/api/v1/sessions/{call_sid}")
+    async def get_session(call_sid: str) -> dict:
+        session = await session_manager.get(call_sid)
+        if not session:
+            raise_http_error("session_not_found")
+        return session.to_dict()
+
+    @app.post("/api/v1/calls/outbound")
+    async def initiate_outbound(to_number: str = "") -> dict:
+        if not to_number:
+            raise_http_error("required_param", "to_number is required")
+        if not outbound_configured():
+            raise_http_error("not_configured", "Telephony provider not configured")
+        return await place_call(to_number)
+
+    @app.post("/api/v1/calls/call-me")
+    async def call_me() -> dict:
+        """Outbound call to the operator's own verified number.
+
+        The number is never defaulted: T7 requires a dialable number to come
+        only from configuration or the environment, never from source.
+        """
+        import os
+
+        verified = os.environ.get("VERIFIED_NUMBER") or settings.telephony.twilio.phone_number
+        if not verified:
+            raise_http_error(
+                "verified_number_missing",
+                "No verified number configured. Set VERIFIED_NUMBER.",
+            )
+        if not outbound_configured():
+            raise_http_error(
+                "not_configured",
+                "Telephony provider not configured (Twilio SID or Asterisk ARI password)",
+            )
+        return await place_call(verified)
+
+    @app.get("/api/v1/calls")
+    async def list_calls(limit: int = 50) -> list[dict]:
+        """Recent calls, newest first. Caller phone hashes are not exposed."""
+        from shefa.call_log import default_calls_store
+
+        rows = default_calls_store().list_calls()
+        rows = [r for r in rows if not r.get("deleted_at")]
+        keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        return [{k: r.get(k) for k in keys} for r in reversed(rows)][: max(1, min(limit, 500))]
+
+    @app.get("/api/v1/appointments")
+    async def list_appointments(date: str = "") -> list[dict]:
+        """Booked appointments for a day (default: today, clinic time), phones masked."""
+        from datetime import datetime
+
+        from shefa.call_log import mask_phone
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+
+        day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        return [
+            {
+                "appointment_id": a["appointment_id"],
+                "date": a["date"],
+                "start_time": a["start_time"],
+                "doctor": a["doctor_en"],
+                "patient_name": a["patient_name"],
+                "phone": mask_phone(a["phone"]),
+                "status": a["status"],
+            }
+            for a in default_clinic_store().appointments_on(day)
+        ]
+
+    @app.get("/console", response_class=HTMLResponse)
+    async def console(request: Request) -> HTMLResponse:
+        """The staff console. Signed out, it is a 401 carrying the sign-in form."""
+        signed_in = getattr(request.state, "principal", None) is not None
+        page = "console.html" if signed_in else "signin.html"
+        return HTMLResponse(
+            content=(STATIC_DIR / page).read_text(encoding="utf-8"),
+            status_code=200 if signed_in else 401,
+        )
+
+    @app.post("/api/v1/login")
+    async def api_login(body: LoginBody | None = None) -> JSONResponse:
+        principal = store.authenticate(body.token if body else None)
+        if principal is None:
+            return error_response("authentication_required")
+        response = JSONResponse({"name": principal.name, "role": principal.role})
+        response.set_cookie(
+            AUTH_COOKIE,
+            body.token if body else "",
+            httponly=True,
+            samesite="lax",
+            secure=settings.auth.dev_mode is False,
+            max_age=12 * 60 * 60,
+        )
+        return response
+
+    @app.websocket("/ws/call")
+    async def ws_call(websocket: WebSocket, uuid: str = "", phone: str = "") -> None:
+        """Talk to the agent from the browser. Same permission as placing a call."""
+        token = _bearer_token(websocket.headers.get("authorization"), dict(websocket.cookies))
+        principal = store.authenticate(token)
+        if not store.authorizes(principal, "calls:place"):
+            await websocket.close(code=4401)
+            return
+        import uuid as uuid_module
+
+        from shefa.telephony.browser import handle_browser_call
+
+        await handle_browser_call(websocket, uuid or str(uuid_module.uuid4()), phone)
+
+    @app.post("/api/v1/calls/ring")
+    async def ring_console(body: RingBody) -> dict:
+        """Make the agent call the console, opening with `message` (or a default line)."""
+        from shefa.telephony.browser import start_test_ring
+
+        message = body.message or (
+            "আসসালামু আলাইকুম, শেফা ক্লিনিক থেকে বলছি। এটি একটি পরীক্ষামূলক কল। "
+            "আমি কীভাবে সাহায্য করতে পারি?"
+            if settings.languages.primary == "bn"
+            else "Hello, this is SHEFA clinic calling to test the line. How can I help?"
+        )
+        return {"call_uuid": start_test_ring(message, body.phone)}
+
+    @app.get("/api/v1/calls/ringing")
+    async def calls_ringing() -> list[dict]:
+        from shefa.telephony.browser import ringing_now
+
+        return ringing_now()
+
+    @app.post("/api/v1/calls/ringing/{call_uuid}/decline")
+    async def decline_ring(call_uuid: str) -> dict:
+        from shefa.telephony.browser import decline
+        from shefa.telephony.call_context import discard_context
+
+        discard_context(call_uuid)
+        return {"declined": decline(call_uuid)}
+
+    @app.get("/api/v1/directory")
+    async def directory() -> list[dict]:
+        """Departments with their doctors, weekly schedules and next free slot."""
+        from shefa.clinic import default_clinic_store
+        from shefa.integrations.ehr import _doctor_card
+
+        clinic = default_clinic_store()
+        return [
+            {
+                "name": d["name_en"],
+                "name_bn": d["name_bn"],
+                "doctors": [_doctor_card(doc) for doc in clinic.doctors(department_id=d["id"])],
+            }
+            for d in clinic.departments()
+        ]
+
+    @app.post("/api/v1/appointments/{appointment_id}/status")
+    async def set_appointment_status(appointment_id: str, body: StatusBody) -> dict:
+        from shefa.clinic import ClinicError, default_clinic_store
+
+        try:
+            updated = default_clinic_store().mark_status(appointment_id, body.status)
+        except ClinicError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "validation", "message": str(exc)}
+            ) from exc
+        return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
+    @app.post("/api/v1/reminders/run")
+    async def run_reminders_now() -> dict:
+        """Place every reminder/follow-up call that is due right now."""
+        from datetime import datetime
+
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+        from shefa.reminders import run_reminder_cycle
+
+        cfg = settings.reminders
+        placed = await run_reminder_cycle(
+            default_clinic_store(),
+            place_call,
+            datetime.now(CLINIC_TZ),
+            language=cfg.language,
+            kinds=tuple(cfg.kinds),
+            quiet_start=cfg.quiet_start,
+            quiet_end=cfg.quiet_end,
+        )
+        return {"placed": len(placed), "calls": placed}
+
+    @app.post("/api/v1/chat")
+    async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:
+        """Text-only chat endpoint — no voice, just text in/out. Free to test."""
+        if not message:
+            raise_http_error("required_param", "message is required")
+        session = await session_manager.get_or_create(call_sid)
+        session.add_turn("user", message)
+        from shefa.models.registry import registry
+        from shefa.tools.definitions import get_tool_definitions
+        messages = build_messages(session)
+        llm = await registry.get_llm()
+        llm_result = await llm.generate(messages, tools=get_tool_definitions())
+        session.add_turn("assistant", llm_result.text, llm_result.language)
+        await session_manager.save(session)
+        return {
+            "reply": llm_result.text,
+            "language": llm_result.language.value,
+            "session_id": call_sid,
+        }
+
+    @app.get("/api/v1/config")
+    async def get_config() -> dict:
+        return {
+            "pipeline": {
+                "stt": {
+                    "provider": settings.pipeline.stt.provider,
+                    "model": settings.pipeline.stt.model,
+                },
+                "tts": {
+                    "provider": settings.pipeline.tts.provider,
+                    "model": settings.pipeline.tts.model,
+                },
+                "llm": {
+                    "provider": settings.pipeline.llm.provider,
+                    "model": settings.pipeline.llm.model,
+                },
+            },
+            "languages": {
+                "primary": settings.languages.primary,
+                "supported": settings.languages.supported,
+                "code_switching": settings.languages.code_switching,
+            },
+            "session": {
+                "backend": settings.session.backend,
+                "ttl_seconds": settings.session.ttl_seconds,
+            },
+            "compliance": {
+                "hipaa_enabled": settings.compliance.hipaa_enabled,
+                "audit_log_enabled": settings.compliance.audit_log_enabled,
+            },
+        }
+
+    @app.get("/api/v1/tools")
+    async def list_tools() -> list[dict]:
+        tools = get_tool_definitions()
+        return [
+            {"name": t.name, "description": t.description, "parameters": t.parameters}
+            for t in tools
+        ]
+
+    return app
+
+
+app = create_app()
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "shefa.main:app",
+        # Loopback by default: a TTS/HIPAA box reachable on every interface is
+        # the failure this whole task exists to prevent.
+        host=settings.auth.bind_host,
+        port=8000,
+        reload=settings.monitoring.logging.level == "DEBUG",
+    )

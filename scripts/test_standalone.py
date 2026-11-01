@@ -27,7 +27,7 @@ async def test_config() -> bool:
     print("TEST: Configuration Loading")
     print("=" * 60)
     try:
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
         print(f"  Languages:  {settings.languages.supported}")
         print(f"  STT:        {settings.pipeline.stt.provider}")
         print(f"  TTS:        {settings.pipeline.tts.provider}")
@@ -44,8 +44,8 @@ async def test_language_detector() -> bool:
     print("\n" + "=" * 60)
     print("TEST: Language Detection")
     print("=" * 60)
-    from sefa.models.base import Language
-    from sefa.pipeline.language_detector import (
+    from shefa.models.base import Language
+    from shefa.pipeline.language_detector import (
         detect_language,
         is_emergency,
     )
@@ -78,8 +78,8 @@ async def test_session() -> bool:
     print("TEST: Session Management")
     print("=" * 60)
     try:
-        from sefa.models.base import Language
-        from sefa.session.manager import SessionManager
+        from shefa.models.base import Language
+        from shefa.session.manager import SessionManager
 
         mgr = SessionManager()
         session = await mgr.get_or_create("test_call_001")
@@ -110,7 +110,7 @@ async def test_stt() -> bool:
     print("TEST: STT (Speech-to-Text) - Local Whisper")
     print("=" * 60)
     try:
-        from sefa.models.stt.whisper_local import WhisperLocalSTT
+        from shefa.models.stt.whisper_local import WhisperLocalSTT
 
         print("  Initializing Faster-Whisper (first run downloads model)...")
         stt = WhisperLocalSTT(model_size="tiny")  # use tiny for quick test
@@ -144,13 +144,13 @@ async def test_tts() -> bool:
     print("TEST: TTS (Text-to-Speech) - Piper")
     print("=" * 60)
     try:
-        from sefa.models.tts.piper_tts import PiperTTS
+        from shefa.models.tts.piper_tts import PiperTTS
 
         tts = PiperTTS()
         print("  Synthesizing test sentence...")
 
         start = time.monotonic()
-        result = await tts.synthesize("Hello, welcome to Sefa Clinic.")
+        result = await tts.synthesize("Hello, welcome to SHEFA Clinic.")
         elapsed = (time.monotonic() - start) * 1000
 
         print(f"  Audio size: {len(result.audio_bytes)} bytes")
@@ -190,7 +190,7 @@ async def test_llm() -> bool:
             model_names = [m["name"] for m in models]
             print(f"  Available models: {model_names}")
 
-        from sefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
+        from shefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 
         model = model_names[0].split(":")[0]
         print(f"  Using model: {model}")
@@ -229,9 +229,9 @@ async def test_full_pipeline() -> bool:
     print("TEST: Full Voice Pipeline (simulated)")
     print("=" * 60)
     try:
-        from sefa.pipeline.language_detector import detect_language
-        from sefa.session.manager import CallSession
-        from sefa.tools.definitions import get_tool_definitions
+        from shefa.pipeline.language_detector import detect_language
+        from shefa.session.manager import CallSession
+        from shefa.tools.definitions import get_tool_definitions
 
         # Simulate a conversation turn
         session = CallSession(call_sid="test_pipeline_001")
@@ -261,7 +261,7 @@ async def test_full_pipeline() -> bool:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Test Sefa components")
+    parser = argparse.ArgumentParser(description="Test SHEFA components")
     parser.add_argument("--llm", action="store_true", help="Test LLM only")
     parser.add_argument("--stt", action="store_true", help="Test STT only")
     parser.add_argument("--tts", action="store_true", help="Test TTS only")

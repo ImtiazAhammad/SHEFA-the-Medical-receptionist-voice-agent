@@ -13,10 +13,10 @@ import sqlite3
 
 import pytest
 
-from sefa.config.settings import settings
-from sefa.store import audit as audit_module
-from sefa.store.audit import AuditStore, utc_day
-from sefa.utils import compliance
+from shefa.config.settings import settings
+from shefa.store import audit as audit_module
+from shefa.store.audit import AuditStore, utc_day
+from shefa.utils import compliance
 
 _REAL_DEFAULT = audit_module.default_audit_store
 _REAL_SET_DEFAULT = audit_module.set_default_audit_store
@@ -24,7 +24,7 @@ _REAL_SET_DEFAULT = audit_module.set_default_audit_store
 
 @pytest.fixture
 def audit(tmp_path) -> AuditStore:
-    store = AuditStore(tmp_path / "sefa.db")
+    store = AuditStore(tmp_path / "shefa.db")
     yield store
     store.close()
 
@@ -178,4 +178,4 @@ class TestComplianceAuditLogWritesToTheStore:
 
 class TestStorageSettings:
     def test_the_db_path_is_a_declared_setting_with_a_default(self):
-        assert settings.storage.db_path == "data/sefa.db"
+        assert settings.storage.db_path == "data/shefa.db"

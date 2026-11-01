@@ -16,10 +16,10 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from sefa import main as main_module
-from sefa.auth import AuthStore, hash_token
-from sefa.config.settings import settings
-from sefa.utils import compliance
+from shefa import main as main_module
+from shefa.auth import AuthStore, hash_token
+from shefa.config.settings import settings
+from shefa.utils import compliance
 
 CLINICIAN_TOKEN = "test-clinician-token-abcdefghijkl"
 VIEWER_TOKEN = "test-viewer-token-abcdefghijklmnop"

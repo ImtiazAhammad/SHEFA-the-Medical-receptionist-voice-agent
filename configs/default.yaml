@@ -1,17 +1,17 @@
-# Sefa Receptionist - Default Configuration
+# SHEFA Receptionist - Default Configuration
 app:
-  name: "Sefa Receptionist"
+  name: "SHEFA Receptionist"
   version: "0.1.0"
   environment: "development"
   debug: true
 
 languages:
-  primary: "en"
+  primary: "bn"   # the language a call opens in; the caller can switch
   supported: ["en", "bn"]
   code_switching: true
   default_greeting:
-    en: "Thank you for calling Sefa Clinic. How may I help you today?"
-    bn: "মেডভয়েস ক্লিনিকে আপনাকে স্বাগতম। আমি আপনাকে কিভাবে সাহায্য করতে পারি?"
+    en: "Thank you for calling SHEFA Clinic. How may I help you today?"
+    bn: "শেফা ক্লিনিকে আপনাকে স্বাগতম। আমি আপনাকে কিভাবে সাহায্য করতে পারি?"
 
 telephony:
   # Single provider knob (D-ENG13): twilio | asterisk | freeswitch.
@@ -94,18 +94,18 @@ models:
       api_key: "${OPENAI_API_KEY}"
     stt_whisper_local:
       type: "whisper_local_stt"
-      # Bangla is the pilot language, so STT must be multilingual: whisper
-      # `small.en` is English-only and returned Devanagari gibberish for Bangla.
-      # `large-v3` is the accurate multilingual model. It is ~1.2s/utterance on
-      # GPU (float16) and ~10s on CPU (int8, the fallback below).
+      # Bangla is the pilot language. Stock `large-v3` gets ~70% of Bengali words wrong
+      # (docs/model-selection.md); the OmiKhan Bangla fine-tune (Apache-2.0) gets ~17%.
+      # Build it once with `python scripts/fetch_stt_model.py` (needs torch +
+      # transformers just for that step). ~1.6 GB VRAM, ~0.15x real time on GPU.
       #
       # GPU requires CUDA-12 runtime libs that this host does not ship (system
       # CUDA is 13). Install the cu12 wheels into the venv and put them on
       # LD_LIBRARY_PATH, or drop device to "cpu" for the slow-but-portable path.
-      model_size: "large-v3"
+      model_size: "models/stt/bangla-whisper-medium-ct2"
       device: "cuda"
       compute_type: "float16"
-      bangla_finetuned: false
+      bangla_finetuned: true
     stt_elevenlabs:
       type: "elevenlabs_stt"
       api_key: "${ELEVENLABS_API_KEY}"
@@ -155,7 +155,7 @@ integrations:
       provider: "smtp"
       smtp_host: "smtp.gmail.com"
       smtp_port: 587
-      from_address: "appointments@Sefa.clinic"
+      from_address: "appointments@SHEFA.clinic"
 
 compliance:
   hipaa_enabled: true
@@ -170,7 +170,7 @@ compliance:
 # (WAL journal, monotonic seq). Tombstones, daily COUNT reconciliation, and
 # the D5 zero-log alert all read this store.
 storage:
-  db_path: "data/sefa.db"
+  db_path: "data/shefa.db"
 
 monitoring:
   prometheus:
@@ -240,7 +240,7 @@ escalation:
 
 # T7: authentication and authorization for every route. Nothing here is a
 # working secret — `principals[].token_hash` is a PBKDF2 record, and the
-# plaintext token is shown once by `sefa token mint`. With no principal
+# plaintext token is shown once by `shefa token mint`. With no principal
 # configured the API refuses every request rather than serving unauthenticated.
 auth:
   dev_mode: "${DEV_MODE:-false}"           # must be actively set true; gates the Twilio router
@@ -250,11 +250,15 @@ auth:
       - "sessions:read"
     clinician:
       - "sessions:read"
+      - "records:read"
+      - "records:write"
       - "calls:place"
       - "chat:use"
     admin:
       - "sessions:read"
+      - "records:read"
+      - "records:write"
       - "calls:place"
       - "chat:use"
       - "config:read"
-  principals: []             # minted via `sefa token --name <name> --role <role>`; e.g. [{name: front-desk, role: clinician, token_hash: "pbkdf2_sha256$..."}]
+  principals: []             # minted via `shefa token --name <name> --role <role>`; e.g. [{name: front-desk, role: clinician, token_hash: "pbkdf2_sha256$..."}]

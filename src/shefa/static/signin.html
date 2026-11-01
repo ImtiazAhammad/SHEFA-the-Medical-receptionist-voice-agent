@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SHEFA sign in</title>
+<style>:root{color-scheme:light dark;--bg:#f6f7f5;--fg:#16231f;--card:#fff;--line:#d9dfdb;--accent:#0b7a63}@media(prefers-color-scheme:dark){:root{--bg:#0f1715;--fg:#e8efec;--card:#17211e;--line:#2a3833;--accent:#38b89c}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
+form{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px;width:min(92vw,380px)}
+h1{margin:0 0 4px;font-size:22px}p{margin:0 0 18px;opacity:.7}input,button{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;font:inherit}
+input{border:1px solid var(--line);background:transparent;color:inherit;margin-bottom:12px}button{border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+#err{color:#c0392b;min-height:1.4em;margin-top:10px;font-size:14px}</style></head><body>
+<form id="f"><h1>SHEFA</h1><p>Clinic console. Paste your access token.</p>
+<input id="t" type="password" placeholder="Access token" autocomplete="current-password" required autofocus>
+<button>Sign in</button><div id="err"></div></form>
+<script>f.onsubmit=async e=>{e.preventDefault();err.textContent='';
+const r=await fetch('/api/v1/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t.value.trim()})});
+if(r.ok)location.reload();else err.textContent='That token was not accepted.'}</script></body></html>

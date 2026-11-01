@@ -11,14 +11,14 @@ from __future__ import annotations
 import pytest
 from test_tts_session import FakeAudioChunk, FakePiperVoice
 
-from sefa.models.base import Language, TTSResult
-from sefa.models.tts.piper_tts import PiperTTS
+from shefa.models.base import Language, TTSResult
+from shefa.models.tts.piper_tts import PiperTTS
 
 
 @pytest.fixture
 def voice(monkeypatch):
     FakePiperVoice.instances = []
-    monkeypatch.setattr("sefa.models.tts.piper_tts.PiperVoice", FakePiperVoice)
+    monkeypatch.setattr("shefa.models.tts.piper_tts.PiperVoice", FakePiperVoice)
     return FakePiperVoice
 
 
@@ -97,7 +97,7 @@ class TestResultContract:
         def boom(model_path: str, **kwargs):
             raise FileNotFoundError(f"no voice at {model_path}")
 
-        monkeypatch.setattr("sefa.models.tts.piper_tts.PiperVoice.load", staticmethod(boom))
+        monkeypatch.setattr("shefa.models.tts.piper_tts.PiperVoice.load", staticmethod(boom))
 
         with pytest.raises(FileNotFoundError, match="models/piper/missing.onnx"):
             await PiperTTS(model_path="models/piper/missing.onnx").synthesize("Hello")
@@ -112,8 +112,8 @@ class TestRegistryWiring:
 
     @pytest.mark.asyncio
     async def test_piper_receives_the_configured_rate_and_voice(self, monkeypatch):
-        from sefa.config.settings import settings
-        from sefa.models.registry import registry
+        from shefa.config.settings import settings
+        from shefa.models.registry import registry
 
         monkeypatch.setattr(settings.pipeline.tts, "sample_rate", 22050)
         monkeypatch.setattr(
@@ -129,7 +129,7 @@ class TestRegistryWiring:
     @pytest.mark.asyncio
     async def test_the_configured_voice_path_is_a_local_voice_not_a_cloud_id(self):
         """`tts.model` held an ElevenLabs model name being used as a Piper path."""
-        from sefa.config.settings import settings
+        from shefa.config.settings import settings
 
         assert settings.pipeline.tts.voice_path.endswith(".onnx")
 

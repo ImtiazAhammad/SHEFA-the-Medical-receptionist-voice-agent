@@ -18,8 +18,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolate_the_default_audit_store(tmp_path, monkeypatch):
-    from sefa.store import audit as audit_module
-    from sefa.store.audit import AuditStore
+    from shefa.store import audit as audit_module
+    from shefa.store.audit import AuditStore
 
     holder: dict[str, AuditStore | None] = {"store": None}
     store = AuditStore(tmp_path / "default-audit.db")
@@ -35,4 +35,27 @@ def _isolate_the_default_audit_store(tmp_path, monkeypatch):
     monkeypatch.setattr(audit_module, "default_audit_store", _default)
     monkeypatch.setattr(audit_module, "set_default_audit_store", _set_default)
     yield
+    store.close()
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_clinic_store(tmp_path):
+    """Same rule as the audit store: no test may reach the repo's `data/` directory."""
+    from shefa.clinic import ClinicStore, set_default_clinic_store
+
+    store = ClinicStore(tmp_path / "default-clinic.db")
+    set_default_clinic_store(store)
+    yield
+    set_default_clinic_store(None)
+    store.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_calls_store(tmp_path):
+    from shefa.call_log import set_default_calls_store
+    from shefa.store.calls import CallsStore
+
+    store = CallsStore(tmp_path / "default-calls.db")
+    set_default_calls_store(store)
+    yield
+    set_default_calls_store(None)
     store.close()

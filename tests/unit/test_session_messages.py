@@ -1,13 +1,13 @@
-"""`sefa.session.messages.build_messages` — the single session -> LLM seam.
+"""`shefa.session.messages.build_messages` — the single session -> LLM seam.
 
 C1: three hand-rolled builders (``CallSession.to_messages``,
 ``VoicePipeline._build_messages``, an inline copy in ``text_chat``) collapsed
 into one. These tests pin the shape every caller must be able to rely on.
 """
 
-from sefa.models.base import Language
-from sefa.session.manager import CallSession, Turn
-from sefa.session.messages import build_messages
+from shefa.models.base import Language
+from shefa.session.manager import CallSession, Turn
+from shefa.session.messages import build_messages
 
 
 def _session(*turns: Turn) -> CallSession:
@@ -25,7 +25,7 @@ def test_system_prompt_is_the_first_message():
 
     assert len(messages) == 1
     assert messages[0]["role"] == "system"
-    assert "sefa Receptionist" in messages[0]["content"]
+    assert "SHEFA Receptionist" in messages[0]["content"]
 
 
 def test_system_prompt_carries_language_and_patient_name():

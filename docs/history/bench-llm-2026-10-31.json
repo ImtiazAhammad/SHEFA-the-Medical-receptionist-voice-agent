@@ -1,0 +1,38 @@
+{
+ "gemma2:9b": {
+  "json_valid": "12/12",
+  "right_tool": "12/12",
+  "right_args": "11/12",
+  "bangla_purity": 0.951,
+  "median_s": 1.04,
+  "p95_s": 2.05,
+  "vram_mib": 7238
+ },
+ "qwen2.5:7b": {
+  "json_valid": "12/12",
+  "right_tool": "9/12",
+  "right_args": "9/12",
+  "bangla_purity": 0.982,
+  "median_s": 1.59,
+  "p95_s": 4.06,
+  "vram_mib": 4878
+ },
+ "aya-expanse:8b": {
+  "json_valid": "12/12",
+  "right_tool": "6/12",
+  "right_args": "6/12",
+  "bangla_purity": 0.803,
+  "median_s": 2.26,
+  "p95_s": 6.38,
+  "vram_mib": 6014
+ },
+ "hf.co/mradermacher/TigerLLM-9B-it-GGUF:Q4_K_M": {
+  "json_valid": "12/12",
+  "right_tool": "9/12",
+  "right_args": "9/12",
+  "bangla_purity": 0.745,
+  "median_s": 1.0,
+  "p95_s": 2.43,
+  "vram_mib": 9996
+ }
+}

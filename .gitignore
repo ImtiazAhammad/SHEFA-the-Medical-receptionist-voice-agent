@@ -19,8 +19,8 @@ htmlcov/
 .opencode/
 .superpowers/
 
-# Model weights (Piper/VITS .onnx/.pt) — fetched by `sefa doctor`, never committed.
-# Anchored to the repo root: unanchored `models/` also swallows src/sefa/models/,
+# Model weights (Piper/VITS .onnx/.pt) — fetched by `shefa doctor`, never committed.
+# Anchored to the repo root: unanchored `models/` also swallows src/shefa/models/,
 # so a brand-new adapter file would be silently ignored instead of staged.
 /models/
 
@@ -30,3 +30,12 @@ graphify-out/
 # Node dependencies for the owner console (`console/`). Package-lock.json is
 # committed so the build is reproducible; node_modules never is.
 node_modules/
+
+# Rendered Asterisk config contains the trunk password
+deploy/asterisk/rendered/
+
+# Database backups hold patient data
+backups/
+
+# Per-machine config (tokens, provider)
+configs/local.yaml

@@ -1,8 +1,8 @@
-# Sefa Medical Voice Agent
+# SHEFA Medical Voice Agent
 
 ## What This Is
 
-HIPAA-compliant, bilingual (English/Bangla) voice AI medical receptionist. Automates patient calls with real-time STT, language detection, LLM-powered conversation, and TTS response — all through Twilio Media Streams.
+Privacy-first, fully open-source, bilingual (English/Bangla) voice AI medical receptionist. Automates patient calls with real-time STT, language detection, LLM-powered conversation, and TTS response — all through Twilio Media Streams.
 
 ## Quick Start
 
@@ -14,7 +14,7 @@ uv sync --extra local-stt --extra local-tts
 cp .env.example .env   # no API keys needed for local mode
 
 # Run
-uv run uvicorn sefa.main:app --port 8000 --reload
+uv run uvicorn shefa.main:app --port 8000 --reload
 
 # Dashboard
 open http://localhost:8000/dashboard
@@ -71,7 +71,7 @@ Phone Call -> Twilio Media Streams -> WebSocket
 ## Project Structure
 
 ```
-src/sefa/
+src/shefa/
   main.py              # FastAPI app, routes, dashboard
   config/settings.py   # Pydantic config from YAML
   models/              # STT/TTS/LLM adapters

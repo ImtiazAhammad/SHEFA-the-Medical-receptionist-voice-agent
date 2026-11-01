@@ -34,14 +34,14 @@ from typing import Any
 import numpy as np
 import pytest
 
-from sefa.audio import (
+from shefa.audio import (
     AudioFrame,
     mulaw8k_to_s16le_16k_mono,
     s16le_16k_mono_to_mulaw8k,
 )
-from sefa.pipeline.vad import EnergyVAD
-from sefa.telephony import twilio
-from sefa.telephony.twilio import decode_inbound_media
+from shefa.pipeline.vad import EnergyVAD
+from shefa.telephony import twilio
+from shefa.telephony.twilio import decode_inbound_media
 
 
 def _tone(seconds: float, rate: int = 8000, amplitude: int = 20000) -> bytes:
@@ -216,7 +216,7 @@ class TestOutboundEncode:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", SilentPipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", SilentPipeline
         )
 
         socket = _Socket(
@@ -300,7 +300,7 @@ class TestMediaStreamMessageFlow:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline
         )
 
         asyncio.run(
@@ -355,7 +355,7 @@ class TestMediaStreamMessageFlow:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", FakePipeline
         )
 
         asyncio.run(
@@ -421,7 +421,7 @@ class TestStreamAddressing:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
         )
 
         socket = _Socket(
@@ -462,7 +462,7 @@ class TestStreamAddressing:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
         )
 
         socket = _HeldOpenSocket(
@@ -481,14 +481,14 @@ class TestHelperCoverage:
     """Direct coverage of helpers the endpoint only reaches on one path."""
 
     def test_width_for_distinguishes_compressed_from_linear(self):
-        from sefa.telephony.twilio import _width_for
+        from shefa.telephony.twilio import _width_for
 
         assert _width_for("audio/x-mulaw") == 0
         assert _width_for("audio/x-alaw") == 1
         assert _width_for("audio/x-l16") == 2
 
     def test_resolve_call_sid_prefers_start_then_the_path_then_unknown(self):
-        from sefa.telephony.twilio import _resolve_call_sid
+        from shefa.telephony.twilio import _resolve_call_sid
 
         assert _resolve_call_sid("", {"start": {"callSid": "CA-real"}}) == "CA-real"
         assert _resolve_call_sid("CA-path", {"start": {}}) == "CA-path"
@@ -496,16 +496,16 @@ class TestHelperCoverage:
         assert _resolve_call_sid("", {"start": "not-a-dict"}) == "unknown"
 
     def test_no_capture_dir_means_no_file_io(self, monkeypatch):
-        from sefa.telephony.twilio import _make_capture
+        from shefa.telephony.twilio import _make_capture
 
-        monkeypatch.delenv("SEFA_CAPTURE_DIR", raising=False)
+        monkeypatch.delenv("SHEFA_CAPTURE_DIR", raising=False)
 
         assert _make_capture("CA-nocap") is None
 
     def test_capture_writes_every_fed_chunk(self, monkeypatch, tmp_path):
-        from sefa.telephony.twilio import _make_capture
+        from shefa.telephony.twilio import _make_capture
 
-        monkeypatch.setenv("SEFA_CAPTURE_DIR", str(tmp_path / "does" / "not" / "exist"))
+        monkeypatch.setenv("SHEFA_CAPTURE_DIR", str(tmp_path / "does" / "not" / "exist"))
 
         capture = _make_capture("CA-cap")
         capture.feed(b"\x01\x02")
@@ -520,7 +520,7 @@ class TestHelperCoverage:
         self, monkeypatch, tmp_path
     ):
         """End-to-end: env set -> file created, fed, and closed on teardown."""
-        monkeypatch.setenv("SEFA_CAPTURE_DIR", str(tmp_path))
+        monkeypatch.setenv("SHEFA_CAPTURE_DIR", str(tmp_path))
         delivered = asyncio.Event()
         pcm = _tone(0.05, rate=16000)
 
@@ -536,7 +536,7 @@ class TestHelperCoverage:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", OneFramePipeline
         )
 
         socket = _Socket(
@@ -596,7 +596,7 @@ class TestHelperCoverage:
                 return None
 
         monkeypatch.setattr(
-            "sefa.pipeline.voice_pipeline.VoicePipeline", CountingPipeline
+            "shefa.pipeline.voice_pipeline.VoicePipeline", CountingPipeline
         )
 
         socket = _HeldOpenSocket(

@@ -9,7 +9,7 @@
   --surface: #ffffff;
   --paper: #f7f8fa;
 
-  /* Mirrors the vocabulary in src/sefa/static/*.html and
+  /* Mirrors the vocabulary in src/shefa/static/*.html and
      designs/.../variant-C-final.html so the console cannot drift. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);

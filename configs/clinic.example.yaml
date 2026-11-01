@@ -1,0 +1,31 @@
+# SHEFA clinic directory. Import with:  shefa clinic import configs/clinic.example.yaml
+# Re-importing restates schedules and leave; it never deletes doctors or appointments.
+departments:
+  - name: Cardiology
+    name_bn: হৃদরোগ
+    doctors:
+      - name: Rahman
+        name_bn: রহমান
+        qualification: MBBS, FCPS (Cardiology)
+        visit_fee: 800
+        schedule:
+          - {days: [Sun, Tue, Thu], start: "16:00", end: "20:00", slot_minutes: 15}
+        leave: []
+  - name: Pediatrics
+    name_bn: শিশু
+    doctors:
+      - name: Sultana
+        name_bn: সুলতানা
+        qualification: MBBS, DCH
+        visit_fee: 600
+        schedule:
+          - {days: [Sat, Mon, Wed], start: "10:00", end: "13:00", slot_minutes: 15}
+  - name: Medicine
+    name_bn: মেডিসিন
+    doctors:
+      - name: Hossain
+        name_bn: হোসেন
+        qualification: MBBS, MD
+        visit_fee: 700
+        schedule:
+          - {days: [Sat, Sun, Mon, Tue, Wed, Thu], start: "09:00", end: "12:00", slot_minutes: 20}

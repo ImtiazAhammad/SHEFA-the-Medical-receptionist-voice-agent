@@ -3,10 +3,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from sefa.auth import AuthStore, hash_token
-from sefa.config.settings import settings
-from sefa.main import create_app, session_manager
-from sefa.models.base import Language, LLMResult
+from shefa.auth import AuthStore, hash_token
+from shefa.config.settings import settings
+from shefa.main import create_app, session_manager
+from shefa.models.base import Language, LLMResult
 
 # Every route needs a bearer token since T7, so these tests present a clinician
 # token rather than exercising the app unauthenticated. Authorization itself is
@@ -41,7 +41,7 @@ def test_test_call_page_served(client, auth):
     resp = client.get("/test-call", headers=auth)
 
     assert resp.status_code == 200
-    assert "Sefa Test Center" in resp.text
+    assert "SHEFA Test Center" in resp.text
 
 
 def test_call_me_not_configured(client, auth, monkeypatch):
@@ -51,14 +51,14 @@ def test_call_me_not_configured(client, auth, monkeypatch):
 
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "not_configured"
-    assert "Twilio not configured" in resp.json()["error"]["message"]
+    assert "not configured" in resp.json()["error"]["message"]
 
 
 def test_call_me_uses_verified_number(client, auth, monkeypatch):
     monkeypatch.setattr(settings.telephony.twilio, "account_sid", "AC123")
     monkeypatch.setenv("VERIFIED_NUMBER", "+8801999999999")
 
-    import sefa.telephony.twilio as tw
+    import shefa.telephony.twilio as tw
 
     calls = []
 
@@ -84,7 +84,7 @@ def test_call_me_has_no_hardcoded_default_number(client, auth, monkeypatch):
     monkeypatch.setattr(settings.telephony.twilio, "phone_number", "")
     monkeypatch.delenv("VERIFIED_NUMBER", raising=False)
 
-    import sefa.telephony.twilio as tw
+    import shefa.telephony.twilio as tw
 
     calls = []
 
@@ -107,7 +107,7 @@ def test_call_me_falls_back_to_configured_number(client, auth, monkeypatch):
     monkeypatch.setattr(settings.telephony.twilio, "phone_number", "+8801555000111")
     monkeypatch.delenv("VERIFIED_NUMBER", raising=False)
 
-    import sefa.telephony.twilio as tw
+    import shefa.telephony.twilio as tw
 
     calls = []
 
@@ -131,7 +131,7 @@ def test_chat_requires_message(client, auth):
 
 
 async def test_chat_round_trip(monkeypatch):
-    from sefa.models.registry import registry
+    from shefa.models.registry import registry
 
     class FakeLLM:
         def __init__(self):

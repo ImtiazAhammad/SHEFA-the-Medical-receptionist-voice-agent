@@ -1,8 +1,8 @@
 ﻿"""Tests for session management."""
 
 
-from sefa.models.base import Language
-from sefa.session.manager import CallSession
+from shefa.models.base import Language
+from shefa.session.manager import CallSession
 
 
 def test_call_session_creation():
