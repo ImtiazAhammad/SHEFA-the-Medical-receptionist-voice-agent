@@ -108,7 +108,7 @@ async def test_caller_hears_departments_and_doctors_from_the_directory(call):
         {"tool": "get_doctor_info", "arguments": {"doctor_name": "Rahman"}},
     )
     assert "800 taka" in info
-    assert "09:00-10:00" in info
+    assert "9 AM to 10 AM" in info and "09:00" not in info
 
 
 async def test_full_booking_then_cancel_without_repeating_the_patient_id(call):
@@ -125,7 +125,7 @@ async def test_full_booking_then_cancel_without_repeating_the_patient_id(call):
             "arguments": {"date": _tomorrow(), "doctor_name": "Rahman"},
         },
     )
-    assert "09:00" in slots
+    assert "9 AM" in slots and "09:00" not in slots
 
     booked = await call.say(
         "09:00 please",
@@ -135,7 +135,7 @@ async def test_full_booking_then_cancel_without_repeating_the_patient_id(call):
         },
     )
     assert "APT-00001" in booked
-    assert _tomorrow() in booked
+    assert "tomorrow at 9 AM" in booked
     assert call.tts.spoken[-1] == booked
 
     cancelled = await call.say(
@@ -263,7 +263,7 @@ async def test_reschedule_moves_the_only_booking(call):
             "arguments": {"new_date": _tomorrow(), "new_time": "09:30"},
         },
     )
-    assert "rescheduled" in reply and "09:30" in reply
+    assert "rescheduled" in reply and "9:30 AM" in reply
     assert default_clinic_store().get_appointment(1)["start_time"] == "09:30"
     problem = await call.say(
         "move it",

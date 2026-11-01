@@ -25,6 +25,12 @@ from shefa.pipeline.actions import (
 from shefa.pipeline.voice_pipeline import VoicePipeline
 from shefa.session.manager import CallSession
 
+
+@pytest.fixture(autouse=True)
+def _fixed_clinic_today(monkeypatch):
+    """Spoken dates say today/tomorrow, so the clock is pinned for these assertions."""
+    monkeypatch.setattr("shefa.speech.clinic_today", lambda: date(2026, 10, 1))
+
 _BOOK = ToolDefinition(
     name="book_appointment",
     description="Book an appointment for the patient.",
@@ -284,8 +290,8 @@ class TestConfirmationText:
             "bn",
         )
         assert text is not None
-        assert "2026-12-01" in text
-        assert "10:00" in text
+        assert "এক ডিসেম্বর, মঙ্গলবার, সকাল দশটায়" in text
+        assert "2026-12-01" not in text and "10:00" not in text  # words, not digits
         assert "ডাক্তার করিম" in text
         assert "APT-9" in text
 
@@ -302,7 +308,7 @@ class TestConfirmationText:
             "en",
         )
         assert text == (
-            "Your appointment is booked for 2026-12-01 at 10:00 with "
+            "Your appointment is booked for Tuesday 1 December at 10 AM with "
             "Dr. Karim. Your reference is APT-9."
         )
 
@@ -316,8 +322,8 @@ class TestConfirmationText:
             "bn",
         )
         assert text is not None
-        assert "09:00" in text
-        assert "10:30" in text
+        assert "সকাল নয়টা" in text and "সকাল সাড়ে দশটা" in text
+        assert "09:00" not in text
 
     def test_cancel_confirms_the_reference(self):
         text = confirmation_text(
@@ -338,7 +344,7 @@ class TestConfirmationText:
             },
             "en",
         )
-        assert text == "Your appointment APT-1 is rescheduled to 2026-12-02 at 11:00."
+        assert text == "Your appointment APT-1 is rescheduled to Wednesday 2 December at 11 AM."
 
     def test_untemplated_tool_returns_none(self):
         assert confirmation_text("verify_patient", {"verified": True}, "en") is None
@@ -381,7 +387,7 @@ class TestGenerateReplyExtractMode:
         reply = await VoicePipeline()._generate_reply(llm, tts, session, _Sink())
 
         assert executed == [("book_appointment", {"date": "2026-12-01"})]
-        assert "2026-12-01" in reply
+        assert "ডিসেম্বর" in reply and "2026-12-01" not in reply
         assert "APT-9" in reply
         # only the templated fact is spoken: no free-form guess before it
         assert tts.spoken == [reply]
@@ -513,12 +519,12 @@ class TestDirectoryConfirmations:
 
     def test_doctor_info_speaks_schedule_next_slot_and_fee(self):
         text = confirmation_text("get_doctor_info", self.DOCTOR, "en")
-        assert "sunday 09:00-12:00" in text
-        assert "2026-11-08 at 09:00" in text
+        assert "sunday 09:00-12:00" in text  # no structured windows: the stored strings
+        assert "8 November at 9 AM" in text and "2026-11-08" not in text
         assert "800 taka" in text
         bn = confirmation_text("get_doctor_info", self.DOCTOR, "bn")
-        assert "ভিজিট ফি 800 টাকা" in bn
-        assert "2026-11-08" in bn
+        assert "ভিজিট ফি আটশো টাকা" in bn
+        assert "আট নভেম্বর, রবিবার, সকাল নয়টায়" in bn
 
     def test_doctor_info_with_no_free_time_says_so(self):
         card = {**self.DOCTOR, "next_available": None, "visit_fee": 0}
@@ -589,7 +595,7 @@ class TestSlotAnswers:
             },
             "en",
         )
-        assert "09:00, 09:30" in text
+        assert "9 AM, 9:30 AM" in text
 
     def test_a_long_list_is_summarised_as_a_range(self):
         times = [f"{h}:{m:02d}" for h in (16, 17, 18) for m in (0, 15, 30, 45)]
@@ -598,8 +604,8 @@ class TestSlotAnswers:
             {"date": "2026-11-03", "doctor": "Rahman", "available_slots": self._slots(*times)},
             "en",
         )
-        assert "from 16:00 to 18:45" in text and "17:15" not in text
-        assert "16:00 থেকে 18:45" in confirmation_text(
+        assert "from 4 PM to 6:45 PM" in text and "5:15" not in text
+        assert "বিকেল চারটা থেকে সন্ধ্যা পৌনে সাতটা" in confirmation_text(
             "check_appointment_slots",
             {"date": "d", "doctor": "R", "available_slots": self._slots(*times)},
             "bn",
@@ -613,8 +619,8 @@ class TestSlotAnswers:
             "next_available": {"date": "2026-11-03", "time": "16:00"},
         }
         en = confirmation_text("check_appointment_slots", result, "en")
-        assert "no free time on 2026-11-02" in en and "2026-11-03 at 16:00" in en
-        assert "2026-11-03 তারিখে 16:00" in confirmation_text(
+        assert "no free time" in en and "3 November at 4 PM" in en and "2026-11" not in en
+        assert "তিন নভেম্বর" in confirmation_text(
             "check_appointment_slots", result, "bn"
         )
 

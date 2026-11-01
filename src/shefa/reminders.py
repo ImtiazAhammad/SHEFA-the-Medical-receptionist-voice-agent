@@ -10,6 +10,7 @@ from datetime import datetime, time
 from typing import TYPE_CHECKING, Any
 
 from shefa.clinic.store import CLINIC_TZ
+from shefa.speech import speak_when
 from shefa.telephony.call_context import OutboundContext, discard_context, set_context
 
 if TYPE_CHECKING:
@@ -39,11 +40,12 @@ def reminder_text(appointment: dict[str, Any], language: str, kind: str = "remin
     if language == "bn":
         return (
             f"আসসালামু আলাইকুম। আপনার অ্যাপয়েন্টমেন্টের কথা মনে করিয়ে দিতে ফোন করেছি। "
-            f"{doctor_bn}-এর সাথে {day} তারিখে {start}-এ, রেফারেন্স {ref}। "
+            f"{doctor_bn}-এর সাথে {speak_when(day, start, 'bn')}, রেফারেন্স {ref}। "
             "আসতে পারবেন কি না জানাবেন; বাতিল বা সময় পরিবর্তন করতে চাইলেও বলতে পারেন।"
         )
     return (
-        f"Hello, this is a reminder of your appointment with {doctor_en} on {day} at {start}, "
+        f"Hello, this is a reminder of your appointment with {doctor_en} "
+        f"{speak_when(day, start, 'en')}, "
         f"reference {ref}. Please tell me if you can come, or if you want to cancel or move it."
     )
 

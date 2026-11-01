@@ -46,6 +46,10 @@ def _doctor_card(doctor: dict[str, Any]) -> dict[str, Any]:
             f"{s['day']} {s['start_time']}-{s['end_time']}"
             for s in store.doctor_schedule(doctor["id"])
         ],
+        "schedule_windows": [
+            {"day": s["day"], "start": s["start_time"], "end": s["end_time"]}
+            for s in store.doctor_schedule(doctor["id"])
+        ],
         "next_available": store.next_available(doctor["id"]),
     }
 

@@ -8,6 +8,7 @@ from shefa.clinic import ClinicStore
 from shefa.clinic.loader import import_directory
 from shefa.clinic.store import CLINIC_TZ
 from shefa.reminders import in_quiet_hours, reminder_text, run_reminder_cycle
+from shefa.speech import speak_when
 from shefa.telephony.call_context import OutboundContext, pop_context
 
 DIRECTORY = {
@@ -106,8 +107,9 @@ def test_reminder_text_speaks_the_facts_in_both_languages(store):
     due = book(store) and store.due_reminders(NOW)[0]
     en = reminder_text(due, "en")
     bn = reminder_text(due, "bn")
+    assert speak_when(TOMORROW, "09:00", "en") in en and speak_when(TOMORROW, "09:00", "bn") in bn
     for text in (en, bn):
-        assert TOMORROW in text and "09:00" in text and due["appointment_id"] in text
+        assert TOMORROW not in text and due["appointment_id"] in text
     assert "Rahman" in en and "রহমান" in bn
     assert "feeling" in reminder_text(due, "en", "followup")
     assert "কেমন" in reminder_text(due, "bn", "followup")

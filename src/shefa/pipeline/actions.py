@@ -24,6 +24,14 @@ if TYPE_CHECKING:
     from shefa.session.manager import CallSession
 
 from shefa.session.messages import build_messages
+from shefa.speech import (
+    speak_date,
+    speak_money,
+    speak_schedule,
+    speak_time,
+    speak_when,
+    upper_first,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,35 +242,38 @@ def tool_result_note(name: str, result: Any) -> str:
     )
 
 
+_LANGS = ("en", "bn")
+
+
 def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
     if not result.get("success"):
         return None
-    date = result.get("date", "")
-    time = result.get("time", "")
     doctor = result.get("doctor") or ""
     ref = result.get("appointment_id", "")
+    when = {lg: speak_when(result.get("date", ""), result.get("time", ""), lg) for lg in _LANGS}
     return {
-        "en": f"Your appointment is booked for {date} at {time}"
+        "en": f"Your appointment is booked for {when['en']}"
         f"{f' with {doctor}' if doctor else ''}. Your reference is {ref}.",
-        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {date} তারিখে {time}-এ"
+        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {when['bn']}"
         f"{f' {doctor}-এর সাথে' if doctor else ''} বুক হয়েছে। "
         f"আপনার রেফারেন্স নম্বর {ref}।",
     }
 
 
 def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
-    date = result.get("date", "")
+    day = {lg: speak_date(result.get("date", ""), lg) for lg in _LANGS}
     if "doctors" in result:  # a broad question: who has any time that day
         names = [d.get("doctor", "") for d in result["doctors"]]
         if not names:
             return {
-                "en": f"No doctor has free time on {date}. Would you like another day?",
-                "bn": f"{date} তারিখে কোনো ডাক্তারের খালি সময় নেই। অন্য দিন দেখব?",
+                "en": f"No doctor has free time {day['en']}. Would you like another day?",
+                "bn": f"{day['bn']} কোনো ডাক্তারের খালি সময় নেই। অন্য দিন দেখব?",
             }
         joined = ", ".join(names)
         return {
-            "en": f"On {date}, there is free time with {joined}. Which doctor would you like?",
-            "bn": f"{date} তারিখে খালি সময় আছে: {joined}। কোন ডাক্তারকে চান?",
+            "en": f"{upper_first(day['en'])}, there is free time with {joined}. "
+            "Which doctor would you like?",
+            "bn": f"{day['bn']} খালি সময় আছে: {joined}। কোন ডাক্তারকে চান?",
         }
     times = [
         slot.get("time", "") for slot in (result.get("available_slots") or []) if slot.get("time")
@@ -273,26 +284,33 @@ def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
         nxt = result.get("next_available") or {}
         who = result.get("doctor", "")
         if nxt.get("date") and nxt.get("time"):
+            soon = {lg: speak_when(nxt["date"], nxt["time"], lg) for lg in _LANGS}
             return {
-                "en": f"{who} has no free time on {date}. The next free time is "
-                f"{nxt['date']} at {nxt['time']}. Shall I book that?",
-                "bn": f"{date} তারিখে {who}-এর খালি সময় নেই। পরবর্তী খালি সময় "
-                f"{nxt['date']} তারিখে {nxt['time']}-এ। সেটা বুক করব?",
+                "en": f"{who} has no free time {day['en']}. The next free time is "
+                f"{soon['en']}. Shall I book that?",
+                "bn": f"{day['bn']} {who}-এর খালি সময় নেই। পরবর্তী খালি সময় "
+                f"{soon['bn']}। সেটা বুক করব?",
             }
         return {
-            "en": f"{who} has no free time on {date} or in the coming weeks.",
-            "bn": f"{date} তারিখে বা আগামী কয়েক সপ্তাহে {who}-এর কোনো খালি সময় নেই।",
+            "en": f"{who} has no free time {day['en']} or in the coming weeks.",
+            "bn": f"{day['bn']} বা আগামী কয়েক সপ্তাহে {who}-এর কোনো খালি সময় নেই।",
         }
     if len(times) > 6:  # reading sixteen times aloud is not a conversation
+        first = {lg: speak_time(times[0], lg) for lg in _LANGS}
+        last = {lg: speak_time(times[-1], lg) for lg in _LANGS}
         return {
-            "en": f"On {date} there are free times from {times[0]} to {times[-1]}. "
-            "What time would you like?",
-            "bn": f"{date} তারিখে {times[0]} থেকে {times[-1]} পর্যন্ত খালি সময় আছে। আপনি কোন সময় চান?",
+            "en": f"{upper_first(day['en'])}, there are free times from {first['en']} to "
+            f"{last['en']}. What time would you like?",
+            "bn": f"{day['bn']} {first['bn']} থেকে {last['bn']} পর্যন্ত খালি সময় আছে। "
+            "আপনি কোন সময় চান?",
         }
-    joined = ", ".join(times)
     return {
-        "en": f"Available times on {date} are {joined}. Which time works for you?",
-        "bn": f"{date} তারিখে যে সময়গুলো পাওয়া যাচ্ছে: {joined}। আপনি কোন সময় চান?",
+        "en": f"Available times {day['en']} are "
+        + ", ".join(speak_time(t, "en") for t in times)
+        + ". Which time works for you?",
+        "bn": f"{day['bn']} যে সময়গুলো পাওয়া যাচ্ছে: "
+        + ", ".join(speak_time(t, "bn") for t in times)
+        + "। আপনি কোন সময় চান?",
     }
 
 
@@ -310,11 +328,12 @@ def _confirm_reschedule(result: dict[str, Any]) -> dict[str, str] | None:
     if not result.get("success"):
         return None
     ref = result.get("appointment_id", "")
-    date = result.get("new_date", "")
-    time = result.get("new_time", "")
+    when = {
+        lg: speak_when(result.get("new_date", ""), result.get("new_time", ""), lg) for lg in _LANGS
+    }
     return {
-        "en": f"Your appointment {ref} is rescheduled to {date} at {time}.",
-        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {ref} {date} তারিখে {time}-এ পরিবর্তন করা হয়েছে।",
+        "en": f"Your appointment {ref} is rescheduled to {when['en']}.",
+        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {ref} {when['bn']} পরিবর্তন করা হয়েছে।",
     }
 
 
@@ -356,24 +375,30 @@ def _confirm_doctor_info(result: dict[str, Any]) -> dict[str, str] | None:
     name = result.get("name")
     if not name:
         return None
-    schedule = ", ".join(result.get("schedule") or []) or "by appointment"
+    windows = result.get("schedule_windows") or []
+    schedule = {
+        lg: speak_schedule(windows, lg) if windows else ", ".join(result.get("schedule") or [])
+        for lg in _LANGS
+    }
     nxt = result.get("next_available") or {}
+    soon = bool(nxt.get("date") and nxt.get("time"))
+    when = {lg: speak_when(nxt["date"], nxt["time"], lg) for lg in _LANGS} if soon else {}
     soonest_en = (
-        f" The next free time is {nxt['date']} at {nxt['time']}."
-        if nxt.get("date") and nxt.get("time")
+        f" The next free time is {when['en']}."
+        if soon
         else " There is no free time in the next 30 days."
     )
     soonest_bn = (
-        f" পরবর্তী খালি সময় {nxt['date']} তারিখে {nxt['time']}-এ।"
-        if nxt.get("date") and nxt.get("time")
-        else " আগামী ৩০ দিনে কোনো খালি সময় নেই।"
+        f" পরবর্তী খালি সময় {when['bn']}।" if soon else " আগামী ৩০ দিনে কোনো খালি সময় নেই।"
     )
     fee = result.get("visit_fee")
     return {
-        "en": f"{name} sees patients in {result.get('department', '')}: {schedule}."
-        f"{soonest_en}" + (f" The visit fee is {fee} taka." if fee else ""),
+        "en": f"{name} sees patients in {result.get('department', '')}: "
+        f"{schedule['en'] or 'by appointment'}.{soonest_en}"
+        + (f" The visit fee is {speak_money(fee, 'en')}." if fee else ""),
         "bn": f"{result.get('name_bn') or name}, {result.get('department_bn') or ''}-এ বসেন: "
-        f"{schedule}।{soonest_bn}" + (f" ভিজিট ফি {fee} টাকা।" if fee else ""),
+        f"{schedule['bn'] or 'অ্যাপয়েন্টমেন্টের মাধ্যমে'}।{soonest_bn}"
+        + (f" ভিজিট ফি {speak_money(fee, 'bn')}।" if fee else ""),
     }
 
 
