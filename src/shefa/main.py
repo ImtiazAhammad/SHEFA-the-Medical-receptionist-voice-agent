@@ -7,10 +7,11 @@ from pathlib import Path
 
 import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from shefa.auth import AuthStore, Principal, TokenError
 from shefa.config.settings import TelephonyProvider, settings
@@ -149,6 +150,14 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/config"): "config:read",
     ("GET", "/api/v1/tools"): "config:read",
     ("GET", "/api/v1/calls"): "records:read",
+    ("GET", "/console"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/login"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/calls/ring"): "calls:place",
+    ("GET", "/api/v1/calls/ringing"): "calls:place",
+    ("POST", "/api/v1/calls/ringing/{call_uuid}/decline"): "calls:place",
+    ("GET", "/api/v1/directory"): "records:read",
+    ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
+    ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
 }
@@ -340,6 +349,19 @@ def _telephony_router_allowed() -> bool:
         return False
     return settings.auth.bind_host in LOOPBACK_HOSTS
 
+
+
+class LoginBody(BaseModel):
+    token: str
+
+
+class RingBody(BaseModel):
+    message: str = ""
+    phone: str = ""
+
+
+class StatusBody(BaseModel):
+    status: str
 
 
 @asynccontextmanager
@@ -556,6 +578,122 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             }
             for a in default_clinic_store().appointments_on(day)
         ]
+
+    @app.get("/console", response_class=HTMLResponse)
+    async def console(request: Request) -> HTMLResponse:
+        """The staff console. Signed out, it is a 401 carrying the sign-in form."""
+        signed_in = getattr(request.state, "principal", None) is not None
+        page = "console.html" if signed_in else "signin.html"
+        return HTMLResponse(
+            content=(STATIC_DIR / page).read_text(encoding="utf-8"),
+            status_code=200 if signed_in else 401,
+        )
+
+    @app.post("/api/v1/login")
+    async def api_login(body: LoginBody | None = None) -> JSONResponse:
+        principal = store.authenticate(body.token if body else None)
+        if principal is None:
+            return error_response("authentication_required")
+        response = JSONResponse({"name": principal.name, "role": principal.role})
+        response.set_cookie(
+            AUTH_COOKIE,
+            body.token if body else "",
+            httponly=True,
+            samesite="lax",
+            secure=settings.auth.dev_mode is False,
+            max_age=12 * 60 * 60,
+        )
+        return response
+
+    @app.websocket("/ws/call")
+    async def ws_call(websocket: WebSocket, uuid: str = "", phone: str = "") -> None:
+        """Talk to the agent from the browser. Same permission as placing a call."""
+        token = _bearer_token(websocket.headers.get("authorization"), dict(websocket.cookies))
+        principal = store.authenticate(token)
+        if not store.authorizes(principal, "calls:place"):
+            await websocket.close(code=4401)
+            return
+        import uuid as uuid_module
+
+        from shefa.telephony.browser import handle_browser_call
+
+        await handle_browser_call(websocket, uuid or str(uuid_module.uuid4()), phone)
+
+    @app.post("/api/v1/calls/ring")
+    async def ring_console(body: RingBody) -> dict:
+        """Make the agent call the console, opening with `message` (or a default line)."""
+        from shefa.telephony.browser import start_test_ring
+
+        message = body.message or (
+            "আসসালামু আলাইকুম, শেফা ক্লিনিক থেকে বলছি। এটি একটি পরীক্ষামূলক কল। "
+            "আমি কীভাবে সাহায্য করতে পারি?"
+            if settings.languages.primary == "bn"
+            else "Hello, this is SHEFA clinic calling to test the line. How can I help?"
+        )
+        return {"call_uuid": start_test_ring(message, body.phone)}
+
+    @app.get("/api/v1/calls/ringing")
+    async def calls_ringing() -> list[dict]:
+        from shefa.telephony.browser import ringing_now
+
+        return ringing_now()
+
+    @app.post("/api/v1/calls/ringing/{call_uuid}/decline")
+    async def decline_ring(call_uuid: str) -> dict:
+        from shefa.telephony.browser import decline
+        from shefa.telephony.call_context import discard_context
+
+        discard_context(call_uuid)
+        return {"declined": decline(call_uuid)}
+
+    @app.get("/api/v1/directory")
+    async def directory() -> list[dict]:
+        """Departments with their doctors, weekly schedules and next free slot."""
+        from shefa.clinic import default_clinic_store
+        from shefa.integrations.ehr import _doctor_card
+
+        clinic = default_clinic_store()
+        return [
+            {
+                "name": d["name_en"],
+                "name_bn": d["name_bn"],
+                "doctors": [_doctor_card(doc) for doc in clinic.doctors(department_id=d["id"])],
+            }
+            for d in clinic.departments()
+        ]
+
+    @app.post("/api/v1/appointments/{appointment_id}/status")
+    async def set_appointment_status(appointment_id: str, body: StatusBody) -> dict:
+        from shefa.clinic import ClinicError, default_clinic_store
+
+        try:
+            updated = default_clinic_store().mark_status(appointment_id, body.status)
+        except ClinicError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "validation", "message": str(exc)}
+            ) from exc
+        return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
+    @app.post("/api/v1/reminders/run")
+    async def run_reminders_now() -> dict:
+        """Place every reminder/follow-up call that is due right now."""
+        from datetime import datetime
+
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+        from shefa.reminders import run_reminder_cycle
+
+        cfg = settings.reminders
+        placed = await run_reminder_cycle(
+            default_clinic_store(),
+            place_call,
+            datetime.now(CLINIC_TZ),
+            language=cfg.language,
+            kinds=tuple(cfg.kinds),
+            quiet_start=cfg.quiet_start,
+            quiet_end=cfg.quiet_end,
+        )
+        return {"placed": len(placed), "calls": placed}
 
     @app.post("/api/v1/chat")
     async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:

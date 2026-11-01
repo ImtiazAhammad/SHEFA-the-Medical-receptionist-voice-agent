@@ -38,9 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    bench = sub.add_parser(
-        "bench", help="measure TTS latency against the abort thresholds"
-    )
+    bench = sub.add_parser("bench", help="measure TTS latency against the abort thresholds")
     bench.add_argument(
         "--iterations",
         type=int,
@@ -74,15 +72,25 @@ def build_parser() -> argparse.ArgumentParser:
     reminders_sub = reminders.add_subparsers(dest="reminders_command")
     reminders_sub.add_parser("run-once", help="place every call that is due right now, then exit")
 
-    token = sub.add_parser(
-        "token", help="mint an API bearer token for a configured role"
+    setup = sub.add_parser(
+        "setup", help="first-run setup: admin token, console mode, sample clinic"
     )
-    token.add_argument(
-        "--name", required=True, help="principal name, e.g. front-desk"
+    setup.add_argument("--name", default="owner", help="who the admin token is for")
+    setup.add_argument("--clinic", default="", help="clinic YAML to import (default: the sample)")
+    setup.add_argument(
+        "--force", action="store_true", help="replace an existing configs/local.yaml"
     )
-    token.add_argument(
-        "--role", required=True, help="a role declared in auth.roles"
+
+    serve = sub.add_parser("serve", help="start the server and the web console")
+    serve.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from a phone")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument(
+        "--https", action="store_true", help="self-signed certificate (phone mics need https)"
     )
+
+    token = sub.add_parser("token", help="mint an API bearer token for a configured role")
+    token.add_argument("--name", required=True, help="principal name, e.g. front-desk")
+    token.add_argument("--role", required=True, help="a role declared in auth.roles")
 
     return parser
 
@@ -175,8 +183,7 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
         ok = False
     else:
         lines.append(
-            f"  ok       escalation retries: {max_attempts} consecutive "
-            "failures end the call"
+            f"  ok       escalation retries: {max_attempts} consecutive failures end the call"
         )
 
     return "\n".join(lines), ok
@@ -243,6 +250,115 @@ def run_clinic(args: argparse.Namespace) -> int:
     return 2
 
 
+def _lan_addresses() -> list[str]:
+    import socket
+
+    found: list[str] = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if not address.startswith("127.") and address not in found:
+                found.append(address)
+    except OSError:
+        pass
+    return found
+
+
+def run_setup(args: argparse.Namespace) -> int:
+    """Write configs/local.yaml with an admin token and console mode; load a sample clinic."""
+    from pathlib import Path
+
+    import yaml
+
+    from shefa.clinic import ClinicError, default_clinic_store
+    from shefa.clinic.loader import import_directory_file
+
+    local = Path("configs/local.yaml")
+    if local.exists() and not args.force:
+        print(f"{local} already exists; use --force to replace it (this mints a new token).")
+        return 1
+    token, record = token_mint(args.name, "admin")
+    local.write_text(
+        yaml.safe_dump(
+            {
+                "telephony": {"provider": "browser"},
+                "reminders": {"enabled": True},
+                "auth": {
+                    "principals": [{"name": args.name, "role": "admin", "token_hash": record}]
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    local.chmod(0o600)
+    clinic_file = Path(args.clinic or "configs/clinic.example.yaml")
+    try:
+        import_directory_file(default_clinic_store(), clinic_file)
+        clinic_note = f"clinic loaded from {clinic_file}"
+    except (ClinicError, OSError, ValueError, yaml.YAMLError) as error:
+        clinic_note = f"clinic NOT loaded ({error}); run: shefa clinic import <file>"
+    print(
+        f"Wrote {local}\n{clinic_note}\n\n"
+        f"Your access token (shown once, not stored):\n  {token}\n\n"
+        "Next:  shefa serve        then open http://127.0.0.1:8000/console\n"
+        "Phone: shefa serve --host 0.0.0.0 --https   then open https://<this-machine>:8000/console"
+    )
+    return 0
+
+
+def run_serve(args: argparse.Namespace) -> int:
+    import subprocess
+    from pathlib import Path
+
+    import uvicorn
+
+    ssl: dict[str, str] = {}
+    if args.https:
+        certs = Path(".shefa/certs")
+        certs.mkdir(parents=True, exist_ok=True)
+        cert, key = certs / "cert.pem", certs / "key.pem"
+        if not cert.exists():
+            names = ",".join(["DNS:localhost", *(f"IP:{ip}" for ip in _lan_addresses())])
+            made = subprocess.run(  # noqa: S603
+                [
+                    "openssl",
+                    "req",
+                    "-x509",
+                    "-newkey",
+                    "rsa:2048",
+                    "-nodes",
+                    "-days",
+                    "825",
+                    "-keyout",
+                    str(key),
+                    "-out",
+                    str(cert),
+                    "-subj",
+                    "/CN=shefa",
+                    "-addext",
+                    f"subjectAltName={names}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if made.returncode != 0:
+                print(
+                    f"Could not create a certificate (is openssl installed?): {made.stderr}",
+                    file=sys.stderr,
+                )
+                return 1
+            key.chmod(0o600)
+        ssl = {"ssl_certfile": str(cert), "ssl_keyfile": str(key)}
+    scheme = "https" if ssl else "http"
+    shown = _lan_addresses() if args.host == "0.0.0.0" else [args.host]  # noqa: S104
+    for address in shown:
+        print(f"Console: {scheme}://{address}:{args.port}/console")
+    uvicorn.run("shefa.main:app", host=args.host, port=args.port, **ssl)
+    return 0
+
+
 def run_reminders(args: argparse.Namespace) -> int:
     import asyncio
     from datetime import datetime
@@ -257,8 +373,10 @@ def run_reminders(args: argparse.Namespace) -> int:
         print("usage: shefa reminders run-once", file=sys.stderr)
         return 2
     if not outbound_configured():
-        print("Telephony is not configured for outbound calls (see docs/asterisk-setup.md)",
-              file=sys.stderr)
+        print(
+            "Telephony is not configured for outbound calls (see docs/asterisk-setup.md)",
+            file=sys.stderr,
+        )
         return 1
     cfg = settings.reminders
     placed = asyncio.run(
@@ -342,6 +460,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "clinic":
         return run_clinic(args)
+
+    if args.command == "setup":
+        return run_setup(args)
+
+    if args.command == "serve":
+        return run_serve(args)
 
     if args.command == "reminders":
         return run_reminders(args)

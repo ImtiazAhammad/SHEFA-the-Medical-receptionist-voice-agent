@@ -10,6 +10,8 @@ from shefa.config.settings import TelephonyProvider, settings
 def outbound_configured() -> bool:
     """True when the selected provider has what it needs to place a call."""
     provider = settings.telephony.provider
+    if provider == TelephonyProvider.BROWSER:
+        return True
     if provider == TelephonyProvider.TWILIO:
         return bool(settings.telephony.twilio.account_sid)
     if provider == TelephonyProvider.ASTERISK:
@@ -28,6 +30,10 @@ async def place_call(
         from shefa.telephony.asterisk import originate_call
 
         return await originate_call(number, call_uuid, variables)
+    if provider == TelephonyProvider.BROWSER:
+        from shefa.telephony.browser import place_call as ring_console
+
+        return await ring_console(number, call_uuid, variables)
     if provider == TelephonyProvider.TWILIO:
         from shefa.telephony.twilio import initiate_outbound_call
 

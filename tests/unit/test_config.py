@@ -668,3 +668,9 @@ def test_dev_mode_placeholder_without_a_fallback_is_not_dev_mode(monkeypatch):
     # The variable is deliberately irrelevant: without `:-` there is no
     # fallback to read, so the placeholder cannot become a bool by being set.
     assert AuthConfig(dev_mode="${SHEFA_DEV_MODE_TEST}").dev_mode is False
+
+
+def test_a_clean_non_twilio_config_is_valid():
+    """No Twilio account and no stream URL: asterisk and browser must load."""
+    for provider in ("asterisk", "browser"):
+        assert TelephonyConfig.model_validate({"provider": provider}).provider.value == provider

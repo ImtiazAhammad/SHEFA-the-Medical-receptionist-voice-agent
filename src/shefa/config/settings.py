@@ -30,6 +30,8 @@ class TelephonyProvider(StrEnum):
     TWILIO = "twilio"
     ASTERISK = "asterisk"
     FREESWITCH = "freeswitch"
+    # The web console's microphone/speaker: no carrier needed (try-out and reminders-to-console).
+    BROWSER = "browser"
 
 
 class StrictModel(BaseModel):
@@ -205,7 +207,11 @@ class TelephonyConfig(StrictModel):
 
     @model_validator(mode="after")
     def _validate_cross_field_knobs(self) -> TelephonyConfig:
-        if self.provider != TelephonyProvider.TWILIO:
+        # With no Twilio account and no explicit URL there is nothing Twilio-shaped to
+        # misroute; the derived "wss://.twil.io" of an empty SID made every non-Twilio
+        # provider (asterisk, browser) fail validation.
+        has_twilio_target = bool(self.twilio.media_stream_url or self.twilio.account_sid)
+        if self.provider != TelephonyProvider.TWILIO and has_twilio_target:
             stream = self.twilio.effective_media_stream_url
             host = urlparse(stream).hostname or ""
             if host == "twil.io" or host.endswith(".twil.io"):
@@ -574,12 +580,29 @@ def load_config(config_path: str | Path = "configs/default.yaml") -> AppConfig:
                 break
     except ImportError:  # pragma: no cover - python-dotenv is a hard dependency
         pass
+    raw: dict[str, Any] = {}
     if path.exists():
         with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
-        resolved = _resolve_env_vars(raw)
-        return AppConfig(**resolved)
+    # `local.yaml` beside the main file holds this machine's choices (tokens, provider) and is
+    # gitignored; it is merged over the shipped defaults key by key.
+    local = path.with_name("local.yaml")
+    if local.exists():
+        with open(local, encoding="utf-8") as f:
+            raw = _deep_merge(raw, yaml.safe_load(f) or {})
+    if raw:
+        return AppConfig(**_resolve_env_vars(raw))
     return AppConfig()
+
+
+def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 settings = load_config()

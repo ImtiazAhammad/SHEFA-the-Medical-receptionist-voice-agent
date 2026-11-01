@@ -251,11 +251,13 @@ auth:
     clinician:
       - "sessions:read"
       - "records:read"
+      - "records:write"
       - "calls:place"
       - "chat:use"
     admin:
       - "sessions:read"
       - "records:read"
+      - "records:write"
       - "calls:place"
       - "chat:use"
       - "config:read"

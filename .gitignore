@@ -36,3 +36,6 @@ deploy/asterisk/rendered/
 
 # Database backups hold patient data
 backups/
+
+# Per-machine config (tokens, provider)
+configs/local.yaml
