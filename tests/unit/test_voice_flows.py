@@ -287,3 +287,42 @@ async def test_null_optional_arguments_from_the_router_do_not_break_booking(call
         },
     )
     assert "APT-00001" in reply
+
+
+async def test_a_slow_router_gets_a_spoken_filler_before_the_answer(call, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0.05)
+    slow = call.tts
+    original = _Script.generate
+
+    async def slow_generate(self, messages, tools=None, **kwargs):
+        await asyncio.sleep(0.3)
+        return await original(self, messages, tools, **kwargs)
+
+    monkeypatch.setattr(_Script, "generate", slow_generate)
+    await call.say("Which departments do you have?", {"tool": "list_departments", "arguments": {}})
+    assert slow.spoken[0] == "One moment."
+    assert "Cardiology" in slow.spoken[1]
+    assert all("One moment" not in t.content for t in call.session.history)
+
+
+async def test_a_fast_router_adds_no_filler(call, monkeypatch):
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 5)
+    await call.say("Which departments do you have?", {"tool": "list_departments", "arguments": {}})
+    assert call.tts.spoken and "One moment." not in call.tts.spoken
+
+
+async def test_filler_can_be_turned_off(call, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0)
+    original = _Script.generate
+
+    async def slow_generate(self, messages, tools=None, **kwargs):
+        await asyncio.sleep(0.1)
+        return await original(self, messages, tools, **kwargs)
+
+    monkeypatch.setattr(_Script, "generate", slow_generate)
+    await call.say("Which departments do you have?", {"tool": "list_departments", "arguments": {}})
+    assert "One moment." not in call.tts.spoken

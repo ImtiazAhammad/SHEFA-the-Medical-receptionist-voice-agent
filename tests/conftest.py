@@ -6,6 +6,7 @@ import pytest
 
 # This machine's configs/local.yaml (tokens, provider) must not change what tests see.
 os.environ.setdefault("SHEFA_IGNORE_LOCAL_CONFIG", "1")
+os.environ.setdefault("SHEFA_SKIP_WARMUP", "1")
 
 
 @pytest.fixture

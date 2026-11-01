@@ -28,6 +28,7 @@ from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
 from shefa.pipeline.actions import (
+    FILLERS,
     confirmation_text,
     error_text,
     extract_action,
@@ -416,7 +417,7 @@ class VoicePipeline:
             # played the model's guess and then the real answer over it, and the two could
             # disagree. The router call costs the same either way; now only one answer is
             # ever spoken: the template built from the tool result, or a reply grounded on it.
-            action = await extract_action(llm, session)
+            action = await self._route_with_filler(llm, tts, session, put_playback)
             if action is None:
                 reply_text, _tool_calls = await self._stream_reply(
                     llm, tts, messages, [], session.language.value, put_playback
@@ -472,6 +473,33 @@ class VoicePipeline:
             llm, tts, messages, tools, session.language.value, put_playback
         )
         return reply_text
+
+    async def _route_with_filler(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+    ) -> Any:
+        """Run the router; if it is slow, say a short filler so the line is never dead.
+
+        The filler goes through the same playback queue ahead of the reply, so the order is
+        natural, and it never enters the session history.
+        """
+        language = session.language.value
+        filler = FILLERS.get(language)
+        delay = settings.pipeline.llm.filler_after_s
+        if not filler or delay <= 0:
+            return await extract_action(llm, session)
+        routing = asyncio.ensure_future(extract_action(llm, session))
+        try:
+            done, _ = await asyncio.wait({routing}, timeout=delay)
+            if not done:
+                await self._emit(tts, filler, language, put_playback)
+            return await routing
+        except BaseException:
+            routing.cancel()
+            raise
 
     async def _emit(
         self,

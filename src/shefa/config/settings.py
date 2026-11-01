@@ -78,6 +78,9 @@ class LLMConfig(StrictModel):
     # Ollama) rejects any request carrying a `tools` array, so the pilot sets
     # this false and books through the structured-JSON action router instead.
     tool_calls: bool = True
+    # Say a short filler ("one moment") if deciding what to do takes longer than this many
+    # seconds, so the caller never hears a dead line. 0 turns it off.
+    filler_after_s: float = 1.2
 
 
 class LanguageDetectionConfig(StrictModel):
@@ -108,6 +111,8 @@ class PipelineConfig(StrictModel):
     language_detection: LanguageDetectionConfig = Field(
         default_factory=LanguageDetectionConfig
     )
+    # Load the models at startup and keep the LLM resident (see shefa.warmup).
+    warm_up: bool = True
 
 
 class LanguagesConfig(StrictModel):

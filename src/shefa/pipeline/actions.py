@@ -164,6 +164,10 @@ def parse_action(text: str, known_tools: set[str]) -> ExtractedAction | None:
     return ExtractedAction(name=name, arguments=arguments)
 
 
+# Spoken while the router is still deciding, never recorded in the call history.
+FILLERS = {"bn": "একটু দেখছি।", "en": "One moment."}
+
+
 async def extract_action(
     llm: BaseLLM,
     session: CallSession,
