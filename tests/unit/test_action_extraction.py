@@ -648,5 +648,7 @@ def test_routing_hints_appear_only_for_tools_that_exist():
 
     full = extractor_system_prompt(get_tool_definitions())
     assert "reschedule_appointment with new_date" in full and "24-hour HH:MM" in full
-    assert "patient_id" in full
+    # The router is not asked to write the caller's id or a free-text reason: the session
+    # supplies the first and the second only cost generation time.
+    assert '"patient_id"' not in full and '"reason"' not in full
     assert "24-hour" not in extractor_system_prompt([_BOOK])

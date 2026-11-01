@@ -81,11 +81,24 @@ def resolve_arguments(arguments: dict[str, Any], today: date | None = None) -> d
     return resolved
 
 
+# Arguments the router is not asked to write: the session already knows who is calling, and
+# a free-text reason is a dozen Bangla tokens (~0.3 s of generation) the booking never needed.
+_ROUTER_SKIPS = {"patient_id", "reason"}
+
+
+def _router_parameters(parameters: dict) -> dict:
+    properties = {k: v for k, v in parameters.get("properties", {}).items()
+                  if k not in _ROUTER_SKIPS}
+    required = [k for k in parameters.get("required", []) if k not in _ROUTER_SKIPS]
+    return {**parameters, "properties": properties, "required": required}
+
+
 def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = None) -> str:
     """Describe the available tools and the exact JSON shape to the router."""
     today = today or date.today()
     lines = "\n".join(
-        f"- {t.name}: {t.description} arguments=" + json.dumps(t.parameters, ensure_ascii=False)
+        f"- {t.name}: {t.description} arguments="
+        + json.dumps(_router_parameters(t.parameters), ensure_ascii=False)
         for t in tools
     )
     names = {t.name for t in tools}
@@ -99,11 +112,16 @@ def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = No
         )
     if {"reschedule_appointment", "cancel_appointment"} <= names:
         hints += (
-            "To move or change an existing appointment call reschedule_appointment with "
-            "new_date and new_time; to cancel one call cancel_appointment. "
+            "To move or change an existing appointment (এটা সরান, নিয়ে যান, পাল্টান) call "
+            "reschedule_appointment with new_date and new_time, never book_appointment; to "
+            "cancel one call cancel_appointment. "
         )
-    if hints:
-        hints += "Omit arguments you do not know; do not put patient_id in arguments.\n"
+    if "get_doctor_info" in names:
+        hints += (
+            "A question about one named doctor's days, hours or fee (কবে বসেন, কখন বসেন, "
+            "visiting hours) is get_doctor_info, not a slot check.\n"
+        )
+    hints += "Omit arguments you do not know.\n"
     return (
         "You are the action router for SHEFA, a medical receptionist answering a "
         "phone call right now. Read the conversation and decide whether the "
