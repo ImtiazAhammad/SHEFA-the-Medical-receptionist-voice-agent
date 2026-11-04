@@ -283,11 +283,12 @@ class TestConfirmationText:
             },
             "bn",
         )
-        assert text is not None
-        assert "2026-12-01" in text
-        assert "10:00" in text
-        assert "ডাক্তার করিম" in text
-        assert "APT-9" in text
+        # Spoken the way a receptionist says it: Bangla weekday, date and time words,
+        # and the reference as a number the caller can repeat (APT-9 -> ৯).
+        assert text == (
+            "আপনার অ্যাপয়েন্টমেন্ট মঙ্গলবার, ১ ডিসেম্বর সকাল ১০টায় ডাক্তার করিম-এর সাথে "
+            "বুক হয়েছে। আপনার রেফারেন্স নম্বর ৯।"
+        )
 
     def test_booking_english(self):
         text = confirmation_text(
@@ -302,8 +303,8 @@ class TestConfirmationText:
             "en",
         )
         assert text == (
-            "Your appointment is booked for 2026-12-01 at 10:00 with "
-            "Dr. Karim. Your reference is APT-9."
+            "Your appointment with Dr. Karim is booked for Tuesday 1 December at 10 am. "
+            "Your reference number is 9."
         )
 
     def test_slots_lists_every_available_time(self):
@@ -316,8 +317,8 @@ class TestConfirmationText:
             "bn",
         )
         assert text is not None
-        assert "09:00" in text
-        assert "10:30" in text
+        assert "সকাল ৯টা" in text
+        assert "সকাল ১০টা ৩০ মিনিট" in text
 
     def test_cancel_confirms_the_reference(self):
         text = confirmation_text(
@@ -325,7 +326,7 @@ class TestConfirmationText:
             {"success": True, "appointment_id": "APT-1", "cancelled": True},
             "en",
         )
-        assert text == "Your appointment APT-1 has been cancelled."
+        assert text == "Done - appointment number 1 is cancelled."
 
     def test_reschedule_names_the_new_slot(self):
         text = confirmation_text(
@@ -338,7 +339,7 @@ class TestConfirmationText:
             },
             "en",
         )
-        assert text == "Your appointment APT-1 is rescheduled to 2026-12-02 at 11:00."
+        assert text == "Done - appointment number 1 is moved to Wednesday 2 December at 11 am."
 
     def test_untemplated_tool_returns_none(self):
         assert confirmation_text("verify_patient", {"verified": True}, "en") is None
@@ -381,8 +382,8 @@ class TestGenerateReplyExtractMode:
         reply = await VoicePipeline()._generate_reply(llm, tts, session, _Sink())
 
         assert executed == [("book_appointment", {"date": "2026-12-01"})]
-        assert "2026-12-01" in reply
-        assert "APT-9" in reply
+        assert "মঙ্গলবার, ১ ডিসেম্বর" in reply
+        assert "রেফারেন্স নম্বর ৯" in reply
         # only the templated fact is spoken: no free-form guess before it
         assert tts.spoken == [reply]
         # facts never go through the model
@@ -513,12 +514,15 @@ class TestDirectoryConfirmations:
 
     def test_doctor_info_speaks_schedule_next_slot_and_fee(self):
         text = confirmation_text("get_doctor_info", self.DOCTOR, "en")
-        assert "sunday 09:00-12:00" in text
-        assert "2026-11-08 at 09:00" in text
-        assert "800 taka" in text
+        assert text == (
+            "Dr. Rahman sees Cardiology patients Sunday, 9 am to 12 noon. The next free time "
+            "is Sunday 8 November at 9 am. The visit fee is 800 taka."
+        )
         bn = confirmation_text("get_doctor_info", self.DOCTOR, "bn")
-        assert "ভিজিট ফি 800 টাকা" in bn
-        assert "2026-11-08" in bn
+        assert bn == (
+            "ডাক্তার রহমান হৃদরোগ বিভাগে বসেন রবিবার সকাল ৯টা থেকে দুপুর ১২টা। পরের খালি সময় "
+            "রবিবার, ৮ নভেম্বর সকাল ৯টায়। ভিজিট ফি ৮০০ টাকা।"
+        )
 
     def test_doctor_info_with_no_free_time_says_so(self):
         card = {**self.DOCTOR, "next_available": None, "visit_fee": 0}
@@ -539,7 +543,7 @@ def test_a_tool_without_arguments_is_still_an_action():
 def test_a_single_doctor_match_gets_the_full_schedule():
     doctor = TestDirectoryConfirmations.DOCTOR
     text = confirmation_text("list_doctors", {"doctors": [doctor]}, "en")
-    assert "sunday 09:00-12:00" in text and "800 taka" in text
+    assert "Sunday, 9 am to 12 noon" in text and "800 taka" in text
 
 
 class TestErrorText:
@@ -589,7 +593,7 @@ class TestSlotAnswers:
             },
             "en",
         )
-        assert "09:00, 09:30" in text
+        assert "9 am and 9:30 am" in text
 
     def test_a_long_list_is_summarised_as_a_range(self):
         times = [f"{h}:{m:02d}" for h in (16, 17, 18) for m in (0, 15, 30, 45)]
@@ -598,8 +602,8 @@ class TestSlotAnswers:
             {"date": "2026-11-03", "doctor": "Rahman", "available_slots": self._slots(*times)},
             "en",
         )
-        assert "from 16:00 to 18:45" in text and "17:15" not in text
-        assert "16:00 থেকে 18:45" in confirmation_text(
+        assert "from 4 pm to 6:45 pm" in text and "5:15" not in text
+        assert "বিকেল ৪টা থেকে সন্ধ্যা ৬টা ৪৫ মিনিট" in confirmation_text(
             "check_appointment_slots",
             {"date": "d", "doctor": "R", "available_slots": self._slots(*times)},
             "bn",
@@ -613,8 +617,9 @@ class TestSlotAnswers:
             "next_available": {"date": "2026-11-03", "time": "16:00"},
         }
         en = confirmation_text("check_appointment_slots", result, "en")
-        assert "no free time on 2026-11-02" in en and "2026-11-03 at 16:00" in en
-        assert "2026-11-03 তারিখে 16:00" in confirmation_text(
+        assert "no free time on Monday 2 November" in en
+        assert "Tuesday 3 November at 4 pm" in en
+        assert "মঙ্গলবার, ৩ নভেম্বর বিকেল ৪টায়" in confirmation_text(
             "check_appointment_slots", result, "bn"
         )
 
@@ -624,8 +629,15 @@ class TestSlotAnswers:
 
     def test_a_broad_question_names_the_doctors_with_time(self):
         result = {"date": "d", "doctors": [{"doctor": "Rahman"}, {"doctor": "Sultana"}]}
-        assert "Rahman, Sultana" in confirmation_text("check_appointment_slots", result, "en")
-        assert "Rahman, Sultana" in confirmation_text("check_appointment_slots", result, "bn")
+        assert "Dr. Rahman and Dr. Sultana have" in confirmation_text(
+            "check_appointment_slots", result, "en"
+        )
+        assert "ডাক্তার Rahman ও ডাক্তার Sultana" in confirmation_text(
+            "check_appointment_slots", result, "bn"
+        )
+        one = {"date": "d", "doctors": [{"doctor": "Rahman", "doctor_bn": "রহমান"}]}
+        assert "Dr. Rahman has free time" in confirmation_text("check_appointment_slots", one, "en")
+        assert "ডাক্তার রহমান-এর" in confirmation_text("check_appointment_slots", one, "bn")
         empty = confirmation_text("check_appointment_slots", {"date": "d", "doctors": []}, "en")
         assert "No doctor has free time" in empty
         assert "খালি সময় নেই" in confirmation_text(
