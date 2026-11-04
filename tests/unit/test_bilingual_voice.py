@@ -155,7 +155,7 @@ class TestRegistry:
 
         assert isinstance(stt, LanguageRoutedSTT)
         assert stt.models["en"] is stt.detector
-        assert stt.detector.model_size == "large-v3-turbo"
+        assert stt.detector.model_size == "small"
         assert stt.models["bn"].model_size == "models/stt/bangla-whisper-medium-ct2"
 
     async def test_without_per_language_models_it_is_one_whisper(self, monkeypatch):

@@ -173,6 +173,18 @@ def build_parser() -> argparse.ArgumentParser:
     lab_sub = lab.add_subparsers(dest="lab_command")
     lab_run = lab_sub.add_parser("run", help="run the scenarios and write an HTML report")
     lab_list = lab_sub.add_parser("list", help="list the scenarios")
+    lab_voices = lab_sub.add_parser(
+        "voices", help="blind listening test: the same lines in several voices"
+    )
+    lab_voices.add_argument(
+        "--voice",
+        action="append",
+        default=[],
+        help="provider:target, repeatable: piper:<file.onnx> vits:<dir> kokoro:<voice> "
+        "azure:<voice> (default: the configured voice for --language)",
+    )
+    lab_voices.add_argument("--language", choices=["bn", "en"], default="bn")
+    lab_voices.add_argument("--out", default="voice-test")
     for command in (lab_run, lab_list):
         command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
     lab_run.add_argument("--only", default="", help="comma-separated scenario ids")
@@ -563,8 +575,10 @@ def run_lab(args: argparse.Namespace) -> int:
 
     from shefa.lab.scenarios import load_scenarios
 
+    if args.lab_command == "voices":
+        return run_voice_test(args)
     if args.lab_command not in {"run", "list"}:
-        print("usage: shefa lab {run,list}", file=sys.stderr)
+        print("usage: shefa lab {run,list,voices}", file=sys.stderr)
         return 2
     try:
         scenarios = load_scenarios(args.scenarios)
@@ -583,6 +597,39 @@ def run_lab(args: argparse.Namespace) -> int:
         return 2
     chosen = [s for s in scenarios if not wanted or s.id in wanted]
     return asyncio.run(_run_lab(chosen, args))
+
+
+def run_voice_test(args: argparse.Namespace) -> int:
+    from shefa.lab.voices import parse_voice_spec
+
+    try:
+        specs = [parse_voice_spec(spec) for spec in args.voice]
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_voice_test(specs, args.language, Path(args.out)))
+
+
+async def _voice_test(specs: list[dict[str, str]], language: str, out: Path) -> int:
+    from shefa.config.settings import VoiceConfig, settings
+    from shefa.lab.voices import PROMPTS, label_for, render, write_page
+    from shefa.models.registry import registry
+
+    if not specs:
+        configured = settings.pipeline.tts.voice_for(language)
+        specs = [{k: v for k, v in configured.model_dump().items() if v}]
+    voices = {label_for(spec): registry._create_voice(VoiceConfig(**spec)) for spec in specs}
+    try:
+        rows = await render(voices, PROMPTS[language], out, language)
+    except Exception as error:  # noqa: BLE001 - a missing voice is a message, not a traceback
+        print(f"A voice failed to speak: {type(error).__name__}: {error}", file=sys.stderr)
+        return 1
+    finally:
+        for voice in voices.values():
+            await voice.close()
+    page = write_page(rows, out)
+    print(f"{len(rows)} lines x {len(voices)} voice(s). Open {page} and score blind.")
+    return 0
 
 
 def lab_meta(speech: bool, audio: bool) -> dict[str, str]:

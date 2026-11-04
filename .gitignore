@@ -45,3 +45,8 @@ configs/local.yaml
 
 # Conversation lab output (report.html, audio, scratch databases)
 lab-report/
+
+# Deep-research scratch folders (the report and notes are kept under docs/research/)
+research_notes/
+reports/
+voice-test/

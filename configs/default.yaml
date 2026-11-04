@@ -51,8 +51,8 @@ pipeline:
     enable_vad: true
     streaming: true
     # Each turn is heard by the model for its language. The Bangla fine-tune forgets
-    # English, so stock large-v3-turbo first detects the language (one encoder pass) and
-    # also transcribes the English turns. ~1 GB extra VRAM at int8.
+    # English, so a stock multilingual Whisper first detects the language (one encoder
+    # pass) and also transcribes the English turns.
     per_language:
       bn: "stt_whisper_local"
       en: "stt_whisper_english"
@@ -124,8 +124,11 @@ models:
       bangla_finetuned: true
     stt_whisper_english:
       type: "whisper_local_stt"
-      # Stock multilingual turbo: language detection for every turn, and English text.
-      model_size: "large-v3-turbo"
+      # Stock multilingual Whisper: language detection for every turn, and English text.
+      # "small" is 0.6 GB (measured) and fits beside gemma2:9b + the Bangla model on a
+      # 12 GB card (~10 GB total). With VRAM to spare, "large-v3-turbo" (~1.5-2 GB at
+      # int8, estimated) hears English better. Downloaded automatically on first use.
+      model_size: "small"
       device: "cuda"
       compute_type: "int8_float16"
       bangla_finetuned: false

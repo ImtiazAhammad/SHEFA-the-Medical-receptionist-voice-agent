@@ -214,6 +214,9 @@ class _Voice:
     async def synthesize_stream(self, text, language="en"):
         yield AudioFrame(b"\x01\x00" * 160, rate=16000)
 
+    async def close(self):
+        pass
+
 
 class _Ears:
     def __init__(self, text=None):
@@ -477,3 +480,80 @@ class TestLabCommand:
         assert "kokoro af_heart" in meta["voices"]
         assert meta["speech recognition"].endswith("(per language)")
         assert set(text_only) == {"language model"}
+
+
+class TestVoiceTest:
+    def test_voice_specs(self):
+        from shefa.lab.voices import label_for, parse_voice_spec
+
+        piper = parse_voice_spec("piper:models/piper/bn_BD-google-medium.onnx")
+        azure = parse_voice_spec("azure:bn-BD-NabanitaNeural")
+
+        assert piper == {"provider": "piper", "voice_path": "models/piper/bn_BD-google-medium.onnx"}
+        assert azure == {"provider": "azure", "voice_id": "bn-BD-NabanitaNeural"}
+        assert label_for(piper) == "piper bn_BD-google-medium"
+        assert label_for(azure) == "azure bn-BD-NabanitaNeural"
+        for bad in ("piper", "telepathy:x", "kokoro:"):
+            with pytest.raises(ValueError, match="use piper"):
+                parse_voice_spec(bad)
+
+    async def test_every_line_in_every_voice_shuffled_blind(self, tmp_path):
+        from shefa.lab.voices import render, write_page
+
+        rows = await render({"one": _Voice(), "two": _Voice()}, ["আসসালামু আলাইকুম", "hi"],
+                            tmp_path, "bn", seed=1)
+        page = write_page(rows, tmp_path).read_text(encoding="utf-8")
+
+        assert [len(r["clips"]) for r in rows] == [2, 2]
+        assert {c["voice"] for r in rows for c in r["clips"]} == {"one", "two"}
+        assert len(list((tmp_path / "audio").iterdir())) == 4
+        assert "আসসালামু আলাইকুম" in page and 'data-voice="one"' in page
+        assert "Reveal" in page and "</script>" in page
+
+    def test_the_command_renders_the_named_voices(self, tmp_path, monkeypatch, capsys):
+        from shefa.models.registry import registry
+
+        made = []
+
+        class Voice(_Voice):
+            async def close(self):
+                made.append("closed")
+
+        def create(config):
+            made.append((config.provider, config.voice_id or config.voice_path))
+            return Voice()
+
+        monkeypatch.setattr(registry, "_create_voice", create)
+
+        code = cli.main(["lab", "voices", "--voice", "azure:bn-BD-NabanitaNeural",
+                         "--voice", "piper:x.onnx", "--out", str(tmp_path / "v")])
+
+        assert code == 0
+        assert made[:2] == [("azure", "bn-BD-NabanitaNeural"), ("piper", "x.onnx")]
+        assert made.count("closed") == 2
+        assert (tmp_path / "v" / "index.html").exists()
+        assert "x 2 voice(s)" in capsys.readouterr().out
+
+    def test_the_default_is_the_configured_voice(self, tmp_path, monkeypatch):
+        from shefa.models.registry import registry
+
+        seen = []
+        monkeypatch.setattr(registry, "_create_voice",
+                            lambda config: seen.append(config.provider) or _Voice())
+
+        assert cli.main(["lab", "voices", "--language", "en", "--out", str(tmp_path)]) == 0
+        assert seen == ["kokoro"]
+
+    def test_a_voice_that_cannot_speak_is_reported(self, tmp_path, monkeypatch, capsys):
+        from shefa.models.registry import registry
+
+        class Broken(_Voice):
+            async def synthesize_stream(self, text, language="en"):
+                raise FileNotFoundError("voice.onnx")
+                yield  # pragma: no cover - makes this an async generator
+
+        monkeypatch.setattr(registry, "_create_voice", lambda config: Broken())
+
+        assert cli.main(["lab", "voices", "--out", str(tmp_path)]) == 1
+        assert "FileNotFoundError" in capsys.readouterr().err
+        assert cli.main(["lab", "voices", "--voice", "nope"]) == 2
