@@ -117,10 +117,11 @@ def fetch_speech_model(
     return Check(True, f"speech model built: {target}")
 
 
-def _http_get_json(url: str) -> Any:
+def _http_get_json(url: str, api_key: str = "") -> Any:
     import httpx
 
-    response = httpx.get(url, timeout=5.0)
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    response = httpx.get(url, headers=headers, timeout=5.0)
     response.raise_for_status()
     return response.json()
 
@@ -130,7 +131,8 @@ def llm_status(
     base_url: str,
     model: str,
     env: Mapping[str, str] = os.environ,
-    get_json: Callable[[str], Any] = _http_get_json,
+    get_json: Callable[..., Any] = _http_get_json,
+    api_key: str = "",
 ) -> Check:
     """Whether the configured language model can answer.
 
@@ -142,17 +144,22 @@ def llm_status(
         if not env.get(variable):
             return Check(False, f"language model: {variable} is not set (put it in .env)")
         return Check(True, f"language model: {provider} {model} (key set)")
+    if api_key.startswith("${"):  # the config names an environment variable that is unset
+        return Check(False, f"language model: {api_key[2:-1]} is not set (put it in .env)")
     base = base_url.rstrip("/")
     try:
-        listing = get_json(f"{base}/models")
+        listing = get_json(f"{base}/models", api_key) if api_key else get_json(f"{base}/models")
     except Exception as error:  # noqa: BLE001 - reported, never raised
+        fix = ("check the API key in .env and the network" if api_key
+               else "Start it with: ollama serve")
         return Check(
-            False,
-            f"language model: no server at {base} ({type(error).__name__}). "
-            "Start it with: ollama serve",
+            False, f"language model: no answer from {base} ({type(error).__name__}). {fix}"
         )
     served = {item.get("id") for item in (listing or {}).get("data", []) if isinstance(item, dict)}
-    if model not in served:
+    # Gemini lists its models as "models/<name>".
+    if model not in served and f"models/{model}" not in served:
+        if api_key:
+            return Check(False, f"language model: {base} does not offer {model} to this key")
         return Check(
             False,
             f"language model: {model} is not on the server at {base} (run: ollama pull {model})",
@@ -171,8 +178,14 @@ def llm_check_for(config: Any, **kwargs: Any) -> Check | None:
         _, adapter = models.resolve_llm_adapter(llm.provider)
     except ValueError as error:
         return Check(False, f"language model: {error}")
+    from shefa.models.registry import hosted_key
+
     return llm_status(
-        llm.provider, getattr(adapter, "base_url", ""), getattr(adapter, "model", ""), **kwargs
+        llm.provider,
+        getattr(adapter, "base_url", ""),
+        getattr(adapter, "model", ""),
+        api_key=hosted_key(adapter),
+        **kwargs,
     )
 
 
@@ -263,6 +276,8 @@ def voice_status(voice: Any, find_spec: Callable[[str], Any] = importlib.util.fi
         return Check(False, f"voice missing: {model} (download it with: shefa fetch-models)")
     if voice.provider == "kokoro":
         return kokoro_check(voice.voice_id, find_spec)
+    if voice.provider == "azure":
+        return azure_check(voice.voice_id)
     if voice.provider == "vits":
         from shefa.models.tts.vits_tts import checkpoint_files
 
@@ -276,8 +291,18 @@ def voice_status(voice: Any, find_spec: Callable[[str], Any] = importlib.util.fi
     return None
 
 
+def azure_check(voice: str, env: Mapping[str, str] = os.environ) -> Check:
+    if not env.get("AZURE_SPEECH_KEY"):
+        return Check(
+            False, f"Azure voice {voice} needs AZURE_SPEECH_KEY and AZURE_SPEECH_REGION in .env"
+        )
+    return Check(True, f"Azure voice {voice} (key set; text is sent to Azure)")
+
+
 def fetch_voice_for(voice: Any) -> Check | None:
     """Fetch or check one resolved voice; None for cloud voices (nothing to fetch)."""
+    if voice.provider == "azure":
+        return azure_check(voice.voice_id)
     if voice.provider == "piper":
         return fetch_voice(voice.voice_path)
     if voice.provider == "kokoro":

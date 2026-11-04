@@ -11,6 +11,12 @@ if TYPE_CHECKING:
     from shefa.models.base import BaseLLM, BaseSTT, BaseTTS
 
 
+def hosted_key(adapter: object) -> str:
+    """The adapter's API key, or "" for a local server ("not-needed" is the placeholder)."""
+    key = str(getattr(adapter, "api_key", "") or "")
+    return "" if key in {"", "not-needed"} else key
+
+
 class ModelRegistry:
     """Central registry for model adapter instances. Lazy-initialized, singleton."""
 
@@ -112,6 +118,10 @@ class ModelRegistry:
             from shefa.models.tts.vits_tts import VITSTTS
 
             return VITSTTS(model_dir=voice.voice_path, use_cuda=voice.device == "cuda")
+        if provider == "azure":
+            from shefa.models.tts.azure_tts import AzureTTS
+
+            return AzureTTS(voice=voice.voice_id)
         if provider == "kokoro":
             from shefa.models.tts.kokoro_tts import KokoroTTS
 
@@ -146,6 +156,7 @@ class ModelRegistry:
                 model=adapter.model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                api_key=hosted_key(adapter),
             )
         raise AssertionError(f"Unreachable: provider {provider!r} resolved but unhandled")
 

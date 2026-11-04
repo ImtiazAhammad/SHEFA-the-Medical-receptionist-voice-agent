@@ -29,6 +29,59 @@ DEMO_PROFILE: dict[str, Any] = {
     },
 }
 
+
+def _hosted_llm(base_url: str, model: str, key_variable: str) -> dict[str, Any]:
+    """Only the language model goes to a hosted OpenAI-compatible service; speech
+    recognition and the voices stay local, and ~7 GB of VRAM is freed."""
+    return {
+        "pipeline": {"llm": {"provider": "local"}},
+        "models": {
+            "adapters": {
+                "llm_local": {
+                    "type": "openai_compatible_llm",
+                    "base_url": base_url,
+                    "model": model,
+                    "api_key": "${" + key_variable + "}",
+                }
+            }
+        },
+    }
+
+
+# `shefa setup --profile NAME`: where the language model (and for openai, speech
+# recognition) runs. Every profile but `local` sends conversation text off the machine.
+PROFILES: dict[str, tuple[dict[str, Any], str]] = {
+    "local": ({}, ""),
+    "openai": (DEMO_PROFILE, "OPENAI_API_KEY"),
+    "gemini": (
+        _hosted_llm(
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "gemini-2.5-flash",
+            "GEMINI_API_KEY",
+        ),
+        "GEMINI_API_KEY",
+    ),
+    "groq": (
+        _hosted_llm("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        "GROQ_API_KEY",
+    ),
+}
+
+# `shefa setup --voices azure`: Azure's Bangladeshi neural voice for Bangla and an
+# Indian-English voice for English (free tier F0: 0.5M characters a month).
+VOICE_PROFILES: dict[str, dict[str, Any]] = {
+    "local": {},
+    "azure": {
+        "pipeline": {
+            "tts": {
+                "provider": "azure",
+                "voice_id": "bn-BD-NabanitaNeural",
+                "voices": {"en": {"provider": "azure", "voice_id": "en-IN-NeerjaNeural"}},
+            }
+        }
+    },
+}
+
 BENCH_TEXTS = [
     "Thank you for calling. How can I help you today?",
     "I can help you book an appointment with one of our doctors.",
@@ -100,9 +153,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="replace an existing configs/local.yaml"
     )
     setup.add_argument(
-        "--demo",
-        action="store_true",
-        help="demo without a GPU: speech recognition and the LLM on OpenAI, the voice local",
+        "--profile",
+        choices=sorted(PROFILES),
+        default="local",
+        help="where the language model runs: local (Ollama), gemini or groq (free tiers, "
+        "speech and voices stay local), openai (speech recognition too)",
+    )
+    setup.add_argument(
+        "--demo", action="store_true", help="same as --profile openai (no GPU needed)"
+    )
+    setup.add_argument(
+        "--voices",
+        choices=sorted(VOICE_PROFILES),
+        default="local",
+        help="azure: Azure's Bangladeshi neural voices (free tier) instead of local voices",
     )
 
     lab = sub.add_parser("lab", help="conversation lab: scripted and simulated patient calls")
@@ -339,9 +403,13 @@ def run_setup(args: argparse.Namespace) -> int:
         "reminders": {"enabled": True},
         "auth": {"principals": [{"name": args.name, "role": "admin", "token_hash": record}]},
     }
-    if args.demo:
-        choices.update(DEMO_PROFILE)
-    local.write_text(yaml.safe_dump(choices, sort_keys=False), encoding="utf-8")
+    from shefa.config.settings import _deep_merge
+
+    profile = "openai" if args.demo else args.profile
+    overrides, key_variable = PROFILES[profile]
+    choices = _deep_merge(_deep_merge(choices, overrides), VOICE_PROFILES[args.voices])
+    local.write_text(yaml.safe_dump(choices, sort_keys=False, allow_unicode=True),
+                     encoding="utf-8")
     local.chmod(0o600)
     clinic_file = Path(args.clinic or "configs/clinic.example.yaml")
     try:
@@ -352,25 +420,39 @@ def run_setup(args: argparse.Namespace) -> int:
     print(
         f"Wrote {local}\n{clinic_note}\n\n"
         f"Your access token (shown once, not stored):\n  {token}\n\n"
-        + (_demo_note() if args.demo else "")
+        + _profile_note(profile, key_variable, args.voices)
         + "Next:  shefa fetch-models   then: shefa serve   and open http://127.0.0.1:8000/console\n"
         "Phone: shefa serve --host 0.0.0.0 --https   then open https://<this-machine>:8000/console"
     )
     return 0
 
 
-def _demo_note() -> str:
+def _profile_note(profile: str, key_variable: str, voices: str) -> str:
+    """What leaves the machine under this profile, and which keys still need setting."""
     import os
 
-    key = (
-        "OPENAI_API_KEY is set."
-        if os.environ.get("OPENAI_API_KEY")
-        else "Put OPENAI_API_KEY=sk-... in .env before serving."
+    if profile == "local" and voices == "local":
+        return ""
+    sent = {
+        "openai": "speech recognition and the language model run on OpenAI",
+        "gemini": "the language model runs on Google Gemini (free tier)",
+        "groq": "the language model runs on Groq (free tier)",
+    }.get(profile, "")
+    parts = [sent] if sent else []
+    if voices == "azure":
+        parts.append("the voices are Azure neural voices")
+    needed = [key_variable] if key_variable else []
+    if voices == "azure":
+        needed += ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"]
+    missing = [name for name in needed if not os.environ.get(name)]
+    keys = (
+        f"Put {', '.join(name + '=...' for name in missing)} in .env before serving."
+        if missing
+        else f"{', '.join(needed)} {'is' if len(needed) == 1 else 'are'} set."
     )
     return (
-        "Demo profile: speech recognition and the language model run on OpenAI, the voice\n"
-        "runs here. Caller audio and text leave this machine, so use it for demos only,\n"
-        f"never for real patients. {key}\n\n"
+        f"Profile {profile}: {'; '.join(parts)}. Conversation text leaves this machine, so use "
+        f"it for demos only, never for real patients. {keys}\n\n"
     )
 
 

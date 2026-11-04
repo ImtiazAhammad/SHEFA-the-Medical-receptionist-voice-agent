@@ -60,6 +60,7 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
         "shefa/models/base.py",
         "shefa/models/stt/whisper_local.py",
         "shefa/models/stt/routed.py",
+        "shefa/models/tts/azure_tts.py",
         "shefa/models/tts/kokoro_tts.py",
         "shefa/models/tts/piper_tts.py",
         "shefa/models/tts/routed.py",

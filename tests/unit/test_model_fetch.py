@@ -196,7 +196,8 @@ class TestLanguageModel:
     def test_the_default_getter_reads_json(self, monkeypatch):
         import httpx
 
-        def get(url, timeout):
+        def get(url, headers, timeout):
+            assert headers == {}  # a local server gets no Authorization header
             return httpx.Response(200, json={"data": []}, request=httpx.Request("GET", url))
 
         monkeypatch.setattr(httpx, "get", get)
@@ -382,7 +383,54 @@ class TestSetupDemo:
     def test_demo_note_confirms_a_key_that_is_set(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
-        assert "OPENAI_API_KEY is set" in cli._demo_note()
+        assert "OPENAI_API_KEY is set" in cli._profile_note("openai", "OPENAI_API_KEY", "local")
+        assert cli._profile_note("local", "", "local") == ""
+
+    def _setup(self, tmp_path, monkeypatch, *args):
+        import yaml
+
+        from shefa.config.settings import load_config
+
+        (tmp_path / "configs").mkdir(exist_ok=True)
+        monkeypatch.chdir(tmp_path)
+        assert cli.main(["setup", "--force", "--clinic", "missing.yaml", *args]) == 0
+        shipped = Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
+        (tmp_path / "configs" / "default.yaml").write_text(shipped.read_text())
+        written = yaml.safe_load((tmp_path / "configs" / "local.yaml").read_text())
+        return written, load_config(tmp_path / "configs" / "default.yaml")
+
+    def test_gemini_profile_sends_only_the_language_model(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("GEMINI_API_KEY", "g-key")
+
+        _, config = self._setup(tmp_path, monkeypatch, "--profile", "gemini")
+
+        _, adapter = config.models.resolve_llm_adapter(config.pipeline.llm.provider)
+        assert adapter.base_url.startswith("https://generativelanguage.googleapis.com")
+        assert adapter.api_key == "g-key"
+        assert config.pipeline.stt.provider == "whisper_local"  # speech stays local
+        assert "GEMINI_API_KEY is set" in capsys.readouterr().out
+
+    def test_groq_profile_and_azure_voices(self, tmp_path, monkeypatch, capsys):
+        for name in ("GROQ_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"):
+            monkeypatch.delenv(name, raising=False)
+
+        _, config = self._setup(tmp_path, monkeypatch, "--profile", "groq", "--voices", "azure")
+
+        _, adapter = config.models.resolve_llm_adapter("local")
+        assert "api.groq.com" in adapter.base_url
+        assert config.pipeline.tts.voice_for("bn").voice_id == "bn-BD-NabanitaNeural"
+        assert config.pipeline.tts.voice_for("en").provider == "azure"
+        out = capsys.readouterr().out
+        assert "Groq" in out and "Azure neural voices" in out
+        assert "GROQ_API_KEY=..., AZURE_SPEECH_KEY=..., AZURE_SPEECH_REGION=..." in out
+
+    def test_local_azure_voices_note_lists_the_azure_keys(self, monkeypatch):
+        monkeypatch.setenv("AZURE_SPEECH_KEY", "k")
+        monkeypatch.setenv("AZURE_SPEECH_REGION", "southeastasia")
+
+        note = cli._profile_note("local", "", "azure")
+
+        assert "AZURE_SPEECH_KEY, AZURE_SPEECH_REGION are set" in note
 
     def test_plain_setup_keeps_the_local_pipeline(self, tmp_path, monkeypatch, capsys):
         import yaml
@@ -558,3 +606,55 @@ class TestDoctorVoices:
         assert "  BLOCKER  en voice x" in text
         assert "xx" not in text
         assert ok is False
+
+
+class TestHostedLanguageModels:
+    def test_a_keyed_server_is_asked_with_its_key(self):
+        seen = {}
+
+        def get_json(url, api_key=""):
+            seen.update(url=url, key=api_key)
+            return {"data": [{"id": "models/gemini-2.5-flash"}]}
+
+        check = model_fetch.llm_status(
+            "local", "https://g/v1beta/openai/", "gemini-2.5-flash", get_json=get_json,
+            api_key="g-key",
+        )
+
+        assert check.ok and seen == {"url": "https://g/v1beta/openai/models", "key": "g-key"}
+
+    def test_a_hosted_failure_points_at_the_key_not_at_ollama(self):
+        def down(url, api_key=""):
+            raise ConnectionError("401")
+
+        failed = model_fetch.llm_status("local", "https://g", "m", get_json=down, api_key="k")
+        missing = model_fetch.llm_status(
+            "local", "https://g", "m", get_json=lambda url, api_key="": {"data": []}, api_key="k"
+        )
+        unset = model_fetch.llm_status("local", "https://g", "m", api_key="${GEMINI_API_KEY}")
+
+        assert "check the API key" in failed.detail and "ollama" not in failed.detail
+        assert "does not offer m" in missing.detail and not missing.pullable
+        assert "GEMINI_API_KEY is not set" in unset.detail
+
+    def test_the_default_getter_sends_the_key(self, monkeypatch):
+        import httpx
+
+        seen = {}
+
+        def get(url, headers, timeout):
+            seen.update(headers)
+            return httpx.Response(200, json={}, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", get)
+        model_fetch._http_get_json("https://g/models", "k")
+
+        assert seen == {"Authorization": "Bearer k"}
+
+    def test_azure_voices_need_their_key(self, monkeypatch):
+        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
+        voice = SimpleNamespace(provider="azure", voice_id="bn-BD-NabanitaNeural")
+
+        assert not model_fetch.fetch_voice_for(voice).ok
+        monkeypatch.setenv("AZURE_SPEECH_KEY", "k")
+        assert model_fetch.voice_status(voice).ok

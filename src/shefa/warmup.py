@@ -32,7 +32,11 @@ async def ping_llm() -> None:
     unload timer to Ollama's default, so this has to repeat while the line is idle."""
     if settings.pipeline.llm.provider != "local":
         return
+    from shefa.models.registry import hosted_key
+
     _, adapter = settings.models.resolve_llm_adapter("local")
+    if hosted_key(adapter):  # a hosted service (Gemini, Groq) is not Ollama: nothing to keep warm
+        return
     base = adapter.base_url.rstrip("/").removesuffix("/v1")
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(
