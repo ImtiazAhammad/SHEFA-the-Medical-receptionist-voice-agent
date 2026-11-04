@@ -41,6 +41,12 @@ class OpenAILLM(BaseLLM):
             for t in tools
         ]
 
+    def _tools_arg(self, tools: list[ToolDefinition] | None) -> dict[str, Any]:
+        """`tools` only when there are some: the SDK sends a bare None as `"tools": null`,
+        and the router path (JSON mode, no tools) must not depend on the API tolerating it."""
+        converted = self._convert_tools(tools)
+        return {"tools": converted} if converted else {}
+
     def _parse_response(self, response: Any) -> LLMResult:
         choice = response.choices[0]
         message = choice.message
@@ -75,7 +81,7 @@ class OpenAILLM(BaseLLM):
         response = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            tools=self._convert_tools(tools),
+            **self._tools_arg(tools),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             **kwargs,
@@ -91,7 +97,7 @@ class OpenAILLM(BaseLLM):
         response = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            tools=self._convert_tools(tools),
+            **self._tools_arg(tools),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             stream=True,

@@ -251,3 +251,76 @@ def test_emergency_suppresses_repeat_prompt():
 def test_is_emergency_is_case_insensitive():
     assert is_emergency("CHEST PAIN", Language.ENGLISH)
     assert not is_emergency("I need a routine checkup", Language.ENGLISH)
+
+
+async def _openai_result(payload: dict, sent: list | None = None, language: str = "auto"):
+    import httpx
+
+    from shefa.models.stt.openai_stt import OpenAISTT
+
+    def reply(request):
+        if sent is not None:
+            sent.append(request)
+        return httpx.Response(200, json=payload)
+
+    stt = OpenAISTT(api_key="sk-test")
+    await stt._client.aclose()
+    stt._client = httpx.AsyncClient(transport=httpx.MockTransport(reply))
+    try:
+        return await stt.transcribe(b"\x00\x00" * 1600, language=language)
+    finally:
+        await stt.close()
+
+
+async def test_openai_request_is_a_multipart_upload_of_a_real_wav_file():
+    """The form dict was passed as `content=`, which httpx rejects: the adapter never ran.
+    Raw pipeline PCM also has to be wrapped as WAV for the API to decode it."""
+    sent: list = []
+    await _openai_result({"text": "hi", "language": "english"}, sent, language="bn")
+
+    body = sent[0].read()
+    assert sent[0].headers["content-type"].startswith("multipart/form-data")
+    assert sent[0].headers["authorization"] == "Bearer sk-test"
+    assert b"RIFF" in body and b"WAVE" in body
+    assert b'name="model"' in body and b"whisper-1" in body
+    assert b'name="language"' in body
+
+
+def test_openai_wav_wrapping_leaves_a_wav_file_alone():
+    from shefa.models.stt.openai_stt import as_wav
+
+    wav = as_wav(b"\x00\x00" * 10)
+
+    assert wav.startswith(b"RIFF")
+    assert as_wav(wav) == wav
+
+
+async def test_openai_clear_speech_is_confident_not_asked_to_repeat():
+    """`confidence` was `no_speech_prob` itself: clear speech scored ~0 and every
+    utterance on the cloud STT got "sorry, could you repeat?"."""
+    result = await _openai_result(
+        {
+            "text": "আমি ডাক্তার দেখাতে চাই",
+            "language": "bengali",
+            "segments": [{"no_speech_prob": 0.02}, {"no_speech_prob": 0.04}],
+        }
+    )
+
+    assert result.confidence == pytest.approx(0.97)
+    assert result.language == Language.BANGLA
+    assert not needs_repeat(result.confidence, result.text, result.language)
+
+
+async def test_openai_likely_silence_is_not_confident():
+    result = await _openai_result(
+        {"text": "you", "language": "english", "segments": [{"no_speech_prob": 0.9}]}
+    )
+
+    assert result.confidence == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize(("text", "expected"), [("hello", 1.0), ("  ", 0.0)])
+async def test_openai_without_segments_trusts_only_non_empty_text(text, expected):
+    result = await _openai_result({"text": text, "language": "english"})
+
+    assert result.confidence == expected
