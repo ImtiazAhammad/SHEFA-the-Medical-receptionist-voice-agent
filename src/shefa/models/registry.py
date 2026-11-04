@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from shefa.config.settings import settings
 
 if TYPE_CHECKING:
+    from shefa.config.settings import VoiceConfig
     from shefa.models.base import BaseLLM, BaseSTT, BaseTTS
 
 
@@ -43,17 +44,18 @@ class ModelRegistry:
         if provider == "openai":
             return OpenAISTT(model=settings.pipeline.stt.model)
         if provider == "whisper_local":
-            from shefa.models.stt.whisper_local import WhisperLocalSTT
+            stt = settings.pipeline.stt
+            if not stt.per_language:
+                return self._whisper("stt_whisper_local")
+            from shefa.models.stt.routed import LanguageRoutedSTT
 
-            # Read model_size/device/compute_type from the resolved adapter.
-            # WhisperLocalSTT defaults to large-v3 on cuda/float16, so calling it
-            # with no arguments silently ignored the configured model and OOM'd on
-            # any machine whose GPU was not exclusively free.
-            adapter = settings.models.adapters.get("stt_whisper_local")
-            return WhisperLocalSTT(
-                model_size=(adapter.model_size if adapter else None) or "large-v3",
-                device=getattr(adapter, "device", None),
-                compute_type=getattr(adapter, "compute_type", None),
+            # One instance per adapter key, so a model serving two roles loads once.
+            loaded: dict[str, BaseSTT] = {}
+            for key in {*stt.per_language.values(), stt.detector or stt.per_language["en"]}:
+                loaded[key] = self._whisper(key)
+            return LanguageRoutedSTT(
+                detector=loaded[stt.detector or stt.per_language["en"]],
+                models={lang: loaded[key] for lang, key in stt.per_language.items()},
             )
         if provider == "elevenlabs":
             from shefa.models.stt.elevenlabs_stt import ElevenLabsSTT
@@ -61,26 +63,59 @@ class ModelRegistry:
             return ElevenLabsSTT()
         raise ValueError(f"Unknown STT provider: {provider}")
 
+    def _whisper(self, key: str) -> BaseSTT:
+        """A faster-whisper model from its `models.adapters` entry.
+
+        Reads model_size/device/compute_type from the adapter: WhisperLocalSTT defaults
+        to large-v3 on cuda/float16, so constructing it bare silently ignored the
+        configured model and OOM'd on any machine whose GPU was not exclusively free.
+        """
+        from shefa.models.stt.whisper_local import WhisperLocalSTT
+
+        adapter = settings.models.adapters.get(key)
+        if key != "stt_whisper_local" and getattr(adapter, "type", None) != "whisper_local_stt":
+            raise ValueError(f"models.adapters.{key} must be a whisper_local_stt adapter")
+        return WhisperLocalSTT(
+            model_size=(adapter.model_size if adapter else None) or "large-v3",
+            device=getattr(adapter, "device", None),
+            compute_type=getattr(adapter, "compute_type", None),
+        )
+
     async def _create_tts(self) -> BaseTTS:
-        provider = settings.pipeline.tts.provider
+        """The primary-language voice, or one voice per language when `tts.voices` is set."""
+        tts = settings.pipeline.tts
+        if not tts.voices:
+            return self._create_voice(tts.voice_for(""))
+        from shefa.models.tts.routed import LanguageRoutedTTS
+
+        primary = settings.languages.primary
+        languages = {primary, *tts.voices}
+        return LanguageRoutedTTS(
+            {language: self._create_voice(tts.voice_for(language)) for language in languages},
+            default=primary,
+        )
+
+    def _create_voice(self, voice: VoiceConfig) -> BaseTTS:
+        provider = voice.provider
         if provider == "elevenlabs":
             from shefa.models.tts.elevenlabs_tts import ElevenLabsTTS
 
-            return ElevenLabsTTS(
-                model=settings.pipeline.tts.model,
-                voice_id=settings.pipeline.tts.voice_id,
-            )
+            return ElevenLabsTTS(model=voice.model, voice_id=voice.voice_id)
         if provider == "piper":
             from shefa.models.tts.piper_tts import PiperTTS
 
             return PiperTTS(
-                model_path=settings.pipeline.tts.voice_path,
+                model_path=voice.voice_path,
                 sample_rate=settings.pipeline.tts.sample_rate,
             )
         if provider == "vits":
             from shefa.models.tts.vits_tts import VITSTTS
 
-            return VITSTTS()
+            return VITSTTS(model_dir=voice.voice_path, use_cuda=voice.device == "cuda")
+        if provider == "kokoro":
+            from shefa.models.tts.kokoro_tts import KokoroTTS
+
+            return KokoroTTS(voice=voice.voice_id, device=voice.device or None)
         raise ValueError(f"Unknown TTS provider: {provider}")
 
     async def _create_llm(self) -> BaseLLM:

@@ -192,21 +192,118 @@ def pull_llm(
     return Check(True, f"language model pulled: {model}")
 
 
+def configured_voices(tts: Any) -> list[Any]:
+    """Every voice the config speaks with, resolved: the primary voice, then each
+    per-language voice in `tts.voices` (duplicates dropped)."""
+    voices = [tts.voice_for("")] if hasattr(tts, "voice_for") else [tts]
+    for language in getattr(tts, "voices", None) or {}:
+        voices.append(tts.voice_for(language))
+    unique: list[Any] = []
+    seen: set[tuple[str, str, str]] = set()
+    for voice in voices:
+        key = (voice.provider, voice.voice_path, getattr(voice, "voice_id", ""))
+        if key not in seen:
+            seen.add(key)
+            unique.append(voice)
+    return unique
+
+
+def _hf_snapshot(repo: str, directory: Path) -> None:
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(repo, local_dir=str(directory))
+
+
+def fetch_vits_voice(
+    model_dir: str,
+    repo: str,
+    find_spec: Callable[[str], Any] = importlib.util.find_spec,
+    download: Callable[[str, Path], None] = _hf_snapshot,
+) -> Check:
+    """A Coqui VITS voice (checkpoint + config.json) from its Hugging Face repo."""
+    from shefa.models.tts.vits_tts import checkpoint_files
+
+    if find_spec("TTS") is None:
+        return Check(False, f"VITS voice {model_dir} needs: uv sync --extra bangla-vits")
+    try:
+        checkpoint_files(model_dir)
+        return Check(True, f"voice present: {model_dir}")
+    except FileNotFoundError:
+        pass
+    if not repo:
+        return Check(False, f"voice missing: {model_dir} (set `model` to its Hugging Face repo)")
+    if find_spec("huggingface_hub") is None:
+        return Check(False, "downloading a VITS voice needs huggingface_hub: uv pip install it")
+    try:
+        download(repo, Path(model_dir))
+        checkpoint_files(model_dir)
+    except Exception as error:  # noqa: BLE001 - reported, never raised
+        return Check(False, f"could not download voice {repo}: {error}")
+    return Check(True, f"voice downloaded: {model_dir} from {repo}")
+
+
+def kokoro_check(voice: str, find_spec: Callable[[str], Any] = importlib.util.find_spec) -> Check:
+    if find_spec("kokoro") is None:
+        return Check(
+            False,
+            "English voice (Kokoro) needs: uv sync --extra kokoro, and espeak-ng "
+            "(apt install espeak-ng / brew install espeak-ng)",
+        )
+    return Check(True, f"Kokoro voice {voice} installed (weights download on first use)")
+
+
+def voice_status(voice: Any, find_spec: Callable[[str], Any] = importlib.util.find_spec) -> (
+    Check | None
+):
+    """Whether one resolved voice is ready, without downloading anything (for doctor)."""
+    if voice.provider == "piper":
+        model = Path(voice.voice_path)
+        if _present(model) and _present(model.with_name(model.name + ".json")):
+            return Check(True, f"voice found: {model}")
+        return Check(False, f"voice missing: {model} (download it with: shefa fetch-models)")
+    if voice.provider == "kokoro":
+        return kokoro_check(voice.voice_id, find_spec)
+    if voice.provider == "vits":
+        from shefa.models.tts.vits_tts import checkpoint_files
+
+        if find_spec("TTS") is None:
+            return Check(False, f"VITS voice {voice.voice_path} needs: uv sync --extra bangla-vits")
+        try:
+            checkpoint_files(voice.voice_path)
+        except FileNotFoundError:
+            return Check(False, f"voice missing: {voice.voice_path} (run: shefa fetch-models)")
+        return Check(True, f"voice found: {voice.voice_path}")
+    return None
+
+
+def fetch_voice_for(voice: Any) -> Check | None:
+    """Fetch or check one resolved voice; None for cloud voices (nothing to fetch)."""
+    if voice.provider == "piper":
+        return fetch_voice(voice.voice_path)
+    if voice.provider == "kokoro":
+        return kokoro_check(voice.voice_id)
+    if voice.provider == "vits":
+        return fetch_vits_voice(voice.voice_path, voice.model)
+    return None
+
+
 def fetch_all(
     config: Any,
     *,
     speech: bool = True,
-    fetch_voice_fn: Callable[[str], Check] = fetch_voice,
+    voice_fn: Callable[[Any], Check | None] = fetch_voice_for,
     runtime_fn: Callable[[], Check] = speech_runtime_check,
     speech_fn: Callable[[str], Check] = fetch_speech_model,
     llm_fn: Callable[[Any], Check | None] = llm_check_for,
     pull_fn: Callable[[str], Check] = pull_llm,
 ) -> list[Check]:
-    """Fetch what the configured providers need, in order: voice, speech, language model."""
+    """Fetch what the configured providers need, in order: voices, speech, language model."""
     checks: list[Check] = []
     pipeline = config.pipeline
-    if pipeline.tts.provider == "piper":
-        checks.append(fetch_voice_fn(pipeline.tts.voice_path))
+    for voice in configured_voices(pipeline.tts):
+        check = voice_fn(voice)
+        if check is not None:
+            checks.append(check)
     adapter = config.models.adapters.get("stt_whisper_local")
     model_dir = getattr(adapter, "model_size", "") or ""
     if pipeline.stt.provider == "whisper_local":

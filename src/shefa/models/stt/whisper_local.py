@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 from pathlib import Path
 
 from shefa.audio import strip_wav_header
@@ -191,11 +192,39 @@ class WhisperLocalSTT(BaseSTT):
             text_parts.append(seg.text)
             segment_confidences.append(_segment_confidence(seg))
 
-        full_text = " ".join(text_parts).strip()
+        # NFC: Bangla vowel signs arrive in composed and decomposed forms; unnormalised
+        # text more than doubled measured Bangla WER in a 2026 benchmark and breaks
+        # exact matches such as the emergency phrase list.
+        full_text = unicodedata.normalize("NFC", " ".join(text_parts).strip())
         detected = info.language or "en"
         confidence = _combine_confidence(info, segment_confidences, full_text)
         duration_ms = info.duration * 1000 if hasattr(info, "duration") else 0.0
         return full_text, detected, confidence, duration_ms
+
+    def _detect_once(self, audio_np) -> tuple[str, float, dict[str, float]]:
+        detect = getattr(self._model, "detect_language", None)
+        if detect is not None:
+            top, probability, ranked = detect(audio_np)
+        else:  # older faster-whisper: detection runs before the lazy decode starts
+            _segments, info = self._model.transcribe(audio_np, beam_size=1)
+            top, probability = info.language, info.language_probability
+            ranked = getattr(info, "all_language_probs", None) or []
+        return top, float(probability), {code: float(p) for code, p in ranked}
+
+    async def detect_language(self, audio_data: bytes) -> tuple[str, float, dict[str, float]]:
+        """(top language, its probability, every language's probability) for the audio."""
+        import numpy as np
+
+        self._ensure_model()
+        payload = strip_wav_header(audio_data)
+        usable = len(payload) - (len(payload) % 2)
+        audio_np = np.frombuffer(payload[:usable], dtype="<i2").astype(np.float32) / 32768.0
+        try:
+            return self._detect_once(audio_np)
+        except Exception:
+            if not self._fall_back_to_cpu():
+                raise
+            return self._detect_once(audio_np)
 
     async def transcribe_stream(
         self, audio_chunk: bytes, language: str = "auto"

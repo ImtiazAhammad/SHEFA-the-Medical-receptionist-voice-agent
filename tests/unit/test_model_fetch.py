@@ -5,6 +5,7 @@ No network, GPU or Ollama: every downloader, HTTP getter and process runner is i
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -274,7 +275,7 @@ class TestFetchAll:
             return run
 
         kwargs = {
-            "fetch_voice_fn": step("voice"),
+            "voice_fn": step("voice"),
             "runtime_fn": step("runtime"),
             "speech_fn": step("speech"),
             "llm_fn": step("llm"),
@@ -295,9 +296,10 @@ class TestFetchAll:
         assert calls == ["voice", "llm"]
 
     def test_a_cloud_voice_needs_no_download(self):
-        _checks, calls = self._run(_config(tts="elevenlabs", stt="openai"))
+        voice = SimpleNamespace(provider="elevenlabs", voice_path="", voice_id="v")
 
-        assert calls == ["llm"]
+        assert model_fetch.fetch_voice_for(voice) is None
+        assert model_fetch.voice_status(voice) is None
 
     def test_the_speech_build_can_be_skipped(self):
         checks, calls = self._run(_config(), speech=False)
@@ -406,3 +408,153 @@ class TestDoctorLanguageModel:
         assert ("  ok       language model" if ok else "  BLOCKER  language model") in text
         if ok is False:
             assert passed is False
+
+
+class TestVoicesOfEveryKind:
+    def test_configured_voices_are_resolved_and_deduplicated(self):
+        from shefa.config.settings import TTSConfig, VoiceConfig
+
+        tts = TTSConfig(
+            provider="piper",
+            voice_path="bn.onnx",
+            voices={
+                "bn": VoiceConfig(),
+                "en": VoiceConfig(provider="kokoro", voice_id="af_heart"),
+            },
+        )
+
+        voices = model_fetch.configured_voices(tts)
+
+        assert [(v.provider, v.voice_path or v.voice_id) for v in voices] == [
+            ("piper", "bn.onnx"),
+            ("kokoro", "af_heart"),
+        ]
+
+    def test_fetch_dispatches_by_provider(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(model_fetch, "fetch_voice", lambda path: seen.append(path) or "p")
+        monkeypatch.setattr(model_fetch, "kokoro_check", lambda v: seen.append(v) or "k")
+        monkeypatch.setattr(
+            model_fetch, "fetch_vits_voice", lambda d, repo: seen.append((d, repo)) or "v"
+        )
+
+        results = [
+            model_fetch.fetch_voice_for(SimpleNamespace(provider=p, voice_path="x", voice_id="y",
+                                                        model="r"))
+            for p in ("piper", "kokoro", "vits")
+        ]
+
+        assert results == ["p", "k", "v"]
+        assert seen == ["x", "y", ("x", "r")]
+
+    def test_kokoro_needs_its_extra(self):
+        missing = model_fetch.kokoro_check("af_heart", lambda name: None)
+        present = model_fetch.kokoro_check("af_heart", lambda name: object())
+
+        assert not missing.ok and "--extra kokoro" in missing.detail
+        assert present.ok
+
+    def _vits_dir(self, tmp_path):
+        directory = tmp_path / "vits"
+        directory.mkdir()
+        (directory / "best.pth").write_bytes(b"x")
+        (directory / "config.json").write_text("{}")
+        return directory
+
+    def test_vits_needs_coqui(self, tmp_path):
+        check = model_fetch.fetch_vits_voice(str(tmp_path), "repo", lambda name: None)
+
+        assert not check.ok and "--extra bangla-vits" in check.detail
+
+    def test_a_present_vits_voice_is_not_downloaded(self, tmp_path):
+        directory = self._vits_dir(tmp_path)
+
+        assert model_fetch.fetch_vits_voice(str(directory), "", lambda n: object()).ok
+
+    def test_a_vits_voice_without_a_repo_cannot_be_fetched(self, tmp_path):
+        check = model_fetch.fetch_vits_voice(str(tmp_path / "v"), "", lambda n: object())
+
+        assert not check.ok and "Hugging Face repo" in check.detail
+
+    def test_vits_download_needs_huggingface_hub(self, tmp_path):
+        check = model_fetch.fetch_vits_voice(
+            str(tmp_path / "v"), "org/voice", lambda n: None if n == "huggingface_hub" else 1
+        )
+
+        assert not check.ok and "huggingface_hub" in check.detail
+
+    def test_vits_download(self, tmp_path):
+        target = tmp_path / "v"
+
+        def download(repo, directory):
+            directory.mkdir()
+            (directory / "m.pth").write_bytes(b"x")
+            (directory / "config.json").write_text("{}")
+
+        check = model_fetch.fetch_vits_voice(str(target), "org/voice", lambda n: 1, download)
+
+        assert check.ok and "org/voice" in check.detail
+
+    def test_a_vits_download_without_a_config_is_reported(self, tmp_path):
+        """The published bangla-speech-processing voices ship a 0-byte config: the
+        checkpoint check after download catches a repo that does not hold a voice."""
+
+        def download(repo, directory):
+            directory.mkdir()
+
+        check = model_fetch.fetch_vits_voice(str(tmp_path / "v"), "org/x", lambda n: 1, download)
+
+        assert not check.ok and "could not download" in check.detail
+
+    def test_the_default_vits_downloader_is_a_hub_snapshot(self, monkeypatch, tmp_path):
+        calls = []
+        module = SimpleNamespace(snapshot_download=lambda repo, local_dir: calls.append(
+            (repo, local_dir)))
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+
+        model_fetch._hf_snapshot("org/voice", tmp_path)
+
+        assert calls == [("org/voice", str(tmp_path))]
+
+    def test_voice_status_never_downloads(self, tmp_path):
+        piper = tmp_path / "v.onnx"
+        missing = model_fetch.voice_status(SimpleNamespace(provider="piper", voice_path=str(piper)))
+        piper.write_bytes(b"x")
+        (tmp_path / "v.onnx.json").write_text("{}")
+        found = model_fetch.voice_status(SimpleNamespace(provider="piper", voice_path=str(piper)))
+
+        assert not missing.ok and "fetch-models" in missing.detail
+        assert found.ok
+
+    def test_voice_status_for_kokoro_and_vits(self, tmp_path):
+        kokoro = SimpleNamespace(provider="kokoro", voice_id="af_heart")
+        vits_dir = self._vits_dir(tmp_path)
+        vits = SimpleNamespace(provider="vits", voice_path=str(vits_dir))
+        gone = SimpleNamespace(provider="vits", voice_path=str(tmp_path / "gone"))
+
+        assert model_fetch.voice_status(kokoro, lambda n: None).ok is False
+        assert model_fetch.voice_status(vits, lambda n: None).ok is False
+        assert model_fetch.voice_status(vits, lambda n: object()).ok is True
+        assert model_fetch.voice_status(gone, lambda n: object()).ok is False
+
+
+class TestDoctorVoices:
+    def test_doctor_reports_each_extra_voice(self, monkeypatch):
+        monkeypatch.setattr(
+            model_fetch,
+            "voice_status",
+            lambda voice: None if voice.provider == "elevenlabs" else Check(False, "voice x"),
+        )
+        from shefa.config.settings import VoiceConfig, settings
+
+        monkeypatch.setattr(
+            settings.pipeline.tts,
+            "voices",
+            {"en": VoiceConfig(provider="kokoro"), "xx": VoiceConfig(provider="elevenlabs")},
+        )
+
+        text, ok = cli.doctor_report()
+
+        assert "  BLOCKER  en voice x" in text
+        assert "xx" not in text
+        assert ok is False

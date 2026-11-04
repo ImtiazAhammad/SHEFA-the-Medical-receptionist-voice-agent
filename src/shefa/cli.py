@@ -144,7 +144,7 @@ async def _measure_tts(texts: list[str], vram: bool):
 def doctor_report(**_: Any) -> tuple[str, bool]:
     """Report whether every configured adapter resolves. Returns (text, ok)."""
     from shefa.config.settings import settings
-    from shefa.model_fetch import llm_check_for
+    from shefa.model_fetch import llm_check_for, voice_status
     from shefa.models.tts.piper_tts import PiperTTS
 
     lines: list[str] = []
@@ -170,6 +170,14 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
         ok = False
     else:
         lines.append(f"  ok       bn voice found: {bn_voices[0]}")
+
+    tts_config = settings.pipeline.tts
+    for language in getattr(tts_config, "voices", None) or {}:
+        status = voice_status(tts_config.voice_for(language))
+        if status is not None:
+            status.detail = f"{language} {status.detail}"
+            lines.append(status.line())
+            ok = ok and status.ok
 
     models = getattr(settings, "models", None)
     stt_adapter = models.adapters.get("stt_whisper_local") if models else None

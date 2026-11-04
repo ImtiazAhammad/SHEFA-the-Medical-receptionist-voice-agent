@@ -1,45 +1,47 @@
-﻿"""VITS TTS adapter for Bangla synthesis."""
+﻿"""Coqui VITS voices, e.g. bangla-speech-processing/bangla_tts_female (MIT, Bangladeshi).
+
+`uv sync --extra bangla-vits` installs the maintained `coqui-tts` fork. `model_dir` holds
+the checkpoint (`*.pth`) and its `config.json`, as `shefa fetch-models` downloads them.
+The previous adapter loaded a placeholder `repo_owner/vits_bangla` hub entry and could
+never have run.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from shefa.models.base import BaseTTS, TTSResult
+from shefa.models.tts.threaded import ThreadedTTS, float_to_frame
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import Iterator
+
+    from shefa.audio import AudioFrame
 
 
-class VITSTTS(BaseTTS):
-    def __init__(self, model_path: str = "models/vits/bangla_vits.pt"):
-        self.model_path = model_path
-        self._model = None
+def checkpoint_files(model_dir: str) -> tuple[Path, Path]:
+    """(checkpoint, config) inside `model_dir`; raises FileNotFoundError naming what is missing."""
+    directory = Path(model_dir)
+    config = directory / "config.json"
+    checkpoints = sorted(directory.glob("*.pth"))
+    if not checkpoints or not config.exists():
+        raise FileNotFoundError(f"no *.pth checkpoint and config.json in {directory}")
+    return checkpoints[0], config
 
-    def _ensure_model(self) -> None:
-        if self._model is None:
-            import torch
 
-            self._model = torch.hub.load(
-                "repo_owner/vits_bangla", "vits_bangla", source="local",
-                model_path=self.model_path
-            )
+class VITSTTS(ThreadedTTS):
+    def __init__(self, model_dir: str = "models/vits/bangla_tts_female", use_cuda: bool = False):
+        super().__init__()
+        self.model_dir = model_dir
+        self.use_cuda = use_cuda
 
-    async def synthesize(self, text: str, language: str = "en") -> TTSResult:
-        self._ensure_model()
-        import io
+    def _load(self) -> Any:
+        from TTS.utils.synthesizer import Synthesizer
 
-        import numpy as np
-        import soundfile as sf
+        checkpoint, config = checkpoint_files(self.model_dir)
+        return Synthesizer(
+            tts_checkpoint=str(checkpoint), tts_config_path=str(config), use_cuda=self.use_cuda
+        )
 
-        audio = self._model.infer(text)
-        audio_np = np.array(audio, dtype=np.float32)
-        buf = io.BytesIO()
-        sf.write(buf, audio_np, 22050, format="WAV")
-        return TTSResult(audio_bytes=buf.getvalue(), sample_rate=22050)
-
-    async def synthesize_stream(self, text: str, language: str = "en") -> AsyncIterator[bytes]:
-        result = await self.synthesize(text, language)
-        yield result.audio_bytes
-
-    async def close(self) -> None:
-        self._model = None
+    def _frames(self, model: Any, text: str) -> Iterator[AudioFrame]:
+        yield float_to_frame(model.tts(text), int(model.output_sample_rate))

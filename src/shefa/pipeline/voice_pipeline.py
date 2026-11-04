@@ -6,6 +6,7 @@ Orchestrates the full real-time conversation loop for each call session.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -113,9 +114,12 @@ async def speak_to(
     still being generated. A barge-in during a long reply therefore stops
     synthesis instead of finishing audio nobody will hear.
     """
-    async for frame in tts.synthesize_stream(text, language=language):
-        if not frame.is_empty:
-            await put_playback(frame)
+    # aclosing: when the turn is cancelled (barge-in), the voice's stream is closed at
+    # once, so its synthesis thread stops rather than waiting for garbage collection.
+    async with contextlib.aclosing(tts.synthesize_stream(text, language=language)) as frames:
+        async for frame in frames:
+            if not frame.is_empty:
+                await put_playback(frame)
 
 
 class VoicePipeline:
