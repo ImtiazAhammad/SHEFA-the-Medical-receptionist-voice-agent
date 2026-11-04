@@ -51,6 +51,7 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
         "shefa/coverage_policy.py",
         "shefa/integrations/calendar.py",
         "shefa/integrations/ehr.py",
+        "shefa/model_fetch.py",
         "shefa/models/base.py",
         "shefa/models/stt/whisper_local.py",
         "shefa/models/tts/piper_tts.py",

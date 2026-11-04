@@ -19,6 +19,16 @@ from typing import Any
 
 DEFAULT_ITERATIONS = 20
 
+# `shefa setup --demo`: the same agent with OpenAI doing speech recognition and the language
+# model, so a laptop without a GPU or Ollama can run it. The voice (Piper) still runs here,
+# and tool calls still go through the JSON action router, the path production uses.
+DEMO_PROFILE: dict[str, Any] = {
+    "pipeline": {
+        "stt": {"provider": "openai", "model": "whisper-1"},
+        "llm": {"provider": "openai"},
+    },
+}
+
 BENCH_TEXTS = [
     "Thank you for calling. How can I help you today?",
     "I can help you book an appointment with one of our doctors.",
@@ -53,6 +63,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check that the configured adapters actually load")
 
+    fetch = sub.add_parser(
+        "fetch-models", help="download the voice, build the speech model, pull the LLM"
+    )
+    fetch.add_argument(
+        "--skip-speech",
+        action="store_true",
+        help="do not build the Bangla speech model (the one-time conversion needs torch)",
+    )
+
     clinic = sub.add_parser("clinic", help="manage the clinic directory")
     clinic_sub = clinic.add_subparsers(dest="clinic_command")
     importer = clinic_sub.add_parser(
@@ -79,6 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--clinic", default="", help="clinic YAML to import (default: the sample)")
     setup.add_argument(
         "--force", action="store_true", help="replace an existing configs/local.yaml"
+    )
+    setup.add_argument(
+        "--demo",
+        action="store_true",
+        help="demo without a GPU: speech recognition and the LLM on OpenAI, the voice local",
     )
 
     serve = sub.add_parser("serve", help="start the server and the web console")
@@ -120,6 +144,7 @@ async def _measure_tts(texts: list[str], vram: bool):
 def doctor_report(**_: Any) -> tuple[str, bool]:
     """Report whether every configured adapter resolves. Returns (text, ok)."""
     from shefa.config.settings import settings
+    from shefa.model_fetch import llm_check_for
     from shefa.models.tts.piper_tts import PiperTTS
 
     lines: list[str] = []
@@ -157,9 +182,14 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
         else:
             lines.append(
                 f"  BLOCKER  speech model missing: {stt_model} "
-                "(build it once with: python scripts/fetch_stt_model.py)"
+                "(build it once with: shefa fetch-models, or python scripts/fetch_stt_model.py)"
             )
             ok = False
+
+    llm = llm_check_for(settings)
+    if llm is not None:
+        lines.append(llm.line())
+        ok = ok and llm.ok
 
     tts = PiperTTS(model_path=str(voice))
     try:
@@ -278,19 +308,14 @@ def run_setup(args: argparse.Namespace) -> int:
         print(f"{local} already exists; use --force to replace it (this mints a new token).")
         return 1
     token, record = token_mint(args.name, "admin")
-    local.write_text(
-        yaml.safe_dump(
-            {
-                "telephony": {"provider": "browser"},
-                "reminders": {"enabled": True},
-                "auth": {
-                    "principals": [{"name": args.name, "role": "admin", "token_hash": record}]
-                },
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
+    choices: dict[str, Any] = {
+        "telephony": {"provider": "browser"},
+        "reminders": {"enabled": True},
+        "auth": {"principals": [{"name": args.name, "role": "admin", "token_hash": record}]},
+    }
+    if args.demo:
+        choices.update(DEMO_PROFILE)
+    local.write_text(yaml.safe_dump(choices, sort_keys=False), encoding="utf-8")
     local.chmod(0o600)
     clinic_file = Path(args.clinic or "configs/clinic.example.yaml")
     try:
@@ -301,10 +326,40 @@ def run_setup(args: argparse.Namespace) -> int:
     print(
         f"Wrote {local}\n{clinic_note}\n\n"
         f"Your access token (shown once, not stored):\n  {token}\n\n"
-        "Next:  shefa serve        then open http://127.0.0.1:8000/console\n"
+        + (_demo_note() if args.demo else "")
+        + "Next:  shefa fetch-models   then: shefa serve   and open http://127.0.0.1:8000/console\n"
         "Phone: shefa serve --host 0.0.0.0 --https   then open https://<this-machine>:8000/console"
     )
     return 0
+
+
+def _demo_note() -> str:
+    import os
+
+    key = (
+        "OPENAI_API_KEY is set."
+        if os.environ.get("OPENAI_API_KEY")
+        else "Put OPENAI_API_KEY=sk-... in .env before serving."
+    )
+    return (
+        "Demo profile: speech recognition and the language model run on OpenAI, the voice\n"
+        "runs here. Caller audio and text leave this machine, so use it for demos only,\n"
+        f"never for real patients. {key}\n\n"
+    )
+
+
+def run_fetch_models(args: argparse.Namespace) -> int:
+    from shefa.config.settings import settings
+    from shefa.model_fetch import fetch_all
+
+    checks = fetch_all(settings, speech=not args.skip_speech)
+    for check in checks:
+        print(check.line())
+    if all(check.ok for check in checks):
+        print("\nEverything the configured pipeline needs is here. Next: shefa serve")
+        return 0
+    print("\nFix the BLOCKER lines above, then run shefa fetch-models again.")
+    return 1
 
 
 def run_serve(args: argparse.Namespace) -> int:
@@ -438,6 +493,9 @@ def main(argv: list[str] | None = None) -> int:
         text, ok = doctor_report()
         print(text)
         return 0 if ok else 1
+
+    if args.command == "fetch-models":
+        return run_fetch_models(args)
 
     if args.command == "token":
         if args.role not in configured_roles():
