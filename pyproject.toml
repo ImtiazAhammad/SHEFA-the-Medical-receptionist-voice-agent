@@ -35,6 +35,8 @@ dependencies = [
     "ruff>=0.8.0",
     "pre-commit>=4.0.0",
     "piper-tts",
+    # Python 3.13 removed `audioop`; the mu-law tests use it as their reference codec.
+    "audioop-lts>=0.2.1; python_version >= '3.13'",
 ]
 
 [project.optional-dependencies]
