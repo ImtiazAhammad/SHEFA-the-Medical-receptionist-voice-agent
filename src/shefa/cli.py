@@ -105,6 +105,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="demo without a GPU: speech recognition and the LLM on OpenAI, the voice local",
     )
 
+    lab = sub.add_parser("lab", help="conversation lab: scripted and simulated patient calls")
+    lab_sub = lab.add_subparsers(dest="lab_command")
+    lab_run = lab_sub.add_parser("run", help="run the scenarios and write an HTML report")
+    lab_list = lab_sub.add_parser("list", help="list the scenarios")
+    for command in (lab_run, lab_list):
+        command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
+    lab_run.add_argument("--only", default="", help="comma-separated scenario ids")
+    lab_run.add_argument("--out", default="lab-report", help="folder for report.html + audio")
+    lab_run.add_argument("--clinic", default="configs/clinic.example.yaml")
+    lab_run.add_argument(
+        "--audio", action="store_true", help="speak every reply with the configured voices"
+    )
+    lab_run.add_argument(
+        "--speech",
+        action="store_true",
+        help="also speak the patient's lines over a simulated phone line and transcribe them",
+    )
+
     serve = sub.add_parser("serve", help="start the server and the web console")
     serve.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to reach it from a phone")
     serve.add_argument("--port", type=int, default=8000)
@@ -458,6 +476,90 @@ def run_reminders(args: argparse.Namespace) -> int:
     return 0 if ok == len(placed) else 1
 
 
+def run_lab(args: argparse.Namespace) -> int:
+    import yaml
+
+    from shefa.lab.scenarios import load_scenarios
+
+    if args.lab_command not in {"run", "list"}:
+        print("usage: shefa lab {run,list}", file=sys.stderr)
+        return 2
+    try:
+        scenarios = load_scenarios(args.scenarios)
+    except (OSError, ValueError, TypeError, yaml.YAMLError) as error:
+        print(f"Cannot read {args.scenarios}: {error}", file=sys.stderr)
+        return 2
+    if args.lab_command == "list":
+        for scenario in scenarios:
+            kind = "simulated" if scenario.persona else f"{len(scenario.turns)} turn(s)"
+            print(f"{scenario.id:<24} {scenario.language}  {kind:<11} {scenario.tests}")
+        return 0
+    wanted = {name.strip() for name in args.only.split(",") if name.strip()}
+    unknown = wanted - {scenario.id for scenario in scenarios}
+    if unknown:
+        print(f"Unknown scenario id(s): {', '.join(sorted(unknown))}", file=sys.stderr)
+        return 2
+    chosen = [s for s in scenarios if not wanted or s.id in wanted]
+    return asyncio.run(_run_lab(chosen, args))
+
+
+def lab_meta(speech: bool, audio: bool) -> dict[str, str]:
+    """What the report says the run used, so two reports can be compared."""
+    from shefa.config.settings import settings
+
+    pipeline = settings.pipeline
+    _, adapter = settings.models.resolve_llm_adapter(pipeline.llm.provider)
+    meta = {"language model": f"{pipeline.llm.provider} {getattr(adapter, 'model', '')}"}
+    if audio or speech:
+        voices = {lang: pipeline.tts.voice_for(lang) for lang in ("bn", "en")}
+        meta["voices"] = ", ".join(
+            f"{lang} {v.provider} {Path(v.voice_path).stem if v.voice_path else v.voice_id}"
+            for lang, v in voices.items()
+        )
+    if speech:
+        meta["speech recognition"] = pipeline.stt.provider + (
+            " (per language)" if pipeline.stt.per_language else ""
+        )
+        meta["phone line"] = "simulated 8 kHz mu-law"
+    return meta
+
+
+async def _run_lab(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab.report import write_report
+    from shefa.lab.runner import Lab
+    from shefa.models.registry import registry
+    from shefa.store import audit
+
+    out = Path(args.out)
+    work = out / ".work"
+    work.mkdir(parents=True, exist_ok=True)
+    # Lab calls write audit rows like real calls; they go to the lab's own file, never
+    # to the clinic's database.
+    audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
+    voice = await registry.get_tts() if args.audio or args.speech else None
+    stt = await registry.get_stt() if args.speech else None
+    lab = Lab(
+        clinic_file=args.clinic,
+        work_dir=work,
+        voice=voice,
+        stt=stt,
+        patient_llm=await registry.get_llm(),
+    )
+    results = []
+    for scenario in scenarios:
+        print(f"  {scenario.id:<24} ", end="", flush=True)
+        result = await lab.run(scenario)
+        results.append(result)
+        failed = [c.name for c in result.checks if not c.ok]
+        failed += [c.name for t in result.turns for c in t.checks if not c.ok]
+        print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    page = write_report(results, out, lab_meta(args.speech, args.audio))
+    passed = sum(1 for result in results if result.passed)
+    print(f"\n{passed}/{len(results)} scenarios passed. Report: {page}")
+    await registry.reset()
+    return 0 if passed == len(results) else 1
+
+
 def run_asterisk(args: argparse.Namespace) -> int:
     import os
     from pathlib import Path
@@ -538,6 +640,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "asterisk":
         return run_asterisk(args)
+
+    if args.command == "lab":
+        return run_lab(args)
 
     parser.print_help()
     return 2

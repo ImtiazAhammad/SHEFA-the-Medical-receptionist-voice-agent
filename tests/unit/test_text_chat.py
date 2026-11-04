@@ -117,7 +117,7 @@ def test_a_typed_booking_lands_in_the_clinic_store(chat):
         phone="01711000000",
     )
 
-    assert "APT-00001" in reply["reply"]
+    assert "reference number is 1." in reply["reply"]
     booked = default_clinic_store().appointments_on(_tomorrow())
     assert [a["start_time"] for a in booked] == ["09:00"]
 

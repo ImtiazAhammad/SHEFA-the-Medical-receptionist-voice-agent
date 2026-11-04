@@ -1,0 +1,56 @@
+:root{--bg:#f4f6f4;
+  --panel:#fff;
+  --fg:#14211d;
+  --mute:#5f6f69;
+  --line:#dde3df;
+  --accent:#0b7a63;
+  --ok:#15803d;
+  --bad:#c0392b;
+  --chip:#e8efeb;
+  --agent:#eef3f1;
+  --me:#0b7a63;
+  --me-fg:#fff}
+@media(prefers-color-scheme:dark){
+:root{--bg:#0e1513;
+  --panel:#16201d;
+  --fg:#e7eeeb;
+  --mute:#91a39b;
+  --line:#26332e;
+  --accent:#38b89c;
+  --ok:#4ade80;
+  --bad:#ef6b5b;
+  --chip:#1e2b27;
+  --agent:#1c2724;
+  --me:#1f6f5c;
+  --me-fg:#f1faf7}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI","Noto Sans Bengali",sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 64px}
+h1{margin:0 0 4px;font-size:26px}
+h2{font-size:19px;margin:0}
+.sub{color:var(--mute);margin:0 0 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat b{display:block;font-size:24px}
+.stat span{color:var(--mute);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
+.head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.head .tag{margin-left:auto}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;background:var(--chip)}
+.tag.ok{color:var(--ok)}
+.tag.bad{color:var(--bad)}
+.tests{color:var(--mute);margin:6px 0 10px}
+.msg{max-width:88%;margin:8px 0;padding:9px 12px;border-radius:14px;background:var(--agent)}
+.msg.me{margin-left:auto;background:var(--me);color:var(--me-fg)}
+.msg small{display:block;opacity:.7;font-size:11px}
+.msg .heard{opacity:.8;font-size:13px;margin-top:4px}
+audio{width:100%;height:32px;margin-top:6px}
+ul.checks{list-style:none;padding:0;margin:10px 0 0;font-size:14px}
+ul.checks li{padding:2px 0}
+ul.checks .ok::before{content:"✓ ";color:var(--ok)}
+ul.checks .bad::before{content:"✗ ";color:var(--bad)}
+.mute{color:var(--mute)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{text-align:left;padding:6px;border-bottom:1px solid var(--line)}
+a{color:var(--accent)}

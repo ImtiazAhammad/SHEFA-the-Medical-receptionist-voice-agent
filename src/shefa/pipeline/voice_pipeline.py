@@ -390,12 +390,16 @@ class VoicePipeline:
             session.add_turn("assistant", greeting)
             session.state = "active"
 
+        session.metadata["actions"] = []
+
         def result(reply: str) -> dict[str, Any]:
             return {
                 "reply": reply,
                 "greeting": greeting,
                 "language": session.language.value,
                 "state": session.state,
+                # The tools this turn ran, e.g. ["book_appointment"]; [] for plain talk.
+                "actions": list(session.metadata.get("actions", [])),
             }
 
         if session.state in ENDED_STATES:
@@ -509,6 +513,8 @@ class VoicePipeline:
             # disagree. The router call costs the same either way; now only one answer is
             # ever spoken: the template built from the tool result, or a reply grounded on it.
             action = await self._route_with_filler(llm, tts, session, put_playback)
+            if action is not None:
+                session.metadata.setdefault("actions", []).append(action.name)
             if action is None:
                 reply_text, _tool_calls = await self._stream_reply(
                     llm, tts, messages, [], session.language.value, put_playback
@@ -551,6 +557,7 @@ class VoicePipeline:
             tool_calls=tool_calls,
         )
         for tc in tool_calls:
+            session.metadata.setdefault("actions", []).append(tc["name"])
             tool_result = await execute_tool(tc["name"], tc["arguments"], session)
             session.add_turn(
                 "tool",
