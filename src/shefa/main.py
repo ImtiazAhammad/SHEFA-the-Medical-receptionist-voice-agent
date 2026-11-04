@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from shefa.auth import AuthStore, Principal, TokenError
 from shefa.config.settings import TelephonyProvider, settings
 from shefa.session.manager import SessionManager
-from shefa.session.messages import build_messages
 from shefa.telephony.outbound import outbound_configured, place_call
 from shefa.telephony.twilio import app as telephony_app
 from shefa.tools.definitions import get_tool_definitions
@@ -34,6 +33,18 @@ setup_logging(
 logger = structlog.get_logger("shefa")
 
 session_manager = SessionManager()
+
+_text_pipeline = None
+
+
+def text_pipeline():
+    """The pipeline behind typed chats; it shares `session_manager` so the chats are listed."""
+    global _text_pipeline
+    if _text_pipeline is None:
+        from shefa.pipeline.voice_pipeline import VoicePipeline
+
+        _text_pipeline = VoicePipeline(session_manager)
+    return _text_pipeline
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -65,6 +76,7 @@ ERROR_STATUS_MAP: dict[str, int] = {
     "required_param": 422,
     "not_configured": 503,
     "verified_number_missing": 503,
+    "model_unavailable": 503,
 }
 
 DEFAULT_ERROR_MESSAGES: dict[str, str] = {
@@ -76,6 +88,7 @@ DEFAULT_ERROR_MESSAGES: dict[str, str] = {
     "required_param": "Required parameter missing.",
     "not_configured": "Dependency not configured.",
     "verified_number_missing": "No verified number configured.",
+    "model_unavailable": "The language model did not answer.",
 }
 
 
@@ -705,24 +718,22 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         return {"placed": len(placed), "calls": placed}
 
     @app.post("/api/v1/chat")
-    async def text_chat(message: str = "", call_sid: str = "text-chat") -> dict:
-        """Text-only chat endpoint — no voice, just text in/out. Free to test."""
-        if not message:
+    async def text_chat(message: str = "", call_sid: str = "text-chat", phone: str = "") -> dict:
+        """A typed conversation with the agent: the same router, tools, templates and
+        emergency handoff as a call, without audio. `phone` identifies the patient on the
+        chat's first message, as the console's call does."""
+        if not message.strip():
             raise_http_error("required_param", "message is required")
-        session = await session_manager.get_or_create(call_sid)
-        session.add_turn("user", message)
-        from shefa.models.registry import registry
-        from shefa.tools.definitions import get_tool_definitions
-        messages = build_messages(session)
-        llm = await registry.get_llm()
-        llm_result = await llm.generate(messages, tools=get_tool_definitions())
-        session.add_turn("assistant", llm_result.text, llm_result.language)
-        await session_manager.save(session)
-        return {
-            "reply": llm_result.text,
-            "language": llm_result.language.value,
-            "session_id": call_sid,
-        }
+        try:
+            turn = await text_pipeline().handle_text(call_sid, message.strip(), phone.strip())
+        except Exception as error:  # noqa: BLE001 - one envelope for any model fault
+            logger.warning("chat_reply_failed", error=type(error).__name__, detail=str(error))
+            raise_http_error(
+                "model_unavailable",
+                f"The language model did not answer ({type(error).__name__}). "
+                "Check it with: shefa doctor",
+            )
+        return {**turn, "session_id": call_sid}
 
     @app.get("/api/v1/config")
     async def get_config() -> dict:

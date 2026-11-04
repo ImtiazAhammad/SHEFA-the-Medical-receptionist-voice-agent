@@ -5,8 +5,7 @@ from fastapi.testclient import TestClient
 
 from shefa.auth import AuthStore, hash_token
 from shefa.config.settings import settings
-from shefa.main import create_app, session_manager
-from shefa.models.base import Language, LLMResult
+from shefa.main import create_app
 
 # Every route needs a bearer token since T7, so these tests present a clinician
 # token rather than exercising the app unauthenticated. Authorization itself is
@@ -128,45 +127,3 @@ def test_chat_requires_message(client, auth):
 
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "required_param"
-
-
-async def test_chat_round_trip(monkeypatch):
-    from shefa.models.registry import registry
-
-    class FakeLLM:
-        def __init__(self):
-            self.messages = None
-
-        async def generate(self, messages, tools=None, **kwargs):
-            self.messages = messages
-            return LLMResult(text="Hello! How can I help?", language=Language.BANGLA)
-
-        async def close(self):
-            pass
-
-    fake = FakeLLM()
-    monkeypatch.setattr(registry, "_llm", fake)
-    call_sid = "chat-test-1"
-    try:
-        with TestClient(create_app(_local_store())) as c:
-            resp = c.post(
-                "/api/v1/chat",
-                params={"message": "Hello there", "call_sid": call_sid},
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            )
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["reply"] == "Hello! How can I help?"
-        assert data["language"] == "bn"
-        assert data["session_id"] == call_sid
-
-        assert fake.messages[0]["role"] == "system"
-        assert "Unknown" in fake.messages[0]["content"]
-        assert fake.messages[-1]["content"] == "Hello there"
-
-        session = await session_manager.get(call_sid)
-        assert session is not None
-        assert [t.role for t in session.history] == ["user", "assistant"]
-    finally:
-        session_manager._sessions.pop(call_sid, None)

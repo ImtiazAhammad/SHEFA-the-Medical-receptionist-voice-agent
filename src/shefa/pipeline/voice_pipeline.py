@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     # here turns a stalled playback consumer into a call that hangs forever.
     PlaybackSink = Callable[[AudioFrame], Awaitable[None]]
 
-from shefa.audio import TARGET_RATE
+from shefa.audio import TARGET_RATE, AudioFrame
 from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
@@ -39,7 +39,7 @@ from shefa.pipeline.error_taxonomy import (
     MalformedLLMOutputError,
     backoff_delay,
 )
-from shefa.pipeline.language_detector import evaluate_transcript
+from shefa.pipeline.language_detector import detect_language, evaluate_transcript
 from shefa.pipeline.vad import EnergyVAD
 from shefa.session.manager import CallSession, SessionManager
 from shefa.session.messages import build_messages
@@ -65,6 +65,21 @@ _SENTENCE_BOUNDARY = re.compile(r"[।?!\n]+|\.(?=\s|$)")
 
 class _SynthesisError(Exception):
     """Internal marker: a failure came from synthesis, not the model."""
+
+
+class _SilentTTS:
+    """The voice for a typed chat: `speak_to` gets one empty frame and plays nothing."""
+
+    async def synthesize_stream(self, text: str, language: str = "en") -> Any:
+        yield AudioFrame(b"")
+
+
+async def _discard(_frame: AudioFrame) -> None:  # pragma: no cover - never handed audio
+    return None
+
+
+# States a conversation cannot continue from: a human has it, or it was closed.
+ENDED_STATES = frozenset({"escalated", "escaped", "terminated"})
 
 
 def split_complete_sentences(text: str) -> tuple[list[str], str]:
@@ -106,8 +121,8 @@ async def speak_to(
 class VoicePipeline:
     """Real-time voice conversation pipeline."""
 
-    def __init__(self) -> None:
-        self._session_manager = SessionManager()
+    def __init__(self, session_manager: SessionManager | None = None) -> None:
+        self._session_manager = session_manager or SessionManager()
         self._buffer_duration_ms: int = 800
         self._audio_buffers: dict[str, list[bytes]] = {}
         # Consecutive classified turn failures per call; reset on the next
@@ -126,13 +141,7 @@ class VoicePipeline:
         session = await self._session_manager.get_or_create(call_sid)
 
         if session.state == "greeting":
-            if settings.languages.primary in {lang.value for lang in Language}:
-                session.language = Language(settings.languages.primary)
-            greetings = settings.languages.default_greeting
-            greeting = greetings.get(
-                session.language.value,
-                greetings.get("en", ""),
-            )
+            greeting = self._default_greeting(session)
             outbound = pop_context(call_sid)
             if outbound is not None:
                 # An outbound call opens with what it is about, and already knows who it is.
@@ -348,6 +357,84 @@ class VoicePipeline:
             await self._session_manager.save(session)
             self._failures[call_sid] = 0  # a successful turn resets the counter
             self._audio_buffers.setdefault(call_sid, [])
+
+    @staticmethod
+    def _default_greeting(session: CallSession) -> str:
+        """Open in the clinic's primary language and return its greeting."""
+        if settings.languages.primary in {lang.value for lang in Language}:
+            session.language = Language(settings.languages.primary)
+        greetings = settings.languages.default_greeting
+        return greetings.get(session.language.value, greetings.get("en", ""))
+
+    async def handle_text(self, call_sid: str, text: str, phone: str = "") -> dict[str, Any]:
+        """One typed turn, through the same decisions as a spoken one minus the audio.
+
+        The console's text chat uses this, so a demo books, answers directory questions and
+        hands an emergency to a human exactly as a call does, with no microphone or speech
+        model. Returns the reply, the greeting when this turn opened the chat, and the state:
+        "active", or one of ``ENDED_STATES`` once the conversation cannot continue.
+        A failed reply leaves the history as it was, so the same message can be resent.
+        """
+        session = await self._session_manager.get_or_create(call_sid)
+        greeting = None
+        if session.state == "greeting":
+            greeting = self._default_greeting(session)
+            if phone:
+                from shefa.clinic import default_clinic_store
+
+                session.patient_id = str(default_clinic_store().upsert_patient(phone))
+            session.add_turn("assistant", greeting)
+            session.state = "active"
+
+        def result(reply: str) -> dict[str, Any]:
+            return {
+                "reply": reply,
+                "greeting": greeting,
+                "language": session.language.value,
+                "state": session.state,
+            }
+
+        if session.state in ENDED_STATES:
+            return result("")
+
+        detected, certainty = detect_language(text)
+        if detected == Language.OTHER:
+            prompts = settings.escalation.other_language_prompt
+            reply = prompts.get(
+                session.language.value, prompts.get("en", DEFAULT_OTHER_LANGUAGE_PROMPT)
+            )
+            session.add_turn("user", text, Language.OTHER)
+            session.add_turn("assistant", reply, Language.OTHER)
+            session.state = "escaped"
+            await self._session_manager.save(session)
+            return result(reply)
+        threshold = settings.pipeline.language_detection.confidence_threshold
+        if detected != session.language and certainty >= threshold:
+            session.language = detected
+
+        session.add_turn("user", text, session.language)
+        # Typed text is never misheard, so only the emergency decision applies.
+        if evaluate_transcript(text, session.language, 1.0).should_escalate:
+            prompts = settings.escalation.transfer_greeting
+            reply = prompts.get(
+                session.language.value, prompts.get("en", "Transferring you now.")
+            )
+            session.add_turn("assistant", reply, session.language)
+            session.state = "escalated"
+            await self._session_manager.save(session)
+            return result(reply)
+
+        before = len(session.history) - 1
+        try:
+            llm = await registry.get_llm()
+            reply = await self._generate_reply(llm, _SilentTTS(), session, _discard)
+        except Exception:
+            del session.history[before:]
+            await self._session_manager.save(session)
+            raise
+        session.add_turn("assistant", reply, session.language)
+        await self._session_manager.save(session)
+        return result(reply)
 
     async def _stream_reply(
         self,
