@@ -1,3 +1,7 @@
+## Project state
+
+Read `docs/project-status.md` first: what is built, decisions, next steps.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
