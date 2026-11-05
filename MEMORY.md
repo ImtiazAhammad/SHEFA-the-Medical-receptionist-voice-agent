@@ -1,85 +1,64 @@
-# SHEFA Medical Voice Agent
+# SHEFA Medical Voice Agent - quick reference
 
-## What This Is
+Current state, decisions and next steps: [`docs/project-status.md`](docs/project-status.md).
 
-Privacy-first, fully open-source, bilingual (English/Bangla) voice AI medical receptionist. Automates patient calls with real-time STT, language detection, LLM-powered conversation, and TTS response — all through Twilio Media Streams.
+## What this is
 
-## Quick Start
+Privacy-first, bilingual (Bangla/English) voice receptionist for clinics in Bangladesh: answers
+calls, explains doctors/departments/schedules, books/moves/cancels appointments, hands
+emergencies to a human, and calls patients with reminders. All models can run on the clinic's
+machine.
+
+## Quick start
 
 ```bash
-# Install (with local models)
-uv sync --extra local-stt --extra local-tts
-
-# Configure for local mode (Ollama + Whisper + Piper)
-cp .env.example .env   # no API keys needed for local mode
-
-# Run
-uv run uvicorn shefa.main:app --port 8000 --reload
-
-# Dashboard
-open http://localhost:8000/dashboard
+uv sync --extra local-stt-gpu --extra kokoro    # Kokoro (English voice) needs espeak-ng
+uv run shefa setup                              # token, console mode, sample clinic (see --profile, --voices)
+uv run shefa fetch-models                       # voices, Bangla speech model, ollama pull
+uv run shefa doctor                             # every line should say ok
+uv run shefa serve                              # http://127.0.0.1:8000/console
+uv run shefa lab run --audio                    # 19 recorded edge-case calls -> lab-report/report.html
+uv run shefa lab voices                         # blind voice test -> voice-test/index.html
 ```
 
 ## Architecture
 
 ```
-Phone Call -> Twilio Media Streams -> WebSocket
-                                         |
-                                    Voice Pipeline
-                                    STT -> Language Detect -> LLM -> TTS
-                                         |                    |
-                                    Session Manager      Tool Calls
-                                                       (9 tools)
+Caller -> browser console (WebSocket) | Asterisk AudioSocket | Twilio (dev sink)
+       -> VoicePipeline: VAD -> STT (routed by language) -> language/emergency checks
+          -> JSON action router (LLM) -> tools (clinic store, SQLite) -> spoken templates
+          -> TTS (one voice per language, sentence streaming)
+Typed chat (/api/v1/chat) -> VoicePipeline.handle_text (same logic, no audio)
 ```
 
-## Pipeline Providers (configurable in configs/default.yaml)
+## Default models (configs/default.yaml)
 
-| Component | Local Option | Cloud Option |
-|-----------|-------------|--------------|
-| STT | faster-whisper (GPU) | OpenAI Whisper API, ElevenLabs Scribe |
-| LLM | Ollama (qwen3-coder-next) | OpenAI GPT-4o, Anthropic Claude |
-| TTS | piper-tts | ElevenLabs Multilingual |
+| Part | Bangla | English |
+|---|---|---|
+| Speech recognition | OmiKhan bangla-asr-whisper-medium (CTranslate2) | stock Whisper `small` (also detects the language) |
+| Language model | gemma2:9b via Ollama, JSON action router | same |
+| Voice | Piper bn_BD-google-medium (CPU) | Kokoro-82M `af_heart` (CPU) |
 
-## API Endpoints
+Profiles: `shefa setup --profile gemini|groq` (LLM on a free tier), `--profile openai`, `--voices
+azure` (bn-BD-NabanitaNeural). Per-machine choices live in gitignored `configs/local.yaml`.
 
-- `GET /health` — health check
-- `GET /dashboard` — web dashboard
-- `GET /api/v1/sessions` — active calls
-- `GET /api/v1/sessions/{call_sid}` — session detail
-- `POST /api/v1/calls/outbound?to_number=...` — make outbound call
-- `GET /api/v1/config` — pipeline config
-- `GET /api/v1/tools` — LLM tool schemas
-
-## 9 LLM Tool Functions
-
-1. `verify_patient` — identity verification (name/DOB/phone/MRN)
-2. `check_appointment_slots` — query available slots
-3. `book_appointment` — book for verified patient
-4. `cancel_appointment` — cancel existing
-5. `reschedule_appointment` — move to new date/time
-6. `get_doctor_info` — doctor profile and availability
-7. `lookup_patient_history` — recent visits, medications
-8. `send_confirmation` — bilingual SMS/email
-9. `transfer_to_human` — escalate to human receptionist
-
-## Hardware Requirements (Local Mode)
-
-- GPU: NVIDIA with 16GB+ VRAM recommended (tested on RTX 4060 Ti)
-- RAM: 16GB+
-- Storage: ~60GB for models (Ollama qwen3-coder-next + Whisper large-v3)
-
-## Project Structure
+## Where things are
 
 ```
 src/shefa/
-  main.py              # FastAPI app, routes, dashboard
-  config/settings.py   # Pydantic config from YAML
-  models/              # STT/TTS/LLM adapters
-  pipeline/            # Voice pipeline + language detection
-  session/manager.py   # Session management
-  tools/               # LLM function-calling tools
-  telephony/           # Twilio integration
-  integrations/        # Calendar, EHR, notifications
-  static/index.html    # Web dashboard
-  utils/               # Compliance, logging
+  main.py               FastAPI app, console API, /api/v1/chat
+  cli.py                shefa setup/serve/doctor/fetch-models/lab/clinic/asterisk/reminders/token
+  model_fetch.py        fetch-models + doctor checks
+  pipeline/             voice_pipeline.py (calls + handle_text), actions.py (router + templates),
+                        language_detector.py (language + emergency), vad.py
+  spoken.py, bangla.py  dates/times/schedules/references as spoken in bn/en
+  models/               stt/ (whisper_local, routed, openai, elevenlabs), tts/ (piper, kokoro,
+                        azure, vits, routed, threaded), llm/ (openai_compatible, openai, anthropic)
+  clinic/               directory + booking engine (SQLite, no double-booking)
+  lab/                  conversation lab (scenarios, runner, report) and voice test
+  telephony/            browser, asterisk (AudioSocket + ARI), twilio, outbound
+  reminders.py          reminder / follow-up calls with quiet hours
+configs/default.yaml, configs/clinic.example.yaml, configs/lab/scenarios.yaml
+docs/                   project-status, demo-guide, fine-tuning-plan, research/, telephony-options,
+                        asterisk-setup, carrier-inquiry, model-selection
 ```
