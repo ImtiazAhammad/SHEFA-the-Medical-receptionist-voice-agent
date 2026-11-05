@@ -48,3 +48,28 @@ def test_needs_escalation_emergency():
 
 def test_no_escalation_normal():
     assert not needs_escalation(0.9, "book appointment", Language.ENGLISH)
+
+
+class TestScriptTraps:
+    """Regressions found by the conversation lab."""
+
+    def test_a_bangla_sentence_ending_in_a_danda_is_bangla_not_hindi(self):
+        """The danda (U+0964) lives in the Devanagari block; Bangla uses it as its full
+        stop. Counting it as Devanagari sent every such sentence to the front desk."""
+        from shefa.pipeline.language_detector import detect_language
+
+        assert detect_language("আমার বাবার বুকে ব্যথা হচ্ছে।")[0] == Language.BANGLA
+        assert detect_language("ধন্যবাদ॥")[0] == Language.BANGLA
+        assert detect_language("मुझे डॉक्टर से मिलना है।")[0] == Language.OTHER
+
+    def test_bangla_with_many_english_words_stays_bangla(self):
+        """`\\w` dropped Bangla vowel signs, so "আমি" never matched a keyword and a
+        Dhaka-style mixed sentence was answered in English."""
+        from shefa.pipeline.language_detector import detect_language
+
+        language, confidence = detect_language(
+            "আমি cardiology তে একটা appointment চাই, doctor কবে বসেন?"
+        )
+
+        assert language == Language.BANGLA
+        assert confidence <= 1.0

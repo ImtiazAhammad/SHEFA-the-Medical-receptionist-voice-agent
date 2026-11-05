@@ -120,6 +120,7 @@ class TestRegistryWiring:
             settings.pipeline.tts, "voice_path", "models/piper/custom.onnx"
         )
 
+        monkeypatch.setattr(settings.pipeline.tts, "voices", {})
         tts = await registry._create_tts()
 
         assert isinstance(tts, PiperTTS)

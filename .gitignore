@@ -6,6 +6,9 @@ build/
 .env
 .venv/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -39,3 +42,11 @@ backups/
 
 # Per-machine config (tokens, provider)
 configs/local.yaml
+
+# Conversation lab output (report.html, audio, scratch databases)
+lab-report/
+
+# Deep-research scratch folders (the report and notes are kept under docs/research/)
+research_notes/
+reports/
+voice-test/

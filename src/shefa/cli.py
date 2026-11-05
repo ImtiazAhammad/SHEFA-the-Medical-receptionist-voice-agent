@@ -19,6 +19,69 @@ from typing import Any
 
 DEFAULT_ITERATIONS = 20
 
+# `shefa setup --demo`: the same agent with OpenAI doing speech recognition and the language
+# model, so a laptop without a GPU or Ollama can run it. The voice (Piper) still runs here,
+# and tool calls still go through the JSON action router, the path production uses.
+DEMO_PROFILE: dict[str, Any] = {
+    "pipeline": {
+        "stt": {"provider": "openai", "model": "whisper-1"},
+        "llm": {"provider": "openai"},
+    },
+}
+
+
+def _hosted_llm(base_url: str, model: str, key_variable: str) -> dict[str, Any]:
+    """Only the language model goes to a hosted OpenAI-compatible service; speech
+    recognition and the voices stay local, and ~7 GB of VRAM is freed."""
+    return {
+        "pipeline": {"llm": {"provider": "local"}},
+        "models": {
+            "adapters": {
+                "llm_local": {
+                    "type": "openai_compatible_llm",
+                    "base_url": base_url,
+                    "model": model,
+                    "api_key": "${" + key_variable + "}",
+                }
+            }
+        },
+    }
+
+
+# `shefa setup --profile NAME`: where the language model (and for openai, speech
+# recognition) runs. Every profile but `local` sends conversation text off the machine.
+PROFILES: dict[str, tuple[dict[str, Any], str]] = {
+    "local": ({}, ""),
+    "openai": (DEMO_PROFILE, "OPENAI_API_KEY"),
+    "gemini": (
+        _hosted_llm(
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "gemini-2.5-flash",
+            "GEMINI_API_KEY",
+        ),
+        "GEMINI_API_KEY",
+    ),
+    "groq": (
+        _hosted_llm("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        "GROQ_API_KEY",
+    ),
+}
+
+# `shefa setup --voices azure`: Azure's Bangladeshi neural voice for Bangla and an
+# Indian-English voice for English (free tier F0: 0.5M characters a month).
+VOICE_PROFILES: dict[str, dict[str, Any]] = {
+    "local": {},
+    "azure": {
+        "pipeline": {
+            "tts": {
+                "provider": "azure",
+                "voice_id": "bn-BD-NabanitaNeural",
+                "voices": {"en": {"provider": "azure", "voice_id": "en-IN-NeerjaNeural"}},
+            }
+        }
+    },
+}
+
 BENCH_TEXTS = [
     "Thank you for calling. How can I help you today?",
     "I can help you book an appointment with one of our doctors.",
@@ -53,6 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check that the configured adapters actually load")
 
+    fetch = sub.add_parser(
+        "fetch-models", help="download the voice, build the speech model, pull the LLM"
+    )
+    fetch.add_argument(
+        "--skip-speech",
+        action="store_true",
+        help="do not build the Bangla speech model (the one-time conversion needs torch)",
+    )
+
     clinic = sub.add_parser("clinic", help="manage the clinic directory")
     clinic_sub = clinic.add_subparsers(dest="clinic_command")
     importer = clinic_sub.add_parser(
@@ -79,6 +151,52 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--clinic", default="", help="clinic YAML to import (default: the sample)")
     setup.add_argument(
         "--force", action="store_true", help="replace an existing configs/local.yaml"
+    )
+    setup.add_argument(
+        "--profile",
+        choices=sorted(PROFILES),
+        default="local",
+        help="where the language model runs: local (Ollama), gemini or groq (free tiers, "
+        "speech and voices stay local), openai (speech recognition too)",
+    )
+    setup.add_argument(
+        "--demo", action="store_true", help="same as --profile openai (no GPU needed)"
+    )
+    setup.add_argument(
+        "--voices",
+        choices=sorted(VOICE_PROFILES),
+        default="local",
+        help="azure: Azure's Bangladeshi neural voices (free tier) instead of local voices",
+    )
+
+    lab = sub.add_parser("lab", help="conversation lab: scripted and simulated patient calls")
+    lab_sub = lab.add_subparsers(dest="lab_command")
+    lab_run = lab_sub.add_parser("run", help="run the scenarios and write an HTML report")
+    lab_list = lab_sub.add_parser("list", help="list the scenarios")
+    lab_voices = lab_sub.add_parser(
+        "voices", help="blind listening test: the same lines in several voices"
+    )
+    lab_voices.add_argument(
+        "--voice",
+        action="append",
+        default=[],
+        help="provider:target, repeatable: piper:<file.onnx> vits:<dir> kokoro:<voice> "
+        "azure:<voice> (default: the configured voice for --language)",
+    )
+    lab_voices.add_argument("--language", choices=["bn", "en"], default="bn")
+    lab_voices.add_argument("--out", default="voice-test")
+    for command in (lab_run, lab_list):
+        command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
+    lab_run.add_argument("--only", default="", help="comma-separated scenario ids")
+    lab_run.add_argument("--out", default="lab-report", help="folder for report.html + audio")
+    lab_run.add_argument("--clinic", default="configs/clinic.example.yaml")
+    lab_run.add_argument(
+        "--audio", action="store_true", help="speak every reply with the configured voices"
+    )
+    lab_run.add_argument(
+        "--speech",
+        action="store_true",
+        help="also speak the patient's lines over a simulated phone line and transcribe them",
     )
 
     serve = sub.add_parser("serve", help="start the server and the web console")
@@ -120,6 +238,7 @@ async def _measure_tts(texts: list[str], vram: bool):
 def doctor_report(**_: Any) -> tuple[str, bool]:
     """Report whether every configured adapter resolves. Returns (text, ok)."""
     from shefa.config.settings import settings
+    from shefa.model_fetch import llm_check_for, voice_status
     from shefa.models.tts.piper_tts import PiperTTS
 
     lines: list[str] = []
@@ -146,6 +265,14 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
     else:
         lines.append(f"  ok       bn voice found: {bn_voices[0]}")
 
+    tts_config = settings.pipeline.tts
+    for language in getattr(tts_config, "voices", None) or {}:
+        status = voice_status(tts_config.voice_for(language))
+        if status is not None:
+            status.detail = f"{language} {status.detail}"
+            lines.append(status.line())
+            ok = ok and status.ok
+
     models = getattr(settings, "models", None)
     stt_adapter = models.adapters.get("stt_whisper_local") if models else None
     stt_model = getattr(stt_adapter, "model_size", "") or ""
@@ -157,9 +284,14 @@ def doctor_report(**_: Any) -> tuple[str, bool]:
         else:
             lines.append(
                 f"  BLOCKER  speech model missing: {stt_model} "
-                "(build it once with: python scripts/fetch_stt_model.py)"
+                "(build it once with: shefa fetch-models, or python scripts/fetch_stt_model.py)"
             )
             ok = False
+
+    llm = llm_check_for(settings)
+    if llm is not None:
+        lines.append(llm.line())
+        ok = ok and llm.ok
 
     tts = PiperTTS(model_path=str(voice))
     try:
@@ -278,19 +410,18 @@ def run_setup(args: argparse.Namespace) -> int:
         print(f"{local} already exists; use --force to replace it (this mints a new token).")
         return 1
     token, record = token_mint(args.name, "admin")
-    local.write_text(
-        yaml.safe_dump(
-            {
-                "telephony": {"provider": "browser"},
-                "reminders": {"enabled": True},
-                "auth": {
-                    "principals": [{"name": args.name, "role": "admin", "token_hash": record}]
-                },
-            },
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
+    choices: dict[str, Any] = {
+        "telephony": {"provider": "browser"},
+        "reminders": {"enabled": True},
+        "auth": {"principals": [{"name": args.name, "role": "admin", "token_hash": record}]},
+    }
+    from shefa.config.settings import _deep_merge
+
+    profile = "openai" if args.demo else args.profile
+    overrides, key_variable = PROFILES[profile]
+    choices = _deep_merge(_deep_merge(choices, overrides), VOICE_PROFILES[args.voices])
+    local.write_text(yaml.safe_dump(choices, sort_keys=False, allow_unicode=True),
+                     encoding="utf-8")
     local.chmod(0o600)
     clinic_file = Path(args.clinic or "configs/clinic.example.yaml")
     try:
@@ -301,10 +432,54 @@ def run_setup(args: argparse.Namespace) -> int:
     print(
         f"Wrote {local}\n{clinic_note}\n\n"
         f"Your access token (shown once, not stored):\n  {token}\n\n"
-        "Next:  shefa serve        then open http://127.0.0.1:8000/console\n"
+        + _profile_note(profile, key_variable, args.voices)
+        + "Next:  shefa fetch-models   then: shefa serve   and open http://127.0.0.1:8000/console\n"
         "Phone: shefa serve --host 0.0.0.0 --https   then open https://<this-machine>:8000/console"
     )
     return 0
+
+
+def _profile_note(profile: str, key_variable: str, voices: str) -> str:
+    """What leaves the machine under this profile, and which keys still need setting."""
+    import os
+
+    if profile == "local" and voices == "local":
+        return ""
+    sent = {
+        "openai": "speech recognition and the language model run on OpenAI",
+        "gemini": "the language model runs on Google Gemini (free tier)",
+        "groq": "the language model runs on Groq (free tier)",
+    }.get(profile, "")
+    parts = [sent] if sent else []
+    if voices == "azure":
+        parts.append("the voices are Azure neural voices")
+    needed = [key_variable] if key_variable else []
+    if voices == "azure":
+        needed += ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"]
+    missing = [name for name in needed if not os.environ.get(name)]
+    keys = (
+        f"Put {', '.join(name + '=...' for name in missing)} in .env before serving."
+        if missing
+        else f"{', '.join(needed)} {'is' if len(needed) == 1 else 'are'} set."
+    )
+    return (
+        f"Profile {profile}: {'; '.join(parts)}. Conversation text leaves this machine, so use "
+        f"it for demos only, never for real patients. {keys}\n\n"
+    )
+
+
+def run_fetch_models(args: argparse.Namespace) -> int:
+    from shefa.config.settings import settings
+    from shefa.model_fetch import fetch_all
+
+    checks = fetch_all(settings, speech=not args.skip_speech)
+    for check in checks:
+        print(check.line())
+    if all(check.ok for check in checks):
+        print("\nEverything the configured pipeline needs is here. Next: shefa serve")
+        return 0
+    print("\nFix the BLOCKER lines above, then run shefa fetch-models again.")
+    return 1
 
 
 def run_serve(args: argparse.Namespace) -> int:
@@ -395,6 +570,125 @@ def run_reminders(args: argparse.Namespace) -> int:
     return 0 if ok == len(placed) else 1
 
 
+def run_lab(args: argparse.Namespace) -> int:
+    import yaml
+
+    from shefa.lab.scenarios import load_scenarios
+
+    if args.lab_command == "voices":
+        return run_voice_test(args)
+    if args.lab_command not in {"run", "list"}:
+        print("usage: shefa lab {run,list,voices}", file=sys.stderr)
+        return 2
+    try:
+        scenarios = load_scenarios(args.scenarios)
+    except (OSError, ValueError, TypeError, yaml.YAMLError) as error:
+        print(f"Cannot read {args.scenarios}: {error}", file=sys.stderr)
+        return 2
+    if args.lab_command == "list":
+        for scenario in scenarios:
+            kind = "simulated" if scenario.persona else f"{len(scenario.turns)} turn(s)"
+            print(f"{scenario.id:<24} {scenario.language}  {kind:<11} {scenario.tests}")
+        return 0
+    wanted = {name.strip() for name in args.only.split(",") if name.strip()}
+    unknown = wanted - {scenario.id for scenario in scenarios}
+    if unknown:
+        print(f"Unknown scenario id(s): {', '.join(sorted(unknown))}", file=sys.stderr)
+        return 2
+    chosen = [s for s in scenarios if not wanted or s.id in wanted]
+    return asyncio.run(_run_lab(chosen, args))
+
+
+def run_voice_test(args: argparse.Namespace) -> int:
+    from shefa.lab.voices import parse_voice_spec
+
+    try:
+        specs = [parse_voice_spec(spec) for spec in args.voice]
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_voice_test(specs, args.language, Path(args.out)))
+
+
+async def _voice_test(specs: list[dict[str, str]], language: str, out: Path) -> int:
+    from shefa.config.settings import VoiceConfig, settings
+    from shefa.lab.voices import PROMPTS, label_for, render, write_page
+    from shefa.models.registry import registry
+
+    if not specs:
+        configured = settings.pipeline.tts.voice_for(language)
+        specs = [{k: v for k, v in configured.model_dump().items() if v}]
+    voices = {label_for(spec): registry._create_voice(VoiceConfig(**spec)) for spec in specs}
+    try:
+        rows = await render(voices, PROMPTS[language], out, language)
+    except Exception as error:  # noqa: BLE001 - a missing voice is a message, not a traceback
+        print(f"A voice failed to speak: {type(error).__name__}: {error}", file=sys.stderr)
+        return 1
+    finally:
+        for voice in voices.values():
+            await voice.close()
+    page = write_page(rows, out)
+    print(f"{len(rows)} lines x {len(voices)} voice(s). Open {page} and score blind.")
+    return 0
+
+
+def lab_meta(speech: bool, audio: bool) -> dict[str, str]:
+    """What the report says the run used, so two reports can be compared."""
+    from shefa.config.settings import settings
+
+    pipeline = settings.pipeline
+    _, adapter = settings.models.resolve_llm_adapter(pipeline.llm.provider)
+    meta = {"language model": f"{pipeline.llm.provider} {getattr(adapter, 'model', '')}"}
+    if audio or speech:
+        voices = {lang: pipeline.tts.voice_for(lang) for lang in ("bn", "en")}
+        meta["voices"] = ", ".join(
+            f"{lang} {v.provider} {Path(v.voice_path).stem if v.voice_path else v.voice_id}"
+            for lang, v in voices.items()
+        )
+    if speech:
+        meta["speech recognition"] = pipeline.stt.provider + (
+            " (per language)" if pipeline.stt.per_language else ""
+        )
+        meta["phone line"] = "simulated 8 kHz mu-law"
+    return meta
+
+
+async def _run_lab(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab.report import write_report
+    from shefa.lab.runner import Lab
+    from shefa.models.registry import registry
+    from shefa.store import audit
+
+    out = Path(args.out)
+    work = out / ".work"
+    work.mkdir(parents=True, exist_ok=True)
+    # Lab calls write audit rows like real calls; they go to the lab's own file, never
+    # to the clinic's database.
+    audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
+    voice = await registry.get_tts() if args.audio or args.speech else None
+    stt = await registry.get_stt() if args.speech else None
+    lab = Lab(
+        clinic_file=args.clinic,
+        work_dir=work,
+        voice=voice,
+        stt=stt,
+        patient_llm=await registry.get_llm(),
+    )
+    results = []
+    for scenario in scenarios:
+        print(f"  {scenario.id:<24} ", end="", flush=True)
+        result = await lab.run(scenario)
+        results.append(result)
+        failed = [c.name for c in result.checks if not c.ok]
+        failed += [c.name for t in result.turns for c in t.checks if not c.ok]
+        print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    page = write_report(results, out, lab_meta(args.speech, args.audio))
+    passed = sum(1 for result in results if result.passed)
+    print(f"\n{passed}/{len(results)} scenarios passed. Report: {page}")
+    await registry.reset()
+    return 0 if passed == len(results) else 1
+
+
 def run_asterisk(args: argparse.Namespace) -> int:
     import os
     from pathlib import Path
@@ -439,6 +733,9 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
         return 0 if ok else 1
 
+    if args.command == "fetch-models":
+        return run_fetch_models(args)
+
     if args.command == "token":
         if args.role not in configured_roles():
             print(
@@ -472,6 +769,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "asterisk":
         return run_asterisk(args)
+
+    if args.command == "lab":
+        return run_lab(args)
 
     parser.print_help()
     return 2

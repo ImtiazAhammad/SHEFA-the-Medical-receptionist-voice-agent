@@ -18,24 +18,63 @@ foreign cloud). Roadmap, in build order:
 | 3 | Asterisk integration replacing Twilio (AudioSocket media, ARI control, config kit) | **built**, needs a live trunk to verify: [`docs/asterisk-setup.md`](docs/asterisk-setup.md) |
 | 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
 | 5 | Call log, owner console, reliability | **done**: web console (`/console`), call log, appointments, dependency health, `scripts/backup_db.py`; load test still to do |
-| 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress (see `scripts/bench_models.py`) |
+| 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress: a voice and a speech model per language, spoken dates/times, conversation lab, blind voice test; research and fine-tuning plan in [`docs/research/`](docs/research/bangla-english-voice-models-2026-11.md) and [`docs/fine-tuning-plan.md`](docs/fine-tuning-plan.md) |
+
+**Showing it to a client:** [`docs/demo-guide.md`](docs/demo-guide.md): set-up choices (fully
+local, free hybrid with Gemini/Groq, laptop), the conversation lab (`shefa lab run --audio`: 19
+recorded edge-case calls with pass/fail checks) and the blind voice test (`shefa lab voices`).
 
 Twilio code remains as a development sink. Carrier selection: see
 [`docs/carrier-inquiry.md`](docs/carrier-inquiry.md).
 
-## Quick start (5 minutes, no phone line needed)
+## Quick start (no phone line needed)
+
+Pick one path. Both end at the same web console.
+
+**A. Demo on any laptop (no GPU).** Speech recognition and the language model run on OpenAI;
+the Bangla voice runs locally. Caller audio and text leave the machine, so use this only for
+demos, never for real patients.
 
 ```bash
 uv sync
-uv run shefa setup            # makes your access token, turns on the console, loads a sample clinic
-uv run python scripts/fetch_stt_model.py    # one-time: the Bangla speech model (needs torch + transformers)
-uv run shefa serve            # then open http://127.0.0.1:8000/console and paste the token
+echo "OPENAI_API_KEY=sk-..." >> .env
+uv run shefa setup --profile openai   # token, console mode, sample clinic, OpenAI for STT + LLM
+uv run shefa fetch-models     # downloads the Piper Bangla voice
+uv run shefa serve            # open http://127.0.0.1:8000/console and paste the token
 ```
-The console lets you **talk to the agent from the browser** (tap the phone button), have the agent
-**call you** ("Have the agent call me", and reminders ring there too), see the day's appointments,
-the call log and the clinic directory. For your phone's browser: `shefa serve --host 0.0.0.0 --https`
-and open the printed `https://<ip>:8000/console` (browsers only allow the microphone over https).
-For real phone calls see [`docs/asterisk-setup.md`](docs/asterisk-setup.md).
+
+**B. Fully local (the product: everything stays on the clinic's machine).** Needs an NVIDIA GPU
+with 12 GB or more and [Ollama](https://ollama.com) (see the 12 GB settings in [`docs/demo-guide.md`](docs/demo-guide.md)).
+
+```bash
+uv sync --extra local-stt-gpu --extra kokoro   # kokoro: the English voice (needs espeak-ng)
+uv pip install torch transformers            # once, only to convert the Bangla speech model
+uv run shefa setup
+uv run shefa fetch-models     # voice + Bangla Whisper conversion + `ollama pull gemma2:9b`
+uv run shefa doctor           # every line should say ok
+uv run shefa serve
+```
+
+`shefa fetch-models` only fetches what the configured providers need, skips what is already
+there, and prints a fix for anything it cannot do (`--skip-speech` skips the speech-model build).
+`--profile gemini` or `--profile groq` sends only the language model to a free tier and keeps
+speech and voices local; `--voices azure` uses Azure's Bangladeshi neural voices. Bangla replies
+are spoken by the Bangla voice and English replies by an English voice (Kokoro:
+`uv sync --extra kokoro`, needs espeak-ng); each turn is heard by the speech model for its
+language.
+
+In the console you can:
+
+- **Type to the agent** ("Or type to the agent"). It uses the same router, tools, booking engine
+  and emergency handoff as a call, so it works without a microphone. The chips cover a short
+  demo script: departments, booking, a doctor's hours, an emergency.
+- **Talk to it from the browser** (tap the phone button).
+- Have the agent **call you** ("Have the agent call me"; reminders ring there too).
+- See the day's appointments, the call log and the clinic directory.
+
+For your phone's browser, run `shefa serve --host 0.0.0.0 --https` and open the printed
+`https://<ip>:8000/console` (browsers only allow the microphone over https). For real phone
+calls see [`docs/asterisk-setup.md`](docs/asterisk-setup.md).
 
 ## Clinic directory
 
@@ -371,6 +410,7 @@ src/shefa/
 | `GET` | `/` | Service info |
 | `POST` | `/api/v1/telephony/incoming` | Twilio incoming call webhook |
 | `POST` | `/api/v1/telephony/outbound` | Initiate outbound call |
+| `POST` | `/api/v1/chat?message=...&call_sid=...&phone=...` | One typed turn through the voice pipeline's logic (no audio) |
 | `WS` | `/api/v1/telephony/media-stream/{call_sid}` | Bidirectional audio stream |
 
 ## Tool Functions (LLM callable)

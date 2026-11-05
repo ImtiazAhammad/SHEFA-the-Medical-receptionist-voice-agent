@@ -55,6 +55,22 @@ class STTConfig(StrictModel):
     temperature: float = 0.0
     enable_vad: bool = True
     streaming: bool = True
+    # whisper_local only: language -> `models.adapters` key of the model that hears it.
+    # When set, `detector` (an adapter key; default: the English model) picks each
+    # turn's language first, so a Bangla fine-tune never has to transcribe English.
+    per_language: dict[str, str] = Field(default_factory=dict)
+    detector: str = ""
+
+
+class VoiceConfig(StrictModel):
+    """The voice for one language (`pipeline.tts.voices.<lang>`). Empty fields fall back
+    to the same field of `pipeline.tts`."""
+
+    provider: str = ""
+    voice_path: str = ""
+    voice_id: str = ""
+    model: str = ""
+    device: str = ""  # kokoro / vits: "cpu" keeps the GPU for speech recognition and the LLM
 
 
 class TTSConfig(StrictModel):
@@ -66,6 +82,24 @@ class TTSConfig(StrictModel):
     similarity_boost: float = 0.75
     speed: float = 1.0
     sample_rate: int = 24000
+    # Extra voices by language. The fields above are the voice of `languages.primary`;
+    # each reply sentence is spoken by the voice for the script it is written in.
+    voices: dict[str, VoiceConfig] = Field(default_factory=dict)
+
+    def voice_for(self, language: str) -> VoiceConfig:
+        """The fully resolved voice for `language` (the primary voice if none is set)."""
+        own = self.voices.get(language, VoiceConfig())
+        provider = own.provider or self.provider
+        # Fall back to the primary voice's fields only for the same provider: a Kokoro
+        # voice must not inherit an ElevenLabs voice id or a Piper file.
+        inherit = provider == self.provider
+        return VoiceConfig(
+            provider=provider,
+            voice_path=own.voice_path or (self.voice_path if inherit else ""),
+            voice_id=own.voice_id or (self.voice_id if inherit else ""),
+            model=own.model or (self.model if inherit else ""),
+            device=own.device,
+        )
 
 
 class LLMConfig(StrictModel):

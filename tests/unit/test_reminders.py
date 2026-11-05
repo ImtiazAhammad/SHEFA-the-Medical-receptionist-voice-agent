@@ -106,9 +106,10 @@ def test_reminder_text_speaks_the_facts_in_both_languages(store):
     due = book(store) and store.due_reminders(NOW)[0]
     en = reminder_text(due, "en")
     bn = reminder_text(due, "bn")
-    for text in (en, bn):
-        assert TOMORROW in text and "09:00" in text and due["appointment_id"] in text
-    assert "Rahman" in en and "রহমান" in bn
+    # The stored facts, spoken: 2026-11-03 09:00 APT-00001.
+    assert "Tuesday 3 November at 9 am" in en and "reference number 1." in en
+    assert "মঙ্গলবার, ৩ নভেম্বর সকাল ৯টায়" in bn and "রেফারেন্স নম্বর ১" in bn
+    assert "Dr. Rahman" in en and "ডাক্তার রহমান" in bn
     assert "feeling" in reminder_text(due, "en", "followup")
     assert "কেমন" in reminder_text(due, "bn", "followup")
 
@@ -141,7 +142,7 @@ async def test_cycle_places_calls_records_attempts_and_hands_over_context(store)
 
     context = pop_context(call_uuid)
     assert isinstance(context, OutboundContext)
-    assert appointment["appointment_id"] in context.greeting
+    assert "রেফারেন্স নম্বর ১" in context.greeting  # APT-00001, spoken as its number
     assert context.patient_id == str(appointment["patient_id"])
     context.on_answered()  # the pipeline reports the pick-up
     assert store.due_reminders(NOW + timedelta(hours=3)) == []

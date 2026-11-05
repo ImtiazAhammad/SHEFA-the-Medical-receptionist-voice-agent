@@ -40,6 +40,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 .doc{padding:10px 0;border-top:1px solid var(--line)}.doc:first-of-type{border-top:0}.doc small{color:var(--mute)}
 .empty{color:var(--mute);text-align:center;padding:18px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}.kv span:nth-child(odd){color:var(--mute)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.note{color:var(--mute);font-size:14px;margin-top:8px;min-height:1.4em}
 #toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:9;max-width:90vw}
 </style>
 </head>
@@ -53,6 +54,21 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
     <button id="orb" class="orb" aria-label="Call the agent">📞</button>
     <div id="state">Tap to call the agent</div>
     <div id="hint">Speak Bangla or English. Allow the microphone when asked.</div>
+  </div>
+  <div class="card">
+    <h2>Or type to the agent</h2>
+    <form id="chatform" class="row" autocomplete="off">
+      <input id="chatin" aria-label="Message to the agent" placeholder="Type in Bangla or English">
+      <button class="btn" id="chatsend" style="flex:0 0 auto">Send</button>
+    </form>
+    <div class="chips" aria-label="Try one">
+      <button type="button" class="btn sm alt" data-say="আপনাদের কোন কোন বিভাগ আছে?">কোন কোন বিভাগ আছে?</button>
+      <button type="button" class="btn sm alt" data-say="আমি আগামীকাল মেডিসিনের ডাক্তার দেখাতে চাই">Book medicine tomorrow</button>
+      <button type="button" class="btn sm alt" data-say="When does Dr. Rahman see patients?">When is Dr. Rahman in?</button>
+      <button type="button" class="btn sm alt" data-say="My father has chest pain">Emergency</button>
+      <button type="button" class="btn sm alt" id="newchat">New chat</button>
+    </div>
+    <div id="chatnote" class="note"></div>
   </div>
   <div class="card">
     <h2>Conversation</h2>
@@ -115,7 +131,8 @@ process(i){const c=i[0][0];if(!c)return true;for(let k=0;k<c.length;k++){this.b.
 const need=Math.floor(this.b.length/this.r);if(need>=1600){const o=new Int16Array(need);for(let j=0;j<need;j++){let a=0,s=Math.floor(j*this.r),e=Math.floor((j+1)*this.r);for(let k=s;k<e;k++)a+=this.b[k];a/=Math.max(1,e-s);o[j]=Math.max(-1,Math.min(1,a))*32767}
 this.b=this.b.slice(Math.floor(need*this.r));this.port.postMessage(o.buffer,[o.buffer])}return true}}registerProcessor('p',P);`;
 function setState(s,h){$('state').textContent=s;$('hint').textContent=h||''}
-function addMsg(role,text){$('chatempty')?.remove();const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'');d.innerHTML='<small>'+(role==='user'?'You':'Agent')+'</small>'+esc(text);$('chat').appendChild(d);$('chat').scrollTop=1e9}
+function addMsg(role,text,before){$('chatempty')?.remove();const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'');d.innerHTML='<small>'+(role==='user'?'You':'Agent')+'</small>'+esc(text);$('chat').insertBefore(d,before||null);$('chat').scrollTop=1e9;return d}
+function clearChat(){$('chat').innerHTML='<div class="empty" id="chatempty">Nothing yet. The conversation appears here.</div>'}
 async function startCall(uuid){
   if(ws)return;
   if(!navigator.mediaDevices?.getUserMedia){setState('Microphone unavailable','Open this page over https (or localhost).');return}
@@ -145,6 +162,23 @@ let ringTimer=null;async function pollRing(){try{const r=await api('/api/v1/call
 $('answer').onclick=()=>{$('ring').classList.remove('on');document.querySelector('[data-tab=talk]').click();startCall(callUuid)};
 $('decline').onclick=async()=>{$('ring').classList.remove('on');try{await api('/api/v1/calls/ringing/'+callUuid+'/decline',{method:'POST'})}catch{}};
 setInterval(pollRing,2500);pollRing();
+
+/* ---------- typed chat: same agent, same tools, no microphone ---------- */
+let chatId='',chatBusy=false;
+async function sendText(text){text=text.trim();if(!text||chatBusy)return;
+  if(ws){toast('End the call first, then type.');return}
+  if(!chatId){chatId='chat-'+Math.random().toString(36).slice(2,10);clearChat()}
+  const mine=addMsg('user',text);$('chatin').value='';chatBusy=true;$('chatsend').disabled=true;$('chatnote').textContent='The agent is replying…';
+  try{const q=new URLSearchParams({message:text,call_sid:chatId});const ph=$('phone').value.trim();if(ph)q.set('phone',ph);
+    const r=await api('/api/v1/chat?'+q,{method:'POST'});
+    if(r.greeting)addMsg('agent',r.greeting,mine);if(r.reply)addMsg('agent',r.reply);
+    if(r.state!=='active'){$('chatnote').textContent='Handed to the front desk, as a call would be. Type again to start a new chat.';chatId=''}
+    else $('chatnote').textContent=''}
+  catch(e){mine.remove();$('chatin').value=text;$('chatnote').textContent=e.message}
+  chatBusy=false;$('chatsend').disabled=false;$('chatin').focus()}
+$('chatform').onsubmit=e=>{e.preventDefault();sendText($('chatin').value)};
+document.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>sendText(b.dataset.say));
+$('newchat').onclick=()=>{chatId='';clearChat();$('chatnote').textContent=''};
 
 /* ---------- records ---------- */
 const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);

@@ -21,11 +21,16 @@ PlaceCall = Callable[[str, str, dict[str, str]], Awaitable[dict[str, Any]]]
 
 
 def reminder_text(appointment: dict[str, Any], language: str, kind: str = "reminder") -> str:
-    """The opening line of the call. Dates, times and IDs are spoken exactly as stored."""
-    ref = appointment["appointment_id"]
-    day, start = appointment["date"], appointment["start_time"]
-    doctor_en = appointment["doctor_en"]
-    doctor_bn = appointment.get("doctor_bn") or doctor_en
+    """The opening line of the call. Dates, times and IDs come from the stored appointment,
+    rendered as they are said aloud ("Thursday 5 November at 4 pm", "বিকেল ৪টায়")."""
+    from shefa.spoken import spoken_date, spoken_doctor, spoken_reference, spoken_time
+
+    stored = appointment["appointment_id"]
+    ref = spoken_reference(stored, language)
+    day = spoken_date(appointment["date"], language)
+    start = spoken_time(appointment["start_time"], language, at=language == "bn")
+    doctor_en = spoken_doctor(appointment["doctor_en"], "en")
+    doctor_bn = spoken_doctor(appointment.get("doctor_bn") or appointment["doctor_en"], "bn")
     if kind == "followup":
         if language == "bn":
             return (
@@ -39,12 +44,13 @@ def reminder_text(appointment: dict[str, Any], language: str, kind: str = "remin
     if language == "bn":
         return (
             f"আসসালামু আলাইকুম। আপনার অ্যাপয়েন্টমেন্টের কথা মনে করিয়ে দিতে ফোন করেছি। "
-            f"{doctor_bn}-এর সাথে {day} তারিখে {start}-এ, রেফারেন্স {ref}। "
+            f"{doctor_bn}-এর সাথে {day} {start}, রেফারেন্স নম্বর {ref}। "
             "আসতে পারবেন কি না জানাবেন; বাতিল বা সময় পরিবর্তন করতে চাইলেও বলতে পারেন।"
         )
     return (
-        f"Hello, this is a reminder of your appointment with {doctor_en} on {day} at {start}, "
-        f"reference {ref}. Please tell me if you can come, or if you want to cancel or move it."
+        f"Hello, this is a reminder of your appointment with {doctor_en} on {day} at "
+        f"{start}, reference number {ref}. Please tell me if you can come, or if you want to "
+        "cancel or move it."
     )
 
 

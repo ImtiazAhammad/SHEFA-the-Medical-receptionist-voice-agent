@@ -44,6 +44,7 @@ async def check_slots(
         listings = [
             {
                 "doctor": doctor["name_en"],
+                "doctor_bn": doctor["name_bn"],
                 "available_slots": store.available_slots(doctor["id"], date),
                 "next_available": store.next_available(doctor["id"]),
             }
@@ -77,6 +78,7 @@ async def book_appointment(
         "date": booked["date"],
         "time": booked["start_time"],
         "doctor": booked["doctor_en"],
+        "doctor_bn": booked["doctor_bn"],
         "patient_id": patient_id,
     }
 

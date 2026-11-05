@@ -14,8 +14,11 @@ from dataclasses import dataclass
 from shefa.models.base import Language
 
 _BANGLA_RANGE = re.compile(r"[\u0980-\u09FF]")
-# Devanagari (Hindi, Marathi, ...) and Arabic/Persian script (Urdu, ...).
-_OTHER_RANGE = re.compile(r"[\u0900-\u097F\u0600-\u06FF]")
+# Devanagari (Hindi, Marathi, ...) and Arabic/Persian script (Urdu, ...). The danda
+# and double danda (U+0964-0965) are excluded: they sit in the Devanagari block, but
+# Bangla uses them as its full stop, and counting them sent every Bangla sentence
+# ending in "।" down the other-language route.
+_OTHER_RANGE = re.compile(r"[\u0900-\u0963\u0966-\u097F\u0600-\u06FF]")
 # Word characters for boundary matching (D-ENG17). Python's ``\b``/``\W``
 # treat Bangla vowel signs (ে, া, ি — Mc/Mn marks) as non-word, so script
 # boundaries must be explicit: Latin letters plus the Bangla block.
@@ -48,7 +51,9 @@ def detect_language(text: str) -> tuple[Language, float]:
         return Language.OTHER, 0.7
 
     bn_chars = len(_BANGLA_RANGE.findall(text))
-    total_alpha = sum(1 for c in text if c.isalpha())
+    # Bangla vowel signs are script but not `isalpha()`, so letters are counted per
+    # script: Bangla characters plus every other letter.
+    total_alpha = bn_chars + sum(1 for c in text if c.isalpha() and not _BANGLA_RANGE.match(c))
 
     if total_alpha == 0:
         return Language.ENGLISH, 0.5
@@ -59,10 +64,12 @@ def detect_language(text: str) -> tuple[Language, float]:
         return Language.BANGLA, min(0.5 + bn_ratio, 1.0)
 
     if bn_ratio > 0.05:
-        stripped = re.sub(r"[^\w\s]", "", text.lower())
+        # Explicit script classes, not `\w`: `\w` drops Bangla vowel signs, so "আমি"
+        # became "আম" and no Bangla keyword could ever match.
+        stripped = re.sub(rf"[^{_WORD}\s]", " ", text.lower())
         words = set(stripped.split())
         if words & _BANGLA_KEYWORDS:
-            return Language.BANGLA, 0.6 + bn_ratio
+            return Language.BANGLA, min(0.6 + bn_ratio, 1.0)
 
     return Language.ENGLISH, max(0.6, 1.0 - bn_ratio)
 
