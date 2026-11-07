@@ -10,6 +10,7 @@ import contextlib
 import logging
 import re
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -158,6 +159,31 @@ def _is_numeric(text: str) -> bool:
     """Mostly digits (a dictated phone number or reference): it belongs to no language."""
     chars = [c for c in text if not c.isspace() and c not in "-+,."]
     return bool(chars) and sum(c.isdigit() for c in chars) / len(chars) >= 0.7
+
+
+def _remember_offer(session: CallSession, name: str, result: dict[str, Any]) -> None:
+    """Keep the booking the agent just offered ("The next free time is ... Shall I book that?").
+
+    A bare "ঠিক আছে" or "yes" then means that booking, instead of being treated as small talk.
+    """
+    session.metadata.pop("offer", None)
+    nxt = result.get("next_available") or {}
+    if (
+        name == "check_appointment_slots"
+        and result.get("doctor_id") is not None
+        and not result.get("available_slots")
+        and nxt.get("date")
+        and nxt.get("time")
+    ):
+        session.metadata["offer"] = {
+            "name": "book_appointment",
+            "arguments": {
+                "doctor_id": result["doctor_id"],
+                "doctor_name": result.get("doctor", ""),
+                "date": nxt["date"],
+                "time": nxt["time"],
+            },
+        }
 
 
 class VoicePipeline:
@@ -651,6 +677,7 @@ class VoicePipeline:
             or error_text(name, result, language)
         )
         if fixed is not None:
+            _remember_offer(session, name, result)
             await self._emit(tts, fixed, language, put_playback)
             return fixed
         messages = build_messages(session)
@@ -698,6 +725,17 @@ class VoicePipeline:
         language = session.language.value
         said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
         pending = session.metadata.get("pending")
+        offer = session.metadata.pop("offer", None)  # an offer lasts one turn
+        if offer and not pending:
+            answer = yes_no(said)
+            if answer is True:  # "ঠিক আছে" to "Shall I book that?": read it back, as ever
+                action = SimpleNamespace(name=offer["name"], arguments=offer["arguments"])
+                session.metadata.setdefault("actions", [])
+                return await self._propose(llm, tts, session, action, put_playback)
+            if answer is False:
+                text = declined_text(language)
+                await self._emit(tts, text, language, put_playback)
+                return text
         if pending:
             answer = yes_no(said)
             if answer is True:

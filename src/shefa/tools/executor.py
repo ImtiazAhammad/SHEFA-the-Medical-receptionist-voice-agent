@@ -45,6 +45,7 @@ def missing_arguments(tool_name: str, args: dict[str, Any], session: CallSession
         name
         for name in _REQUIRED.get(tool_name, ())
         if not str(args.get(name) if args.get(name) is not None else "").strip()
+        and not (name == "doctor_name" and args.get("doctor_id") is not None)
     ]
     if tool_name == "verify_patient" and session.patient_id:
         return []  # the caller ID already says who this is
@@ -94,7 +95,9 @@ async def preview_action(
     store = default_clinic_store()
     try:
         if tool_name == "book_appointment":
-            doctor = _resolve_doctor(store, args["doctor_name"])[0]
+            doctor = _resolve_doctor(
+                store, args.get("doctor_name"), doctor_id=args.get("doctor_id")
+            )[0]
             day, time = str(args["date"]), str(args["time"])
             if not _slot_open(store, doctor["id"], day, time):
                 return {
@@ -208,6 +211,7 @@ async def _book_appointment(args: dict[str, Any], session: CallSession) -> dict[
         time=args["time"],
         doctor_name=args.get("doctor_name") or "",
         reason=args.get("reason") or "",
+        doctor_id=args.get("doctor_id"),
     )
 
 

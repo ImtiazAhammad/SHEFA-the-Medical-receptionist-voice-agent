@@ -133,6 +133,11 @@ def normalize_phone(raw: str) -> str:
     return ("+" if plus and not digits.startswith("0") else "") + digits
 
 
+def clinic_today() -> _date:
+    """Today's date at the clinic (Asia/Dhaka), whatever time zone the server runs in."""
+    return datetime.now(CLINIC_TZ).date()
+
+
 def _to_minutes(hhmm: str) -> int:
     try:
         hours, minutes = hhmm.split(":")

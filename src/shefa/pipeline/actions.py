@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from shefa.models.base import BaseLLM, ToolDefinition
     from shefa.session.manager import CallSession
 
+from shefa.clinic.store import clinic_today
 from shefa.pipeline.grounding import ground_arguments
 from shefa.session.messages import build_messages, clinic_directory
 from shefa.spoken import (
@@ -72,7 +73,7 @@ def resolve_relative_day(value: Any, today: date | None = None) -> str | None:
     offset = _RELATIVE_DAYS.get(value.strip().lower())
     if offset is None:
         return None
-    return ((today or date.today()) + timedelta(days=offset)).isoformat()
+    return ((today or clinic_today()) + timedelta(days=offset)).isoformat()
 
 
 def resolve_arguments(arguments: dict[str, Any], today: date | None = None) -> dict[str, Any]:
@@ -125,7 +126,7 @@ def extractor_system_prompt(
     identified: bool = False,
 ) -> str:
     """Describe the available tools and the exact JSON shape to the router."""
-    today = today or date.today()
+    today = today or clinic_today()
     lines = "\n".join(
         f"- {t.name}: {t.description} arguments="
         + json.dumps(_router_parameters(t.parameters), ensure_ascii=False)
@@ -238,7 +239,7 @@ async def extract_action(
     """
     from shefa.tools.definitions import get_tool_definitions
 
-    today = today or date.today()
+    today = today or clinic_today()
     if tools is None:
         tools = get_tool_definitions()
     messages = build_messages(session)

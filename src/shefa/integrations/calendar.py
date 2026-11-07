@@ -45,9 +45,16 @@ def error_result(exc: ClinicError) -> dict[str, Any]:
 
 
 def _resolve_doctor(
-    store: ClinicStore, doctor_name: str | None, specialty: str | None = None
+    store: ClinicStore,
+    doctor_name: str | None,
+    specialty: str | None = None,
+    doctor_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """The doctors a request refers to: one by name, a department's, or everyone."""
+    """The doctors a request refers to: by id, by name, a department's, or everyone."""
+    if doctor_id is not None:  # set by the agent itself (an offer it made), never by the caller
+        match = [d for d in store.doctors() if d["id"] == int(doctor_id)]
+        if match:
+            return match
     if doctor_name:
         doctor, others = store.resolve_doctor(doctor_name)
         if doctor is None and len(others) > 1 and store.find_doctors(doctor_name):
@@ -74,6 +81,7 @@ async def check_slots(
             {
                 "doctor": doctor["name_en"],
                 "doctor_bn": doctor["name_bn"],
+                "doctor_id": doctor["id"],
                 "available_slots": store.available_slots(doctor["id"], date),
                 "next_available": store.next_available(doctor["id"]),
             }
@@ -92,10 +100,11 @@ async def book_appointment(
     time: str,
     doctor_name: str = "",
     reason: str = "",
+    doctor_id: int | None = None,
 ) -> dict[str, Any]:
     store = default_clinic_store()
     try:
-        doctors = _resolve_doctor(store, doctor_name or None)
+        doctors = _resolve_doctor(store, doctor_name or None, doctor_id=doctor_id)
         if len(doctors) != 1:
             return {"error": "Which doctor would the patient like to see?"}
         booked = store.book(_patient_id(patient_id), doctors[0]["id"], date, time, reason=reason)
