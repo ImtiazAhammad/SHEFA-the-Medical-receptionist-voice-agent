@@ -90,6 +90,26 @@ CONDITIONS = {
 # A surgeon in these departments still sees outpatients for the department's usual problems; a
 # cardiac or neuro surgeon does not see "high blood pressure" or "headache", so gets no list.
 SURGEONS_WHO_SEE_OUTPATIENTS = {"Orthopedics", "Urology", "Gynecology", "ENT"}
+# The site publishes English names only, and the Bangla voice garbles Latin-script names
+# ("Lutfor Rahman" is heard as "লাত ফোয়ামন"; "লুৎফর রহমান" is heard correctly). These Bangla
+# spellings are SHEFA's own transliterations, NOT from the source: unverified, to be checked by a
+# Bangla speaker. A clinic's own spellings (--names FILE: "English name: বাংলা নাম") override them.
+BANGLA_NAMES = {
+    "Lutfor Rahman": "লুৎফর রহমান",
+    "A P M Sohrabuzzaman": "এ পি এম সোহরাবুজ্জামান",
+    "M Khademul Islam": "এম খাদেমুল ইসলাম",
+    "Md. Saifullah": "মোহাম্মদ সাইফুল্লাহ",
+    "M. Amjad Hossain": "এম আমজাদ হোসেন",
+    "Abu Zaffar Chowdhury": "আবু জাফর চৌধুরী",
+    "Md. Jahangir Kabir": "মোহাম্মদ জাহাঙ্গীর কবির",
+    "Mariam Faruqui": "মরিয়ম ফারুকী",
+    "F. M. Siddiqui": "এফ এম সিদ্দিকী",
+    "Ali Hossain": "আলী হোসেন",
+    "Muhammad Rafiqul Alam": "মুহাম্মদ রফিকুল আলম",
+    "Mohammad Moniruzzaman": "মোহাম্মদ মনিরুজ্জামান",
+    "Sirajul Haque": "সিরাজুল হক",
+    "Mian Mashhud Ahmad": "মিয়া মাশহুদ আহমেদ",
+}
 PLACEHOLDER_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu"]
 
 _robots: dict[str, robotparser.RobotFileParser] = {}
@@ -166,7 +186,12 @@ def bare_name(full: str) -> str:
     return re.sub(r"\s+", " ", cleaned.replace("-", " ")).strip(" .,")
 
 
-def build(doctors: list[dict[str, str]], limit: int, per_department: int) -> dict:
+def build(
+    doctors: list[dict[str, str]],
+    limit: int,
+    per_department: int,
+    bangla_names: dict[str, str] | None = None,
+) -> dict:
     chosen: list[dict[str, str]] = []
     counts: dict[str, int] = {}
     for doctor in doctors:
@@ -185,9 +210,12 @@ def build(doctors: list[dict[str, str]], limit: int, per_department: int) -> dic
         surgeon = "surgeon" in doctor["designation"].lower()
         if english in CONDITIONS and (not surgeon or english in SURGEONS_WHO_SEE_OUTPATIENTS):
             profile["conditions"] = {"en": CONDITIONS[english][0], "bn": CONDITIONS[english][1]}
+        name = bare_name(doctor["name"]) or doctor["name"]
+        name_bn = (bangla_names if bangla_names is not None else BANGLA_NAMES).get(name, "")
         group["doctors"].append(
             {
-                "name": bare_name(doctor["name"]) or doctor["name"],
+                "name": name,
+                **({"name_bn": name_bn} if name_bn else {}),
                 "qualification": doctor.get("qualification", ""),
                 "profile": profile,
                 "schedule": [
@@ -206,6 +234,7 @@ def to_yaml(directory: dict) -> str:
         "# SCHEDULES ARE PLACEHOLDERS and there are no fees or rooms: the site does not publish\n"
         "# them. Replace them with the clinic's real ones before anyone relies on this.\n"
         "# 'conditions' describe the department in general, not the individual doctor.\n"
+        "# 'name_bn' is SHEFA's transliteration (the site has English names only): UNVERIFIED.\n"
     )
 
     class Plain(yaml.SafeDumper):
@@ -222,6 +251,7 @@ def main() -> None:
     parser.add_argument("--per-department", type=int, default=2)
     parser.add_argument("--pages", type=int, default=5)
     parser.add_argument("--out", default="configs/clinic.labaid.local.yaml")
+    parser.add_argument("--names", help="YAML file of 'English name: বাংলা নাম' from the clinic")
     args = parser.parse_args()
 
     listed: list[dict[str, str]] = []
@@ -229,7 +259,10 @@ def main() -> None:
         listed += parse_listing(fetch(f"{LISTING}?page={number}"))
     print(f"{len(listed)} doctors listed")
     # Pick first, then fetch profiles for only the chosen ones.
-    pick = build(listed, args.limit, args.per_department)
+    names = dict(BANGLA_NAMES)
+    if args.names:
+        names.update(yaml.safe_load(Path(args.names).read_text(encoding="utf-8")) or {})
+    pick = build(listed, args.limit, args.per_department, names)
     chosen_urls = {d["_source"] for dep in pick["departments"] for d in dep["doctors"]}
     qualifications = {url: parse_qualification(fetch(url)) for url in sorted(chosen_urls)}
     for department in pick["departments"]:

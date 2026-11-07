@@ -82,6 +82,10 @@ class TTSConfig(StrictModel):
     similarity_boost: float = 0.75
     speed: float = 1.0
     sample_rate: int = 24000
+    # Speak sentence by sentence with punctuation-driven pauses and levelled loudness
+    # (see shefa.models.tts.prosody).
+    prosody: bool = True
+    target_rms_dbfs: float = -17.0
     # Extra voices by language. The fields above are the voice of `languages.primary`;
     # each reply sentence is spoken by the voice for the script it is written in.
     voices: dict[str, VoiceConfig] = Field(default_factory=dict)

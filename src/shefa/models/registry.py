@@ -89,6 +89,15 @@ class ModelRegistry:
 
     async def _create_tts(self) -> BaseTTS:
         """The primary-language voice, or one voice per language when `tts.voices` is set."""
+        voice = self._create_voices()
+        tts = settings.pipeline.tts
+        if not tts.prosody:
+            return voice
+        from shefa.models.tts.prosody import ProsodyTTS
+
+        return ProsodyTTS(voice, target_rms_dbfs=tts.target_rms_dbfs)
+
+    def _create_voices(self) -> BaseTTS:
         tts = settings.pipeline.tts
         if not tts.voices:
             return self._create_voice(tts.voice_for(""))

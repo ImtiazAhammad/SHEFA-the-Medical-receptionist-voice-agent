@@ -118,3 +118,18 @@ def test_per_department_and_total_limits():
     ]
     built = labaid.build(doctors, limit=10, per_department=2)
     assert sum(len(d["doctors"]) for d in built["departments"]) == 2
+
+
+def test_bangla_names_are_added_where_known_and_a_clinic_file_overrides_them():
+    doctors = [
+        {"url": "u1", "name": "Dr. Lutfor Rahman", "designation": "Cardiologist", "hospital": ""},
+        {"url": "u2", "name": "Dr. Nobody Known", "designation": "Cardiologist", "hospital": ""},
+    ]
+    built = labaid.build(doctors, limit=10, per_department=5)
+    by_name = {d["name"]: d for dep in built["departments"] for d in dep["doctors"]}
+    assert by_name["Lutfor Rahman"]["name_bn"] == "লুৎফর রহমান"
+    assert "name_bn" not in by_name["Nobody Known"]  # never guessed for an unknown name
+    own = labaid.build(doctors, 10, 5, {"Nobody Known": "কেউ না"})
+    names = {d["name"]: d.get("name_bn") for dep in own["departments"] for d in dep["doctors"]}
+    assert names == {"Lutfor Rahman": None, "Nobody Known": "কেউ না"}
+    assert "UNVERIFIED" in labaid.to_yaml(built)
