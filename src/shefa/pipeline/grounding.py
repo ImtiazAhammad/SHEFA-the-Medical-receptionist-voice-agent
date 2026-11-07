@@ -66,58 +66,76 @@ def _to_24h(hour: int, period: str | None) -> int | None:
     return 0 if hour == 12 else hour + 12 if hour >= 6 else hour  # night: 8 -> 20, 1 -> 1
 
 
+def _period_before(text: str, position: int) -> str | None:
+    """The period word ("সকাল", "বিকেল"...) nearest before ``position``."""
+    best, best_at = None, -1
+    for word, period in _PERIODS.items():
+        at = text.rfind(word, 0, position)
+        if at > best_at:
+            best, best_at = period, at
+    return best
+
+
 def parse_time(text: str) -> str | None:
-    """'HH:MM' from "সকাল সাড়ে দশটায়" or "4:30 pm"; None when there is no clear time."""
-    english = _EN_CLOCK.search(text)
-    if english:
+    """'HH:MM' from "সকাল সাড়ে দশটায়" or "4:30 pm"; None when there is no clear time.
+
+    If several times are mentioned the last one wins: a correction ("না, বিকেল চারটা") or the
+    place a booking is being moved to comes after the one it replaces.
+    """
+    candidates: list[tuple[int, str]] = []
+    for english in _EN_CLOCK.finditer(text):
         hour, minute, meridiem = int(english[1]), int(english[2] or 0), english[3].lower()
-        if not 1 <= hour <= 12 or minute > 59:
-            return None
-        if meridiem.startswith("a"):
-            hour = 0 if hour == 12 else hour
-        else:
-            hour = 12 if hour == 12 else hour + 12
-        return f"{hour:02d}:{minute:02d}"
-    period = next((p for word, p in _PERIODS.items() if word in text), None)
-    match = _BN_CLOCK.search(text.translate(_BN_DIGITS))
-    if not match or period is None:
-        return None
-    hour = _int(match["hour"])
-    if hour is None or not 1 <= hour <= 12:
-        return None
-    minute = _int(match["minute"]) if match["minute"] else 0
-    fraction = match["fraction"]
-    if fraction == "সাড়ে":
-        minute = 30
-    elif fraction == "সোয়া":
-        minute = 15
-    elif fraction == "পৌনে":
-        hour, minute = (hour - 1) or 12, 45
-    clock = _to_24h(hour, period)
-    if clock is None or minute is None or minute > 59:
-        return None
-    return f"{clock:02d}:{minute:02d}"
+        if 1 <= hour <= 12 and minute <= 59:
+            if meridiem.startswith("a"):
+                hour = 0 if hour == 12 else hour
+            else:
+                hour = 12 if hour == 12 else hour + 12
+            candidates.append((english.start(), f"{hour:02d}:{minute:02d}"))
+    digits = text.translate(_BN_DIGITS)
+    for match in _BN_CLOCK.finditer(digits):
+        hour = _int(match["hour"])
+        period = _period_before(digits, match.start())
+        if hour is None or not 1 <= hour <= 12 or period is None:
+            continue
+        minute = _int(match["minute"]) if match["minute"] else 0
+        fraction = match["fraction"]
+        if fraction == "সাড়ে":
+            minute = 30
+        elif fraction == "সোয়া":
+            minute = 15
+        elif fraction == "পৌনে":
+            hour, minute = (hour - 1) or 12, 45
+        clock = _to_24h(hour, period)
+        if clock is not None and minute is not None and minute <= 59:
+            candidates.append((match.start(), f"{clock:02d}:{minute:02d}"))
+    return max(candidates)[1] if candidates else None
 
 
 _EN_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _EN_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august",
               "september", "october", "november", "december")  # fmt: skip
-_BN_RELATIVE = (("আগামীকাল", 1), ("পরশু", 2), ("কাল", 1), ("আজ", 0))
 _EN_RELATIVE = (("day after tomorrow", 2), ("tomorrow", 1), ("today", 0))
 
 
-def _explicit_date(text: str, today: date) -> date | None:
+def _explicit_dates(text: str, today: date) -> list[tuple[int, date]]:
     lowered = text.lower().translate(_BN_DIGITS)
+    found: list[tuple[int, date]] = []
     for index, month in enumerate(MONTHS_BN, start=1):
-        found = re.search(rf"{_NUMBER}\s*{month}", lowered)
-        if found and (day := _int(found[1])):
-            return _calendar(today, index, day)
+        for match in re.finditer(rf"{_NUMBER}\s*{month}", lowered):
+            day = _int(match[1])
+            result = _calendar(today, index, day) if day else None
+            if result:
+                found.append((match.start(), result))
     for index, month in enumerate(_EN_MONTHS, start=1):
-        found = re.search(rf"(\d{{1,2}})(?:st|nd|rd|th)?\s*(?:of\s*)?{month}", lowered)
-        found = found or re.search(rf"{month}\s*(\d{{1,2}})", lowered)
-        if found:
-            return _calendar(today, index, int(found[1]))
-    return None
+        for pattern in (
+            rf"(\d{{1,2}})(?:st|nd|rd|th)?\s*(?:of\s*)?{month}",
+            rf"{month}\s*(\d{{1,2}})",
+        ):
+            for match in re.finditer(pattern, lowered):
+                result = _calendar(today, index, int(match[1]))
+                if result:
+                    found.append((match.start(), result))
+    return found
 
 
 def _calendar(today: date, month: int, day: int) -> date | None:
@@ -131,23 +149,44 @@ def _calendar(today: date, month: int, day: int) -> date | None:
     return None
 
 
+_BN_LETTER = "\u0980-\u09ff"
+# "কাল" is also the end of "সকাল": a relative word must stand alone (a suffix like -কে is fine).
+_BN_RELATIVE_RE = tuple(
+    (re.compile(rf"(?<![{_BN_LETTER}]){word}(?:কে|ই)?(?![{_BN_LETTER}])"), offset)
+    for word, offset in (("আগামীকাল", 1), ("পরশু", 2), ("পরশুদিন", 2), ("কাল", 1), ("আজ", 0))
+)
+
+
 def parse_date(text: str, today: date) -> str | None:
-    """ISO date from "কাল", "সোমবার", "৯ নভেম্বর" or "next Friday"; None when there is none."""
-    explicit = _explicit_date(text, today)
+    """ISO date from "কাল", "সোমবার", "৯ নভেম্বর" or "next Friday"; None when there is none.
+
+    An explicit date beats a relative word, which beats a weekday ("আজ রবিবার" is today); within
+    one kind the last mention wins ("Monday... no, Wednesday"; "move the 15th to the 9th").
+    """
+    explicit = _explicit_dates(text, today)
     if explicit:
-        return explicit.isoformat()
+        return max(explicit)[1].isoformat()
     lowered = text.lower()
+    relative: list[tuple[int, date]] = []
     for word, offset in _EN_RELATIVE:
-        if word in lowered:
-            return (today + timedelta(days=offset)).isoformat()
-    for word, offset in _BN_RELATIVE:
-        if word in text and "গতকাল" not in text:
-            return (today + timedelta(days=offset)).isoformat()
+        at = lowered.rfind(word)
+        if at >= 0:
+            relative.append((at, today + timedelta(days=offset)))
+    if "গতকাল" not in text:
+        for pattern, offset in _BN_RELATIVE_RE:
+            for match in pattern.finditer(text):
+                relative.append((match.start(), today + timedelta(days=offset)))
+    if relative:
+        return max(relative)[1].isoformat()
+    weekdays: list[tuple[int, date]] = []
     for index in range(7):
-        if WEEKDAYS_BN[index] in text or re.search(rf"\b{_EN_WEEKDAYS[index]}\b", lowered):
+        at = text.rfind(WEEKDAYS_BN[index])
+        for match in re.finditer(rf"\b{_EN_WEEKDAYS[index]}\b", lowered):
+            at = max(at, match.start())
+        if at >= 0:
             gap = (index - today.weekday()) % 7 or 7  # "Sunday" on a Sunday is the next one
-            return (today + timedelta(days=gap)).isoformat()
-    return None
+            weekdays.append((at, today + timedelta(days=gap)))
+    return max(weekdays)[1].isoformat() if weekdays else None
 
 
 _DAY_KEYS = {"book_appointment": ("date", "time"), "check_appointment_slots": ("date", None),

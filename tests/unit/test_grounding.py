@@ -95,3 +95,18 @@ def test_tools_without_a_day_or_time_are_untouched():
 def test_a_time_is_only_added_to_a_tool_that_takes_one():
     fixed = ground_arguments("check_appointment_slots", {"date": "x"}, "কাল সকাল দশটায়", SUNDAY)
     assert fixed == {"date": "2026-11-09"}  # slots ask for a day, not a time
+
+
+@pytest.mark.parametrize(
+    ("said", "day", "time"),
+    [
+        ("সোমবার, ৯ নভেম্বর... না না, বুধবার, ১১ নভেম্বর সকাল এগারোটায়", "2026-11-11", "11:00"),
+        ("আমার রবিবার, ১৫ নভেম্বর সকালের অ্যাপয়েন্টমেন্টটা সোমবার, ৯ নভেম্বর সকাল দশটায় সরাতে চাই",
+         "2026-11-09", "10:00"),
+        ("Monday at 9 am, no wait, Tuesday at 4 pm", "2026-11-10", "16:00"),
+        ("সকাল নয়টা থেকে বিকেল চারটায় সরান", None, "16:00"),
+    ],
+)  # fmt: skip
+def test_the_last_mention_wins_when_the_caller_corrects_or_moves(said, day, time):
+    assert parse_date(said, SUNDAY) == day
+    assert parse_time(said) == time
