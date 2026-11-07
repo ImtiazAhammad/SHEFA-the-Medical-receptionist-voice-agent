@@ -1,4 +1,6 @@
-# SHEFA clinic directory. Import with:  shefa clinic import configs/clinic.example.yaml
+# SHEFA clinic directory. THE DOCTORS IN THIS SAMPLE ARE FICTIONAL. For real public data see
+# scripts/import_labaid_directory.py.
+# Import with:  shefa clinic import configs/clinic.example.yaml
 # Re-importing restates schedules, leave and profiles; it never deletes doctors or appointments.
 #
 # `profile` is optional and every key in it is optional. The agent answers callers' questions

@@ -27,6 +27,10 @@
 - Tests never read `configs/local.yaml` or load real models.
 - The directory block must stay under ~1,500 tokens for 20 doctors so it fits `num_ctx` 4096 with history.
 
+## Data
+
+The sample clinic (`configs/clinic.example.yaml`) is fictional and says so. Real names come from `scripts/import_labaid_directory.py` (Labaid's public listing, robots.txt checked, written to the gitignored `configs/clinic.labaid.local.yaml`; schedules are placeholders because the site publishes none). Ibn Sina and Popular were not scraped: their robots.txt restricts automated access; use their data only with their permission or exports the clinic provides.
+
 ## Review Focus
 
 - Indirect request ("my child has a fever", "is there a lady doctor", "who is best for the heart") is answered from the directory, with no tool call and no medical advice.
@@ -44,8 +48,12 @@ Interface: profile keys `designation, experience_years, gender, languages, room,
 ### Task 2: Directory block in the prompts
 Files: create `src/shefa/clinic/brief.py` (`directory_brief(store) -> str`); modify `src/shefa/prompts.py`, `src/shefa/session/messages.py`, `src/shefa/pipeline/actions.py` (`extractor_system_prompt(..., directory="")`, canonical-name hint). Tests: `tests/unit/test_directory_brief.py`, additions to `tests/unit/test_action_extraction.py`; extend `scripts/bench_router.py` with indirect phrasings and the directory.
 
-### Task 3: Fuzzy names and "did you mean"
+### Task 3: Fuzzy names, ambiguity and "did you mean"
+Added after real data arrived: Labaid's listing has several Rahmans and Hossains, so a surname must resolve to *one* doctor or produce "Which one: Lutfor Rahman or Mahbubor Rahman?" (`ClinicStore.find_doctors(query) -> list[dict]`; `find_doctor` returns a doctor only when exactly one matches).
 Files: `src/shefa/clinic/store.py` (`find_doctor` fuzzy + aliases, `closest_doctors`, fuzzy `find_department`), `src/shefa/pipeline/actions.py` (`error_text` unknown doctor). Test: `tests/unit/test_fuzzy_names.py`.
+
+### Task 3b: Answer the question that was asked
+Live finding (2026-11-08): "is there a lady doctor?" and "where is the room?" both returned the same full doctor card, and the card has no room. `_doctor_card` must include the profile (designation, room, gender, languages, experience, notes), and directory questions (`get_doctor_info`, `list_doctors`, `list_departments`) are answered by a grounded model reply that states only what was asked, with dates, times and fees still rendered by `shefa.spoken`. Test: a scripted model asked about the room answers with the room and nothing else.
 
 ### Task 4: Missing arguments, my appointments, phone validation
 Files: `src/shefa/tools/executor.py`, `src/shefa/tools/definitions.py` (`list_my_appointments`), `src/shefa/integrations/ehr.py` (`verify_patient` validates), create `src/shefa/phone_words.py`, `src/shefa/pipeline/actions.py` (`need_text`, templates). Tests: `test_tool_arguments.py`, `test_phone_words.py`.
