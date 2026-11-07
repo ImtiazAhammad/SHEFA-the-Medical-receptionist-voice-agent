@@ -142,6 +142,22 @@ class FakePipeline:
         pass
 
 
+class EndingPipeline(FakePipeline):
+    async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+        await put_playback(AudioFrame(b"\x01\x00" * 800, rate=16000))
+
+
+def test_the_page_is_told_to_hang_up_when_the_agent_ends_the_call(client, monkeypatch):
+    monkeypatch.setattr(browser, "pipeline_factory", lambda: EndingPipeline())
+    monkeypatch.setattr("shefa.telephony.endcall.GRACE_S", 0.01)
+    signed_in(client)
+    with client.websocket_connect(
+        "/ws/call?phone=01711000123", headers={"Authorization": f"Bearer {TOKEN}"}
+    ) as ws:
+        assert ws.receive_bytes() == b"\x01\x00" * 800  # the farewell comes first
+        assert ws.receive_json() == {"type": "hangup"}
+
+
 def test_browser_call_streams_audio_both_ways(client, monkeypatch):
     fake = FakePipeline()
     monkeypatch.setattr(browser, "pipeline_factory", lambda: fake)

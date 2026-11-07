@@ -76,6 +76,36 @@ async def test_call_audio_flows_both_ways_and_hangup_cleans_up(pipeline):
     server.close()
 
 
+class EndingPipeline(FakePipeline):
+    """A pipeline that says its last words and returns, as a handover or goodbye does."""
+
+    async def process_audio_stream(self, call_sid, audio_queue, put_playback):
+        await put_playback(AudioFrame(b"\x01\x00" * 320, rate=16000))
+
+
+async def test_the_call_is_hung_up_after_the_last_words_when_the_agent_ends_it(monkeypatch):
+    fake = EndingPipeline()
+    monkeypatch.setattr(asterisk, "pipeline_factory", lambda: fake)
+    monkeypatch.setattr(asterisk, "FRAME_SECONDS", 0.001)
+    monkeypatch.setattr("shefa.telephony.endcall.GRACE_S", 0.01)
+    server, port = await _serve()
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(encode_frame(KIND_UUID, CALL_UUID.bytes))
+    await writer.drain()
+
+    kinds = []
+    while True:
+        kind, _ = await asyncio.wait_for(read_frame(reader), 3)
+        kinds.append(kind)
+        if kind == KIND_HANGUP:
+            break
+    assert KIND_AUDIO in kinds and kinds[-1] == KIND_HANGUP  # the farewell, then the hang-up
+    assert fake.cleaned == [str(CALL_UUID)]
+    assert control.get(str(CALL_UUID)) is None
+    writer.close()
+    server.close()
+
+
 async def test_a_connection_without_a_uuid_is_closed(pipeline):
     server, port = await _serve()
     reader, writer = await asyncio.open_connection("127.0.0.1", port)

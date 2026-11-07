@@ -11,6 +11,7 @@ with that entry's uuid, and the pipeline opens with the message registered for i
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -21,11 +22,13 @@ from fastapi import WebSocket, WebSocketDisconnect
 from shefa.call_log import call_ended, call_started
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.control import CallLeg, control
+from shefa.telephony.endcall import log_pipeline_end, wait_for_playback
 from shefa.telephony.twilio import make_media_queues
 
 logger = logging.getLogger(__name__)
 
 RING_SECONDS = 60.0
+HANGUP_WAIT_S = 30.0  # how long the page gets to finish playing the farewell
 CHUNK_BYTES = 6400  # 200 ms of 16 kHz s16le
 
 _ringing: dict[str, dict[str, Any]] = {}
@@ -143,11 +146,26 @@ async def handle_browser_call(websocket: WebSocket, call_uuid: str, phone: str =
         asyncio.create_task(_send_playback(websocket, queues.playback)),
         asyncio.create_task(_send_transcript(websocket, pipeline, call_uuid)),
     ]
-    try:
+    async def receive() -> None:
         while True:
             chunk = await websocket.receive_bytes()
             if chunk:
                 await queues.put_audio(chunk)
+
+    reader_task = asyncio.create_task(receive())
+    tasks.append(reader_task)
+    try:
+        done, _ = await asyncio.wait({reader_task, tasks[0]}, return_when=asyncio.FIRST_COMPLETED)
+        if tasks[0] in done and reader_task not in done:
+            log_pipeline_end(call_uuid, tasks[0])
+            await wait_for_playback(queues.playback)
+            # The page ends the call itself once the farewell has finished playing; it knows
+            # how much audio it still holds, the server does not.
+            await websocket.send_json({"type": "hangup"})
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(reader_task), HANGUP_WAIT_S)
+        elif reader_task in done and reader_task.exception() is not None:
+            raise reader_task.exception()
     except (WebSocketDisconnect, RuntimeError):
         logger.info("Console call ended: %s", call_uuid)
     finally:
