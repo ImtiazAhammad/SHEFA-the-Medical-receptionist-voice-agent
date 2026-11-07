@@ -42,6 +42,7 @@ backups/
 
 # Per-machine config (tokens, provider)
 configs/local.yaml
+configs/clinic.*.local.yaml
 
 # Conversation lab output (report.html, audio, scratch databases)
 lab-report/

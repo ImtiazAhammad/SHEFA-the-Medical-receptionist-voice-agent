@@ -5,7 +5,9 @@
 # from it ("who treats a child's fever?", "is there a lady doctor?", "where is the room?"), so
 # the more of it a clinic fills in, the fewer questions end in "let me transfer you".
 #   designation, experience_years, gender (male|female), languages, room,
-#   conditions {en, bn}   what the doctor sees patients for: this is how a symptom finds a doctor
+#   conditions {en, bn}   what the doctor sees patients for: this is how a symptom finds a doctor.
+#                         Do not list urgent symptoms (chest pain, breathing trouble, bleeding):
+#                         the agent treats those as emergencies and hands over to a human.
 #   aliases               other spellings callers or the speech recogniser produce
 #   blurb {en, bn}        one spoken sentence about the doctor
 #   fees {new, followup, report}
@@ -25,8 +27,8 @@ departments:
           languages: [bn, en]
           room: Room 3A, third floor
           conditions:
-            en: [chest pain, high blood pressure, palpitations, heart check-up, breathlessness on exertion]
-            bn: [বুকে ব্যথা, উচ্চ রক্তচাপ, বুক ধড়ফড়, হার্ট চেকআপ, হাঁটলে দম ফুরিয়ে যাওয়া]
+            en: [high blood pressure, palpitations, heart check-up, follow-up after a heart problem]
+            bn: [উচ্চ রক্তচাপ, বুক ধড়ফড়, হার্ট চেকআপ, হৃদরোগের পর ফলো-আপ]
           aliases: [রহমান সাহেব, Rehman, ডাক্তর রহমান]
           blurb:
             en: Dr Rahman is a heart specialist with eighteen years of experience.

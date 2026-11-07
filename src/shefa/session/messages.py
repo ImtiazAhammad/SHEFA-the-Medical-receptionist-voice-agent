@@ -23,6 +23,17 @@ if TYPE_CHECKING:
     from shefa.session.manager import CallSession
 
 
+def clinic_directory(language: str) -> str:
+    """The directory block for the prompt, or nothing if the clinic store is unavailable."""
+    try:
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.brief import directory_brief
+
+        return directory_brief(default_clinic_store(), language)
+    except Exception:
+        return ""
+
+
 def build_messages(session: CallSession) -> list[dict[str, Any]]:
     """Return the LLM message list for ``session``.
 
@@ -32,7 +43,9 @@ def build_messages(session: CallSession) -> list[dict[str, Any]]:
         {
             "role": "system",
             "content": system_prompt(
-                session.language.value, session.patient_name
+                session.language.value,
+                session.patient_name,
+                clinic_directory(session.language.value),
             ),
         }
     ]

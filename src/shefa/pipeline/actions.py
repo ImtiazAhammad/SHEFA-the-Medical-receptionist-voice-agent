@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from shefa.models.base import BaseLLM, ToolDefinition
     from shefa.session.manager import CallSession
 
-from shefa.session.messages import build_messages
+from shefa.session.messages import build_messages, clinic_directory
 from shefa.spoken import (
     spoken_date,
     spoken_doctor,
@@ -90,6 +90,20 @@ def resolve_arguments(arguments: dict[str, Any], today: date | None = None) -> d
     return resolved
 
 
+def directory_hints(directory: str) -> str:
+    """How the router uses the clinic directory it is shown (empty when there is none)."""
+    if not directory:
+        return ""
+    return (
+        "Copy doctor_name and department exactly as the clinic directory below spells them "
+        "(English, e.g. Rahman, Pediatrics), whatever spelling the patient used. When the "
+        "patient describes a problem rather than asking for a person, pick the department "
+        "whose 'sees' list fits and call list_doctors with it. Questions the directory "
+        "already answers (gender, room, languages, experience, fees, who sees what) need no "
+        "tool: answer {\"tool\": null}.\n"
+    )
+
+
 # Arguments the router is not asked to write: the session already knows who is calling, and
 # a free-text reason is a dozen Bangla tokens (~0.3 s of generation) the booking never needed.
 _ROUTER_SKIPS = {"patient_id", "reason"}
@@ -102,7 +116,9 @@ def _router_parameters(parameters: dict) -> dict:
     return {**parameters, "properties": properties, "required": required}
 
 
-def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = None) -> str:
+def extractor_system_prompt(
+    tools: list[ToolDefinition], today: date | None = None, directory: str = ""
+) -> str:
     """Describe the available tools and the exact JSON shape to the router."""
     today = today or date.today()
     lines = "\n".join(
@@ -148,6 +164,8 @@ def extractor_system_prompt(tools: list[ToolDefinition], today: date | None = No
         "tomorrow, আজ, আগামীকাল, পরশু) into an absolute YYYY-MM-DD date in the "
         "arguments. Never use a date that is already in the past.\n"
         + hints
+        + directory_hints(directory)
+        + (directory + "\n" if directory else "")
         + 'Reply with ONLY a JSON object: {"tool": <name or null>, "arguments": {}}.\n'
         "Available tools:\n" + lines
     )
@@ -213,7 +231,12 @@ async def extract_action(
     if tools is None:
         tools = get_tool_definitions()
     messages = build_messages(session)
-    messages[0] = {"role": "system", "content": extractor_system_prompt(tools, today)}
+    messages[0] = {
+        "role": "system",
+        "content": extractor_system_prompt(
+            tools, today, clinic_directory(session.language.value)
+        ),
+    }
     try:
         result = await llm.generate(messages, response_format={"type": "json_object"})
     except Exception:

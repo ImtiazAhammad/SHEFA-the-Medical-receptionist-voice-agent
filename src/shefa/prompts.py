@@ -45,9 +45,14 @@ SYSTEM_PROMPT_TEMPLATE = (
 )
 
 
-def system_prompt(language: str, patient_name: str | None) -> str:
-    """Render the system prompt for a session's language and patient."""
-    return SYSTEM_PROMPT_TEMPLATE.format(
+def system_prompt(language: str, patient_name: str | None, directory: str = "") -> str:
+    """Render the system prompt for a session's language and patient.
+
+    ``directory`` is the clinic directory block (see ``shefa.clinic.brief``); when given, the
+    model answers questions about the doctors from it.
+    """
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(
         language=language,
         patient_name=patient_name or "Unknown",
     )
+    return f"{prompt}\n{directory}" if directory else prompt

@@ -13,7 +13,7 @@ restates schedules and leave but never deletes a doctor or an appointment.
             visit_fee: 800
             profile:                  # optional; see configs/clinic.example.yaml
               designation: Professor
-              conditions: {en: [chest pain], bn: [বুকে ব্যথা]}
+              conditions: {en: [heart check-up], bn: [হার্ট চেকআপ]}
             schedule:
               - {days: [Mon, Wed], start: "09:00", end: "13:00", slot_minutes: 15}
             leave:
