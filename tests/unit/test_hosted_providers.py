@@ -105,7 +105,7 @@ async def test_the_registry_builds_azure_voices(monkeypatch):
     monkeypatch.setattr(settings.pipeline.tts, "voices",
                         {"en": VoiceConfig(provider="azure", voice_id="en-IN-NeerjaNeural")})
 
-    tts = await registry._create_tts()
+    tts = (await registry._create_tts()).inner  # the voice under the prosody wrapper
 
     assert tts.voices["en"].voice == "en-IN-NeerjaNeural"
     assert tts.voices[settings.languages.primary].voice == "bn-BD-NabanitaNeural"

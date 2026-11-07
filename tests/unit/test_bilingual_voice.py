@@ -131,7 +131,7 @@ class TestRegistry:
         )
         monkeypatch.setattr(settings.languages, "primary", "bn")
 
-        tts = await registry._create_tts()
+        tts = (await registry._create_tts()).inner  # the voice under the prosody wrapper
 
         assert isinstance(tts, LanguageRoutedTTS)
         assert tts.default == "bn"

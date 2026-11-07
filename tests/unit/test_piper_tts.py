@@ -121,7 +121,7 @@ class TestRegistryWiring:
         )
 
         monkeypatch.setattr(settings.pipeline.tts, "voices", {})
-        tts = await registry._create_tts()
+        tts = (await registry._create_tts()).inner  # the voice under the prosody wrapper
 
         assert isinstance(tts, PiperTTS)
         assert tts.sample_rate == 22050

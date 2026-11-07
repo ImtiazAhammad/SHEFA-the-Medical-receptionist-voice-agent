@@ -124,3 +124,16 @@ async def test_close_and_synthesize_delegate():
     assert (await wrapped.synthesize("x")).sample_rate == RATE
     await wrapped.close()
     assert inner.closed
+
+
+async def test_the_registry_wraps_the_voice_and_the_wrapper_can_be_switched_off(monkeypatch):
+    from shefa.config.settings import settings
+    from shefa.models.registry import ModelRegistry
+
+    monkeypatch.setattr(settings.pipeline.tts, "voices", {})
+    monkeypatch.setattr(settings.pipeline.tts, "provider", "piper")
+    monkeypatch.setattr(settings.pipeline.tts, "prosody", True)
+    wrapped = await ModelRegistry()._create_tts()
+    assert isinstance(wrapped, ProsodyTTS)
+    monkeypatch.setattr(settings.pipeline.tts, "prosody", False)
+    assert not isinstance(await ModelRegistry()._create_tts(), ProsodyTTS)
