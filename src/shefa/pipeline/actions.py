@@ -279,6 +279,58 @@ def _say(result: dict[str, Any], language: str) -> dict[str, Any]:
     }
 
 
+# Directory questions: answered by a short model reply grounded on the directory and the tool
+# result, not by dumping a template. Anything the model says with a number nobody supplied is
+# discarded and the template is spoken instead.
+INFO_TOOLS = frozenset({"get_doctor_info", "list_doctors"})
+_BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
+
+
+def numbers_in(text: Any) -> set[str]:
+    """The digit runs in ``text``, Bangla digits read as ASCII."""
+    return set(re.findall(r"\d+", str(text).translate(_BN_DIGITS)))
+
+
+def numbers_grounded(reply: str, *sources: Any) -> bool:
+    """True when every number in ``reply`` appears in at least one of the sources."""
+    allowed: set[str] = set()
+    for source in sources:
+        allowed |= numbers_in(source)
+    return numbers_in(reply) <= allowed
+
+
+def _spoken_doctor_result(result: dict[str, Any], language: str) -> dict[str, Any]:
+    """A copy of a doctor card with dates and times as words, for the model to read from."""
+    card = dict(result)
+    nxt = card.get("next_available")
+    if isinstance(nxt, dict) and nxt.get("date") and nxt.get("time"):
+        card["next_available"] = (
+            f"{spoken_date(nxt['date'], language)} "
+            f"{spoken_time(nxt['time'], language, at=True)}"
+        )
+    if isinstance(card.get("doctors"), list):
+        card["doctors"] = [
+            _spoken_doctor_result(d, language) if isinstance(d, dict) else d
+            for d in card["doctors"]
+        ]
+    card.pop("schedule_windows", None)
+    return card
+
+
+def info_note(name: str, result: dict[str, Any], question: str, language: str) -> str:
+    """Instruction appended to the system prompt for a grounded directory answer."""
+    answer_language = "Bangla" if language == "bn" else "English"
+    return (
+        f"[directory answer] The patient asked: {question!r}. Using ONLY the clinic directory "
+        f"above and this tool result, answer exactly what was asked in one or two short spoken "
+        f"sentences in {answer_language}. Do not list everything. Do not give medical advice or "
+        "a diagnosis: if they describe a problem, name the doctor or department whose 'sees' "
+        "list fits and offer to book. Say times and dates as words, never as digits like 16:00. "
+        f"Tool {name} returned: "
+        + json.dumps(_spoken_doctor_result(result, language), ensure_ascii=False)
+    )
+
+
 def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
     if not result.get("success"):
         return None
@@ -442,6 +494,9 @@ def _confirm_doctor_info(result: dict[str, Any]) -> dict[str, str] | None:
         if has_next
         else " সামনের ৩০ দিনে কোনো খালি সময় নেই।"
     )
+    if room := result.get("room"):
+        en += f" The room is {room}."
+        bn += f" রুম: {room}।"
     if fee:
         en += f" The visit fee is {fee} taka."
         bn += f" ভিজিট ফি {spoken_number(fee, 'bn')} টাকা।"

@@ -30,9 +30,12 @@ from shefa.models.base import Language
 from shefa.models.registry import registry
 from shefa.pipeline.actions import (
     FILLERS,
+    INFO_TOOLS,
     confirmation_text,
     error_text,
     extract_action,
+    info_note,
+    numbers_grounded,
     tool_result_note,
 )
 from shefa.pipeline.error_taxonomy import (
@@ -547,6 +550,12 @@ class VoicePipeline:
                 )
                 return reply_text
             tool_result = await execute_tool(action.name, action.arguments, session)
+            if action.name in INFO_TOOLS and not tool_result.get("error"):
+                answered = await self._grounded_answer(
+                    llm, tts, session, action.name, tool_result, put_playback
+                )
+                if answered is not None:
+                    return answered
             # Facts (date/time/doctor/ID) come from the tool result rendered in code and
             # spoken verbatim; the model never gets to re-state them. Only untemplated tools
             # fall back to a grounded model reply, with the result folded into the LEADING
@@ -597,6 +606,36 @@ class VoicePipeline:
             llm, tts, messages, tools, session.language.value, put_playback
         )
         return reply_text
+
+    async def _grounded_answer(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        name: str,
+        result: dict[str, Any],
+        put_playback: PlaybackSink,
+    ) -> str | None:
+        """Answer a directory question with what was asked, or None to use the template.
+
+        The reply is generated whole and checked before anything is spoken: it must not be
+        empty, and every number in it must come from the directory or the tool result.
+        """
+        language = session.language.value
+        question = next((t.content for t in reversed(session.history) if t.role == "user"), "")
+        note = info_note(name, result, question, language)
+        messages = build_messages(session)
+        messages[0]["content"] += "\n\n" + note
+        try:
+            reply = (await llm.generate(messages)).text.strip()
+        except Exception:
+            logger.warning("Grounded directory answer failed; using the template")
+            return None
+        if not reply or not numbers_grounded(reply, messages[0]["content"]):
+            logger.info("Directory answer rejected (empty or ungrounded): %r", reply[:80])
+            return None
+        await self._emit(tts, reply, language, put_playback)
+        return reply
 
     async def _route_with_filler(
         self,

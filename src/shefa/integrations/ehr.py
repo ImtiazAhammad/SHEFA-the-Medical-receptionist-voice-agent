@@ -33,6 +33,16 @@ async def verify_patient(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _profile_facts(profile: dict[str, Any]) -> dict[str, Any]:
+    """The profile fields a caller asks about, left out when the clinic did not supply them."""
+    keys = ("designation", "experience_years", "gender", "languages", "room", "fees")
+    facts = {k: profile[k] for k in keys if profile.get(k) not in (None, "", [], {})}
+    for key in ("blurb", "booking_notes", "conditions"):
+        if profile.get(key):
+            facts[key] = profile[key]
+    return facts
+
+
 def _doctor_card(doctor: dict[str, Any]) -> dict[str, Any]:
     store = default_clinic_store()
     return {
@@ -47,6 +57,7 @@ def _doctor_card(doctor: dict[str, Any]) -> dict[str, Any]:
             for s in store.doctor_schedule(doctor["id"])
         ],
         "next_available": store.next_available(doctor["id"]),
+        **_profile_facts(doctor.get("profile") or {}),
     }
 
 
