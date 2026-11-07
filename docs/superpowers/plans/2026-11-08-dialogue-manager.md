@@ -1,5 +1,7 @@
 # Dialogue Manager Implementation Plan
 
+**Status 2026-11-08:** Tasks 1-8 are implemented and tested (1492 tests; lab 26/26 with real models and voices). Open: the real-microphone acceptance run, a browser check of the mic-gate change, and the items in `docs/research/2026-11-08-verbex-demo-analysis.md` section 4 that are not met yet (A1 p95, A3 interruption, A4 real-audio WER, V1/V4/V5 voice).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (the user said "go ahead"; implemented natively, one task after another). Steps use checkbox syntax.
 
 **Goal:** Make SHEFA hold a conversation: it knows the doctors, answers indirect questions from that knowledge, asks for what is missing, confirms before it changes anything, and survives mishearing.

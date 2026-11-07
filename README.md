@@ -18,7 +18,27 @@ foreign cloud). Roadmap, in build order:
 | 3 | Asterisk integration replacing Twilio (AudioSocket media, ARI control, config kit) | **built**, needs a live trunk to verify: [`docs/asterisk-setup.md`](docs/asterisk-setup.md) |
 | 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
 | 5 | Call log, owner console, reliability | **done**: web console (`/console`), call log, appointments, dependency health, `scripts/backup_db.py`; load test still to do |
-| 6 | Bangla quality: licence-clean voice, STT accuracy on real phone audio | in progress: a voice and a speech model per language, spoken dates/times, conversation lab, blind voice test; research and fine-tuning plan in [`docs/research/`](docs/research/bangla-english-voice-models-2026-11.md) and [`docs/fine-tuning-plan.md`](docs/fine-tuning-plan.md) |
+| 6 | Conversation and Bangla quality | **in progress**, see below |
+| 7 | Production frontend (staff, owner, doctor, public booking) | **planned**: [`PRODUCT.md`](PRODUCT.md), [brief](docs/superpowers/plans/2026-11-08-frontend-brief.md); awaiting visual direction |
+
+**How a call behaves now** (details: [`docs/research/2026-11-08-architecture-critique.md`](docs/research/2026-11-08-architecture-critique.md)):
+
+- The model is shown the clinic directory, including each doctor's profile (conditions seen,
+  gender, room, fees, notes), so "my child has a fever" or "is there a lady doctor?" is answered
+  from the data, one short grounded sentence, and a number the directory does not contain is
+  never spoken.
+- Days and clock times come from the caller's words, read by code (`pipeline/grounding.py`); the
+  router cannot overrule them.
+- A booking, cancellation or move is checked, read back in words and runs only on a clear yes.
+  Missing details are asked for; names are matched fuzzily and an ambiguous surname asks "which
+  one?"; thanks, "ok" and goodbye are handled in code, and goodbye hangs up.
+- Numbers, hours and dates are spoken as Bangla words (Piper misreads digits).
+- Measured: replies start about 1.7 s after the caller stops; the conversation lab passes 26/26
+  scenarios with the real models and voices. Not yet measured: real phone audio, real
+  microphones, concurrency. Voice-quality targets and what the Verbex reel does and does not
+  show: [`docs/research/2026-11-08-verbex-demo-analysis.md`](docs/research/2026-11-08-verbex-demo-analysis.md).
+- Real doctors for a local demo: `scripts/import_labaid_directory.py` (public listing, robots.txt
+  respected, output gitignored; schedules are placeholders). `configs/clinic.example.yaml` is fictional.
 
 **Showing it to a client:** [`docs/demo-guide.md`](docs/demo-guide.md): set-up choices (fully
 local, free hybrid with Gemini/Groq, laptop), the conversation lab (`shefa lab run --audio`: 19
