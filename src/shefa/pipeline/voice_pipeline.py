@@ -122,6 +122,14 @@ async def speak_to(
                 await put_playback(frame)
 
 
+# A turn flips the call's language only when what was said is long enough to be sure about.
+MIN_WORDS_TO_SWITCH_LANGUAGE = 3
+
+
+def _convincing_switch(result: Any) -> bool:
+    return len(str(result.text).split()) >= MIN_WORDS_TO_SWITCH_LANGUAGE
+
+
 class VoicePipeline:
     """Real-time voice conversation pipeline."""
 
@@ -285,6 +293,24 @@ class VoicePipeline:
                     call_sid,
                 )
                 break
+
+            if detected_lang != session.language and not _convincing_switch(stt_result):
+                # One short word ("বলুন" heard as "Bholen.") must not flip a Bangla call into
+                # English: hear it again as the language the call is already in.
+                try:
+                    again = await stt.transcribe(buffer, language=session.language.value)
+                except Exception:
+                    again = None
+                if again is not None and again.text.strip():
+                    logger.info(
+                        "Language switch to %s ignored on %s: '%s' is too short; heard "
+                        "again as '%s'",
+                        detected_lang.value,
+                        call_sid,
+                        stt_result.text,
+                        again.text,
+                    )
+                    stt_result, detected_lang = again, session.language
 
             if detected_lang != session.language:
                 session.language = detected_lang

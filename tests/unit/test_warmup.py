@@ -13,8 +13,8 @@ class _Stt:
     def __init__(self):
         self.heard = []
 
-    async def transcribe(self, audio):
-        self.heard.append(len(audio))
+    async def transcribe(self, audio, language="auto"):
+        self.heard.append((len(audio), language))
 
 
 class _Tts:
@@ -83,7 +83,8 @@ async def test_warm_models_loads_each_stage(pings, monkeypatch):
     timings = await warmup.warm_models()
     assert set(timings) == {"stt", "tts", "llm"}
     assert routed  # the router prompt is exercised, not just the model loaded
-    assert stt.heard == [16000]
+    # every language model is warmed, not just the detector
+    assert stt.heard == [(16000, "auto"), (16000, "bn"), (16000, "en")]
 
 
 async def test_a_failed_stage_is_skipped_not_raised(pings, monkeypatch):

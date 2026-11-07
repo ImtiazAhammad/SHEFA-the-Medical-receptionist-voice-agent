@@ -62,7 +62,11 @@ async def warm_models() -> dict[str, float]:
 
     async def stt() -> None:
         adapter = await registry.get_stt()
-        await adapter.transcribe(b"\x00\x00" * 8000)  # 0.5 s of silence at 16 kHz
+        silence = b"\x00\x00" * 8000  # 0.5 s at 16 kHz
+        # The language router holds one model per language and loads each on first use, so
+        # warming only "auto" left the Bangla model to load on the first caller (about 2 s).
+        for language in ("auto", "bn", "en"):
+            await adapter.transcribe(silence, language)
 
     async def tts() -> None:
         adapter = await registry.get_tts()
