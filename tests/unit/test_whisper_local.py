@@ -81,6 +81,26 @@ def test_preload_cuda_libraries_loads_available_wheels(monkeypatch, tmp_path):
     assert all(mode == ctypes.RTLD_GLOBAL for _, mode in loaded)
 
 
+def test_preload_never_loads_nvblas(monkeypatch, tmp_path):
+    """libnvblas, loaded RTLD_GLOBAL, hijacks the CPU BLAS and segfaults the server the first
+    time Kokoro (torch on the CPU) multiplies a matrix after Whisper has loaded."""
+    root = tmp_path / "nvidia"
+    (root / "cublas" / "lib").mkdir(parents=True)
+    for name in ("libcublas.so.12", "libcublasLt.so.12", "libnvblas.so.12"):
+        (root / "cublas" / "lib" / name).write_bytes(b"")
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: SimpleNamespace(submodule_search_locations=[str(root)]),
+    )
+    loaded = []
+    monkeypatch.setattr(ctypes, "CDLL", lambda path, mode=None: loaded.append(Path(path).name))
+
+    _preload_cuda_libraries()
+
+    assert loaded == ["libcublas.so.12", "libcublasLt.so.12"]
+
+
 def test_a_cpu_load_does_not_preload_cuda(monkeypatch):
     stt = WhisperLocalSTT(device="cpu", compute_type="int8")
     called = []

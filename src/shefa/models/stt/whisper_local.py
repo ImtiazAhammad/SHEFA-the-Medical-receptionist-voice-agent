@@ -19,6 +19,10 @@ _AVG_LOGPROB_FLOOR = -2.0
 # The pip packages `nvidia-*-cu12` that ctranslate2 needs for GPU inference,
 # in load order (cudart before cublas, cublas before cudnn).
 _CUDA_PRELOAD_ORDER = ("cuda_runtime", "cublas", "cudnn")
+# Never preload NVBLAS: loaded RTLD_GLOBAL it replaces the process's CPU BLAS (numpy, torch,
+# Kokoro) with a drop-in that has no config here, and the process dies with a segfault the
+# first time anything multiplies a matrix on the CPU. ctranslate2 does not use it.
+_CUDA_PRELOAD_SKIP = ("libnvblas",)
 
 
 def _preload_cuda_libraries() -> None:
@@ -46,6 +50,8 @@ def _preload_cuda_libraries() -> None:
         if not lib_dir.is_dir():
             continue
         for lib in sorted(lib_dir.glob("*.so*")):
+            if lib.name.startswith(_CUDA_PRELOAD_SKIP):
+                continue
             try:
                 ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
             except OSError:
