@@ -128,7 +128,7 @@ let ws=null,ctx=null,micStream=null,node=null,playAt=0,agentUntil=0,callUuid='';
 $('phone').value=store.get('phone');$('phone').onchange=()=>store.set('phone',$('phone').value.trim());
 const WORKLET=`class P extends AudioWorkletProcessor{constructor(){super();this.b=[];this.n=0;this.r=sampleRate/16000}
 process(i){const c=i[0][0];if(!c)return true;for(let k=0;k<c.length;k++){this.b.push(c[k]);}
-const need=Math.floor(this.b.length/this.r);if(need>=1600){const o=new Int16Array(need);for(let j=0;j<need;j++){let a=0,s=Math.floor(j*this.r),e=Math.floor((j+1)*this.r);for(let k=s;k<e;k++)a+=this.b[k];a/=Math.max(1,e-s);o[j]=Math.max(-1,Math.min(1,a))*32767}
+const need=Math.floor(this.b.length/this.r);if(need>=640){const o=new Int16Array(need);for(let j=0;j<need;j++){let a=0,s=Math.floor(j*this.r),e=Math.floor((j+1)*this.r);for(let k=s;k<e;k++)a+=this.b[k];a/=Math.max(1,e-s);o[j]=Math.max(-1,Math.min(1,a))*32767}
 this.b=this.b.slice(Math.floor(need*this.r));this.port.postMessage(o.buffer,[o.buffer])}return true}}registerProcessor('p',P);`;
 function setState(s,h){$('state').textContent=s;$('hint').textContent=h||''}
 function addMsg(role,text,before){$('chatempty')?.remove();const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'');d.innerHTML='<small>'+(role==='user'?'You':'Agent')+'</small>'+esc(text);$('chat').insertBefore(d,before||null);$('chat').scrollTop=1e9;return d}
@@ -148,7 +148,7 @@ async function startCall(uuid){
   ws.onclose=ev=>{endCall(ev.code===4401?'Not allowed. Sign in again.':'Call ended')};
   node.port.onmessage=e=>{if(ws?.readyState!==1)return;
     // half duplex: while the agent is talking, send silence so it cannot hear itself
-    if(ctx.currentTime<agentUntil+0.25)ws.send(new Int16Array(e.data.byteLength/2).buffer);else ws.send(e.data)};
+    if(ctx.currentTime<agentUntil)ws.send(new Int16Array(e.data.byteLength/2).buffer);else ws.send(e.data)};
 }
 function play(buf){const s=new Int16Array(buf),f=new Float32Array(s.length);for(let i=0;i<s.length;i++)f[i]=s[i]/32768;
   const b=ctx.createBuffer(1,f.length,16000);b.copyToChannel(f,0);const src=ctx.createBufferSource();src.buffer=b;src.connect(ctx.destination);

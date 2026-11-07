@@ -109,3 +109,60 @@ async def test_if_hearing_it_again_fails_the_original_result_stands(monkeypatch)
 
     stt = Broken({"auto": ("Yes", Language.ENGLISH)})
     assert await _call(monkeypatch, "SID-BROKEN", stt) is Language.ENGLISH
+
+
+def test_a_dictated_number_is_neutral():
+    from shefa.pipeline.voice_pipeline import _is_numeric
+
+    assert (
+        _is_numeric("01782737074") and _is_numeric("০১৭৮২-৭৩৭০৭৪") and _is_numeric("+8801782737074")
+    )
+    assert not _is_numeric("book at 5") and not _is_numeric("")
+
+
+def test_a_switch_needs_enough_words_and_enough_confidence():
+    from shefa.pipeline.voice_pipeline import _convincing_switch
+
+    def heard(text, confidence):
+        return STTResult(text=text, language=Language.ENGLISH, confidence=confidence)
+
+    assert _convincing_switch(heard("I need an appointment please", 0.9))
+    assert not _convincing_switch(heard("I need an appointment please", 0.3))
+    assert not _convincing_switch(heard("Bye", 0.99))
+
+
+@pytest.mark.asyncio
+async def test_a_dictated_number_is_not_heard_again_and_does_not_switch_the_language(monkeypatch):
+    stt = _STT({"auto": ("01782737074", Language.ENGLISH)})
+    language = await _call(monkeypatch, "SID-DIGITS", stt)
+    assert language is Language.BANGLA
+    assert stt.calls == ["auto"]  # not re-heard: the first transcript had the right digits
+
+
+@pytest.mark.asyncio
+async def test_room_noise_with_no_words_is_not_counted_as_a_failure(monkeypatch):
+    import shefa.pipeline.voice_pipeline as vp
+
+    class ShortVAD(vp.EnergyVAD):
+        def __init__(self, **kw):
+            super().__init__(**{**kw, "max_buffer_s": 1.0})
+
+    monkeypatch.setattr(vp, "EnergyVAD", ShortVAD)
+    monkeypatch.setattr(settings.languages, "primary", "bn")
+    stt = _STT({"auto": ("", Language.ENGLISH)})
+    monkeypatch.setattr(registry, "_stt", stt)
+    monkeypatch.setattr(registry, "_llm", _LLM())
+    monkeypatch.setattr(registry, "_tts", _TTS())
+    pipe = vp.VoicePipeline()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    task = asyncio.create_task(pipe.process_audio_stream("SID-NOISE", queue, _Sink()))
+    await asyncio.sleep(0)
+    for _ in range(40):  # four seconds of quiet noise: several max-length flushes
+        await queue.put(_pcm(60.0, 3))
+        await asyncio.sleep(0.005)
+    await asyncio.sleep(1.0)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    assert len(stt.calls) >= 2
+    assert pipe._failures.get("SID-NOISE", 0) == 0

@@ -138,8 +138,26 @@ async def speak_to(
 MIN_WORDS_TO_SWITCH_LANGUAGE = 3
 
 
+MIN_CONFIDENCE_TO_SWITCH_LANGUAGE = 0.6
+# A buffer this quiet (RMS of 16-bit samples) is room noise or a dead line, not a caller whose
+# words could not be understood: an empty transcript from it is not a failure to count.
+QUIET_RMS = 150.0
+MAX_QUIET_FLUSHES = 4  # ... unless it goes on this many times in a row
+
+
 def _convincing_switch(result: Any) -> bool:
-    return len(str(result.text).split()) >= MIN_WORDS_TO_SWITCH_LANGUAGE
+    """Enough words, heard with enough confidence, to change the call's language."""
+    words = len(str(result.text).split())
+    return (
+        words >= MIN_WORDS_TO_SWITCH_LANGUAGE
+        and float(getattr(result, "confidence", 1.0)) >= MIN_CONFIDENCE_TO_SWITCH_LANGUAGE
+    )
+
+
+def _is_numeric(text: str) -> bool:
+    """Mostly digits (a dictated phone number or reference): it belongs to no language."""
+    chars = [c for c in text if not c.isspace() and c not in "-+,."]
+    return bool(chars) and sum(c.isdigit() for c in chars) / len(chars) >= 0.7
 
 
 class VoicePipeline:
@@ -198,6 +216,7 @@ class VoicePipeline:
         # and sentences were cut at the first natural pause.
         vad = EnergyVAD(sample_rate=TARGET_RATE)
 
+        quiet_flushes = 0  # consecutive near-silent turns
         while True:
             try:
                 chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
@@ -261,6 +280,17 @@ class VoicePipeline:
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
 
+            if not stt_result.text.strip() and _rms < QUIET_RMS:
+                quiet_flushes += 1
+                if quiet_flushes < MAX_QUIET_FLUSHES:
+                    logger.info(
+                        "STT [%s]: ignored %.2fs of near-silence (rms=%.0f); not a failure",
+                        call_sid,
+                        len(buffer) / 32000,
+                        _rms,
+                    )
+                    self._audio_buffers.setdefault(call_sid, [])
+                    continue
             if not stt_result.text.strip():
                 logger.info(
                     "STT [%s]: heard nothing from %.2fs of audio "
@@ -278,6 +308,7 @@ class VoicePipeline:
                     break
                 continue
 
+            quiet_flushes = 0
             detected_lang = stt_result.language
             if detected_lang == Language.OTHER:
                 # D-ENG16: neither-en-nor-bn is an explicit route, not English.
@@ -302,7 +333,9 @@ class VoicePipeline:
                 )
                 break
 
-            if detected_lang != session.language and not _convincing_switch(stt_result):
+            if detected_lang != session.language and _is_numeric(stt_result.text):
+                detected_lang = session.language  # digits are neutral: neither switch nor re-hear
+            elif detected_lang != session.language and not _convincing_switch(stt_result):
                 # One short word ("বলুন" heard as "Bholen.") must not flip a Bangla call into
                 # English: hear it again as the language the call is already in.
                 try:
