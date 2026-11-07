@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from shefa.models.base import BaseLLM, ToolDefinition
     from shefa.session.manager import CallSession
 
+from shefa.pipeline.grounding import ground_arguments
 from shefa.session.messages import build_messages, clinic_directory
 from shefa.spoken import (
     spoken_date,
@@ -254,6 +255,9 @@ async def extract_action(
     if action is None:
         return None
     action.arguments = resolve_arguments(action.arguments, today)
+    # What the caller just said about the day and time is read by code, not trusted to the model.
+    said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
+    action.arguments = ground_arguments(action.name, action.arguments, said, today)
     return action
 
 

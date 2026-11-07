@@ -18,6 +18,7 @@
   turns:
     - "আসসালামু আলাইকুম। আমি মেডিসিনের ডাক্তার দেখাতে চাই।"
     - "{bn:Sun} সকাল দশটায় ডাক্তার হোসেনের কাছে সিরিয়াল দেন।"
+    - "হ্যাঁ, ঠিক আছে।"
   expect:
     actions_any: [book_appointment]
     booked: 1
@@ -32,6 +33,7 @@
   turns:
     - "Hi, I'd like to see the heart doctor, please."
     - "Can you book Dr. Rahman for {en:Tue} at 4 pm?"
+    - "Yes, that is right."
   expect:
     actions_any: [book_appointment]
     booked: 1
@@ -60,6 +62,7 @@
       - {doctor: Hossain, date: "{iso:Sun}", time: "09:00", name: "করিম"}
   turns:
     - "আমার {bn:Sun} সকালের অ্যাপয়েন্টমেন্টটা {bn:Mon} সকাল দশটায় সরাতে চাই।"
+    - "হ্যাঁ, করুন।"
   expect:
     actions_any: [reschedule_appointment]
     booked: 1
@@ -162,6 +165,7 @@
   phone: "01711000008"
   turns:
     - "শিশু ডাক্তার সুলতানার কাছে {bn:Mon}... না না, {bn:Wed} সকাল এগারোটায় সিরিয়াল দেন।"
+    - "জি, ঠিক আছে।"
   expect:
     booked: 1
     booked_dates: ["{iso:Wed}"]
@@ -249,3 +253,98 @@
   max_turns: 6
   expect:
     reply_language: en
+
+# --- added after the 2026-11-07 console calls ----------------------------------------------
+- id: confirm-no
+  title: The caller says no to the read-back
+  title_bn: পড়ে শোনানোর পর "না"
+  tests: A booking is read back and the caller declines; nothing may be booked.
+  language: bn
+  phone: "01711000010"
+  turns:
+    - "ডাক্তার হোসেনের কাছে {bn:Sun} সকাল দশটায় সিরিয়াল দেন।"
+    - "না, থাক।"
+  expect:
+    booked: 0
+    reply_language: bn
+
+- id: misheard-doctor
+  title: The doctor's name as the recogniser writes it
+  title_bn: ডাক্তারের নাম ভুল বানানে
+  tests: '"ডাক্তর সুলতানার" (a mis-heard spelling) still finds Dr. Sultana, and is read back before booking.'
+  language: bn
+  phone: "01711000011"
+  turns:
+    - "ডাক্তর সুলতানার কাছে {bn:Mon} সকাল দশটায় সিরিয়াল চাই।"
+    - "হ্যাঁ।"
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Mon}"]
+    reply_language: bn
+
+- id: child-fever
+  title: A symptom instead of a doctor's name
+  title_bn: ডাক্তারের নাম না বলে সমস্যা বলা
+  tests: '"My child has a fever" leads to the children''s doctor from the directory, with no advice and no booking until asked.'
+  language: bn
+  turns:
+    - "আমার বাচ্চার জ্বর, কোন ডাক্তার দেখাব?"
+  expect:
+    final_reply_contains_any: ["সুলতানা", "Sultana", "শিশু"]
+    actions_none: [book_appointment]
+    never_say: ["প্যারাসিটামল", "paracetamol", "নাপা", "napa"]
+    reply_language: bn
+
+- id: lady-doctor
+  title: Asking for a lady doctor
+  title_bn: মহিলা ডাক্তার আছে কি?
+  tests: Answered from the doctor profiles, not by a transfer.
+  language: bn
+  turns:
+    - "মহিলা ডাক্তার আছে?"
+  expect:
+    final_reply_contains_any: ["সুলতানা", "Sultana"]
+    actions_none: [transfer_to_human]
+    reply_language: bn
+
+- id: room-question
+  title: Asking where the doctor sits
+  title_bn: ডাক্তার কোথায় বসেন?
+  tests: The room is answered, not the doctor's whole card.
+  language: bn
+  turns:
+    - "ডাক্তার সুলতানার রুম কোথায়?"
+  expect:
+    final_reply_contains_any: ["2B", "২বি", "২ বি", "দুই বি", "দ্বিতীয় তলা", "second floor"]
+    reply_language: bn
+
+- id: my-appointments
+  title: "Do I have an appointment?"
+  title_bn: আমার কি কোনো অ্যাপয়েন্টমেন্ট আছে?
+  tests: A known caller is told their own booking; this used to be a transfer to a human.
+  language: bn
+  phone: "01711000012"
+  setup:
+    appointments:
+      - {doctor: Hossain, date: "{iso:Sun}", time: "09:00", name: "করিম"}
+  turns:
+    - "আমার কি কোনো অ্যাপয়েন্টমেন্ট বুক করা আছে?"
+  expect:
+    actions_any: [list_my_appointments]
+    actions_none: [transfer_to_human]
+    final_reply_contains_any: ["হোসেন", "Hossain"]
+    reply_language: bn
+
+- id: thanks-and-goodbye
+  title: Thanks, then goodbye
+  title_bn: ধন্যবাদ, তারপর আল্লাহ হাফেজ
+  tests: Small talk is answered politely and never becomes a transfer; goodbye ends the call.
+  language: bn
+  turns:
+    - "হ্যালো, শিশু ডাক্তার আছেন?"
+    - "ঠিক আছে, ধন্যবাদ।"
+    - "আল্লাহ হাফেজ।"
+  expect:
+    state: completed
+    actions_none: [transfer_to_human]
+    reply_language: bn

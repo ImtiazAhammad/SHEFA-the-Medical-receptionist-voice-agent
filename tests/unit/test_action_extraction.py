@@ -670,3 +670,34 @@ def test_routing_hints_appear_only_for_tools_that_exist():
     # supplies the first and the second only cost generation time.
     assert '"patient_id"' not in full and '"reason"' not in full
     assert "24-hour" not in extractor_system_prompt([_BOOK])
+
+
+class TestRouterArgumentsAreGroundedInSpeech:
+    async def test_a_time_the_router_got_wrong_is_corrected_from_the_callers_words(self):
+        llm = _ScriptedLLM(
+            routed_action={
+                "tool": "book_appointment",
+                "arguments": {"doctor_name": "Sultana", "date": "2026-10-30", "time": "09:00"},
+            },
+            replies=[],
+        )
+        session = _session(("user", "সুলতানার কাছে সোমবার সকাল দশটায় সিরিয়াল চাই"))
+
+        action = await extract_action(llm, session, today=date(2026, 11, 8))
+
+        assert action.arguments == {
+            "doctor_name": "Sultana",
+            "date": "2026-11-09",
+            "time": "10:00",
+        }
+
+    async def test_a_plain_yes_leaves_the_routers_values(self):
+        arguments = {"doctor_name": "Sultana", "date": "2026-11-09", "time": "10:00"}
+        llm = _ScriptedLLM(
+            routed_action={"tool": "book_appointment", "arguments": arguments}, replies=[]
+        )
+        session = _session(("user", "হ্যাঁ ঠিক আছে"))
+
+        action = await extract_action(llm, session, today=date(2026, 11, 8))
+
+        assert action.arguments == arguments
