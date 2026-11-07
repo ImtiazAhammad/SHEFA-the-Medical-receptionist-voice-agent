@@ -51,11 +51,20 @@ def _doctor_card(doctor: dict[str, Any]) -> dict[str, Any]:
 
 
 async def get_doctor_info(doctor_name: str) -> dict[str, Any]:
-    doctor = default_clinic_store().find_doctor(doctor_name)
-    if doctor is None:
-        names = [d["name_en"] for d in default_clinic_store().doctors()]
-        return {"error": f"No doctor matching {doctor_name!r}", "doctors": names}
-    return _doctor_card(doctor)
+    store = default_clinic_store()
+    doctor, others = store.resolve_doctor(doctor_name)
+    if doctor is not None:
+        return _doctor_card(doctor)
+    if store.find_doctors(doctor_name):  # several fit: ask which
+        return {
+            "error": f"Which doctor? {doctor_name!r} could be several",
+            "candidates": [d["name_en"] for d in others],
+        }
+    return {
+        "error": f"No doctor matching {doctor_name!r}",
+        "closest": [d["name_en"] for d in others],
+        "doctors": [d["name_en"] for d in store.doctors()],
+    }
 
 
 async def list_departments() -> dict[str, Any]:

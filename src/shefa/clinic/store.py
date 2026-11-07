@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from shefa.clinic import names
+
 CLINIC_TZ = ZoneInfo("Asia/Dhaka")
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _ID_PREFIX = "APT-"
@@ -321,13 +323,15 @@ class ClinicStore:
         return [dict(r) for r in self.connection.execute("SELECT * FROM departments ORDER BY id")]
 
     def find_department(self, query: str) -> dict[str, Any] | None:
-        like = f"%{query.strip().lower()}%"
-        row = self.connection.execute(
-            "SELECT * FROM departments WHERE lower(name_en) LIKE ? OR name_bn LIKE ?"
-            " ORDER BY id LIMIT 1",
-            (like, f"%{query.strip()}%"),
-        ).fetchone()
-        return dict(row) if row else None
+        """The department a spoken name refers to ("পিশু বিভাগ", "pediatrician"), or None."""
+        words = names.tokens(query)
+        scored = sorted(
+            ((names.department_score(words, d), d) for d in self.departments()),
+            key=lambda pair: -pair[0],
+        )
+        if scored and scored[0][0] >= names.DEPARTMENT_THRESHOLD:
+            return scored[0][1]
+        return None
 
     def doctors(self, department_id: int | None = None) -> list[dict[str, Any]]:
         sql = (
@@ -340,22 +344,30 @@ class ClinicStore:
             params = (department_id,)
         return [_doctor(r) for r in self.connection.execute(sql + " ORDER BY d.id", params)]
 
+    def find_doctors(self, query: str) -> list[dict[str, Any]]:
+        """Every doctor the spoken name could mean, best first; one entry is a clear match."""
+        ranked = names.rank_doctors(query, self.doctors(), floor=names.DOCTOR_THRESHOLD)
+        return names.best_matches(ranked, len(names.tokens(query)))
+
+    def closest_doctors(self, query: str, n: int = 2) -> list[dict[str, Any]]:
+        """The doctors nearest to a name that matched nobody, for a "did you mean" question."""
+        ranked = names.rank_doctors(
+            query, self.doctors(), floor=names.SUGGESTION_FLOOR, phonetic=True
+        )
+        return [d for _, d in ranked[:n]]
+
+    def resolve_doctor(self, query: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """``(doctor, candidates)``: one match, several (ambiguous), or ``(None, suggestions)``."""
+        matches = self.find_doctors(query)
+        if len(matches) == 1:
+            return matches[0], matches
+        if matches:
+            return None, matches
+        return None, self.closest_doctors(query)
+
     def find_doctor(self, query: str) -> dict[str, Any] | None:
-        """Match a spoken name against English or Bangla names, ignoring "Dr."."""
-        text = query.strip()
-        for prefix in ("dr.", "dr ", "ডা.", "ডাঃ", "ডাক্তার"):
-            if text.lower().startswith(prefix):
-                text = text[len(prefix) :].strip()
-        if not text:
-            return None
-        row = self.connection.execute(
-            "SELECT d.*, p.name_en AS department_en, p.name_bn AS department_bn"
-            " FROM doctors d JOIN departments p ON p.id = d.department_id"
-            " WHERE d.active = 1 AND (lower(d.name_en) LIKE ? OR d.name_bn LIKE ?)"
-            " ORDER BY d.id LIMIT 1",
-            (f"%{text.lower()}%", f"%{text}%"),
-        ).fetchone()
-        return _doctor(row) if row else None
+        """The one doctor a spoken name means; None when it matches nobody or several."""
+        return self.resolve_doctor(query)[0]
 
     def doctor_schedule(self, doctor_id: int) -> list[dict[str, Any]]:
         rows = self.connection.execute(

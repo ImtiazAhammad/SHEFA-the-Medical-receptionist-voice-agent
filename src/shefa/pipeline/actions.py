@@ -560,6 +560,36 @@ _GENERIC_ERROR = {
 }
 
 
+def _doctor_names(names: list[str], language: str, *, either: bool = False) -> str:
+    spoken = [spoken_doctor(n, language) for n in names]
+    if either and len(spoken) > 1:
+        return (" নাকি " if language == "bn" else " or ").join(spoken)
+    return spoken_list(spoken, language)
+
+
+def _lookup_text(result: dict[str, Any], language: str) -> str | None:
+    """Replies for a doctor name that fit several doctors, nobody, or nearly somebody."""
+    bn = language == "bn"
+    if result.get("candidates"):
+        who = _doctor_names(result["candidates"], language, either=True)
+        return (
+            f"কোন ডাক্তার: {who}? পুরো নামটা বলবেন?"
+            if bn
+            else f"Which doctor: {who}? Please say the full name."
+        )
+    if result.get("closest"):
+        who = spoken_doctor(result["closest"][0], language)
+        return f"আপনি কি {who}-এর কথা বলছেন?" if bn else f"Did you mean {who}?"
+    if result.get("doctors") and "doctor" in str(result.get("error", "")).lower():
+        who = _doctor_names(result["doctors"][:4], language)
+        return (
+            f"ওই নামে কাউকে পাইনি। আমাদের ডাক্তার: {who}। কার কথা বলছেন?"
+            if bn
+            else f"I could not find that name. Our doctors are {who}. Who do you mean?"
+        )
+    return None
+
+
 def error_text(tool_name: str, result: Any, language: str) -> str | None:
     """A fixed spoken sentence for a failed tool, or None when the result is not a failure."""
     if not isinstance(result, dict):
@@ -567,6 +597,8 @@ def error_text(tool_name: str, result: Any, language: str) -> str | None:
     failed = bool(result.get("error")) or result.get("transferred") is False
     if not failed:
         return None
+    if (lookup := _lookup_text(result, language)) is not None:
+        return lookup
     message = str(result.get("error") or "transfer").lower()
     for needles, phrases in _ERRORS:
         if any(needle in message for needle in needles):

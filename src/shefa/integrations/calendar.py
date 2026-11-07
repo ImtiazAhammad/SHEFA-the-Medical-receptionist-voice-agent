@@ -17,14 +17,43 @@ def _patient_id(value: str) -> int:
         raise ClinicError("A verified patient is required before booking") from exc
 
 
+class AmbiguousDoctorError(ClinicError):
+    """A spoken name that fits more than one doctor ("Rahman" with two Rahmans)."""
+
+    def __init__(self, query: str, candidates: list[str]) -> None:
+        super().__init__(f"Which doctor? {query!r} could be {', '.join(candidates)}")
+        self.candidates = candidates
+
+
+class UnknownDoctorError(ClinicError):
+    """A name that matches nobody; ``closest`` are the nearest names, if any."""
+
+    def __init__(self, query: str, closest: list[str]) -> None:
+        super().__init__(f"No doctor matching {query!r}")
+        self.closest = closest
+
+
+def error_result(exc: ClinicError) -> dict[str, Any]:
+    """A tool error as a dict, with the candidates or suggestions the reply can use."""
+    result: dict[str, Any] = {"error": str(exc)}
+    if isinstance(exc, AmbiguousDoctorError):
+        result["candidates"] = exc.candidates
+    elif isinstance(exc, UnknownDoctorError):
+        result["closest"] = exc.closest
+        result["doctors"] = [d["name_en"] for d in default_clinic_store().doctors()]
+    return result
+
+
 def _resolve_doctor(
     store: ClinicStore, doctor_name: str | None, specialty: str | None = None
 ) -> list[dict[str, Any]]:
     """The doctors a request refers to: one by name, a department's, or everyone."""
     if doctor_name:
-        doctor = store.find_doctor(doctor_name)
+        doctor, others = store.resolve_doctor(doctor_name)
+        if doctor is None and len(others) > 1 and store.find_doctors(doctor_name):
+            raise AmbiguousDoctorError(doctor_name, [d["name_en"] for d in others])
         if doctor is None:
-            raise ClinicError(f"No doctor matching {doctor_name!r}")
+            raise UnknownDoctorError(doctor_name, [d["name_en"] for d in others])
         return [doctor]
     if specialty:
         department = store.find_department(specialty)
@@ -51,7 +80,7 @@ async def check_slots(
             for doctor in doctors
         ]
     except ClinicError as exc:
-        return {"error": str(exc)}
+        return error_result(exc)
     if len(listings) == 1:
         return {"date": date, **listings[0]}
     return {"date": date, "doctors": [item for item in listings if item["available_slots"]]}
@@ -71,7 +100,7 @@ async def book_appointment(
             return {"error": "Which doctor would the patient like to see?"}
         booked = store.book(_patient_id(patient_id), doctors[0]["id"], date, time, reason=reason)
     except ClinicError as exc:
-        return {"error": str(exc)}
+        return error_result(exc)
     return {
         "success": True,
         "appointment_id": booked["appointment_id"],
@@ -90,7 +119,7 @@ async def cancel_appointment(
     try:
         store.cancel(appointment_id, _patient_id(patient_id))
     except ClinicError as exc:
-        return {"error": str(exc)}
+        return error_result(exc)
     return {"success": True, "appointment_id": appointment_id, "cancelled": True}
 
 
@@ -101,7 +130,7 @@ async def reschedule_appointment(
     try:
         store.reschedule(appointment_id, _patient_id(patient_id), new_date, new_time)
     except ClinicError as exc:
-        return {"error": str(exc)}
+        return error_result(exc)
     return {
         "success": True,
         "appointment_id": appointment_id,
