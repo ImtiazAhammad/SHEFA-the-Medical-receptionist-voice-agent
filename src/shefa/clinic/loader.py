@@ -11,6 +11,9 @@ restates schedules and leave but never deletes a doctor or an appointment.
             name_bn: রহমান
             qualification: MBBS, FCPS
             visit_fee: 800
+            profile:                  # optional; see configs/clinic.example.yaml
+              designation: Professor
+              conditions: {en: [chest pain], bn: [বুকে ব্যথা]}
             schedule:
               - {days: [Mon, Wed], start: "09:00", end: "13:00", slot_minutes: 15}
             leave:
@@ -24,6 +27,7 @@ from typing import Any
 
 import yaml
 
+from shefa.clinic.profile import validate_profile
 from shefa.clinic.store import WEEKDAYS, ClinicError, ClinicStore
 
 _DAYS = {name[:3].lower(): index for index, name in enumerate(WEEKDAYS)}
@@ -56,6 +60,7 @@ def import_directory(store: ClinicStore, data: dict[str, Any]) -> dict[str, int]
                 name_bn=doctor.get("name_bn", ""),
                 qualification=doctor.get("qualification", ""),
                 visit_fee=doctor.get("visit_fee"),
+                profile=validate_profile(doctor.get("profile"), f"Dr {doctor_name}"),
             )
             store.clear_schedule_and_leave(doctor_id)
             counts["doctors"] += 1

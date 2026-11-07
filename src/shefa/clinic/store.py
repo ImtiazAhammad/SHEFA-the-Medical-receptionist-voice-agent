@@ -14,6 +14,7 @@ of two racing bookings fail inside SQLite. Dates are `YYYY-MM-DD` and times are
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time as _time
 from datetime import date as _date
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS doctors (
     department_id INTEGER NOT NULL REFERENCES departments(id),
     qualification TEXT NOT NULL DEFAULT '',
     visit_fee     INTEGER,
-    active        INTEGER NOT NULL DEFAULT 1
+    active        INTEGER NOT NULL DEFAULT 1,
+    profile       TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS doctor_schedules (
     id           INTEGER PRIMARY KEY,
@@ -151,6 +153,16 @@ def _parse_date(value: str) -> _date:
         raise ClinicError(f"Date must be YYYY-MM-DD, got {value!r}") from exc
 
 
+def _doctor(row: sqlite3.Row) -> dict[str, Any]:
+    """A doctors row as a dict, with the stored profile decoded."""
+    doctor = dict(row)
+    try:
+        doctor["profile"] = json.loads(doctor.get("profile") or "{}")
+    except ValueError:
+        doctor["profile"] = {}
+    return doctor
+
+
 class ClinicStore:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
@@ -162,7 +174,16 @@ class ClinicStore:
         self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.executescript(_SCHEMA)
+        self._migrate()
         self.connection.commit()
+
+    def _migrate(self) -> None:
+        """Bring a database made by an older version up to the current schema."""
+        columns = {r[1] for r in self.connection.execute("PRAGMA table_info(doctors)")}
+        if "profile" not in columns:
+            self.connection.execute(
+                "ALTER TABLE doctors ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'"
+            )
 
     def close(self) -> None:
         self.connection.close()
@@ -190,12 +211,20 @@ class ClinicStore:
         name_bn: str = "",
         qualification: str = "",
         visit_fee: int | None = None,
+        profile: dict[str, Any] | None = None,
     ) -> int:
         with self.connection:
             cur = self.connection.execute(
-                "INSERT INTO doctors (name_en, name_bn, department_id, qualification, visit_fee)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (name_en, name_bn, department_id, qualification, visit_fee),
+                "INSERT INTO doctors (name_en, name_bn, department_id, qualification, visit_fee,"
+                " profile) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    name_en,
+                    name_bn,
+                    department_id,
+                    qualification,
+                    visit_fee,
+                    json.dumps(profile or {}, ensure_ascii=False),
+                ),
             )
         return int(cur.lastrowid)
 
@@ -219,6 +248,7 @@ class ClinicStore:
         name_bn: str = "",
         qualification: str = "",
         visit_fee: int | None = None,
+        profile: dict[str, Any] | None = None,
     ) -> int:
         """Update the doctor with this English name, or add them. Never deletes."""
         row = self.connection.execute(
@@ -231,12 +261,20 @@ class ClinicStore:
                 name_bn=name_bn,
                 qualification=qualification,
                 visit_fee=visit_fee,
+                profile=profile,
             )
         with self.connection:
             self.connection.execute(
                 "UPDATE doctors SET name_bn = ?, department_id = ?, qualification = ?,"
-                " visit_fee = ?, active = 1 WHERE id = ?",
-                (name_bn, department_id, qualification, visit_fee, row[0]),
+                " visit_fee = ?, active = 1, profile = ? WHERE id = ?",
+                (
+                    name_bn,
+                    department_id,
+                    qualification,
+                    visit_fee,
+                    json.dumps(profile or {}, ensure_ascii=False),
+                    row[0],
+                ),
             )
         return int(row[0])
 
@@ -300,7 +338,7 @@ class ClinicStore:
         if department_id is not None:
             sql += " AND d.department_id = ?"
             params = (department_id,)
-        return [dict(r) for r in self.connection.execute(sql + " ORDER BY d.id", params)]
+        return [_doctor(r) for r in self.connection.execute(sql + " ORDER BY d.id", params)]
 
     def find_doctor(self, query: str) -> dict[str, Any] | None:
         """Match a spoken name against English or Bangla names, ignoring "Dr."."""
@@ -317,7 +355,7 @@ class ClinicStore:
             " ORDER BY d.id LIMIT 1",
             (f"%{text.lower()}%", f"%{text}%"),
         ).fetchone()
-        return dict(row) if row else None
+        return _doctor(row) if row else None
 
     def doctor_schedule(self, doctor_id: int) -> list[dict[str, Any]]:
         rows = self.connection.execute(

@@ -1,5 +1,15 @@
 # SHEFA clinic directory. Import with:  shefa clinic import configs/clinic.example.yaml
-# Re-importing restates schedules and leave; it never deletes doctors or appointments.
+# Re-importing restates schedules, leave and profiles; it never deletes doctors or appointments.
+#
+# `profile` is optional and every key in it is optional. The agent answers callers' questions
+# from it ("who treats a child's fever?", "is there a lady doctor?", "where is the room?"), so
+# the more of it a clinic fills in, the fewer questions end in "let me transfer you".
+#   designation, experience_years, gender (male|female), languages, room,
+#   conditions {en, bn}   what the doctor sees patients for: this is how a symptom finds a doctor
+#   aliases               other spellings callers or the speech recogniser produce
+#   blurb {en, bn}        one spoken sentence about the doctor
+#   fees {new, followup, report}
+#   booking_notes {en, bn}  what to bring or know before the visit
 departments:
   - name: Cardiology
     name_bn: হৃদরোগ
@@ -8,6 +18,23 @@ departments:
         name_bn: রহমান
         qualification: MBBS, FCPS (Cardiology)
         visit_fee: 800
+        profile:
+          designation: Associate Professor of Cardiology
+          experience_years: 18
+          gender: male
+          languages: [bn, en]
+          room: Room 3A, third floor
+          conditions:
+            en: [chest pain, high blood pressure, palpitations, heart check-up, breathlessness on exertion]
+            bn: [বুকে ব্যথা, উচ্চ রক্তচাপ, বুক ধড়ফড়, হার্ট চেকআপ, হাঁটলে দম ফুরিয়ে যাওয়া]
+          aliases: [রহমান সাহেব, Rehman, ডাক্তর রহমান]
+          blurb:
+            en: Dr Rahman is a heart specialist with eighteen years of experience.
+            bn: ডাক্তার রহমান আঠারো বছরের অভিজ্ঞতাসম্পন্ন একজন হৃদরোগ বিশেষজ্ঞ।
+          fees: {new: 800, followup: 500, report: 300}
+          booking_notes:
+            en: Please bring any old reports and ECGs.
+            bn: পুরনো রিপোর্ট ও ইসিজি সাথে আনবেন।
         schedule:
           - {days: [Sun, Tue, Thu], start: "16:00", end: "20:00", slot_minutes: 15}
         leave: []
@@ -18,6 +45,23 @@ departments:
         name_bn: সুলতানা
         qualification: MBBS, DCH
         visit_fee: 600
+        profile:
+          designation: Consultant Pediatrician
+          experience_years: 12
+          gender: female
+          languages: [bn, en]
+          room: Room 2B, second floor
+          conditions:
+            en: [child fever, cough and cold in children, vaccination, newborn care, child growth, diarrhoea in children]
+            bn: [বাচ্চার জ্বর, বাচ্চার সর্দি কাশি, টিকা, নবজাতকের যত্ন, শিশুর বৃদ্ধি, বাচ্চার পাতলা পায়খানা]
+          aliases: [সুলতানা ম্যাডাম, ডাক্তর সুলতানা, Sultana madam]
+          blurb:
+            en: Dr Sultana is a children's doctor with twelve years of experience.
+            bn: ডাক্তার সুলতানা বারো বছরের অভিজ্ঞতাসম্পন্ন একজন শিশু বিশেষজ্ঞ।
+          fees: {new: 600, followup: 400, report: 200}
+          booking_notes:
+            en: Please bring the child's vaccination card.
+            bn: শিশুর টিকার কার্ড সাথে আনবেন।
         schedule:
           - {days: [Sat, Mon, Wed], start: "10:00", end: "13:00", slot_minutes: 15}
   - name: Medicine
@@ -27,5 +71,22 @@ departments:
         name_bn: হোসেন
         qualification: MBBS, MD
         visit_fee: 700
+        profile:
+          designation: Consultant Physician
+          experience_years: 15
+          gender: male
+          languages: [bn, en]
+          room: Room 1A, first floor
+          conditions:
+            en: [fever, diabetes, thyroid, stomach pain, gastric, general check-up, headache, weakness]
+            bn: [জ্বর, ডায়াবেটিস, থাইরয়েড, পেট ব্যথা, গ্যাস্ট্রিক, সাধারণ চেকআপ, মাথা ব্যথা, দুর্বলতা]
+          aliases: [হোসেন সাহেব, ডাক্তর হোসেন, Hussain]
+          blurb:
+            en: Dr Hossain is a physician for adults and sees most general problems.
+            bn: ডাক্তার হোসেন প্রাপ্তবয়স্কদের মেডিসিন বিশেষজ্ঞ এবং সাধারণ রোগ দেখেন।
+          fees: {new: 700, followup: 400, report: 250}
+          booking_notes:
+            en: Come on an empty stomach if blood tests are planned.
+            bn: রক্ত পরীক্ষার কথা থাকলে খালি পেটে আসবেন।
         schedule:
           - {days: [Sat, Sun, Mon, Tue, Wed, Thu], start: "09:00", end: "12:00", slot_minutes: 20}
