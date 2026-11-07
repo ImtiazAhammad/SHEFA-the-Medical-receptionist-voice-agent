@@ -1,4 +1,4 @@
-﻿"""Core voice pipeline: STT -> Language Detection -> LLM -> TTS.
+"""Core voice pipeline: STT -> Language Detection -> LLM -> TTS.
 
 Orchestrates the full real-time conversation loop for each call session.
 """
@@ -39,18 +39,26 @@ from shefa.pipeline.actions import (
     numbers_grounded,
     tool_result_note,
 )
+from shefa.pipeline.confirm import (
+    NEEDS_CONFIRMATION,
+    declined_text,
+    read_back,
+    reask_text,
+    yes_no,
+)
 from shefa.pipeline.error_taxonomy import (
     FailureKind,
     MalformedLLMOutputError,
     backoff_delay,
 )
 from shefa.pipeline.language_detector import detect_language, evaluate_transcript
+from shefa.pipeline.social import classify_social, social_reply
 from shefa.pipeline.vad import EnergyVAD
 from shefa.session.manager import CallSession, SessionManager
 from shefa.session.messages import build_messages
 from shefa.telephony.call_context import pop_context
 from shefa.tools.definitions import get_tool_definitions
-from shefa.tools.executor import execute_tool
+from shefa.tools.executor import execute_tool, preview_action
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +92,7 @@ async def _discard(_frame: AudioFrame) -> None:  # pragma: no cover - never hand
 
 
 # States a conversation cannot continue from: a human has it, or it was closed.
-ENDED_STATES = frozenset({"escalated", "escaped", "terminated"})
+ENDED_STATES = frozenset({"escalated", "escaped", "terminated", "completed"})
 
 
 def split_complete_sentences(text: str) -> tuple[list[str], str]:
@@ -243,16 +251,12 @@ class VoicePipeline:
             except asyncio.CancelledError:
                 break
             except TimeoutError:
-                if await self._rescue(
-                    call_sid, session, put_playback, FailureKind.STT_TIMEOUT
-                ):
+                if await self._rescue(call_sid, session, put_playback, FailureKind.STT_TIMEOUT):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
             except Exception:
-                if await self._rescue(
-                    call_sid, session, put_playback, FailureKind.STT_ERROR
-                ):
+                if await self._rescue(call_sid, session, put_playback, FailureKind.STT_ERROR):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
@@ -320,9 +324,7 @@ class VoicePipeline:
                 session.language = detected_lang
                 logger.info("Language switched to %s for %s", detected_lang.value, call_sid)
 
-            decision = evaluate_transcript(
-                stt_result.text, session.language, stt_result.confidence
-            )
+            decision = evaluate_transcript(stt_result.text, session.language, stt_result.confidence)
 
             if decision.should_escalate:
                 escalation_msg = settings.escalation.transfer_greeting.get(
@@ -354,18 +356,14 @@ class VoicePipeline:
 
             try:
                 start = time.monotonic()
-                reply_text = await self._generate_reply(
-                    llm, tts, session, put_playback
-                )
+                reply_text = await self._generate_reply(llm, tts, session, put_playback)
                 llm_ms = (time.monotonic() - start) * 1000
                 logger.info("LLM [%s]: '%s' (%.0fms)", call_sid, reply_text[:80], llm_ms)
             except asyncio.CancelledError:
                 break
             except _SynthesisError as exc:
                 logger.error("TTS failed for %s: %s", call_sid, exc)
-                if await self._rescue(
-                    call_sid, session, put_playback, FailureKind.TTS_FAILURE
-                ):
+                if await self._rescue(call_sid, session, put_playback, FailureKind.TTS_FAILURE):
                     break
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
@@ -391,6 +389,8 @@ class VoicePipeline:
             await self._session_manager.save(session)
             self._failures[call_sid] = 0  # a successful turn resets the counter
             self._audio_buffers.setdefault(call_sid, [])
+            if session.state in ENDED_STATES:  # the caller said goodbye: end the call
+                break
 
     @staticmethod
     def _default_greeting(session: CallSession) -> str:
@@ -454,9 +454,7 @@ class VoicePipeline:
         # Typed text is never misheard, so only the emergency decision applies.
         if evaluate_transcript(text, session.language, 1.0).should_escalate:
             prompts = settings.escalation.transfer_greeting
-            reply = prompts.get(
-                session.language.value, prompts.get("en", "Transferring you now.")
-            )
+            reply = prompts.get(session.language.value, prompts.get("en", "Transferring you now."))
             session.add_turn("assistant", reply, session.language)
             session.state = "escalated"
             await self._session_manager.save(session)
@@ -542,14 +540,20 @@ class VoicePipeline:
             # played the model's guess and then the real answer over it, and the two could
             # disagree. The router call costs the same either way; now only one answer is
             # ever spoken: the template built from the tool result, or a reply grounded on it.
+            handled = await self._dialogue_state(llm, tts, session, put_playback)
+            if handled is not None:
+                return handled
             action = await self._route_with_filler(llm, tts, session, put_playback)
-            if action is not None:
+            if action is not None and action.name not in NEEDS_CONFIRMATION:
+                # booking, cancelling and moving are recorded when they run, after the yes
                 session.metadata.setdefault("actions", []).append(action.name)
             if action is None:
                 reply_text, _tool_calls = await self._stream_reply(
                     llm, tts, messages, [], session.language.value, put_playback
                 )
                 return reply_text
+            if action.name in NEEDS_CONFIRMATION:
+                return await self._propose(llm, tts, session, action, put_playback)
             tool_result = await execute_tool(action.name, action.arguments, session)
             if action.name in INFO_TOOLS and not tool_result.get("error"):
                 answered = await self._grounded_answer(
@@ -557,25 +561,9 @@ class VoicePipeline:
                 )
                 if answered is not None:
                     return answered
-            # Facts (date/time/doctor/ID) come from the tool result rendered in code and
-            # spoken verbatim; the model never gets to re-state them. Only untemplated tools
-            # fall back to a grounded model reply, with the result folded into the LEADING
-            # system message (gemma2's chat template reads a trailing one loosely).
-            language = session.language.value
-            fixed = (
-                need_text(action.name, tool_result, language)
-                or confirmation_text(action.name, tool_result, language)
-                or error_text(action.name, tool_result, language)
+            return await self._speak_tool_result(
+                llm, tts, session, action.name, tool_result, put_playback
             )
-            if fixed is not None:
-                await self._emit(tts, fixed, session.language.value, put_playback)
-                return fixed
-            messages = build_messages(session)
-            messages[0]["content"] += "\n\n" + tool_result_note(action.name, tool_result)
-            reply_text, _tool_calls = await self._stream_reply(
-                llm, tts, messages, [], session.language.value, put_playback
-            )
-            return reply_text
 
         tools = get_tool_definitions()
         reply_text, tool_calls = await self._stream_reply(
@@ -609,6 +597,101 @@ class VoicePipeline:
             llm, tts, messages, tools, session.language.value, put_playback
         )
         return reply_text
+
+    async def _speak_tool_result(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        name: str,
+        result: dict[str, Any],
+        put_playback: PlaybackSink,
+    ) -> str:
+        """Say what a tool did. Facts (date/time/doctor/ID) come from the result rendered in code
+        and are spoken verbatim; the model never gets to re-state them. Only untemplated tools
+        fall back to a grounded model reply, with the result folded into the LEADING system
+        message (gemma2's chat template reads a trailing one loosely)."""
+        language = session.language.value
+        fixed = (
+            need_text(name, result, language)
+            or confirmation_text(name, result, language)
+            or error_text(name, result, language)
+        )
+        if fixed is not None:
+            await self._emit(tts, fixed, language, put_playback)
+            return fixed
+        messages = build_messages(session)
+        messages[0]["content"] += "\n\n" + tool_result_note(name, result)
+        reply_text, _tool_calls = await self._stream_reply(
+            llm, tts, messages, [], language, put_playback
+        )
+        return reply_text
+
+    async def _propose(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        action: Any,
+        put_playback: PlaybackSink,
+    ) -> str:
+        """Check a booking/cancel/move and read it back; it runs only on the caller's yes."""
+        preview = await preview_action(action.name, action.arguments, session)
+        if "preview" not in preview:
+            session.metadata.pop("pending", None)
+            return await self._speak_tool_result(
+                llm, tts, session, action.name, preview, put_playback
+            )
+        session.metadata["pending"] = {
+            "name": action.name,
+            "arguments": action.arguments,
+            "preview": preview["preview"],
+        }
+        text = read_back(action.name, preview["preview"], session.language.value)
+        await self._emit(tts, text, session.language.value, put_playback)
+        return text
+
+    async def _dialogue_state(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+    ) -> str | None:
+        """Handle the turn without the router when it answers a pending question or is small talk.
+
+        Returns the spoken reply, or None when the turn is a real request for the router.
+        """
+        language = session.language.value
+        said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
+        pending = session.metadata.get("pending")
+        if pending:
+            answer = yes_no(said)
+            if answer is True:
+                session.metadata.pop("pending")
+                session.metadata.setdefault("actions", []).append(pending["name"])
+                result = await execute_tool(pending["name"], pending["arguments"], session)
+                return await self._speak_tool_result(
+                    llm, tts, session, pending["name"], result, put_playback
+                )
+            if answer is False:
+                session.metadata.pop("pending")
+                text = declined_text(language)
+                await self._emit(tts, text, language, put_playback)
+                return text
+            if not pending.get("asked") and len(said.split()) <= 3:
+                pending["asked"] = True  # one reminder; after that the pending action is dropped
+                text = reask_text(language)
+                await self._emit(tts, text, language, put_playback)
+                return text
+            session.metadata.pop("pending")  # a new request: the old question is void
+        if (kind := classify_social(said)) is not None:
+            text = social_reply(kind, language)
+            await self._emit(tts, text, language, put_playback)
+            if kind == "bye":
+                session.state = "completed"
+            return text
+        return None
 
     async def _grounded_answer(
         self,

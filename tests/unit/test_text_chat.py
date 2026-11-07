@@ -104,7 +104,7 @@ def test_first_message_opens_with_the_greeting_then_answers_from_the_directory(c
 
     second = chat.say("thanks")
     assert second["greeting"] is None
-    assert second["reply"] == "How else can I help?"
+    assert second["reply"] == "You are welcome. Is there anything else I can help with?"
 
 
 def test_a_typed_booking_lands_in_the_clinic_store(chat):
@@ -116,6 +116,10 @@ def test_a_typed_booking_lands_in_the_clinic_store(chat):
         },
         phone="01711000000",
     )
+
+    assert reply["reply"].endswith("Shall I book it?")
+    assert default_clinic_store().appointments_on(_tomorrow()) == []  # not until the caller agrees
+    reply = chat.say("yes")
 
     assert "reference number is 1." in reply["reply"]
     booked = default_clinic_store().appointments_on(_tomorrow())

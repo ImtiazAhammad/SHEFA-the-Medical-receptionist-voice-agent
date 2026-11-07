@@ -73,6 +73,68 @@ async def execute_tool(
         return {"error": str(e)}
 
 
+def _slot_open(store: Any, doctor_id: int, day: str, time: str) -> bool:
+    return any(slot["time"] == time for slot in store.available_slots(doctor_id, day))
+
+
+async def preview_action(
+    tool_name: str, args: dict[str, Any], session: CallSession
+) -> dict[str, Any]:
+    """Check a booking, cancellation or move without changing anything.
+
+    Returns ``{"preview": {...}}`` with the facts to read back, or the same ``needs`` / ``error``
+    result the real tool would give, so a problem is raised before the caller is asked to confirm.
+    """
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.store import ClinicError
+    from shefa.integrations.calendar import _resolve_doctor, error_result
+
+    if missing := missing_arguments(tool_name, args, session):
+        return {"needs": missing, "tool": tool_name}
+    store = default_clinic_store()
+    try:
+        if tool_name == "book_appointment":
+            doctor = _resolve_doctor(store, args["doctor_name"])[0]
+            day, time = str(args["date"]), str(args["time"])
+            if not _slot_open(store, doctor["id"], day, time):
+                return {
+                    "error": f"{time} on {day} is not an open slot",
+                    "next_available": store.next_available(doctor["id"]),
+                }
+            return {
+                "preview": {
+                    "doctor": doctor["name_en"],
+                    "doctor_bn": doctor.get("name_bn") or "",
+                    "date": day,
+                    "time": time,
+                }
+            }
+        appointment_id, problem = _target_appointment(args, session)
+        if problem:
+            return problem
+        appointment = store.get_appointment(appointment_id)
+        if str(appointment["patient_id"]) != str(session.patient_id):
+            return {"error": "Unknown appointment"}
+        facts = {
+            "appointment_id": appointment["appointment_id"],
+            "doctor": appointment["doctor_en"],
+            "doctor_bn": appointment.get("doctor_bn") or "",
+            "date": appointment["date"],
+            "time": appointment["start_time"],
+        }
+        if tool_name == "reschedule_appointment":
+            day, time = str(args["new_date"]), str(args["new_time"])
+            if not _slot_open(store, appointment["doctor_id"], day, time):
+                return {
+                    "error": f"{time} on {day} is not an open slot",
+                    "next_available": store.next_available(appointment["doctor_id"]),
+                }
+            facts |= {"new_date": day, "new_time": time}
+        return {"preview": facts}
+    except ClinicError as exc:
+        return error_result(exc)
+
+
 async def _verify_patient(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.ehr import verify_patient as ehr_verify
 

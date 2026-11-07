@@ -89,7 +89,14 @@ def call(monkeypatch):
         session.add_turn("assistant", reply, session.language)
         return reply
 
-    return SimpleNamespace(say=say, session=session, tts=tts)
+    async def yes() -> str:
+        """The caller's "yes" to a read-back: handled before the router, so no action is queued."""
+        session.add_turn("user", "yes", session.language)
+        reply = await VoicePipeline()._generate_reply(llm, tts, session, _sink)
+        session.add_turn("assistant", reply, session.language)
+        return reply
+
+    return SimpleNamespace(say=say, yes=yes, session=session, tts=tts)
 
 
 def _tomorrow() -> str:
@@ -140,6 +147,8 @@ async def test_full_booking_then_cancel_without_repeating_the_patient_id(call):
             "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
         },
     )
+    assert booked.endswith("Shall I book it?")  # read back first, nothing booked yet
+    booked = await call.yes()
     assert "reference number is 1." in booked  # APT-00001, as a caller can say it back
     assert _spoken(_tomorrow()) in booked
     assert call.tts.spoken[-1] == booked
@@ -148,6 +157,8 @@ async def test_full_booking_then_cancel_without_repeating_the_patient_id(call):
         "Cancel it",
         {"tool": "cancel_appointment", "arguments": {"appointment_id": "APT-00001"}},
     )
+    assert cancelled.endswith("Shall I cancel it?")
+    cancelled = await call.yes()
     assert "appointment number 1" in cancelled
     assert "cancelled" in cancelled
     store = default_clinic_store()
@@ -204,6 +215,7 @@ async def test_the_model_cannot_choose_who_is_booked(call):
             },
         },
     )
+    await call.yes()
     booked = store.get_appointment(1)
     assert booked["patient_id"] == int(call.session.patient_id) != other
 
@@ -217,7 +229,9 @@ async def test_cancel_without_a_reference_cancels_the_callers_only_booking(call)
             "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
         },
     )
+    await call.yes()
     reply = await call.say("cancel my appointment", {"tool": "cancel_appointment", "arguments": {}})
+    reply = await call.yes()
     assert "appointment number 1" in reply and "cancelled" in reply
     assert default_clinic_store().get_appointment(1)["status"] == "cancelled"
 
@@ -235,6 +249,7 @@ async def test_cancel_with_two_bookings_asks_which_and_with_none_says_so(call):
                 "arguments": {"date": _tomorrow(), "time": time, "doctor_name": "Rahman"},
             },
         )
+        await call.yes()
     which = await call.say("cancel it", {"tool": "cancel_appointment", "arguments": {}})
     assert "more than one appointment" in which
     assert {default_clinic_store().get_appointment(i)["status"] for i in (1, 2)} == {"booked"}
@@ -262,6 +277,7 @@ async def test_reschedule_moves_the_only_booking(call):
             "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
         },
     )
+    await call.yes()
     reply = await call.say(
         "move it to 09:30",
         {
@@ -269,6 +285,8 @@ async def test_reschedule_moves_the_only_booking(call):
             "arguments": {"new_date": _tomorrow(), "new_time": "09:30"},
         },
     )
+    assert reply.endswith("Shall I move it?")
+    reply = await call.yes()
     assert "moved to" in reply and "9:30 am" in reply
     assert default_clinic_store().get_appointment(1)["start_time"] == "09:30"
     problem = await call.say(
@@ -292,6 +310,7 @@ async def test_null_optional_arguments_from_the_router_do_not_break_booking(call
             },
         },
     )
+    reply = await call.yes()
     assert "reference number is 1." in reply
 
 

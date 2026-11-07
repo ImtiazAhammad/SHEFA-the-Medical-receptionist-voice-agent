@@ -377,7 +377,13 @@ class TestGenerateReplyExtractMode:
 
         monkeypatch.setattr("shefa.pipeline.voice_pipeline.execute_tool", _fake_execute)
         tts = _FakeTTS()
-        session = _session(("user", "আমাকে কাল অ্যাপয়েন্টমেন্ট দিন"))
+        session = _session(("user", "হ্যাঁ"))
+        # the booking was read back on the previous turn and the caller has just said yes
+        session.metadata["pending"] = {
+            "name": "book_appointment",
+            "arguments": {"date": "2026-12-01"},
+            "preview": {},
+        }
 
         reply = await VoicePipeline()._generate_reply(llm, tts, session, _Sink())
 

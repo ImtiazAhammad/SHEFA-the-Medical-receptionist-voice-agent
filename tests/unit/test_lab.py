@@ -250,10 +250,10 @@ class TestRunner:
             None,
             {"tool": "book_appointment",
              "arguments": {"doctor_name": "Hossain", "date": "2026-11-08", "time": "10:00"}},
-        ]
+        ]  # the third turn is the caller's yes, handled without the router
         scenario = Scenario(
             id="booking", title="t", tests="t", phone="01711000001",
-            turns=["মেডিসিনের ডাক্তার দেখাব", "{bn:Sun} সকাল দশটায়"],
+            turns=["মেডিসিনের ডাক্তার দেখাব", "{bn:Sun} সকাল দশটায়", "হ্যাঁ"],
             expect=Expect(actions_any=["book_appointment"], booked=1,
                           booked_dates=["{iso:Sun}"], reply_language="bn"),
         )
@@ -263,8 +263,10 @@ class TestRunner:
         assert result.error is None
         assert result.turns[0].greeting
         assert result.turns[1].said == "রবিবার, ৮ নভেম্বর সকাল দশটায়"
-        assert result.turns[1].actions == ["book_appointment"]
-        assert "রেফারেন্স নম্বর এক" in result.turns[1].reply
+        assert result.turns[1].actions == []  # read back, not yet booked
+        assert "বুক করব" in result.turns[1].reply
+        assert result.turns[2].actions == ["book_appointment"]
+        assert "রেফারেন্স নম্বর এক" in result.turns[2].reply
         assert [a["start_time"] for a in result.appointments] == ["10:00"]
         assert result.passed, [c for c in result.checks if not c.ok]
 
