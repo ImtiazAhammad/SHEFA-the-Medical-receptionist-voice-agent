@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from shefa.clinic import default_clinic_store
-from shefa.clinic.store import WEEKDAYS
+from shefa.clinic.store import WEEKDAYS, normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,17 @@ async def verify_patient(data: dict[str, Any]) -> dict[str, Any]:
     book and to manage that number's own appointments, and nothing here exposes
     clinical records.
     """
-    phone = str(data.get("phone") or "").strip()
-    if not phone:
+    from shefa.phone_words import is_bd_mobile, parse_spoken_digits
+
+    raw = str(data.get("phone") or "").strip()
+    if not raw:
         return {"verified": False, "error": "A phone number is required"}
+    # The caller may have said it as words or Bangla digits; a number that is not a Bangladeshi
+    # mobile is never registered, so one misheard digit cannot create a stray patient.
+    phone = parse_spoken_digits(raw)
+    if not is_bd_mobile(phone):
+        return {"verified": False, "error": "invalid phone", "heard": phone}
+    phone = normalize_phone(phone)
     store = default_clinic_store()
     name = str(data.get("name") or "")
     patient_id = store.upsert_patient(phone, name)

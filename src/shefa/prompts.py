@@ -45,7 +45,9 @@ SYSTEM_PROMPT_TEMPLATE = (
 )
 
 
-def system_prompt(language: str, patient_name: str | None, directory: str = "") -> str:
+def system_prompt(
+    language: str, patient_name: str | None, directory: str = "", identified: bool = False
+) -> str:
     """Render the system prompt for a session's language and patient.
 
     ``directory`` is the clinic directory block (see ``shefa.clinic.brief``); when given, the
@@ -55,4 +57,9 @@ def system_prompt(language: str, patient_name: str | None, directory: str = "") 
         language=language,
         patient_name=patient_name or "Unknown",
     )
+    if identified:
+        prompt += (
+            "- The caller is already identified by their phone number (caller ID): never ask "
+            "for their number or name to look them up.\n"
+        )
     return f"{prompt}\n{directory}" if directory else prompt

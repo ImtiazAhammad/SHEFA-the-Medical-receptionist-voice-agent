@@ -35,6 +35,7 @@ from shefa.pipeline.actions import (
     error_text,
     extract_action,
     info_note,
+    need_text,
     numbers_grounded,
     tool_result_note,
 )
@@ -561,8 +562,10 @@ class VoicePipeline:
             # fall back to a grounded model reply, with the result folded into the LEADING
             # system message (gemma2's chat template reads a trailing one loosely).
             language = session.language.value
-            fixed = confirmation_text(action.name, tool_result, language) or error_text(
-                action.name, tool_result, language
+            fixed = (
+                need_text(action.name, tool_result, language)
+                or confirmation_text(action.name, tool_result, language)
+                or error_text(action.name, tool_result, language)
             )
             if fixed is not None:
                 await self._emit(tts, fixed, session.language.value, put_playback)

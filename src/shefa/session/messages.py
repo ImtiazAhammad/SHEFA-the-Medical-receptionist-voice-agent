@@ -46,6 +46,7 @@ def build_messages(session: CallSession) -> list[dict[str, Any]]:
                 session.language.value,
                 session.patient_name,
                 clinic_directory(session.language.value),
+                identified=bool(session.patient_id),
             ),
         }
     ]

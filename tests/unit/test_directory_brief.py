@@ -105,3 +105,11 @@ def test_the_router_is_told_to_use_the_directory(store):
     assert directory in prompt and "Copy doctor_name" in prompt
     plain = extractor_system_prompt(get_tool_definitions(), date(2026, 11, 8))
     assert "Copy doctor_name" not in plain and directory_hints("") == ""
+
+
+def test_an_identified_caller_is_never_asked_for_a_number():
+    assert "already identified" not in system_prompt("en", None)
+    assert "already identified" in system_prompt("en", "Imtiaz", identified=True)
+    tools = get_tool_definitions()
+    assert "never call verify_patient" in extractor_system_prompt(tools, identified=True)
+    assert "never call verify_patient" not in extractor_system_prompt(tools)

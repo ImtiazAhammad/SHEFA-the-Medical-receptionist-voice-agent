@@ -100,7 +100,7 @@ def directory_hints(directory: str) -> str:
         "patient describes a problem rather than asking for a person, pick the department "
         "whose 'sees' list fits and call list_doctors with it. Questions the directory "
         "already answers (gender, room, languages, experience, fees, who sees what) need no "
-        "tool: answer {\"tool\": null}.\n"
+        'tool: answer {"tool": null}.\n'
     )
 
 
@@ -110,14 +110,18 @@ _ROUTER_SKIPS = {"patient_id", "reason"}
 
 
 def _router_parameters(parameters: dict) -> dict:
-    properties = {k: v for k, v in parameters.get("properties", {}).items()
-                  if k not in _ROUTER_SKIPS}
+    properties = {
+        k: v for k, v in parameters.get("properties", {}).items() if k not in _ROUTER_SKIPS
+    }
     required = [k for k in parameters.get("required", []) if k not in _ROUTER_SKIPS]
     return {**parameters, "properties": properties, "required": required}
 
 
 def extractor_system_prompt(
-    tools: list[ToolDefinition], today: date | None = None, directory: str = ""
+    tools: list[ToolDefinition],
+    today: date | None = None,
+    directory: str = "",
+    identified: bool = False,
 ) -> str:
     """Describe the available tools and the exact JSON shape to the router."""
     today = today or date.today()
@@ -164,6 +168,12 @@ def extractor_system_prompt(
         "tomorrow, আজ, আগামীকাল, পরশু) into an absolute YYYY-MM-DD date in the "
         "arguments. Never use a date that is already in the past.\n"
         + hints
+        + (
+            "The caller is already identified by caller ID: never call verify_patient and "
+            "never ask for a phone number.\n"
+            if identified
+            else ""
+        )
         + directory_hints(directory)
         + (directory + "\n" if directory else "")
         + 'Reply with ONLY a JSON object: {"tool": <name or null>, "arguments": {}}.\n'
@@ -233,9 +243,7 @@ async def extract_action(
     messages = build_messages(session)
     messages[0] = {
         "role": "system",
-        "content": extractor_system_prompt(
-            tools, today, clinic_directory(session.language.value)
-        ),
+        "content": extractor_system_prompt(tools, today, clinic_directory(session.language.value)),
     }
     try:
         result = await llm.generate(messages, response_format={"type": "json_object"})
@@ -279,6 +287,77 @@ def _say(result: dict[str, Any], language: str) -> dict[str, Any]:
     }
 
 
+_NEED_ORDER = ("doctor_name", "date", "new_date", "phone", "appointment_id")
+_NEEDS = {
+    "doctor_name": ("Which doctor would you like to see?", "কোন ডাক্তারের কাছে যেতে চান?"),
+    "phone": ("What is your mobile phone number?", "আপনার মোবাইল নম্বরটা বলবেন?"),
+    "appointment_id": (
+        "What is the appointment reference number?",
+        "অ্যাপয়েন্টমেন্টের রেফারেন্স নম্বরটা বলবেন?",
+    ),
+    "date": ("Which day would you like?", "কোন দিন চান?"),
+    "time": ("What time would you like?", "কোন সময় চান?"),
+    "new_date": ("Which day should I move it to?", "কোন দিনে সরাতে চান?"),
+    "new_time": ("What time should I move it to?", "কোন সময়ে সরাতে চান?"),
+}
+_NEEDS_TOGETHER = {
+    frozenset({"date", "time"}): (
+        "Which day and time would you like?",
+        "কোন দিন ও কোন সময় চান?",
+    ),
+    frozenset({"new_date", "new_time"}): (
+        "Which day and time should I move it to?",
+        "কোন দিন ও কোন সময়ে সরাতে চান?",
+    ),
+}
+
+
+def need_text(tool_name: str, result: Any, language: str) -> str | None:
+    """One question asking for what the tool still needs, or None when nothing is missing."""
+    if not isinstance(result, dict) or not result.get("needs"):
+        return None
+    needs = list(result["needs"])
+    index = 0 if language == "en" else 1
+    if pair := _NEEDS_TOGETHER.get(frozenset(needs)):
+        return pair[index]
+    first = next((n for n in _NEED_ORDER if n in needs), needs[0])
+    return _NEEDS.get(first, _NEEDS["appointment_id"])[index]
+
+
+def _confirm_my_appointments(result: dict[str, Any]) -> dict[str, str] | None:
+    items = result.get("appointments")
+    if items is None:
+        return None
+    if not items:
+        return {
+            "en": "You have no upcoming appointments.",
+            "bn": "আপনার কোনো আসন্ন অ্যাপয়েন্টমেন্ট নেই।",
+        }
+    en_parts, bn_parts = [], []
+    for item in items[:3]:
+        doctor_bn = item.get("doctor_bn") or item["doctor"]
+        en_parts.append(
+            f"{spoken_doctor(item['doctor'], 'en')}, {spoken_date(item['date'], 'en')} at "
+            f"{spoken_time(item['time'], 'en')}, reference "
+            f"{spoken_reference(item['appointment_id'], 'en')}"
+        )
+        bn_parts.append(
+            f"{spoken_doctor(doctor_bn, 'bn')}-এর সাথে {spoken_date(item['date'], 'bn')} "
+            f"{spoken_time(item['time'], 'bn', at=True)}, রেফারেন্স "
+            f"{spoken_reference(item['appointment_id'], 'bn')}"
+        )
+    more = len(items) - 3
+    count_en = "an appointment" if len(items) == 1 else f"{len(items)} appointments"
+    count_bn = "একটি অ্যাপয়েন্টমেন্ট" if len(items) == 1 else f"{len(items)}টি অ্যাপয়েন্টমেন্ট"
+    en = (
+        f"You have {count_en}: "
+        + "; ".join(en_parts)
+        + (f"; and {more} more." if more > 0 else ".")
+    )
+    bn = f"আপনার {count_bn} আছে: " + "; ".join(bn_parts) + (f"; আরও {more}টি।" if more > 0 else "।")
+    return {"en": en, "bn": bn}
+
+
 # Directory questions: answered by a short model reply grounded on the directory and the tool
 # result, not by dumping a template. Anything the model says with a number nobody supplied is
 # discarded and the template is spoken instead.
@@ -305,8 +384,7 @@ def _spoken_doctor_result(result: dict[str, Any], language: str) -> dict[str, An
     nxt = card.get("next_available")
     if isinstance(nxt, dict) and nxt.get("date") and nxt.get("time"):
         card["next_available"] = (
-            f"{spoken_date(nxt['date'], language)} "
-            f"{spoken_time(nxt['time'], language, at=True)}"
+            f"{spoken_date(nxt['date'], language)} {spoken_time(nxt['time'], language, at=True)}"
         )
     if isinstance(card.get("doctors"), list):
         card["doctors"] = [
@@ -346,8 +424,9 @@ def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
-    date_en, date_bn = spoken_date(result.get("date", ""), "en"), spoken_date(
-        result.get("date", ""), "bn"
+    date_en, date_bn = (
+        spoken_date(result.get("date", ""), "en"),
+        spoken_date(result.get("date", ""), "bn"),
     )
     if "doctors" in result:  # a broad question: who has any time that day
         doctors = result["doctors"]
@@ -420,8 +499,7 @@ def _confirm_reschedule(result: dict[str, Any]) -> dict[str, str] | None:
     en, bn = _say(moved, "en"), _say(moved, "bn")
     return {
         "en": f"Done - appointment number {en['ref']} is moved to {en['date']} at {en['at']}.",
-        "bn": f"ঠিক আছে, {bn['ref']} নম্বর অ্যাপয়েন্টমেন্টটি {bn['date']} {bn['at']} "
-        "সরানো হয়েছে।",
+        "bn": f"ঠিক আছে, {bn['ref']} নম্বর অ্যাপয়েন্টমেন্টটি {bn['date']} {bn['at']} সরানো হয়েছে।",
     }
 
 
@@ -448,8 +526,10 @@ def _confirm_doctors(result: dict[str, Any]) -> dict[str, str] | None:
     return {
         "en": "Our doctors are "
         + spoken_list(
-            [f"{spoken_doctor(d.get('name', ''), 'en')} ({d.get('department', '')})"
-             for d in items],
+            [
+                f"{spoken_doctor(d.get('name', ''), 'en')} ({d.get('department', '')})"
+                for d in items
+            ],
             "en",
         )
         + ". Would you like a doctor's schedule, or to book?",
@@ -489,8 +569,7 @@ def _confirm_doctor_info(result: dict[str, Any]) -> dict[str, str] | None:
         f"{spoken_schedule(lines, 'bn')}।" if lines else "অ্যাপয়েন্টমেন্ট নিয়ে।"
     )
     bn += (
-        f" পরের খালি সময় {spoken_date(nxt['date'], 'bn')} "
-        f"{spoken_time(nxt['time'], 'bn', at=True)}।"
+        f" পরের খালি সময় {spoken_date(nxt['date'], 'bn')} {spoken_time(nxt['time'], 'bn', at=True)}।"
         if has_next
         else " সামনের ৩০ দিনে কোনো খালি সময় নেই।"
     )
@@ -515,6 +594,7 @@ _CONFIRMATIONS: dict[str, Any] = {
     "list_departments": _confirm_departments,
     "list_doctors": _confirm_doctors,
     "get_doctor_info": _confirm_doctor_info,
+    "list_my_appointments": _confirm_my_appointments,
 }
 
 
@@ -560,6 +640,14 @@ _ERRORS: tuple[tuple[tuple[str, ...], dict[str, str]], ...] = (
         {
             "en": "Sorry, that time is not available. Shall I read out the free times?",
             "bn": "দুঃখিত, ওই সময়টি খালি নেই। আমি কি খালি সময়গুলো বলব?",
+        },
+    ),
+    (
+        ("invalid phone",),
+        {
+            "en": "I did not catch the whole number. Please say your 11-digit mobile number "
+            "again, one digit at a time.",
+            "bn": "পুরো নম্বরটা বুঝতে পারিনি। আপনার ১১ সংখ্যার মোবাইল নম্বরটা আবার, একটা একটা করে সংখ্যা বলবেন?",
         },
     ),
     (

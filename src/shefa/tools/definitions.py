@@ -104,6 +104,14 @@ def get_tool_definitions() -> list[ToolDefinition]:
             parameters={"type": "object", "properties": {}},
         ),
         ToolDefinition(
+            name="list_my_appointments",
+            description=(
+                "Use when the caller asks whether they have an appointment, what their "
+                "bookings are, or when their appointment is. Takes no arguments."
+            ),
+            parameters={"type": "object", "properties": {}},
+        ),
+        ToolDefinition(
             name="list_doctors",
             description=(
                 "Use when the patient asks which doctors there are, in general or in one "

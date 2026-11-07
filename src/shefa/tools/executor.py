@@ -12,6 +12,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# What each tool cannot run without. The model often calls a tool with only some of it ("move my
+# appointment" with no new time); that is a question for the caller, not an exception.
+_REQUIRED: dict[str, tuple[str, ...]] = {
+    "check_appointment_slots": ("date",),
+    "book_appointment": ("doctor_name", "date", "time"),
+    "reschedule_appointment": ("new_date", "new_time"),
+    "get_doctor_info": ("doctor_name",),
+    "verify_patient": ("phone",),
+    "send_confirmation": ("appointment_id",),
+}
+
+
+# These act for a person, so the caller must be identified (by caller ID or a spoken number) first.
+_NEEDS_IDENTITY = frozenset(
+    {
+        "book_appointment",
+        "cancel_appointment",
+        "reschedule_appointment",
+        "send_confirmation",
+        "list_my_appointments",
+        "lookup_patient_history",
+    }
+)
+
+
+def missing_arguments(tool_name: str, args: dict[str, Any], session: CallSession) -> list[str]:
+    """The required arguments that are absent or blank for ``tool_name``."""
+    if tool_name in _NEEDS_IDENTITY and not session.patient_id:
+        return ["phone"]
+    missing = [
+        name
+        for name in _REQUIRED.get(tool_name, ())
+        if not str(args.get(name) if args.get(name) is not None else "").strip()
+    ]
+    if tool_name == "verify_patient" and session.patient_id:
+        return []  # the caller ID already says who this is
+    return missing
+
+
 async def execute_tool(
     tool_name: str, arguments: str | dict[str, Any], session: CallSession
 ) -> dict[str, Any]:
@@ -23,6 +62,8 @@ async def execute_tool(
     handler = _HANDLERS.get(tool_name)
     if handler is None:
         return {"error": f"Unknown tool: {tool_name}"}
+    if missing := missing_arguments(tool_name, args, session):
+        return {"needs": missing, "tool": tool_name}
 
     try:
         result = await handler(args, session)
@@ -35,6 +76,17 @@ async def execute_tool(
 async def _verify_patient(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.ehr import verify_patient as ehr_verify
 
+    if session.patient_id and not str(args.get("phone") or "").strip():
+        from shefa.clinic import default_clinic_store
+
+        known = default_clinic_store().get_patient(int(session.patient_id)) or {}
+        session.patient_name = session.patient_name or known.get("name") or None
+        return {
+            "verified": True,
+            "patient_id": session.patient_id,
+            "name": known.get("name", ""),
+            "phone": known.get("phone", ""),
+        }
     result = await ehr_verify(args)
     if result.get("verified"):
         session.patient_id = result.get("patient_id")
@@ -142,19 +194,46 @@ async def _list_doctors(args: dict[str, Any], session: CallSession) -> dict[str,
     return await list_doctors(args.get("department"))
 
 
+async def _list_my_appointments(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
+    """The caller's own upcoming appointments, for "do I have an appointment?"."""
+    if not session.patient_id:
+        return {"needs": ["phone"], "tool": "list_my_appointments"}
+    from datetime import datetime
+
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.store import CLINIC_TZ
+
+    today = datetime.now(CLINIC_TZ).date().isoformat()
+    upcoming = default_clinic_store().appointments_for_patient(
+        int(session.patient_id), upcoming_from=today
+    )
+    return {
+        "appointments": [
+            {
+                "appointment_id": a["appointment_id"],
+                "date": a["date"],
+                "time": a["start_time"],
+                "doctor": a["doctor_en"],
+                "doctor_bn": a.get("doctor_bn") or "",
+            }
+            for a in upcoming
+        ]
+    }
+
+
 async def _lookup_patient_history(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.ehr import get_patient_history
 
-    return await get_patient_history(args["patient_id"])
+    return await get_patient_history(_acting_patient(session))
 
 
 async def _send_confirmation(args: dict[str, Any], session: CallSession) -> dict[str, Any]:
     from shefa.integrations.notifications import send_confirmation
 
     return await send_confirmation(
-        patient_id=args["patient_id"],
+        patient_id=_acting_patient(session),
         appointment_id=args["appointment_id"],
-        method=args["method"],
+        method=args.get("method") or "sms",
         language=session.language.value,
     )
 
@@ -209,6 +288,7 @@ _HANDLERS: dict[str, Any] = {
     "list_departments": _list_departments,
     "list_doctors": _list_doctors,
     "lookup_patient_history": _lookup_patient_history,
+    "list_my_appointments": _list_my_appointments,
     "send_confirmation": _send_confirmation,
     "transfer_to_human": _transfer_to_human,
 }
