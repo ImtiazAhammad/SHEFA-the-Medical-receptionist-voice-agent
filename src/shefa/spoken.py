@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from shefa.bangla import WEEKDAYS_BN, bn_date, bn_digits, en_date
+from shefa.bangla import WEEKDAYS_BN, bn_date_words, bn_digits, bn_number, en_date
 
 _WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _SCHEDULE_LINE = re.compile(r"^\s*([A-Za-z]+)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s*$")
@@ -64,8 +64,8 @@ def spoken_time(value: str, language: str, *, at: bool = False) -> str:
     if language == "bn":
         twelve = hour % 12 or 12
         if minute == 0:
-            return f"{_bn_period(hour)} {bn_digits(twelve)}{'টায়' if at else 'টা'}"
-        return f"{_bn_period(hour)} {bn_digits(twelve)}টা {bn_digits(minute)} মিনিট" + (
+            return f"{_bn_period(hour)} {bn_number(twelve)}{'টায়' if at else 'টা'}"
+        return f"{_bn_period(hour)} {bn_number(twelve)}টা {bn_number(minute)} মিনিট" + (
             "ে" if at else ""
         )
     clock, suffix = _en_clock(hour, minute)
@@ -91,7 +91,7 @@ def spoken_date(value: str, language: str) -> str:
         day = date.fromisoformat(str(value))
     except ValueError:
         return str(value)
-    return bn_date(day) if language == "bn" else en_date(day)
+    return bn_date_words(day) if language == "bn" else en_date(day)
 
 
 def spoken_list(items: list[str], language: str) -> str:
@@ -159,9 +159,14 @@ def spoken_reference(value: str, language: str) -> str:
     digits = re.sub(r"\D", "", str(value)).lstrip("0")
     if not digits:
         return str(value)
-    return bn_digits(digits) if language == "bn" else digits
+    return bn_number(int(digits)) if language == "bn" else digits
 
 
 def spoken_number(value: object, language: str) -> str:
     """800 -> '800' / '৮০০'."""
-    return bn_digits(value) if language == "bn" else str(value)
+    if language != "bn":
+        return str(value)
+    try:
+        return bn_number(int(str(value)))
+    except ValueError:
+        return bn_digits(value)

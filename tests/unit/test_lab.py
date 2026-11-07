@@ -264,7 +264,7 @@ class TestRunner:
         assert result.turns[0].greeting
         assert result.turns[1].said == "রবিবার, ৮ নভেম্বর সকাল দশটায়"
         assert result.turns[1].actions == ["book_appointment"]
-        assert "রেফারেন্স নম্বর ১" in result.turns[1].reply
+        assert "রেফারেন্স নম্বর এক" in result.turns[1].reply
         assert [a["start_time"] for a in result.appointments] == ["10:00"]
         assert result.passed, [c for c in result.checks if not c.ok]
 

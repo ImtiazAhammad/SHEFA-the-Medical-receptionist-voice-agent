@@ -284,10 +284,10 @@ class TestConfirmationText:
             "bn",
         )
         # Spoken the way a receptionist says it: Bangla weekday, date and time words,
-        # and the reference as a number the caller can repeat (APT-9 -> ৯).
+        # and the reference as a number the caller can repeat (APT-9 -> নয়).
         assert text == (
-            "আপনার অ্যাপয়েন্টমেন্ট মঙ্গলবার, ১ ডিসেম্বর সকাল ১০টায় ডাক্তার করিম-এর সাথে "
-            "বুক হয়েছে। আপনার রেফারেন্স নম্বর ৯।"
+            "আপনার অ্যাপয়েন্টমেন্ট মঙ্গলবার, এক ডিসেম্বর সকাল দশটায় ডাক্তার করিম-এর সাথে "
+            "বুক হয়েছে। আপনার রেফারেন্স নম্বর নয়।"
         )
 
     def test_booking_english(self):
@@ -317,8 +317,8 @@ class TestConfirmationText:
             "bn",
         )
         assert text is not None
-        assert "সকাল ৯টা" in text
-        assert "সকাল ১০টা ৩০ মিনিট" in text
+        assert "সকাল নয়টা" in text
+        assert "সকাল দশটা ত্রিশ মিনিট" in text
 
     def test_cancel_confirms_the_reference(self):
         text = confirmation_text(
@@ -382,8 +382,8 @@ class TestGenerateReplyExtractMode:
         reply = await VoicePipeline()._generate_reply(llm, tts, session, _Sink())
 
         assert executed == [("book_appointment", {"date": "2026-12-01"})]
-        assert "মঙ্গলবার, ১ ডিসেম্বর" in reply
-        assert "রেফারেন্স নম্বর ৯" in reply
+        assert "মঙ্গলবার, এক ডিসেম্বর" in reply
+        assert "রেফারেন্স নম্বর নয়" in reply
         # only the templated fact is spoken: no free-form guess before it
         assert tts.spoken == [reply]
         # facts never go through the model
@@ -520,8 +520,8 @@ class TestDirectoryConfirmations:
         )
         bn = confirmation_text("get_doctor_info", self.DOCTOR, "bn")
         assert bn == (
-            "ডাক্তার রহমান হৃদরোগ বিভাগে বসেন রবিবার সকাল ৯টা থেকে দুপুর ১২টা। পরের খালি সময় "
-            "রবিবার, ৮ নভেম্বর সকাল ৯টায়। ভিজিট ফি ৮০০ টাকা।"
+            "ডাক্তার রহমান হৃদরোগ বিভাগে বসেন রবিবার সকাল নয়টা থেকে দুপুর বারোটা। পরের খালি সময় "
+            "রবিবার, আট নভেম্বর সকাল নয়টায়। ভিজিট ফি আটশো টাকা।"
         )
 
     def test_doctor_info_with_no_free_time_says_so(self):
@@ -603,7 +603,7 @@ class TestSlotAnswers:
             "en",
         )
         assert "from 4 pm to 6:45 pm" in text and "5:15" not in text
-        assert "বিকেল ৪টা থেকে সন্ধ্যা ৬টা ৪৫ মিনিট" in confirmation_text(
+        assert "বিকেল চারটা থেকে সন্ধ্যা ছয়টা পঁয়তাল্লিশ মিনিট" in confirmation_text(
             "check_appointment_slots",
             {"date": "d", "doctor": "R", "available_slots": self._slots(*times)},
             "bn",
@@ -619,7 +619,7 @@ class TestSlotAnswers:
         en = confirmation_text("check_appointment_slots", result, "en")
         assert "no free time on Monday 2 November" in en
         assert "Tuesday 3 November at 4 pm" in en
-        assert "মঙ্গলবার, ৩ নভেম্বর বিকেল ৪টায়" in confirmation_text(
+        assert "মঙ্গলবার, তিন নভেম্বর বিকেল চারটায়" in confirmation_text(
             "check_appointment_slots", result, "bn"
         )
 
