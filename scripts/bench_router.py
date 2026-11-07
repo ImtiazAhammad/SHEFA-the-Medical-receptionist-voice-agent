@@ -23,6 +23,7 @@ from shefa.clinic import ClinicStore
 from shefa.clinic.brief import directory_brief
 from shefa.clinic.loader import import_directory_file
 from shefa.pipeline.actions import extractor_system_prompt, parse_action, resolve_arguments
+from shefa.pipeline.grounding import ground_arguments
 from shefa.tools.definitions import get_tool_definitions
 
 TODAY = date(2026, 11, 1)  # a Sunday; tomorrow = 2026-11-02
@@ -142,7 +143,14 @@ def score(model: str, host: str, runs: int, directories: dict[str, str]) -> dict
             times.append(seconds)
             action = parse_action(text, names)
             got = (
-                (action.name, resolve_arguments(action.arguments, TODAY)) if action else (None, {})
+                (
+                    action.name,
+                    ground_arguments(
+                        action.name, resolve_arguments(action.arguments, TODAY), utterance, TODAY
+                    ),
+                )
+                if action
+                else (None, {})
             )
         name, arguments = got
         accepted = {None if t == "none" else t for t in (tool or "none").split("|")}

@@ -34,7 +34,8 @@ foreign cloud). Roadmap, in build order:
   one?"; thanks, "ok" and goodbye are handled in code, and goodbye hangs up.
 - Numbers, hours and dates are spoken as Bangla words (Piper misreads digits).
 - Measured: replies start about 1.7 s after the caller stops; the conversation lab passes 26/26
-  scenarios with the real models and voices. Not yet measured: real phone audio, real
+  scenarios with the real models and voices; the router gets all 24 benchmark cases right
+  (tool and arguments) once days and times are grounded in code. Not yet measured: real phone audio, real
   microphones, concurrency. Voice-quality targets and what the Verbex reel does and does not
   show: [`docs/research/2026-11-08-verbex-demo-analysis.md`](docs/research/2026-11-08-verbex-demo-analysis.md).
 - Real doctors for a local demo: `scripts/import_labaid_directory.py` (public listing, robots.txt

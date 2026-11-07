@@ -88,7 +88,7 @@ Agent (not in the video; targets from the production-voice-agent research and SH
 | A2 | Booking task success >= 95% on the lab scenarios, including mis-heard names, phone dictation, interruptions; zero bookings without a spoken read-back and an explicit yes | 19/19 lab calls pass, but they are scripted; confirm-before-act not built |
 | A3 | Caller can interrupt the agent; playback stops within 300 ms | cannot interrupt (half-duplex) |
 | A4 | Bangla word error rate on recorded clinic-phone audio, measured, with names and digits reported separately | never measured on real phone audio |
-| A5 | No call ends in silence: every turn produces speech or a handover | one silent turn seen on 2026-11-07 |
+| A5 | No call ends in silence: every turn produces speech or a handover | Fixed: a finished pipeline (handover, goodbye, failures) now hangs up after the last words. One turn on 2026-11-07 showed no reply line in the log; `evaluate_transcript` does not drop that sentence at any realistic confidence, so the cause is unconfirmed |
 
 ## 5. Candidate path for V4/V5 (needs a bake-off, not a decision)
 
@@ -106,3 +106,25 @@ No open model with per-phrase emotion tags and code-mixing was found in search.
 - The VAD merges overlapping voices and music with speech, so pause statistics are approximate.
 - The pitch tracker is a simple autocorrelation method; octave errors are possible; it cannot tell
   naturalness. Human listening is the real test.
+
+
+## 7. Progress, measured on 2026-11-08
+
+| # | Target | Before | Now | Status |
+|---|---|---|---|---|
+| V1 | Pause p90/median >= 2.0 | 1.15 | 2.65 on a clinic reply (1.8 on a long narration) | met on replies; the metric is ours, listening is the real test |
+| V2 | Speech level -16 dBFS, peak <= -1 | -20.3 dBFS, peak 0.0 | -18.7 dBFS, peak -2.1 dBFS, no clipping | peak met; level not (the soft limiter caps what Piper's dynamics allow); phone audio is G.711 anyway |
+| V3 | Sample rate | 22.05 kHz | 22.05 kHz | unchanged |
+| V4 | English words inside Bangla read correctly | no | Measured: a Latin-script name in a Bangla sentence is garbled ("Lutfor Rahman" heard as "লাত ফোয়ামন"); the same name in Bangla script is perfect ("লুৎফর রহমান"). A mixed sentence with "appointment" and "Dr. Rahman" lost both | **not met by voice switching; the fix is data**: every doctor needs `name_bn`. The Labaid demo file carries unverified transliterations, flagged as such. Mid-sentence voice switching was not built: a male voice changing to a female English voice partway through is worse than either |
+| V5 | Selectable styles | none | none | open: needs the Indic Parler bake-off (licence to be read first) |
+| V6 | Blind listening score | not run | not run | open: needs three Bangladeshi listeners |
+| A1 | Reply <= 1.0 s p50, <= 1.8 s p95 | 1.3-1.7 s | 1.7 s typical on synthetic speech | p50 not met; no real-microphone p95 yet |
+| A2 | Task success >= 95%; no booking without read-back and yes | read-back not built | read-back built; lab 26/26 with real models and voices; router 24/24 tools and arguments (grounded) | met on the lab; scripted callers only |
+| A3 | Caller can interrupt; playback stops < 300 ms | no | no | open |
+| A4 | Bangla WER on recorded clinic-phone audio | never measured | never measured | open |
+| A5 | No call ends in silence | no | hang-up built; see the table above | met in tests |
+
+Also checked in a real browser (Playwright, throwaway server and database): sign-in, typed chat
+with a symptom question, a booking through the read-back and the yes, the Today tab showing the
+booking on a 390 px phone viewport, tab switching; no JavaScript errors. The microphone path (and
+the new `hangupWhenQuiet`) is still untested in a browser.

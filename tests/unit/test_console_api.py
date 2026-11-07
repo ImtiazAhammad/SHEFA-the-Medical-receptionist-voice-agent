@@ -326,3 +326,11 @@ def test_serve_https_reports_a_missing_openssl(tmp_path, monkeypatch, capsys):
     )
     assert main(["serve", "--https"]) == 1
     assert "no openssl" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("page", ["console.html", "signin.html"])
+def test_pages_name_an_icon_so_browsers_do_not_request_favicon_ico(page):
+    html = (Path(__file__).parents[2] / "src" / "shefa" / "static" / page).read_text(
+        encoding="utf-8"
+    )
+    assert 'rel="icon"' in html  # /favicon.ico is (correctly) refused without a sign-in
