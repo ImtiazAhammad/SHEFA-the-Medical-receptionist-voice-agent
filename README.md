@@ -73,8 +73,12 @@ uv pip install torch transformers            # once, only to convert the Bangla 
 uv run shefa setup
 uv run shefa fetch-models     # voice + Bangla Whisper conversion + `ollama pull gemma2:9b`
 uv run shefa doctor           # every line should say ok
-uv run shefa serve
+uv run shefa serve            # starts Ollama if needed and loads the doctors if none are loaded
 ```
+
+After the first install the only command you need is `uv run shefa serve`, then open
+<http://127.0.0.1:8000/console>. If `ollama serve` says "address already in use", Ollama is already
+running in the background: that is fine.
 
 `shefa fetch-models` only fetches what the configured providers need, skips what is already
 there, and prints a fix for anything it cannot do (`--skip-speech` skips the speech-model build).

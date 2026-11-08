@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -482,6 +484,64 @@ def run_fetch_models(args: argparse.Namespace) -> int:
     return 1
 
 
+class _QuietPolling(logging.Filter):
+    """The console asks "who is ringing?" every second; that is not worth a log line."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/v1/calls/ringing" not in record.getMessage()
+
+
+def _ensure_ollama(base: str = "http://localhost:11434") -> None:
+    """Make sure the language model server is up: use it if running, else start it."""
+    import shutil
+    import subprocess
+    import time
+    import urllib.request
+
+    def up() -> bool:
+        try:
+            urllib.request.urlopen(f"{base}/api/tags", timeout=2)  # noqa: S310
+        except OSError:
+            return False
+        return True
+
+    if up():
+        return
+    if shutil.which("ollama") is None:
+        print("Ollama is not installed or not running: the agent cannot think without it.")
+        return
+    print("Starting Ollama...")
+    subprocess.Popen(  # noqa: S603
+        ["ollama", "serve"],  # noqa: S607
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    for _ in range(20):
+        if up():
+            return
+        time.sleep(1)
+    print("Ollama did not start; run `ollama serve` in another terminal.")
+
+
+def _ensure_directory() -> None:
+    """A fresh install has no doctors: load the local clinic file, else the fictional sample."""
+    from pathlib import Path
+
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.loader import import_directory_file
+
+    store = default_clinic_store()
+    if store.doctors():
+        return
+    for name in ("clinic.labaid.local.yaml", "clinic.example.yaml"):
+        path = Path("configs") / name
+        if path.exists():
+            counts = import_directory_file(store, path)
+            print(f"Loaded {counts['doctors']} doctors from {path}")
+            return
+
+
 def run_serve(args: argparse.Namespace) -> int:
     import subprocess
     from pathlib import Path
@@ -530,6 +590,10 @@ def run_serve(args: argparse.Namespace) -> int:
     shown = _lan_addresses() if args.host == "0.0.0.0" else [args.host]  # noqa: S104
     for address in shown:
         print(f"Console: {scheme}://{address}:{args.port}/console")
+    logging.getLogger("uvicorn.access").addFilter(_QuietPolling())
+    if not os.environ.get("SHEFA_SKIP_WARMUP"):  # tests and CI bring their own services
+        _ensure_ollama()
+        _ensure_directory()
     uvicorn.run("shefa.main:app", host=args.host, port=args.port, **ssl)
     return 0
 
