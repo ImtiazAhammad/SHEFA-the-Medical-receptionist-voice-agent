@@ -41,6 +41,7 @@ from shefa.pipeline.actions import (
     numbers_grounded,
     tool_result_note,
 )
+from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import (
     NEEDS_CONFIRMATION,
     declined_text,
@@ -170,6 +171,21 @@ def _remember_offer(session: CallSession, name: str, result: dict[str, Any]) -> 
     A bare "ঠিক আছে" or "yes" then means that booking, instead of being treated as small talk.
     """
     session.metadata.pop("offer", None)
+    session.metadata.pop("choices", None)
+    times = [s["time"] for s in result.get("available_slots") or [] if s.get("time")]
+    if (
+        name == "check_appointment_slots"
+        and result.get("doctor_id") is not None
+        and result.get("date")
+        and 2 <= len(times) <= MAX_CHOICES  # a longer list is summarised, not read out
+    ):
+        session.metadata["choices"] = {
+            "doctor_id": result["doctor_id"],
+            "doctor_name": result.get("doctor", ""),
+            "date": result["date"],
+            "times": times,
+            "turns_left": 2,
+        }
     nxt = result.get("next_available") or {}
     if (
         name == "check_appointment_slots"
@@ -796,6 +812,25 @@ class VoicePipeline:
         said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
         pending = session.metadata.get("pending")
         offer = session.metadata.pop("offer", None)  # an offer lasts one turn
+        choices = session.metadata.get("choices")
+        if choices and not pending:
+            index = pick(said, len(choices["times"]))
+            if index is not None:  # "the second one": a lookup in what the caller just heard
+                session.metadata.pop("choices")
+                action = SimpleNamespace(
+                    name="book_appointment",
+                    arguments={
+                        "doctor_id": choices["doctor_id"],
+                        "doctor_name": choices["doctor_name"],
+                        "date": choices["date"],
+                        "time": choices["times"][index],
+                    },
+                )
+                session.metadata.setdefault("actions", [])
+                return await self._propose(llm, tts, session, action, put_playback)
+            choices["turns_left"] -= 1
+            if choices["turns_left"] <= 0:
+                session.metadata.pop("choices")
         if offer and not pending:
             answer = yes_no(said)
             if answer is True:  # "ঠিক আছে" to "Shall I book that?": read it back, as ever
