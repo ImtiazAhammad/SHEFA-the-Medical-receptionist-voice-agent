@@ -654,6 +654,16 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             )
         return await place_call(verified)
 
+    def _audit(request: Request, event: str, call_sid: str | None = None, **details) -> None:
+        """Record who touched patient data. Ids and counts only: never names, phones or words."""
+        from shefa.utils.compliance import audit_log
+
+        who = getattr(request.state, "principal", None)
+        try:
+            audit_log(event, call_sid=call_sid, user=who.name if who else None, details=details)
+        except Exception:  # noqa: BLE001 - a broken audit must be loud, not break the clinic
+            logger.error("audit_write_failed", audit_event=event)
+
     @app.get("/api/v1/calls")
     async def list_calls(limit: int = 50) -> list[dict]:
         """Recent calls, newest first. Caller phone hashes are not exposed."""
@@ -672,14 +682,17 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         who = getattr(request.state, "principal", None)
         if not default_calls_store().tombstone(call_sid, user=who.name if who else "unknown"):
             return error_response("call_not_found")
+        _audit(request, "call_deleted", call_sid=call_sid)
         return {"call_sid": call_sid, "deleted": True}
 
     @app.get("/api/v1/callbacks")
-    async def list_callbacks(include_resolved: bool = False) -> list[dict]:
+    async def list_callbacks(request: Request, include_resolved: bool = False) -> list[dict]:
         """People who were promised a person: open ones, oldest first."""
         from shefa.call_log import default_calls_store
 
-        return default_calls_store().list_callbacks(open_only=not include_resolved)
+        rows = default_calls_store().list_callbacks(open_only=not include_resolved)
+        _audit(request, "callbacks_listed", count=len(rows))
+        return rows
 
     @app.post("/api/v1/callbacks/{callback_id}/resolve", response_model=None)
     async def resolve_callback(
@@ -693,6 +706,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         )
         if not done:
             return error_response("callback_not_found")
+        _audit(request, "callback_resolved", callback_id=callback_id)
         return {"id": callback_id, "resolved": True}
 
     def _own_doctor(request: Request) -> int:
@@ -725,6 +739,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
         doctor_id = _own_doctor(request)
         day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        _audit(request, "doctor_day_viewed", doctor_id=doctor_id, date=day)
         return [
             {
                 "appointment_id": a["appointment_id"],
@@ -758,6 +773,13 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=422, detail={"code": "validation", "message": str(exc)}
             ) from exc
+        _audit(
+            request,
+            "appointment_status_changed",
+            appointment_id=updated["appointment_id"],
+            status=updated["status"],
+            by="doctor",
+        )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
 
     @app.get("/api/v1/overview")
@@ -789,7 +811,9 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/appointments")
-    async def list_appointments(date: str = "", status: str = "booked") -> list[dict]:
+    async def list_appointments(
+        request: Request, date: str = "", status: str = "booked"
+    ) -> list[dict]:
         """Booked appointments for a day (default: today, clinic time), phones masked."""
         from datetime import datetime
 
@@ -798,6 +822,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         from shefa.clinic.store import CLINIC_TZ
 
         day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        rows = default_clinic_store().appointments_on(
+            day, status=None if status == "all" else status
+        )
+        _audit(request, "appointments_listed", date=day, count=len(rows))
         return [
             {
                 "appointment_id": a["appointment_id"],
@@ -808,9 +836,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "phone": mask_phone(a["phone"]),
                 "status": a["status"],
             }
-            for a in default_clinic_store().appointments_on(
-                day, status=None if status == "all" else status
-            )
+            for a in rows
         ]
 
     @app.get("/console", response_class=HTMLResponse)
@@ -865,13 +891,22 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         return response
 
     @app.post("/api/v1/login")
-    async def api_login(body: LoginBody | None = None) -> JSONResponse:
+    async def api_login(request: Request, body: LoginBody | None = None) -> JSONResponse:
+        from shefa.utils.compliance import audit_log
+
         secret = body.token if body else None
         if body and body.username and body.password:
             secret = staff.sign_in(body.username, body.password)
         principal = store.authenticate(secret)
+        client = request.client.host if request.client else "unknown"
         if principal is None:
+            audit_log(
+                "staff_sign_in_failed",
+                user=(body.username if body and body.username else None),
+                details={"client": client},
+            )
             return error_response("authentication_required")
+        audit_log("staff_signed_in", user=principal.name, details={"client": client})
         response = JSONResponse({"name": principal.name, "role": principal.role})
         response.set_cookie(
             AUTH_COOKIE,
@@ -917,7 +952,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         return ringing_now()
 
     @app.get("/api/v1/calls/{call_sid}", response_model=None)
-    async def call_detail(call_sid: str) -> dict | JSONResponse:
+    async def call_detail(call_sid: str, request: Request) -> dict | JSONResponse:
         """One call with every turn: heard, how sure, what the agent did, what it said."""
         from shefa.call_log import default_calls_store
 
@@ -926,6 +961,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         if row is None or row.get("deleted_at"):
             return error_response("call_not_found")
         keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        _audit(request, "transcript_viewed", call_sid=call_sid)
         return {**{k: row.get(k) for k in keys}, "turns": calls.turns_for(call_sid)}
 
     @app.post("/api/v1/calls/ringing/{call_uuid}/decline")
@@ -953,7 +989,9 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         ]
 
     @app.post("/api/v1/appointments/{appointment_id}/status")
-    async def set_appointment_status(appointment_id: str, body: StatusBody) -> dict:
+    async def set_appointment_status(
+        appointment_id: str, body: StatusBody, request: Request
+    ) -> dict:
         from shefa.clinic import ClinicError, default_clinic_store
 
         try:
@@ -962,6 +1000,13 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=422, detail={"code": "validation", "message": str(exc)}
             ) from exc
+        _audit(
+            request,
+            "appointment_status_changed",
+            appointment_id=updated["appointment_id"],
+            status=updated["status"],
+            by="desk",
+        )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
 
     @app.post("/api/v1/reminders/run")

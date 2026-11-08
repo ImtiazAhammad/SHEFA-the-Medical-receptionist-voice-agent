@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,7 +63,8 @@ class AuditStore:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(self.path))
+        self.connection = sqlite3.connect(str(self.path), check_same_thread=False)
+        self._lock = threading.Lock()  # one connection is shared by the request threads
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA synchronous=NORMAL")
@@ -90,7 +92,7 @@ class AuditStore:
         ts: float | None = None,
     ) -> int:
         """Insert one row and return its monotonic sequence."""
-        with self.connection:
+        with self._lock, self.connection:
             cur = self.connection.execute(
                 "INSERT INTO audit_log (ts, event, call_sid, patient_id, user,"
                 " details) VALUES (?, ?, ?, ?, ?, ?)",

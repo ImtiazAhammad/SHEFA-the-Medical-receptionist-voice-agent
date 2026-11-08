@@ -58,7 +58,8 @@ async def execute_tool(
     """Execute a tool call and return the result."""
     args = json.loads(arguments) if isinstance(arguments, str) else arguments
 
-    logger.info("Tool call: %s(%s) for %s", tool_name, args, session.call_sid)
+    # The argument VALUES are names, phone numbers and dates of birth: log which fields, not what.
+    logger.info("Tool call: %s(%s) for %s", tool_name, sorted(args), session.call_sid)
 
     handler = _HANDLERS.get(tool_name)
     if handler is None:
