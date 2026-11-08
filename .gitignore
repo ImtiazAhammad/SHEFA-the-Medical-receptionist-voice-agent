@@ -5,6 +5,7 @@ dist/
 build/
 .env
 .venv/
+.venv-vllm/
 *.db
 *.db-shm
 *.db-wal

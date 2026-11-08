@@ -32,6 +32,8 @@ async def ping_llm() -> None:
     unload timer to Ollama's default, so this has to repeat while the line is idle."""
     if settings.pipeline.llm.provider != "local":
         return
+    if settings.llm_server.engine != "ollama":  # vLLM keeps its model loaded; nothing to ping
+        return
     from shefa.models.registry import hosted_key
 
     _, adapter = settings.models.resolve_llm_adapter("local")

@@ -150,7 +150,10 @@ def llm_status(
     try:
         listing = get_json(f"{base}/models", api_key) if api_key else get_json(f"{base}/models")
     except Exception as error:  # noqa: BLE001 - reported, never raised
+        from shefa.config.settings import settings
+
         fix = ("check the API key in .env and the network" if api_key
+               else "Start it with: shefa serve" if settings.llm_server.engine == "vllm"
                else "Start it with: ollama serve")
         return Check(
             False, f"language model: no answer from {base} ({type(error).__name__}). {fix}"

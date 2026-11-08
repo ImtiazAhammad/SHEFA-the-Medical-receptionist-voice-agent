@@ -167,6 +167,7 @@ class ModelRegistry:
                 max_tokens=max_tokens,
                 api_key=hosted_key(adapter),
                 timeout_s=settings.pipeline.llm.timeout_s,
+                extra_body=settings.pipeline.llm.extra_body,
             )
         raise AssertionError(f"Unreachable: provider {provider!r} resolved but unhandled")
 

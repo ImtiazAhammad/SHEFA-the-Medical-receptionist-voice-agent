@@ -55,6 +55,7 @@ def _hosted_llm(base_url: str, model: str, key_variable: str) -> dict[str, Any]:
 PROFILES: dict[str, tuple[dict[str, Any], str]] = {
     "local": ({}, ""),
     "openai": (DEMO_PROFILE, "OPENAI_API_KEY"),
+    "vllm": ({}, ""),  # filled in below from VllmConfig, which owns the defaults
     "gemini": (
         _hosted_llm(
             "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -68,6 +69,36 @@ PROFILES: dict[str, tuple[dict[str, Any], str]] = {
         "GROQ_API_KEY",
     ),
 }
+
+def vllm_profile() -> dict[str, Any]:
+    """Config that points the agent at a local vLLM server and has `shefa serve` start it."""
+    from shefa.config.settings import VllmConfig
+
+    cfg = VllmConfig()
+    return {
+        "llm_server": {"engine": "vllm"},
+        "pipeline": {
+            "llm": {
+                "provider": "local",
+                "model": cfg.served_name,
+                # Qwen3-style models "think" first by default, which is seconds of silence.
+                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+            }
+        },
+        "models": {
+            "adapters": {
+                "llm_local": {
+                    "type": "openai_compatible_llm",
+                    "base_url": f"http://localhost:{cfg.port}/v1",
+                    "model": cfg.served_name,
+                    "api_key": "not-needed",
+                }
+            }
+        },
+    }
+
+
+PROFILES["vllm"] = (vllm_profile(), "")
 
 # `shefa setup --voices azure`: Azure's Bangladeshi neural voice for Bangla and an
 # Indian-English voice for English (free tier F0: 0.5M characters a month).
@@ -158,7 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         choices=sorted(PROFILES),
         default="local",
-        help="where the language model runs: local (Ollama), gemini or groq (free tiers, "
+        help="where the language model runs: local (Ollama), vllm (local, serves several "
+        "callers at once), gemini or groq (free tiers, "
         "speech and voices stay local), openai (speech recognition too)",
     )
     setup.add_argument(
@@ -598,6 +630,84 @@ def _ensure_ollama(base: str = "http://localhost:11434") -> None:
     print("Ollama did not start; run `ollama serve` in another terminal.")
 
 
+def vllm_command(cfg: Any) -> list[str]:
+    """The command that starts vLLM's OpenAI-compatible server for `cfg` (a VllmConfig)."""
+    return [
+        cfg.python,
+        "-m",
+        "vllm.entrypoints.openai.api_server",
+        "--model",
+        cfg.model,
+        "--served-model-name",
+        cfg.served_name,
+        "--port",
+        str(cfg.port),
+        "--gpu-memory-utilization",
+        str(cfg.gpu_memory_utilization),
+        "--max-model-len",
+        str(cfg.max_model_len),
+        "--max-num-seqs",
+        str(cfg.max_num_seqs),
+        "--enable-prefix-caching",  # every turn repeats the same long system prompt
+        *cfg.extra_args,
+    ]
+
+
+def _ensure_vllm() -> None:
+    """Make sure vLLM is up: use it if it answers, else start it and wait for the model."""
+    import subprocess
+    import time
+    import urllib.request
+    from pathlib import Path
+
+    from shefa.config.settings import settings
+
+    cfg = settings.llm_server.vllm
+    base = f"http://localhost:{cfg.port}"
+
+    def up() -> bool:
+        try:
+            urllib.request.urlopen(f"{base}/v1/models", timeout=2)  # noqa: S310
+        except OSError:
+            return False
+        return True
+
+    if up():
+        return
+    if not Path(cfg.python).exists():
+        print(
+            f"vLLM is not installed ({cfg.python} is missing). Install it with:\n"
+            "  uv venv .venv-vllm --python 3.12 && VIRTUAL_ENV=.venv-vllm uv pip install vllm"
+        )
+        return
+    log = Path("data") / "vllm.log"
+    log.parent.mkdir(exist_ok=True)
+    print(f"Starting vLLM with {cfg.model} (the first start downloads it; log: {log})...")
+    with log.open("ab") as out:
+        process = subprocess.Popen(  # noqa: S603
+            vllm_command(cfg), stdout=out, stderr=out, start_new_session=True
+        )
+    deadline = time.monotonic() + cfg.startup_timeout_s
+    while time.monotonic() < deadline:
+        if up():
+            print("vLLM is ready.")
+            return
+        if process.poll() is not None:
+            print(f"vLLM stopped (exit {process.returncode}); see {log}")
+            return
+        time.sleep(3)
+    print(f"vLLM did not answer within {cfg.startup_timeout_s:.0f}s; see {log}")
+
+
+def _ensure_llm_server() -> None:
+    from shefa.config.settings import settings
+
+    if settings.llm_server.engine == "vllm":
+        _ensure_vllm()
+    else:
+        _ensure_ollama()
+
+
 def _ensure_directory() -> None:
     """A fresh install has no doctors: load the local clinic file, else the fictional sample."""
     from pathlib import Path
@@ -667,7 +777,7 @@ def run_serve(args: argparse.Namespace) -> int:
         print(f"Console:   {scheme}://{address}:{args.port}/console")
     logging.getLogger("uvicorn.access").addFilter(_QuietPolling())
     if not os.environ.get("SHEFA_SKIP_WARMUP"):  # tests and CI bring their own services
-        _ensure_ollama()
+        _ensure_llm_server()
         _ensure_directory()
     uvicorn.run("shefa.main:app", host=args.host, port=args.port, **ssl)
     return 0

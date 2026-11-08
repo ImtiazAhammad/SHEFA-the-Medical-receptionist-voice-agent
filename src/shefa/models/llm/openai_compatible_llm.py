@@ -36,10 +36,12 @@ class OpenAICompatibleLLM(BaseLLM):
         max_tokens: int = 512,
         api_key: str = "",
         timeout_s: float = 20.0,
+        extra_body: dict[str, Any] | None = None,
     ):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._extra_body = extra_body or None
         # A hosted OpenAI-compatible service (Gemini, Groq) needs its key; a local server
         # takes any string.
         key = api_key or os.environ.get("LOCAL_LLM_API_KEY", "") or "not-needed"
@@ -74,6 +76,7 @@ class OpenAICompatibleLLM(BaseLLM):
             tools=converted,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            **({"extra_body": self._extra_body} if self._extra_body else {}),
             **overrides,
         )
 

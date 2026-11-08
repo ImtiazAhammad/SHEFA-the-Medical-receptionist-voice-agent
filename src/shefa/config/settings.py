@@ -122,6 +122,10 @@ class LLMConfig(StrictModel):
     # A model server that stops answering must not leave a caller on a silent line: give up
     # after this many seconds (the call then falls back to a repeat prompt or a handover).
     timeout_s: float = Field(default=20.0, gt=0)
+    # Extra fields sent with every request to the model server. For a Qwen3-style model on vLLM
+    # this turns off the "thinking" phase, which would add seconds of silence to every turn:
+    #   {"chat_template_kwargs": {"enable_thinking": false}}
+    extra_body: dict[str, Any] = Field(default_factory=dict)
 
 
 class LanguageDetectionConfig(StrictModel):
@@ -364,6 +368,35 @@ class StorageConfig(StrictModel):
     transcript_retention_days: int = Field(default=90, ge=0)  # 0 = keep for ever
 
 
+class VllmConfig(StrictModel):
+    """The vLLM server `shefa serve` starts when `llm_server.engine` is `vllm`.
+
+    vLLM batches concurrent requests, so a second caller's turn is not queued behind the first
+    the way it is on Ollama. It reserves its GPU share up front, so the numbers below have to
+    leave room for speech recognition and the voice on the same card.
+    """
+
+    model: str = "Qwen/Qwen3-14B-AWQ"  # a Hugging Face id, downloaded on first start
+    served_name: str = "shefa-llm"  # the name the agent asks for; hides the checkpoint behind it
+    port: int = Field(default=8001, ge=1, le=65535)  # 8000 is the SHEFA server itself
+    # Share of the WHOLE GPU vLLM may take. Set it per model: the weights, a cache for the
+    # callers, and room for speech recognition (about 2.5 GB with Whisper medium) must all fit.
+    # 0.78 suits a 4-bit 14B model on a 16 GB card.
+    gpu_memory_utilization: float = Field(default=0.78, gt=0.1, le=0.95)
+    max_model_len: int = Field(default=4096, ge=512)  # longest prompt+reply; calls are short
+    max_num_seqs: int = Field(default=6, ge=1)  # requests decoded together
+    python: str = ".venv-vllm/bin/python"  # vLLM lives in its own virtualenv
+    extra_args: list[str] = Field(default_factory=list)
+    startup_timeout_s: float = Field(default=900.0, gt=0)  # the first start downloads weights
+
+
+class LLMServerConfig(StrictModel):
+    """Which program serves the language model locally. `shefa serve` starts it if it is down."""
+
+    engine: Literal["ollama", "vllm"] = "ollama"
+    vllm: VllmConfig = Field(default_factory=VllmConfig)
+
+
 class BookingConfig(StrictModel):
     """The public patient booking page: what it allows and how hard it is to abuse.
 
@@ -580,6 +613,7 @@ class AppConfig(StrictModel):
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     booking: BookingConfig = Field(default_factory=BookingConfig)
+    llm_server: LLMServerConfig = Field(default_factory=LLMServerConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
