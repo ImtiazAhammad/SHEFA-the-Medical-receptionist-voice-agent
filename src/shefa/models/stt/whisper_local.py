@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import unicodedata
 from pathlib import Path
@@ -113,6 +114,14 @@ class WhisperLocalSTT(BaseSTT):
         self._compute_type = compute_type
         self._model = None
         self._model_device: str | None = None
+        # Decoding blocks for a second or more. It runs on a worker thread so the event loop keeps
+        # pacing every call's audio, and one at a time so two callers do not fight for the GPU.
+        self._gate: asyncio.Semaphore | None = None
+
+    def _slot(self) -> asyncio.Semaphore:
+        if self._gate is None:
+            self._gate = asyncio.Semaphore(1)
+        return self._gate
 
     def _detect_device(self) -> tuple[str, str]:
         if self._device:
@@ -221,16 +230,17 @@ class WhisperLocalSTT(BaseSTT):
         """(top language, its probability, every language's probability) for the audio."""
         import numpy as np
 
-        self._ensure_model()
         payload = strip_wav_header(audio_data)
         usable = len(payload) - (len(payload) % 2)
         audio_np = np.frombuffer(payload[:usable], dtype="<i2").astype(np.float32) / 32768.0
-        try:
-            return self._detect_once(audio_np)
-        except Exception:
-            if not self._fall_back_to_cpu():
-                raise
-            return self._detect_once(audio_np)
+        async with self._slot():
+            await asyncio.to_thread(self._ensure_model)
+            try:
+                return await asyncio.to_thread(self._detect_once, audio_np)
+            except Exception:
+                if not await asyncio.to_thread(self._fall_back_to_cpu):
+                    raise
+                return await asyncio.to_thread(self._detect_once, audio_np)
 
     async def transcribe_stream(
         self, audio_chunk: bytes, language: str = "auto"
@@ -240,9 +250,13 @@ class WhisperLocalSTT(BaseSTT):
     async def transcribe(
         self, audio_data: bytes, language: str = "auto"
     ) -> STTResult:
+        async with self._slot():
+            await asyncio.to_thread(self._ensure_model)
+            return await self._transcribe_locked(audio_data, language)
+
+    async def _transcribe_locked(self, audio_data: bytes, language: str) -> STTResult:
         import numpy as np
 
-        self._ensure_model()
         # Pipeline audio is s16le 16k mono PCM (what the telephony codec
         # boundary and EnergyVAD both produce). Reading it as float32 halved
         # the sample count and turned every waveform into garbage, so nothing
@@ -259,14 +273,14 @@ class WhisperLocalSTT(BaseSTT):
 
         lang_arg = None if language == "auto" else language
         try:
-            full_text, detected, confidence, duration_ms = self._transcribe_once(
-                audio_np, lang_arg
+            full_text, detected, confidence, duration_ms = await asyncio.to_thread(
+                self._transcribe_once, audio_np, lang_arg
             )
         except Exception:
-            if not self._fall_back_to_cpu():
+            if not await asyncio.to_thread(self._fall_back_to_cpu):
                 raise
-            full_text, detected, confidence, duration_ms = self._transcribe_once(
-                audio_np, lang_arg
+            full_text, detected, confidence, duration_ms = await asyncio.to_thread(
+                self._transcribe_once, audio_np, lang_arg
             )
 
         return STTResult(
