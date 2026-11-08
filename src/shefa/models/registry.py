@@ -166,6 +166,7 @@ class ModelRegistry:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=hosted_key(adapter),
+                timeout_s=settings.pipeline.llm.timeout_s,
             )
         raise AssertionError(f"Unreachable: provider {provider!r} resolved but unhandled")
 

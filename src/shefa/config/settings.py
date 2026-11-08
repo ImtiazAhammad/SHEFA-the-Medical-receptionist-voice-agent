@@ -119,6 +119,9 @@ class LLMConfig(StrictModel):
     # Say a short filler ("one moment") if deciding what to do takes longer than this many
     # seconds, so the caller never hears a dead line. 0 turns it off.
     filler_after_s: float = 1.2
+    # A model server that stops answering must not leave a caller on a silent line: give up
+    # after this many seconds (the call then falls back to a repeat prompt or a handover).
+    timeout_s: float = Field(default=20.0, gt=0)
 
 
 class LanguageDetectionConfig(StrictModel):

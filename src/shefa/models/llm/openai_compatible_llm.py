@@ -35,6 +35,7 @@ class OpenAICompatibleLLM(BaseLLM):
         temperature: float = 0.3,
         max_tokens: int = 512,
         api_key: str = "",
+        timeout_s: float = 20.0,
     ):
         self.model = model
         self.temperature = temperature
@@ -42,7 +43,9 @@ class OpenAICompatibleLLM(BaseLLM):
         # A hosted OpenAI-compatible service (Gemini, Groq) needs its key; a local server
         # takes any string.
         key = api_key or os.environ.get("LOCAL_LLM_API_KEY", "") or "not-needed"
-        self._client = AsyncOpenAI(base_url=base_url, api_key=key)
+        self._client = AsyncOpenAI(
+            base_url=base_url, api_key=key, timeout=timeout_s, max_retries=0
+        )
 
     def _convert_tools(self, tools: list[ToolDefinition] | None) -> list[dict[str, Any]] | None:
         if not tools:

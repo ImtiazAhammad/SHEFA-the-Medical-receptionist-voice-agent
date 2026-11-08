@@ -58,3 +58,10 @@ async def test_decoding_is_one_at_a_time(monkeypatch):
     pcm = b"\x01\x00" * 1600
     await asyncio.gather(*(stt.transcribe(pcm, "bn") for _ in range(4)))
     assert peak == 1
+
+
+def test_the_local_model_client_gives_up_instead_of_hanging():
+    from shefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
+
+    llm = OpenAICompatibleLLM(timeout_s=7)
+    assert llm._client.timeout == 7 and llm._client.max_retries == 0
