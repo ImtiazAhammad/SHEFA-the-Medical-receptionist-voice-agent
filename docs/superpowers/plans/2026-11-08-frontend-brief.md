@@ -1,6 +1,6 @@
 # SHEFA frontend: design brief (shape)
 
-Status: **awaiting confirmation.** No code is written from this brief until it is confirmed. Visual
+Status: **decisions given 2026-11-08 (below); build starts at M0.** No code is written from this brief until it is confirmed. Visual
 direction is deliberately not decided here; it is the next step (new-work: visual authority,
 world options, concept choice) and needs the user's choice.
 
@@ -92,3 +92,14 @@ Missing and required by this brief:
 - Open: store call audio or not; patient-page confirmation channel (SMS, call, none); doctor sign-in (phone OTP, password); hosting of the patient page; consent wording; brand name treatment and logo (none exists).
 - Accessibility floor: WCAG 2.2 AA, keyboard complete, Bangla fonts with correct shaping, reduced motion respected, tolerant of slow networks (patient page budget: first view under 150 kB of JavaScript).
 - Testing: component tests, Playwright flows per role, axe checks, and a real-phone pass before M1 is called done.
+
+## 9. Decisions (user, 2026-11-08: "I need all of these")
+
+Read as: support every option, with a sensible default for each.
+
+| Question | Decision |
+|---|---|
+| Visual direction | Calm and clinical as the base (staff screens), warmer on the public patient page; one token set, two densities. Concept still to be chosen in new-work. |
+| Call audio | A clinic setting, **off by default**; turning it on shows consent wording and a retention period. Transcripts are kept (per-turn log, `/api/v1/calls/{sid}`); they also need a retention setting and a delete path tied to the call tombstone. |
+| Patient-page confirmation | All three: reference number on screen always; SMS and a call-back offered when the clinic has configured them. |
+| Doctor sign-in | Both: phone code (OTP) and password; the clinic chooses which are on. |
