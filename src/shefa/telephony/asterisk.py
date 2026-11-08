@@ -23,7 +23,7 @@ from shefa.audio import (
     s16le_16k_mono_to_slin8k,
     to_s16le_16k_mono,
 )
-from shefa.call_log import call_ended, call_started
+from shefa.call_log import call_started, finish_call
 from shefa.config.settings import settings
 from shefa.telephony.audiosocket import (
     KIND_AUDIO,
@@ -35,7 +35,7 @@ from shefa.telephony.audiosocket import (
 )
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.control import CallLeg, control
-from shefa.telephony.endcall import log_pipeline_end, wait_for_playback
+from shefa.telephony.endcall import log_pipeline_end, session_of, wait_for_playback
 from shefa.telephony.twilio import make_media_queues
 
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
         await asyncio.gather(*tasks, return_exceptions=True)
         await pipeline.cleanup(call_sid)
         control.release(call_sid)
-        call_ended(call_sid)
+        finish_call(call_sid, await session_of(pipeline, call_sid))
         with contextlib.suppress(ConnectionError, OSError):
             writer.write(encode_frame(KIND_HANGUP, b""))
             writer.close()

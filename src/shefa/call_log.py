@@ -54,6 +54,7 @@ def call_started(call_sid: str, direction: str) -> None:
 def call_ended(call_sid: str, disposition: str = "completed") -> None:
     try:
         store = default_calls_store()
+        purge_old_transcripts(store)
         row = store.get_call(call_sid) or {"call_sid": call_sid}
         started = row.get("started_at")
         store.upsert_call(
@@ -79,7 +80,9 @@ def log_turn(
     note: str | None = None,
 ) -> None:
     """Keep one turn of the conversation. Never raises: a log fault must not drop a call."""
-    if not text:
+    from shefa.config.settings import settings
+
+    if not text or not settings.storage.keep_transcripts:
         return
     try:
         default_calls_store().add_turn(
@@ -93,3 +96,54 @@ def log_turn(
         )
     except Exception:
         logger.exception("Could not record a turn of call %s", call_sid)
+
+
+def purge_old_transcripts(store: CallsStore | None = None) -> int:
+    """Forget the words of old calls (storage.transcript_retention_days; 0 keeps them for ever)."""
+    from shefa.config.settings import settings
+
+    days = settings.storage.transcript_retention_days
+    if days <= 0:
+        return 0
+    try:
+        return (store or default_calls_store()).purge_turns_before(time.time() - days * 86400)
+    except Exception:
+        logger.exception("Could not purge old transcripts")
+        return 0
+
+
+DISPOSITIONS = {
+    "escalated": "handed_over",
+    "escaped": "unsupported_language",
+    "terminated": "failed",
+    "completed": "completed",
+}
+
+
+def disposition_for(state: str | None) -> str:
+    """How a call ended, from the conversation's final state."""
+    return DISPOSITIONS.get(state or "", "caller_hung_up")
+
+
+def finish_call(call_sid: str, session: object | None) -> None:
+    """End the call record with its real outcome, and queue a call-back when a person is owed.
+
+    Never raises: a log fault must not drop a call.
+    """
+    state = getattr(session, "state", None)
+    disposition = disposition_for(state)
+    call_ended(call_sid, disposition)
+    if disposition != "handed_over":
+        return
+    try:
+        phone = None
+        patient_id = getattr(session, "patient_id", None)
+        if patient_id:
+            from shefa.clinic import default_clinic_store
+
+            patient = default_clinic_store().get_patient(int(patient_id))
+            phone = patient["phone"] if patient else None
+        language = getattr(getattr(session, "language", None), "value", None)
+        default_calls_store().add_callback(call_sid, phone, language, "handed over by the agent")
+    except Exception:
+        logger.exception("Could not queue a call-back for %s", call_sid)

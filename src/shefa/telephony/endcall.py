@@ -37,3 +37,15 @@ def log_pipeline_end(call_sid: str, task: asyncio.Task) -> None:
         logger.error("Pipeline for %s crashed: %r", call_sid, error)
     else:
         logger.info("Pipeline for %s finished; ending the call", call_sid)
+
+
+async def session_of(pipeline: object, call_sid: str) -> object | None:
+    """The finished conversation, for recording how the call ended; None if unavailable."""
+    getter = getattr(pipeline, "session_for", None)
+    if getter is None:
+        return None
+    try:
+        return await getter(call_sid)
+    except Exception:
+        logger.exception("Could not read the session of %s", call_sid)
+        return None

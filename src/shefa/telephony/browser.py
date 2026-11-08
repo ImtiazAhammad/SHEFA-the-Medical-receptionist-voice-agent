@@ -19,10 +19,10 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from shefa.call_log import call_ended, call_started
+from shefa.call_log import call_started, finish_call
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.control import CallLeg, control
-from shefa.telephony.endcall import log_pipeline_end, wait_for_playback
+from shefa.telephony.endcall import log_pipeline_end, session_of, wait_for_playback
 from shefa.telephony.twilio import make_media_queues
 
 logger = logging.getLogger(__name__)
@@ -174,4 +174,4 @@ async def handle_browser_call(websocket: WebSocket, call_uuid: str, phone: str =
         await asyncio.gather(*tasks, return_exceptions=True)
         await pipeline.cleanup(call_uuid)
         control.release(call_uuid)
-        call_ended(call_uuid)
+        finish_call(call_uuid, await session_of(pipeline, call_uuid))

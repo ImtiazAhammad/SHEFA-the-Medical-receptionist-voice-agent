@@ -356,6 +356,9 @@ class StorageConfig(StrictModel):
     """
 
     db_path: str = "data/shefa.db"
+    # What was said on calls is patient data. Turn it off, or let it expire.
+    keep_transcripts: bool = True
+    transcript_retention_days: int = Field(default=90, ge=0)  # 0 = keep for ever
 
 
 class ComplianceConfig(StrictModel):

@@ -75,6 +75,7 @@ ERROR_STATUS_MAP: dict[str, int] = {
     "route_not_authorized": 403,
     "session_not_found": 404,
     "call_not_found": 404,
+    "callback_not_found": 404,
     "validation": 422,
     "required_param": 422,
     "not_configured": 503,
@@ -88,6 +89,7 @@ DEFAULT_ERROR_MESSAGES: dict[str, str] = {
     "route_not_authorized": "This route is not authorized.",
     "session_not_found": "Session not found",
     "call_not_found": "Call not found.",
+    "callback_not_found": "Call-back not found.",
     "validation": "Request validation failed.",
     "required_param": "Required parameter missing.",
     "not_configured": "Dependency not configured.",
@@ -178,6 +180,10 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
+    ("DELETE", "/api/v1/calls/{call_sid}"): "records:write",
+    ("GET", "/api/v1/callbacks"): "records:read",
+    ("POST", "/api/v1/callbacks/{callback_id}/resolve"): "records:write",
+    ("GET", "/api/v1/overview"): "records:read",
     ("GET", "/app"): PUBLIC_PERMISSION,
     ("GET", "/app/{path:path}"): PUBLIC_PERMISSION,
     ("GET", "/api/v1/me"): PUBLIC_PERMISSION,
@@ -394,6 +400,10 @@ class StatusBody(BaseModel):
     status: str
 
 
+class ResolveBody(BaseModel):
+    note: str = ""
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     """Listen for Asterisk AudioSocket calls for as long as the server runs."""
@@ -600,6 +610,65 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         rows = [r for r in rows if not r.get("deleted_at")]
         keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
         return [{k: r.get(k) for k in keys} for r in reversed(rows)][: max(1, min(limit, 500))]
+
+    @app.delete("/api/v1/calls/{call_sid}", response_model=None)
+    async def delete_call(call_sid: str, request: Request) -> dict | JSONResponse:
+        """Erase what was said on a call. The call row stays, marked deleted, as the audit trail."""
+        from shefa.call_log import default_calls_store
+
+        who = getattr(request.state, "principal", None)
+        if not default_calls_store().tombstone(call_sid, user=who.name if who else "unknown"):
+            return error_response("call_not_found")
+        return {"call_sid": call_sid, "deleted": True}
+
+    @app.get("/api/v1/callbacks")
+    async def list_callbacks(include_resolved: bool = False) -> list[dict]:
+        """People who were promised a person: open ones, oldest first."""
+        from shefa.call_log import default_calls_store
+
+        return default_calls_store().list_callbacks(open_only=not include_resolved)
+
+    @app.post("/api/v1/callbacks/{callback_id}/resolve", response_model=None)
+    async def resolve_callback(
+        callback_id: int, request: Request, body: ResolveBody | None = None
+    ) -> dict | JSONResponse:
+        from shefa.call_log import default_calls_store
+
+        who = getattr(request.state, "principal", None)
+        done = default_calls_store().resolve_callback(
+            callback_id, user=who.name if who else "unknown", note=(body.note if body else "")
+        )
+        if not done:
+            return error_response("callback_not_found")
+        return {"id": callback_id, "resolved": True}
+
+    @app.get("/api/v1/overview")
+    async def overview(days: int = 7) -> dict:
+        """What the owner asks first: is it working? Counts over the last `days` days."""
+        import time as _time
+
+        from shefa.call_log import default_calls_store
+        from shefa.clinic import default_clinic_store
+
+        days = max(1, min(days, 90))
+        since = _time.time() - days * 86400
+        calls = default_calls_store().stats_since(since)
+        clinic = default_clinic_store()
+        booked = clinic.connection.execute(
+            "SELECT COUNT(*) FROM appointments WHERE created_at >= ? AND source != 'staff'",
+            (since,),
+        ).fetchone()[0]
+        reminders = clinic.connection.execute(
+            "SELECT COUNT(*), COALESCE(SUM(done), 0) FROM reminders WHERE last_attempt >= ?",
+            (since,),
+        ).fetchone()
+        return {
+            "days": days,
+            "calls": calls,
+            "booked_by_agent": booked,
+            "open_callbacks": len(default_calls_store().list_callbacks()),
+            "reminders": {"attempted": reminders[0], "completed": int(reminders[1])},
+        }
 
     @app.get("/api/v1/appointments")
     async def list_appointments(date: str = "") -> list[dict]:

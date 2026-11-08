@@ -961,6 +961,10 @@ class VoicePipeline:
             self._failures.get(call_sid, 0),
         )
 
+    async def session_for(self, call_sid: str) -> CallSession | None:
+        """The conversation of a call, for reporting how it ended."""
+        return await self._session_manager.get(call_sid)
+
     async def cleanup(self, call_sid: str) -> None:
         self._audio_buffers.pop(call_sid, None)
         self._failures.pop(call_sid, None)

@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS call_turns (
     note       TEXT,
     PRIMARY KEY (call_sid, idx)
 );
+
+CREATE TABLE IF NOT EXISTS callbacks (
+    id          INTEGER PRIMARY KEY,
+    created_at  REAL NOT NULL,
+    call_sid    TEXT,
+    phone       TEXT,
+    language    TEXT,
+    reason      TEXT NOT NULL DEFAULT '',
+    resolved_at REAL,
+    resolved_by TEXT,
+    note        TEXT
+);
 """
 
 _CALL_FIELDS = (
@@ -151,6 +163,69 @@ class CallsStore:
             out.append(turn)
         return out
 
+    def delete_turns(self, call_sid: str) -> int:
+        """Erase what was said on a call (the call row stays, as an audit trail)."""
+        with self.connection:
+            return self.connection.execute(
+                "DELETE FROM call_turns WHERE call_sid = ?", (call_sid,)
+            ).rowcount
+
+    def purge_turns_before(self, cutoff: float) -> int:
+        """Retention: forget the words of calls that ended before `cutoff`."""
+        with self.connection:
+            return self.connection.execute(
+                "DELETE FROM call_turns WHERE at < ?", (cutoff,)
+            ).rowcount
+
+    def add_callback(
+        self, call_sid: str | None, phone: str | None, language: str | None, reason: str
+    ) -> int:
+        with self.connection:
+            cur = self.connection.execute(
+                "INSERT INTO callbacks (created_at, call_sid, phone, language, reason)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (time.time(), call_sid, phone, language, reason),
+            )
+        return int(cur.lastrowid)
+
+    def list_callbacks(self, *, open_only: bool = True) -> list[dict[str, Any]]:
+        where = " WHERE resolved_at IS NULL" if open_only else ""
+        return [
+            dict(r)
+            for r in self.connection.execute(
+                f"SELECT * FROM callbacks{where} ORDER BY created_at"  # noqa: S608
+            )
+        ]
+
+    def resolve_callback(self, callback_id: int, *, user: str, note: str = "") -> bool:
+        with self.connection:
+            cur = self.connection.execute(
+                "UPDATE callbacks SET resolved_at = ?, resolved_by = ?, note = ?"
+                " WHERE id = ? AND resolved_at IS NULL",
+                (time.time(), user, note, callback_id),
+            )
+        return cur.rowcount > 0
+
+    def stats_since(self, since: float) -> dict[str, Any]:
+        """Counts for the owner's overview. Deleted calls are not counted."""
+        rows = self.connection.execute(
+            "SELECT direction, disposition, duration_seconds FROM calls"
+            " WHERE started_at >= ? AND deleted_at IS NULL",
+            (since,),
+        ).fetchall()
+        by: dict[str, int] = {}
+        for r in rows:
+            key = r["disposition"] or "in_progress"
+            by[key] = by.get(key, 0) + 1
+        durations = [r["duration_seconds"] for r in rows if r["duration_seconds"]]
+        return {
+            "calls": len(rows),
+            "inbound": sum(1 for r in rows if r["direction"] == "inbound"),
+            "outbound": sum(1 for r in rows if r["direction"] == "outbound"),
+            "dispositions": by,
+            "average_seconds": round(sum(durations) / len(durations), 1) if durations else None,
+        }
+
     def count_for_day(self, day: str) -> int:
         """Calls that started on `day` (`YYYY-MM-DD`, UTC)."""
         count = self.connection.execute(
@@ -175,6 +250,7 @@ class CallsStore:
                 (at, user, call_sid),
             ).fetchone()
         if written is not None:
+            self.delete_turns(call_sid)
             return True
         exists = self.connection.execute(
             "SELECT 1 FROM calls WHERE call_sid = ?", (call_sid,)
