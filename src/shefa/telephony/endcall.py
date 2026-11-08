@@ -28,6 +28,15 @@ async def wait_for_playback(
     await asyncio.sleep(grace_s)  # the frame that was just taken is still being played
 
 
+def task_error(task: asyncio.Task) -> BaseException | None:
+    """The exception a finished task raised, or None if it was cancelled or ended cleanly.
+
+    ``Task.exception()`` itself raises ``CancelledError`` for a cancelled task, which at hang-up
+    escaped the call handler. A cancelled reader is a normal end of a call, not a failure.
+    """
+    return None if task.cancelled() else task.exception()
+
+
 def log_pipeline_end(call_sid: str, task: asyncio.Task) -> None:
     """Say why the pipeline stopped; an exception here is a bug, not a normal hang-up."""
     if task.cancelled():

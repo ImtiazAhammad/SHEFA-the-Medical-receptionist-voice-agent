@@ -22,7 +22,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from shefa.call_log import call_started, finish_call
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.control import CallLeg, control
-from shefa.telephony.endcall import log_pipeline_end, session_of, wait_for_playback
+from shefa.telephony.endcall import log_pipeline_end, session_of, task_error, wait_for_playback
 from shefa.telephony.twilio import make_media_queues
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,7 @@ async def handle_browser_call(websocket: WebSocket, call_uuid: str, phone: str =
         asyncio.create_task(_send_playback(websocket, queues.playback)),
         asyncio.create_task(_send_transcript(websocket, pipeline, call_uuid)),
     ]
+
     async def receive() -> None:
         while True:
             chunk = await websocket.receive_bytes()
@@ -164,8 +165,8 @@ async def handle_browser_call(websocket: WebSocket, call_uuid: str, phone: str =
             await websocket.send_json({"type": "hangup"})
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(asyncio.shield(reader_task), HANGUP_WAIT_S)
-        elif reader_task in done and reader_task.exception() is not None:
-            raise reader_task.exception()
+        elif reader_task in done and (error := task_error(reader_task)) is not None:
+            raise error
     except (WebSocketDisconnect, RuntimeError):
         logger.info("Console call ended: %s", call_uuid)
     finally:

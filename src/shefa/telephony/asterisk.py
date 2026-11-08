@@ -36,7 +36,12 @@ from shefa.telephony.audiosocket import (
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
 from shefa.telephony.capacity import gate
 from shefa.telephony.control import CallLeg, control
-from shefa.telephony.endcall import log_pipeline_end, session_of, wait_for_playback
+from shefa.telephony.endcall import (
+    log_pipeline_end,
+    session_of,
+    task_error,
+    wait_for_playback,
+)
 from shefa.telephony.twilio import make_media_queues
 
 logger = logging.getLogger(__name__)
@@ -230,6 +235,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
         ),
         asyncio.create_task(playback.run()),
     ]
+
     async def pump() -> None:
         while True:
             frame = await read_frame(reader)
@@ -245,8 +251,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
         if tasks[0] in done and reader_task not in done:
             log_pipeline_end(call_sid, tasks[0])
             await wait_for_playback(queues.playback)  # let the last words play, then hang up
-        elif reader_task in done and reader_task.exception() is not None:
-            exc = reader_task.exception()
+        elif reader_task in done and (exc := task_error(reader_task)) is not None:
             if isinstance(exc, (ConnectionError, TimeoutError)):
                 logger.info("AudioSocket connection dropped: %s", call_sid)
             else:

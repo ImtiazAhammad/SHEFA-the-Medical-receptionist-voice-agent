@@ -147,6 +147,23 @@ class EndingPipeline(FakePipeline):
         await put_playback(AudioFrame(b"\x01\x00" * 800, rate=16000))
 
 
+def finish(ws) -> None:
+    """Hang up from the page's side and wait for the server to tidy up.
+
+    Leaving the test client's `with` block while the handler is still running makes the client
+    cancel it, and that cancellation surfaces as a CancelledError in the test (about one run in
+    four). A real browser has no such race, so the test waits like one would.
+    """
+    import time
+
+    from shefa.telephony.control import control
+
+    ws.close(1000)
+    deadline = time.monotonic() + 3
+    while control.active_count() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def test_the_page_is_told_to_hang_up_when_the_agent_ends_the_call(client, monkeypatch):
     monkeypatch.setattr(browser, "pipeline_factory", lambda: EndingPipeline())
     monkeypatch.setattr("shefa.telephony.endcall.GRACE_S", 0.01)
@@ -156,6 +173,7 @@ def test_the_page_is_told_to_hang_up_when_the_agent_ends_the_call(client, monkey
     ) as ws:
         assert ws.receive_bytes() == b"\x01\x00" * 800  # the farewell comes first
         assert ws.receive_json() == {"type": "hangup"}
+        finish(ws)
 
 
 def test_browser_call_streams_audio_both_ways(client, monkeypatch):
@@ -168,6 +186,7 @@ def test_browser_call_streams_audio_both_ways(client, monkeypatch):
         ws.send_bytes(b"\x02\x00" * 400)
         reply = ws.receive_bytes()
         assert reply == b"\x01\x00" * 800
+        finish(ws)
     assert fake.heard and fake.heard[0] == b"\x02\x00" * 400
     patient = default_clinic_store().get_patient(1)
     assert patient["phone"] == "01711000123"  # the caller was recognised from the form field
