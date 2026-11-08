@@ -245,6 +245,10 @@ class TelephonyConfig(StrictModel):
     # Explicit outbound ingress URL — the ngrok localhost scrape is deleted
     # (D-ENG25). Validated as an absolute http(s) URL when set.
     public_url: str = ""
+    # Calls answered at once on this box (0 = no limit). One GPU serves speech recognition, the
+    # model and the voice, so past this number every caller's audio degrades; the next caller is
+    # told the lines are busy and a call-back is queued. Measure with the load test, then set it.
+    max_concurrent_calls: int = Field(default=4, ge=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -304,6 +308,8 @@ class EscalationConfig(StrictModel):
     # A caller who simply asks for a person (not an emergency) gets this, without the 999 line.
     human_request_phrases: dict[str, list[str]] = Field(default_factory=dict)
     handover_greeting: dict[str, str] = Field(default_factory=dict)
+    # Said to a caller who rings while every line the box can serve is in use.
+    busy_message: dict[str, str] = Field(default_factory=dict)
     # Said instead of any reply that gives a dose or a diagnosis.
     medical_refusal: dict[str, str] = Field(default_factory=dict)
     repeat_prompt: dict[str, str] = Field(default_factory=dict)

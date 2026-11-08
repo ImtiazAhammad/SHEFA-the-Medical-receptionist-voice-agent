@@ -23,7 +23,7 @@ from shefa.audio import (
     s16le_16k_mono_to_slin8k,
     to_s16le_16k_mono,
 )
-from shefa.call_log import call_started, finish_call
+from shefa.call_log import call_ended, call_started, default_calls_store, finish_call
 from shefa.config.settings import settings
 from shefa.telephony.audiosocket import (
     KIND_AUDIO,
@@ -34,6 +34,7 @@ from shefa.telephony.audiosocket import (
     read_frame,
 )
 from shefa.telephony.call_context import OutboundContext, has_context, set_context
+from shefa.telephony.capacity import gate
 from shefa.telephony.control import CallLeg, control
 from shefa.telephony.endcall import log_pipeline_end, session_of, wait_for_playback
 from shefa.telephony.twilio import make_media_queues
@@ -216,6 +217,9 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
     if not has_context(call_sid):
         await _identify_caller(call_sid, leg)
     call_started(call_sid, "outbound" if has_context(call_sid) else "inbound")
+    if not gate.admit(call_sid):
+        await _turn_away(call_sid, leg, writer)
+        return
     pipeline = pipeline_factory()
     queues = make_media_queues()
     control.register(leg)
@@ -253,11 +257,47 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
         await asyncio.gather(*tasks, return_exceptions=True)
         await pipeline.cleanup(call_sid)
         control.release(call_sid)
+        gate.release(call_sid)
         finish_call(call_sid, await session_of(pipeline, call_sid))
         with contextlib.suppress(ConnectionError, OSError):
             writer.write(encode_frame(KIND_HANGUP, b""))
             writer.close()
         logger.info("AudioSocket call ended: %s (%d frames played)", call_sid, playback.frames_sent)
+
+
+async def _turn_away(call_sid: str, leg: AsteriskCallLeg, writer: asyncio.StreamWriter) -> None:
+    """Every line is in use: say so, queue a call-back with the caller's number, hang up."""
+    from shefa.models.registry import registry
+    from shefa.pipeline.voice_pipeline import speak_to
+
+    language = settings.languages.primary
+    phone = None
+    try:
+        phone = await asyncio.wait_for(leg.caller_number(), timeout=2.0)
+    except Exception:  # noqa: BLE001 - a hidden number still gets the message
+        logger.info("No caller number for %s", call_sid)
+    try:
+        default_calls_store().add_callback(call_sid, phone, language, "all lines were busy")
+    except Exception:
+        logger.exception("Could not queue a call-back for %s", call_sid)
+    prompts = settings.escalation.busy_message
+    message = prompts.get(language, prompts.get("en", "All our lines are busy. We will call you."))
+    queues = make_media_queues()
+    playback = _Playback(writer, queues.playback)
+    task = asyncio.create_task(playback.run())
+    try:
+        tts = await registry.get_tts()
+        await speak_to(tts, message, language, queues.put_playback)
+        await wait_for_playback(queues.playback)
+    except Exception:
+        logger.exception("Could not speak the busy message to %s", call_sid)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        call_ended(call_sid, "turned_away")
+        with contextlib.suppress(ConnectionError, OSError):
+            writer.write(encode_frame(KIND_HANGUP, b""))
+            writer.close()
 
 
 async def start_audiosocket_server() -> asyncio.AbstractServer:

@@ -117,6 +117,7 @@ DISPOSITIONS = {
     "escaped": "unsupported_language",
     "terminated": "failed",
     "completed": "completed",
+    # "turned_away" is written directly by the telephony layer when every line is busy.
 }
 
 

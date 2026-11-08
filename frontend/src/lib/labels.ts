@@ -23,7 +23,11 @@ export function actionLabel(name: string, lang: Lang): string {
 
 const DISPOSITIONS: Record<string, [string, string]> = {
   completed: ['Finished', 'শেষ হয়েছে'],
+  handed_over: ['Handed to a person', 'মানুষের কাছে দেওয়া হয়েছে'],
   escalated: ['Handed to a person', 'মানুষের কাছে দেওয়া হয়েছে'],
+  caller_hung_up: ['Caller hung up', 'কলার ফোন রেখে দিয়েছেন'],
+  unsupported_language: ['Language not supported', 'ভাষা সমর্থিত নয়'],
+  turned_away: ['Lines busy, call-back queued', 'লাইন ব্যস্ত, কল-ব্যাক রাখা হয়েছে'],
   failed: ['Failed', 'ব্যর্থ'],
 }
 

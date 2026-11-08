@@ -19,6 +19,8 @@ languages:
 telephony:
   # Single provider knob (D-ENG13): twilio | asterisk | freeswitch.
   provider: "twilio"
+  # Calls answered at once; the next caller hears the busy message and is queued for a call-back.
+  max_concurrent_calls: 4
   # SIP trunk credentials ONLY — provider selection lives at telephony.provider.
   # A `provider` key under `sip` is the removed two-key state and fails startup.
   sip:
@@ -278,6 +280,9 @@ escalation:
   handover_greeting:
     en: "Of course. I am connecting you to our receptionist. Please hold."
     bn: "অবশ্যই। আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে দিচ্ছি। অনুগ্রহ করে অপেক্ষা করুন।"
+  busy_message:
+    en: "Thank you for calling SHEFA Clinic. All our lines are busy right now. We have noted your call and will ring you back shortly. If it is an emergency, please call 999."
+    bn: "শেফা ক্লিনিকে ফোন করার জন্য ধন্যবাদ। এই মুহূর্তে আমাদের সব লাইন ব্যস্ত। আপনার কলটি লিখে রাখা হয়েছে, আমরা শীঘ্রই আপনাকে ফোন করব। জরুরি হলে ৯৯৯-এ ফোন করুন।"
   medical_refusal:
     en: "I am not able to give medical advice. Please ask the doctor, or I can connect you to our receptionist."
     bn: "আমি চিকিৎসা সংক্রান্ত পরামর্শ দিতে পারি না। দয়া করে ডাক্তারকে জিজ্ঞাসা করুন, অথবা চাইলে আপনাকে রিসেপশনিস্টের সাথে কথা বলিয়ে দিতে পারি।"
