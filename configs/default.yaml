@@ -10,8 +10,11 @@ languages:
   supported: ["en", "bn"]
   code_switching: true
   default_greeting:
-    en: "Thank you for calling SHEFA Clinic. How may I help you today?"
-    bn: "শেফা ক্লিনিকে আপনাকে স্বাগতম। আমি আপনাকে কিভাবে সাহায্য করতে পারি?"
+    # Says up front that this is an automated assistant and that the call is written down, and how
+    # to reach a person. If you switch transcripts off (storage.keep_transcripts: false) remove the
+    # "written down" sentence so the greeting stays true.
+    en: "Thank you for calling SHEFA Clinic. I am an automated assistant, and what you say on this call is written down to help with your booking. Say person at any time to speak with someone. How may I help you today?"
+    bn: "শেফা ক্লিনিকে আপনাকে স্বাগতম। আমি একটি স্বয়ংক্রিয় সহকারী, আপনার বুকিংয়ের সুবিধার জন্য এই কলের কথা লিখে রাখা হয়। যেকোনো সময় মানুষ বললে আপনাকে একজন কর্মীর সাথে কথা বলিয়ে দেব। আমি কীভাবে সাহায্য করতে পারি?"
 
 telephony:
   # Single provider knob (D-ENG13): twilio | asterisk | freeswitch.
@@ -263,6 +266,18 @@ escalation:
   transfer_greeting:
     en: "If anyone is in danger, please call 999 now. I'm transferring you to our receptionist. Please hold."
     bn: "কেউ বিপদে থাকলে এখনই ৯৯৯-এ ফোন করুন। আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
+  # Asking for a person is not an emergency: no 999 line.
+  human_request_phrases:
+    en: ["speak to a person", "talk to a person", "speak to someone", "talk to someone",
+         "speak with someone", "talk with someone", "speak to a human", "talk to a human",
+         "real person", "a human", "the receptionist", "an operator", "representative",
+         "person", "human", "operator"]
+    bn: ["মানুষ চাই", "মানুষের সাথে কথা", "মানুষের সঙ্গে কথা", "কারো সাথে কথা বলতে",
+         "কারও সাথে কথা বলতে", "কাউকে দিন", "রিসেপশনিস্টের সাথে", "রিসেপশনিস্টকে দিন",
+         "কর্মীর সাথে কথা", "অপারেটর", "মানুষ"]
+  handover_greeting:
+    en: "Of course. I am connecting you to our receptionist. Please hold."
+    bn: "অবশ্যই। আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে দিচ্ছি। অনুগ্রহ করে অপেক্ষা করুন।"
   repeat_prompt:
     en: "Sorry, I didn't catch that clearly. Could you say that again?"
     bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"

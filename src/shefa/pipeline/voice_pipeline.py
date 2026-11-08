@@ -54,7 +54,11 @@ from shefa.pipeline.error_taxonomy import (
     MalformedLLMOutputError,
     backoff_delay,
 )
-from shefa.pipeline.language_detector import detect_language, evaluate_transcript
+from shefa.pipeline.language_detector import (
+    detect_language,
+    escalation_prompt,
+    evaluate_transcript,
+)
 from shefa.pipeline.language_request import ACKNOWLEDGEMENT, requested_language
 from shefa.pipeline.replycheck import speakable, tidy, whole_reply_ok
 from shefa.pipeline.social import classify_social, social_reply
@@ -420,10 +424,7 @@ class VoicePipeline:
             decision = evaluate_transcript(stt_result.text, session.language, stt_result.confidence)
 
             if decision.should_escalate:
-                escalation_msg = settings.escalation.transfer_greeting.get(
-                    session.language.value,
-                    settings.escalation.transfer_greeting.get("en", "Transferring you now."),
-                )
+                escalation_msg = escalation_prompt(decision, session.language)
                 tts = await registry.get_tts()
                 await speak_to(tts, escalation_msg, session.language.value, put_playback)
                 session.add_turn("assistant", escalation_msg, session.language)
@@ -576,9 +577,9 @@ class VoicePipeline:
         session.add_turn("user", text, session.language)
         log_turn(call_sid, "user", text, language=session.language.value, note="typed")
         # Typed text is never misheard, so only the emergency decision applies.
-        if evaluate_transcript(text, session.language, 1.0).should_escalate:
-            prompts = settings.escalation.transfer_greeting
-            reply = prompts.get(session.language.value, prompts.get("en", "Transferring you now."))
+        typed = evaluate_transcript(text, session.language, 1.0)
+        if typed.should_escalate:
+            reply = escalation_prompt(typed, session.language)
             session.add_turn("assistant", reply, session.language)
             session.state = "escalated"
             await self._session_manager.save(session)

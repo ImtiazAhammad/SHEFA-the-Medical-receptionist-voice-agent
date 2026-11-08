@@ -32,6 +32,10 @@ _EBOUND = rf"(?![{_WORD}])"  # "end boundary": char after is not a word char
 # addition — is boundary-anchored and may match anywhere, so adding a generic
 # word like "urgent" without classifying it here breaks the benign corpus.
 _END_ANCHORED_KEYWORDS = frozenset({"emergency", "unconscious", "জরুরি", "অজ্ঞান"})
+# A bare word that is a request only when it is the whole answer ("person", "মানুষ"): inside a
+# sentence it is just a noun ("many people are fainting in the heat").
+_WHOLE_UTTERANCE_ONLY = frozenset({"person", "human", "operator", "মানুষ", "অপারেটর"})
+_POLITE = frozenset({"please", "plz", "প্লিজ", "দয়া", "করে"})
 _BANGLA_KEYWORDS = {
     "আসসালামু আলাইকুম", "ধন্যবাদ", "হ্যাঁ", "না", "কি", "কেমন", "আছেন", "বোঝা",
     "সাহায্য", "ডাক্তার", "অ্যাপয়েন্টমেন্ট", "কখন", "দরকার", "আমি",
@@ -94,7 +98,17 @@ def is_emergency(text: str, language: Language) -> bool:
     """
     from shefa.config.settings import settings
 
-    keywords = settings.escalation.emergency_keywords.get(language.value, [])
+    return _mentions(text, settings.escalation.emergency_keywords.get(language.value, []))
+
+
+def is_human_request(text: str, language: Language) -> bool:
+    """The caller asked for a person ("let me talk to someone"). Not an emergency."""
+    from shefa.config.settings import settings
+
+    return _mentions(text, settings.escalation.human_request_phrases.get(language.value, []))
+
+
+def _mentions(text: str, keywords: list[str]) -> bool:
     if not keywords:
         return False
 
@@ -106,6 +120,11 @@ def is_emergency(text: str, language: Language) -> bool:
 
     for keyword in keywords:
         kw = keyword.lower()
+        if kw in _WHOLE_UTTERANCE_ONLY:
+            rest = [w for w in core.split() if w != kw]
+            if kw in core.split() and all(w in _POLITE for w in rest):
+                return True
+            continue
         end_anchored = " " not in kw and kw in _END_ANCHORED_KEYWORDS
         if end_anchored:
             if core == kw or core.endswith(" " + kw):
@@ -144,6 +163,7 @@ class TranscriptDecision:
     is_emergency: bool
     needs_repeat: bool
     should_escalate: bool
+    wants_person: bool = False
 
 
 def evaluate_transcript(
@@ -153,9 +173,23 @@ def evaluate_transcript(
     from shefa.config.settings import settings
 
     emergency = is_emergency(text, language)
+    wants_person = not emergency and is_human_request(text, language)
     unclear = confidence < settings.escalation.repeat_threshold
     return TranscriptDecision(
         is_emergency=emergency,
-        needs_repeat=unclear and not emergency,
-        should_escalate=emergency,
+        needs_repeat=unclear and not emergency and not wants_person,
+        should_escalate=emergency or wants_person,
+        wants_person=wants_person,
     )
+
+
+def escalation_prompt(decision: TranscriptDecision, language: Language) -> str:
+    """What the caller hears as they are handed over: the 999 line only for an emergency."""
+    from shefa.config.settings import settings
+
+    prompts = (
+        settings.escalation.handover_greeting
+        if decision.wants_person and not decision.is_emergency
+        else settings.escalation.transfer_greeting
+    )
+    return prompts.get(language.value, prompts.get("en", "Transferring you now."))

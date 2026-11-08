@@ -298,6 +298,9 @@ class EscalationConfig(StrictModel):
     hold_audio_url: str = ""
     emergency_keywords: dict[str, list[str]] = Field(default_factory=dict)
     transfer_greeting: dict[str, str] = Field(default_factory=dict)
+    # A caller who simply asks for a person (not an emergency) gets this, without the 999 line.
+    human_request_phrases: dict[str, list[str]] = Field(default_factory=dict)
+    handover_greeting: dict[str, str] = Field(default_factory=dict)
     repeat_prompt: dict[str, str] = Field(default_factory=dict)
     terminal_prompt: dict[str, str] = Field(default_factory=dict)
     other_language_prompt: dict[str, str] = Field(default_factory=dict)
