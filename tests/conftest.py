@@ -7,6 +7,10 @@ import pytest
 # This machine's configs/local.yaml (tokens, provider) must not change what tests see.
 os.environ.setdefault("SHEFA_IGNORE_LOCAL_CONFIG", "1")
 os.environ.setdefault("SHEFA_SKIP_WARMUP", "1")
+# Tests encrypt with a throwaway key, never the repo's .shefa/data.key.
+from cryptography.fernet import Fernet  # noqa: E402
+
+os.environ["SHEFA_DATA_KEY"] = Fernet.generate_key().decode()
 
 
 @pytest.fixture

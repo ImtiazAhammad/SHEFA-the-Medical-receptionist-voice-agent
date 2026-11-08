@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from shefa.store.crypt import default_cipher
+
 _CALLS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (
     call_sid            TEXT PRIMARY KEY UNIQUE NOT NULL,
@@ -146,10 +148,10 @@ class CallsStore:
                     time.time(),
                     role,
                     language,
-                    text,
+                    default_cipher().encrypt(text),
                     confidence,
                     json.dumps(actions) if actions else None,
-                    note,
+                    default_cipher().encrypt(note),
                 ),
             )
 
@@ -159,6 +161,8 @@ class CallsStore:
             "SELECT * FROM call_turns WHERE call_sid = ? ORDER BY idx", (call_sid,)
         ):
             turn = dict(row)
+            turn["text"] = default_cipher().decrypt(turn["text"])
+            turn["note"] = default_cipher().decrypt(turn["note"])
             turn["actions"] = json.loads(turn["actions"]) if turn["actions"] else []
             out.append(turn)
         return out
@@ -184,25 +188,36 @@ class CallsStore:
             cur = self.connection.execute(
                 "INSERT INTO callbacks (created_at, call_sid, phone, language, reason)"
                 " VALUES (?, ?, ?, ?, ?)",
-                (time.time(), call_sid, phone, language, reason),
+                (
+                    time.time(),
+                    call_sid,
+                    default_cipher().encrypt(phone),
+                    language,
+                    default_cipher().encrypt(reason),
+                ),
             )
         return int(cur.lastrowid)
 
     def list_callbacks(self, *, open_only: bool = True) -> list[dict[str, Any]]:
         where = " WHERE resolved_at IS NULL" if open_only else ""
-        return [
+        rows = [
             dict(r)
             for r in self.connection.execute(
                 f"SELECT * FROM callbacks{where} ORDER BY created_at"  # noqa: S608
             )
         ]
+        for row in rows:
+            row["phone"] = default_cipher().decrypt(row["phone"])
+            row["reason"] = default_cipher().decrypt(row["reason"])
+            row["note"] = default_cipher().decrypt(row.get("note"))
+        return rows
 
     def resolve_callback(self, callback_id: int, *, user: str, note: str = "") -> bool:
         with self.connection:
             cur = self.connection.execute(
                 "UPDATE callbacks SET resolved_at = ?, resolved_by = ?, note = ?"
                 " WHERE id = ? AND resolved_at IS NULL",
-                (time.time(), user, note, callback_id),
+                (time.time(), user, default_cipher().encrypt(note), callback_id),
             )
         return cur.rowcount > 0
 

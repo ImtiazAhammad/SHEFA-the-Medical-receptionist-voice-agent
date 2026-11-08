@@ -371,6 +371,10 @@ class StorageConfig(StrictModel):
     # What was said on calls is patient data. Turn it off, or let it expire.
     keep_transcripts: bool = True
     transcript_retention_days: int = Field(default=90, ge=0)  # 0 = keep for ever
+    # Encrypt transcripts and call-back details on disk (store/crypt.py). The key is SHEFA_DATA_KEY
+    # or this file, created on first use. Back it up apart from the database: no key, no words.
+    encrypt_at_rest: bool = True
+    key_file: str = ".shefa/data.key"
 
 
 class VllmConfig(StrictModel):
