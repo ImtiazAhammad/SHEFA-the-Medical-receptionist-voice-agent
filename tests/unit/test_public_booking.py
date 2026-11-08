@@ -217,3 +217,55 @@ def test_the_page_can_be_switched_off(client, monkeypatch):
 def test_staff_routes_stay_closed_to_a_stranger(client):
     assert client.get("/api/v1/appointments").status_code == 401
     assert client.get("/api/v1/callbacks").status_code == 401
+
+
+def test_a_web_booking_is_unconfirmed_until_the_desk_confirms_it(client, doctor_id):
+    receipt = book(client, doctor_id).json()
+    assert receipt["confirmed"] is False
+    assert default_clinic_store().get_appointment(receipt["reference"])["confirmed"] == 0
+
+    staff = TestClient(
+        create_app(
+            AuthStore([("desk", "admin", hash_token("y" * 32))], {"admin": ["records:write"]})
+        ),
+        base_url="https://testserver",
+    )
+    staff.headers["Authorization"] = "Bearer " + "y" * 32
+    assert staff.post(f"/api/v1/appointments/{receipt['reference']}/confirm").json()["confirmed"]
+
+    assert default_clinic_store().get_appointment(receipt["reference"])["confirmed"] == 1
+    assert (
+        client.post(
+            "/api/v1/public/appointments/lookup",
+            json={"reference": receipt["reference"], "phone": PHONE},
+        ).json()["confirmed"]
+        is True
+    )
+
+
+def test_a_phone_booking_needs_no_confirmation():
+    clinic = default_clinic_store()
+    dept = clinic.add_department("Medicine")
+    doctor = clinic.add_doctor("Dr. P", dept)
+    clinic.add_schedule(doctor, 0, "09:00", "10:00", 30)
+    patient = clinic.upsert_patient("01711000999", "Rahim")
+    assert clinic.book(patient, doctor, "2099-01-05", "09:00", source="phone")["confirmed"] == 1
+
+
+def test_an_old_database_without_the_column_is_migrated(tmp_path):
+    import sqlite3
+
+    from shefa.clinic.store import ClinicStore
+
+    path = tmp_path / "old.db"
+    with ClinicStore(path) as fresh:
+        fresh.connection.execute("ALTER TABLE appointments DROP COLUMN confirmed")
+        fresh.connection.commit()
+    assert "confirmed" not in {
+        r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(appointments)")
+    }
+
+    with ClinicStore(path) as migrated:
+        assert "confirmed" in {
+            r[1] for r in migrated.connection.execute("PRAGMA table_info(appointments)")
+        }

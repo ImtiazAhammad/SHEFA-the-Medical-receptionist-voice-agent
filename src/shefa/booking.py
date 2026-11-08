@@ -225,6 +225,8 @@ class PublicBooking:
         return {
             "reference": appointment["appointment_id"],
             "status": appointment["status"],
+            # A web booking holds the slot; the clinic confirms it by phone.
+            "confirmed": bool(appointment.get("confirmed", 1)),
             "doctor": appointment["doctor_en"],
             "doctor_bn": appointment["doctor_bn"],
             "department": appointment["department_en"],

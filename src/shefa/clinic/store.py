@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS appointments (
                CHECK (status IN ('booked', 'cancelled', 'completed', 'no_show')),
     reason     TEXT NOT NULL DEFAULT '',
     source     TEXT NOT NULL DEFAULT 'phone',
+    -- A booking made on the public web page holds its slot but is unconfirmed until the front
+    -- desk checks it, because a web form cannot prove the phone number is the caller's own.
+    confirmed  INTEGER NOT NULL DEFAULT 1,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -190,6 +193,11 @@ class ClinicStore:
         if "profile" not in columns:
             self.connection.execute(
                 "ALTER TABLE doctors ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'"
+            )
+        booked = {r[1] for r in self.connection.execute("PRAGMA table_info(appointments)")}
+        if "confirmed" not in booked:
+            self.connection.execute(
+                "ALTER TABLE appointments ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1"
             )
 
     def close(self) -> None:
@@ -510,7 +518,8 @@ class ClinicStore:
             with self.connection:
                 cur = self.connection.execute(
                     "INSERT INTO appointments (patient_id, doctor_id, date, start_time, end_time,"
-                    " reason, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " reason, source, confirmed, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         patient_id,
                         doctor_id,
@@ -519,6 +528,7 @@ class ClinicStore:
                         slot["end_time"],
                         reason,
                         source,
+                        0 if source == "web" else 1,
                         stamp,
                         stamp,
                     ),
@@ -526,6 +536,17 @@ class ClinicStore:
         except sqlite3.IntegrityError as exc:
             raise SlotUnavailableError(f"{start_time} on {day} was just taken") from exc
         return self.get_appointment(int(cur.lastrowid))
+
+    def confirm(self, appointment_id: str | int) -> dict[str, Any]:
+        """The front desk has checked a web booking (usually by calling the patient)."""
+        row_id = parse_appointment_id(appointment_id)
+        self._appointment_row(row_id)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE appointments SET confirmed = 1, updated_at = ? WHERE id = ?",
+                (_time.time(), row_id),
+            )
+        return self.get_appointment(row_id)
 
     def _owned(self, appointment_id: str | int, patient_id: int) -> dict[str, Any]:
         appointment = self.get_appointment(appointment_id)

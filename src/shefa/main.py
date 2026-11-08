@@ -199,6 +199,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/calls/ringing/{call_uuid}/decline"): "calls:place",
     ("GET", "/api/v1/directory"): "records:read",
     ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
+    ("POST", "/api/v1/appointments/{appointment_id}/confirm"): "records:write",
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
@@ -786,9 +787,11 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     async def overview(days: int = 7) -> dict:
         """What the owner asks first: is it working? Counts over the last `days` days."""
         import time as _time
+        from datetime import datetime
 
         from shefa.call_log import default_calls_store
         from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
 
         days = max(1, min(days, 90))
         since = _time.time() - days * 86400
@@ -806,6 +809,11 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             "days": days,
             "calls": calls,
             "booked_by_agent": booked,
+            "unconfirmed_web_bookings": clinic.connection.execute(
+                "SELECT COUNT(*) FROM appointments WHERE source = 'web' AND confirmed = 0"
+                " AND status = 'booked' AND date >= ?",
+                (datetime.now(CLINIC_TZ).date().isoformat(),),
+            ).fetchone()[0],
             "open_callbacks": len(default_calls_store().list_callbacks()),
             "reminders": {"attempted": reminders[0], "completed": int(reminders[1])},
         }
@@ -835,6 +843,8 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "patient_name": a["patient_name"],
                 "phone": mask_phone(a["phone"]),
                 "status": a["status"],
+                "source": a.get("source", "phone"),
+                "confirmed": bool(a.get("confirmed", 1)),
             }
             for a in rows
         ]
@@ -1008,6 +1018,20 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             by="desk",
         )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
+    @app.post("/api/v1/appointments/{appointment_id}/confirm")
+    async def confirm_appointment(appointment_id: str, request: Request) -> dict:
+        """The desk has checked a web booking with the patient."""
+        from shefa.clinic import ClinicError, default_clinic_store
+
+        try:
+            updated = default_clinic_store().confirm(appointment_id)
+        except ClinicError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": "validation", "message": str(exc)}
+            ) from exc
+        _audit(request, "appointment_confirmed", appointment_id=updated["appointment_id"])
+        return {"appointment_id": updated["appointment_id"], "confirmed": True}
 
     @app.post("/api/v1/reminders/run")
     async def run_reminders_now() -> dict:
