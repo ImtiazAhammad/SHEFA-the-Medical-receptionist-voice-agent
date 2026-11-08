@@ -20,7 +20,11 @@ _YES = frozenset(
         "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm", "correct", "right",
     }
 )  # fmt: skip
-_YES_PHRASES = ("ঠিক আছে", "ঠিকআছে", "go ahead", "please do", "that's right", "thats right")
+_YES_PHRASES = (
+    "ঠিক আছে", "ঠিকআছে", "go ahead", "please do", "that's right", "thats right",
+    "go with that", "that one", "that works", "sounds good", "book it", "book that",
+    "ওটাই", "এটাই", "ওটা দিন", "এটা দিন",
+)  # fmt: skip
 _NO = frozenset({"না", "নাহ", "নাই", "নয়", "থাক", "ভুল", "no", "nope", "wrong", "don't", "dont"})
 _SPLIT = re.compile(r"[\s,.;:!?।()\"-]+")
 MAX_WORDS = 4  # a longer reply ("yes but make it five") is a new request, not an answer

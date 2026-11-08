@@ -655,6 +655,28 @@ def vllm_command(cfg: Any) -> list[str]:
     ]
 
 
+def vllm_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment vLLM starts with.
+
+    vLLM's sampler tries to compile a FlashInfer kernel at start-up, which needs the CUDA
+    toolkit and ninja. A clinic box has neither, and without this the engine dies after loading
+    the weights. The plain PyTorch sampler is what we measured. An explicit setting wins.
+    """
+    import os
+
+    env = dict(os.environ if base is None else base)
+    env.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    return env
+
+
+def vllm_failure_reason(log_text: str) -> str:
+    """The line of vLLM's log that says why it stopped (its last "...Error: ..." line)."""
+    lines = [ln for ln in log_text.splitlines() if "Error:" in ln and "File \"" not in ln]
+    if not lines:
+        return ""
+    return lines[-1].split("] ", 1)[-1].strip()[:300]
+
+
 def _ensure_vllm() -> None:
     """Make sure vLLM is up: use it if it answers, else start it and wait for the model."""
     import subprocess
@@ -687,7 +709,11 @@ def _ensure_vllm() -> None:
     print(f"Starting vLLM with {cfg.model} (the first start downloads it; log: {log})...")
     with log.open("ab") as out:
         process = subprocess.Popen(  # noqa: S603
-            vllm_command(cfg), stdout=out, stderr=out, start_new_session=True
+            vllm_command(cfg),
+            stdout=out,
+            stderr=out,
+            start_new_session=True,
+            env=vllm_environment(),
         )
     deadline = time.monotonic() + cfg.startup_timeout_s
     while time.monotonic() < deadline:
@@ -695,7 +721,8 @@ def _ensure_vllm() -> None:
             print("vLLM is ready.")
             return
         if process.poll() is not None:
-            print(f"vLLM stopped (exit {process.returncode}); see {log}")
+            reason = vllm_failure_reason(log.read_text(errors="replace"))
+            print(f"vLLM stopped (exit {process.returncode}). {reason}\nFull log: {log}")
             return
         time.sleep(3)
     print(f"vLLM did not answer within {cfg.startup_timeout_s:.0f}s; see {log}")

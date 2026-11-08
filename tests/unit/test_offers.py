@@ -132,3 +132,21 @@ def test_clinic_today_is_the_dhaka_date():
     from datetime import datetime
 
     assert clinic_today() == datetime.now(CLINIC_TZ).date()
+
+
+@pytest.mark.parametrize(
+    "phrase", ["Okay, go with that", "that one", "sounds good", "the first one", "ওটাই"]
+)
+async def test_everyday_ways_of_accepting_an_offer_read_the_booking_back(call, phrase):
+    await ask_for_the_day_the_doctor_is_away(call)
+    reply = await call.say(phrase)
+    assert "Dr. Rahman" in reply and reply.endswith("Shall I book it?")
+
+
+async def test_the_next_free_time_is_never_earlier_than_the_day_asked_about(call):
+    from shefa.integrations.calendar import check_slots
+
+    day = (date.today() + timedelta(days=5)).isoformat()
+    result = await check_slots(day, "Rahman")
+    nxt = result["next_available"]
+    assert nxt is None or nxt["date"] > day or result["available_slots"]

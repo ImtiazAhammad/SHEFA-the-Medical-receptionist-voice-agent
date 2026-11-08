@@ -853,6 +853,8 @@ class VoicePipeline:
                 session.metadata.pop("choices")
         if offer and not pending:
             answer = yes_no(said)
+            if answer is None and pick(said, 2) == 0:  # "the first one": the one offered
+                answer = True
             if answer is True:  # "ঠিক আছে" to "Shall I book that?": read it back, as ever
                 action = SimpleNamespace(name=offer["name"], arguments=offer["arguments"])
                 session.metadata.setdefault("actions", [])

@@ -70,6 +70,28 @@ def _resolve_doctor(
     return store.doctors()
 
 
+def _next_after(store: ClinicStore, doctor_id: int, asked_day: str) -> dict[str, Any] | None:
+    """The next free time AFTER the day the caller asked about.
+
+    "No time tomorrow; the next free time is today" is nonsense, and a caller who says yes to it
+    books a slot earlier than the one they wanted. Search from the day after `asked_day`, never
+    earlier than now.
+    """
+    from datetime import datetime, time, timedelta
+
+    from shefa.clinic.store import CLINIC_TZ
+
+    try:
+        after = datetime.fromisoformat(asked_day).date() + timedelta(days=1)
+    except ValueError:
+        return store.next_available(doctor_id)
+    if after <= datetime.now(CLINIC_TZ).date():
+        return store.next_available(doctor_id)
+    return store.next_available(
+        doctor_id, now=datetime.combine(after, time(0, 0), tzinfo=CLINIC_TZ)
+    )
+
+
 async def check_slots(
     date: str, doctor_name: str | None = None, specialty: str | None = None
 ) -> dict[str, Any]:
@@ -83,7 +105,7 @@ async def check_slots(
                 "doctor_bn": doctor["name_bn"],
                 "doctor_id": doctor["id"],
                 "available_slots": store.available_slots(doctor["id"], date),
-                "next_available": store.next_available(doctor["id"]),
+                "next_available": _next_after(store, doctor["id"], date),
             }
             for doctor in doctors
         ]

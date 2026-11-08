@@ -107,3 +107,22 @@ def test_the_gemma_template_folds_the_system_prompt_into_the_first_user_turn():
     assert "<start_of_turn>user\nRULES\n\nHi<end_of_turn>" in text  # not lost on the greeting
     assert text.count("RULES") == 1 and text.endswith("<start_of_turn>model\n")
     assert "system" not in text.replace("RULES", "")
+
+
+def test_vllm_starts_without_the_flashinfer_sampler_unless_told_otherwise():
+    assert cli.vllm_environment({"PATH": "/bin"})["VLLM_USE_FLASHINFER_SAMPLER"] == "0"
+    kept = cli.vllm_environment({"VLLM_USE_FLASHINFER_SAMPLER": "1"})
+    assert kept["VLLM_USE_FLASHINFER_SAMPLER"] == "1"
+
+
+def test_the_launcher_reports_why_vllm_stopped():
+    log = (
+        "INFO starting\n"
+        '(EngineCore pid=1) ERROR 11-09 01:42:03 [core.py:1584]   File "core.py", line 1\n'
+        "(EngineCore pid=1) ERROR 11-09 01:42:03 [core.py:1584] ValueError: Free memory on device "
+        "cuda:0 (7.91/15.57 GiB) on startup is less than desired GPU memory utilization (0.6).\n"
+        "RuntimeError: Engine core initialization failed.\n"
+    )
+    assert "Engine core initialization failed" in cli.vllm_failure_reason(log)
+    assert "Free memory" in cli.vllm_failure_reason(log.rsplit("RuntimeError", 1)[0])
+    assert cli.vllm_failure_reason("all fine") == ""
