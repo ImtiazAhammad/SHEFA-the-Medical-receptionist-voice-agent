@@ -55,13 +55,34 @@ a dosing question, and escalated a chest-pain call (see the commit that added th
 - Gemma 2's own chat template rejects a system message; `configs/chat_templates/gemma2.jinja`
   folds it into the first user turn.
 
+## Everything on the card at once (speech + vLLM + callers)
+
+The language model alone is not the whole load. With the Bangla speech model (faster-whisper,
+float16) and vLLM loaded together, and N simulated callers each looping "transcribe a 4.4 s phone
+clip, then ask the model", pausing 6 s between turns (harsher than real, where a caller also
+listens to the reply):
+
+| Callers | GPU used (of 16.4 GB) | Speech p50 / p95 | Model p50 / p95 |
+|---|---|---|---|
+| 1 (no pause) | 12.4 GB | 0.42 / 0.60 s | 1.04 / 2.32 s |
+| 3 | 12.4 GB | 0.46 / 1.86 s | 1.04 / 1.39 s |
+| 5 | 12.4 GB | 0.47 / 4.91 s | 1.05 / 1.39 s |
+| 8 | 12.4 GB | 5.07 / 8.08 s | 1.39 / 1.39 s |
+
+- **They fit**: 12.4 GB with the voice on the CPU, so there is about 4 GB left.
+- **Speech recognition is the bottleneck**, not the model. It decodes one utterance at a time
+  (about 0.3 s alone) and callers queue behind each other. Two or three parallel decodes
+  (`concurrency`) help only a little (5 callers, speech p95: 4.9 s, 4.2 s, 3.5 s) because the GPU
+  is compute-bound. Narrowing the beam from 5 to 1 saves only 0.03 s (the encoder dominates) and
+  changed the text in 2 of 8 clips, so it was left alone.
+- **Default cap: 3 simultaneous calls** (worst-case turn about 3.3 s on this card).
+
 ## Limits of this measurement
 
-One GPU, one model size, 6 rounds per caller count, router requests only. Speech recognition and
-the voice were NOT running at the same time, and they share the GPU in production; the real load
-test has to run with them (3 simultaneous scripted calls through AudioSocket for 30 minutes,
-tracking p95 and VRAM). Treat 5 callers as the upper bound until that is done; the default
-`telephony.max_concurrent_calls` is 4.
+One GPU; recorded patient clips from the conversation lab, not real phone calls; the voice ran on
+the CPU and was not part of the load; no real trunk. The target from the engineering review
+(95th percentile under 2.5 s at 3 callers) is therefore NOT yet met end to end on this card
+(about 3.3 s worst case); a faster speech model or a bigger GPU is the next step.
 
 ## How to use it
 

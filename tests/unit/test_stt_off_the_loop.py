@@ -65,3 +65,17 @@ def test_the_local_model_client_gives_up_instead_of_hanging():
 
     llm = OpenAICompatibleLLM(timeout_s=7)
     assert llm._client.timeout == 7 and llm._client.max_retries == 0
+
+
+def test_parallel_decodes_get_a_worker_each_and_the_default_changes_nothing(monkeypatch):
+    seen: list[dict] = []
+
+    class Fake:
+        def __init__(self, size, **kwargs):
+            seen.append(kwargs)
+
+    monkeypatch.setattr("faster_whisper.WhisperModel", Fake)
+    WhisperLocalSTT(device="cpu")._load("cpu", "int8")
+    WhisperLocalSTT(device="cpu", concurrency=2)._load("cpu", "int8")
+
+    assert "num_workers" not in seen[0] and seen[1]["num_workers"] == 2

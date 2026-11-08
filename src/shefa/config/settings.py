@@ -247,8 +247,10 @@ class TelephonyConfig(StrictModel):
     public_url: str = ""
     # Calls answered at once on this box (0 = no limit). One GPU serves speech recognition, the
     # model and the voice, so past this number every caller's audio degrades; the next caller is
-    # told the lines are busy and a call-back is queued. Measure with the load test, then set it.
-    max_concurrent_calls: int = Field(default=4, ge=0)
+    # told the lines are busy and a call-back is queued. 3 is what a 16 GB RTX 4060 Ti held with a
+    # 95th-percentile turn of about 3.3 s (docs/research/2026-11-09-vllm-vs-ollama.md); a bigger GPU
+    # can take more. Measure on your hardware, then set it.
+    max_concurrent_calls: int = Field(default=3, ge=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -504,6 +506,9 @@ class WhisperLocalAdapterConfig(StrictModel):
     device: str = "cuda"
     compute_type: str = "float16"
     bangla_finetuned: bool = True
+    # Utterances decoded at the same time. 1 is safest; 2 may cut waiting when several callers
+    # speak at once if the GPU has spare compute (measure with the soak test, docs/deployment.md).
+    concurrency: int = Field(default=1, ge=1, le=4)
 
 
 class PiperAdapterConfig(StrictModel):

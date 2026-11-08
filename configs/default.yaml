@@ -20,7 +20,7 @@ telephony:
   # Single provider knob (D-ENG13): twilio | asterisk | freeswitch.
   provider: "twilio"
   # Calls answered at once; the next caller hears the busy message and is queued for a call-back.
-  max_concurrent_calls: 4
+  max_concurrent_calls: 3
   # SIP trunk credentials ONLY — provider selection lives at telephony.provider.
   # A `provider` key under `sip` is the removed two-key state and fails startup.
   sip:

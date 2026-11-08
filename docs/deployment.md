@@ -90,11 +90,24 @@ list growing: it means people are waiting for a human.
 
 ## 9. Capacity
 
-`telephony.max_concurrent_calls` defaults to 4. A caller beyond it hears a busy message, a call-back
-is queued with their number, and the line is released. Measure, then set it:
-`scripts/bench_concurrency.py` measures the language model alone (5 callers: p95 1.56 s on vLLM, see
-`docs/research/2026-11-09-vllm-vs-ollama.md`). **The full load test with speech and voice running
-together has not been done.**
+`telephony.max_concurrent_calls` defaults to 3. A caller beyond it hears a busy message, a call-back
+is queued with their number, and the line is released.
+
+Measured on a 16 GB RTX 4060 Ti with the Bangla speech model and vLLM loaded together (12.4 GB of
+the card in use; the voice runs on the CPU), callers pausing 6 s between turns
+(`docs/research/2026-11-09-vllm-vs-ollama.md`):
+
+| Callers | Speech recognition p95 | Language model p95 | Both, worst case |
+|---|---|---|---|
+| 3 | 1.9 s | 1.4 s | about 3.3 s |
+| 5 | 4.9 s | 1.4 s | about 6.3 s |
+| 8 | 8.1 s | 1.4 s | unusable |
+
+Speech recognition is now the limit: about 0.3-0.5 s per utterance, one after another. Letting
+two or three decode at once (`models.adapters.stt_whisper_local.concurrency`) helps only a little
+(5 callers: 4.9 s, 4.2 s, 3.5 s). A larger GPU, or a smaller speech model, is the real fix. The
+test is deliberately harsher than real callers, who listen as well as talk, so treat these as an
+upper bound on latency. **A real-call load test over the trunk has not been done.**
 
 ## 10. Go-live checklist
 

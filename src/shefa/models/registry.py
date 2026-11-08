@@ -85,6 +85,7 @@ class ModelRegistry:
             model_size=(adapter.model_size if adapter else None) or "large-v3",
             device=getattr(adapter, "device", None),
             compute_type=getattr(adapter, "compute_type", None),
+            concurrency=getattr(adapter, "concurrency", 1),
         )
 
     async def _create_tts(self) -> BaseTTS:

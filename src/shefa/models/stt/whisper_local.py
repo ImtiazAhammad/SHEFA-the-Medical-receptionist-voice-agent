@@ -108,19 +108,22 @@ class WhisperLocalSTT(BaseSTT):
         model_size: str = "large-v3",
         device: str | None = None,
         compute_type: str | None = None,
+        concurrency: int = 1,
     ):
         self.model_size = model_size
+        self._concurrency = max(1, concurrency)
         self._device = device
         self._compute_type = compute_type
         self._model = None
         self._model_device: str | None = None
         # Decoding blocks for a second or more. It runs on a worker thread so the event loop keeps
-        # pacing every call's audio, and one at a time so two callers do not fight for the GPU.
+        # pacing every call's audio, and `concurrency` at a time (one by default) so callers do not
+        # fight for the GPU. Raise it only after measuring: it needs spare GPU compute and memory.
         self._gate: asyncio.Semaphore | None = None
 
     def _slot(self) -> asyncio.Semaphore:
         if self._gate is None:
-            self._gate = asyncio.Semaphore(1)
+            self._gate = asyncio.Semaphore(self._concurrency)
         return self._gate
 
     def _detect_device(self) -> tuple[str, str]:
@@ -144,7 +147,8 @@ class WhisperLocalSTT(BaseSTT):
             _preload_cuda_libraries()
         from faster_whisper import WhisperModel
 
-        return WhisperModel(self.model_size, device=device, compute_type=compute_type)
+        extra = {"num_workers": self._concurrency} if self._concurrency > 1 else {}
+        return WhisperModel(self.model_size, device=device, compute_type=compute_type, **extra)
 
     def _ensure_model(self) -> None:
         if self._model is not None:
