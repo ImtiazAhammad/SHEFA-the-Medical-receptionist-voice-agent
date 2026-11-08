@@ -203,6 +203,11 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
     ("POST", "/api/v1/appointments/{appointment_id}/confirm"): "records:write",
     ("GET", "/api/v1/export/appointments"): "records:export",
+    ("GET", "/api/v1/staff"): "staff:manage",
+    ("GET", "/api/v1/staff/doctors"): "staff:manage",
+    ("POST", "/api/v1/staff"): "staff:manage",
+    ("POST", "/api/v1/staff/{username}/password"): "staff:manage",
+    ("POST", "/api/v1/staff/{username}/active"): "staff:manage",
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
@@ -438,6 +443,22 @@ class RingBody(BaseModel):
 
 class StatusBody(BaseModel):
     status: str
+
+
+class StaffBody(BaseModel):
+    username: str
+    password: str
+    role: str
+    display_name: str = ""
+    doctor_id: int | None = None
+
+
+class PasswordBody(BaseModel):
+    password: str
+
+
+class ActiveBody(BaseModel):
+    active: bool
 
 
 class ResolveBody(BaseModel):
@@ -1021,6 +1042,77 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             by="desk",
         )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
+    @app.get("/api/v1/staff")
+    async def list_staff() -> list[dict]:
+        """The clinic's staff accounts (never their passwords or sessions)."""
+        return staff.users()
+
+    @app.get("/api/v1/staff/doctors")
+    async def staff_doctor_choices() -> list[dict]:
+        """Doctors a doctor account can be tied to (id and names only)."""
+        from shefa.clinic import default_clinic_store
+
+        return [
+            {"id": d["id"], "name": d["name_en"], "name_bn": d["name_bn"]}
+            for d in default_clinic_store().doctors()
+        ]
+
+    @app.post("/api/v1/staff", response_model=None)
+    async def add_staff(body: StaffBody, request: Request) -> dict | JSONResponse:
+        from shefa.store.staff import StaffError
+
+        try:
+            staff.add_user(
+                body.username,
+                body.password,
+                body.role,
+                display_name=body.display_name,
+                doctor_id=body.doctor_id,
+            )
+        except StaffError as exc:
+            return error_response("validation", str(exc))
+        _audit(request, "staff_created", username=body.username.strip(), role=body.role)
+        return {"username": body.username.strip(), "role": body.role}
+
+    @app.post("/api/v1/staff/{username}/password", response_model=None)
+    async def reset_staff_password(
+        username: str, body: PasswordBody, request: Request
+    ) -> dict | JSONResponse:
+        from shefa.auth import TokenError
+        from shefa.store.staff import StaffError
+
+        try:
+            staff.set_password(username, body.password)
+        except (StaffError, TokenError) as exc:
+            return error_response("validation", str(exc))
+        _audit(request, "staff_password_reset", username=username)
+        return {"username": username, "password_changed": True}
+
+    @app.post("/api/v1/staff/{username}/active", response_model=None)
+    async def set_staff_active(
+        username: str, body: ActiveBody, request: Request
+    ) -> dict | JSONResponse:
+        from shefa.store.staff import StaffError
+
+        who = getattr(request.state, "principal", None)
+        if not body.active:
+            if who is not None and who.name == username:
+                return error_response("validation", "You cannot disable your own account.")
+            others = [
+                u
+                for u in staff.users()
+                if u["role"] == "owner" and u["active"] and u["username"] != username
+            ]
+            target = next((u for u in staff.users() if u["username"] == username), None)
+            if target and target["role"] == "owner" and not others:
+                return error_response("validation", "Keep at least one active owner account.")
+        try:
+            staff.set_active(username, body.active)
+        except StaffError as exc:
+            return error_response("validation", str(exc))
+        _audit(request, "staff_enabled" if body.active else "staff_disabled", username=username)
+        return {"username": username, "active": body.active}
 
     @app.get("/api/v1/export/appointments", response_model=None)
     async def export_appointments(

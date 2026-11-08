@@ -209,3 +209,9 @@ summary { cursor: pointer; min-height: 32px; font-weight: 550; }
 
 .side .seg { display: flex; }
 .side .seg button { flex: 1; }
+
+/* Staff accounts page */
+.section-title { font-size: var(--step-1); margin: 2rem 0 0.75rem; }
+.stack { display: grid; gap: 0.9rem; max-width: 28rem; }
+.stack .inline-field { display: grid; gap: 0.3rem; align-items: stretch; }
+.stack .inline-field span { font-weight: 600; font-size: var(--step--1); }

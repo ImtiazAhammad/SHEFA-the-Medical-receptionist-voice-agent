@@ -137,3 +137,17 @@ export interface MyAppointment {
   reason: string
   status: string
 }
+
+export interface StaffUser {
+  username: string
+  display_name: string
+  role: 'desk' | 'owner' | 'doctor'
+  doctor_id: number | null
+  active: number | boolean
+}
+
+export interface DoctorChoice {
+  id: number
+  name: string
+  name_bn: string
+}
