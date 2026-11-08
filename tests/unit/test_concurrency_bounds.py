@@ -44,14 +44,14 @@ class TestBoundedQueues:
         assert queues.playback.maxsize > 0
 
     @pytest.mark.asyncio
-    async def test_audio_queue_put_times_out_when_the_pipeline_never_drains(self):
-        queues = make_media_queues()
+    async def test_a_busy_pipeline_loses_the_oldest_audio_but_never_the_call(self):
+        queues = make_media_queues(audio_maxsize=3)
 
-        for _ in range(queues.audio.maxsize):
-            await queues.put_audio(b"chunk")
+        for n in range(5):
+            await queues.put_audio(bytes([n]))  # must not raise
 
-        with pytest.raises(asyncio.TimeoutError):
-            await queues.put_audio(b"one-too-many")
+        assert [queues.audio.get_nowait() for _ in range(3)] == [b"\x02", b"\x03", b"\x04"]
+        assert queues.audio_dropped == 2
 
     @pytest.mark.asyncio
     async def test_playback_put_times_out_when_nobody_drains(self):

@@ -218,7 +218,24 @@ def parse_action(text: str, known_tools: set[str]) -> ExtractedAction | None:
     if not isinstance(arguments, dict):
         logger.warning("Action router returned non-dict arguments for %r", name)
         return None
+    if "properties" in arguments and "type" in arguments:
+        # The model copied the tool's parameter schema instead of filling it in.
+        logger.warning("Action router echoed the schema of %r; treating the turn as talk", name)
+        return None
     return ExtractedAction(name=name, arguments=arguments)
+
+
+_WIDENING = re.compile(
+    r"\b(other|others|else|more|all|anyone|anybody)\b|আর|আরও|অন্য|সব|সকল|আরো", re.IGNORECASE
+)
+
+
+def widen_listing(name: str, arguments: dict[str, Any], said: str) -> dict[str, Any]:
+    """"Who else is there?" asks about everyone: the department carried over from the
+    earlier question is dropped."""
+    if name == "list_doctors" and arguments.get("department") and _WIDENING.search(said):
+        return {k: v for k, v in arguments.items() if k != "department"}
+    return arguments
 
 
 # Spoken while the router is still deciding, never recorded in the call history.
@@ -259,6 +276,7 @@ async def extract_action(
     # What the caller just said about the day and time is read by code, not trusted to the model.
     said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
     action.arguments = ground_arguments(action.name, action.arguments, said, today)
+    action.arguments = widen_listing(action.name, action.arguments, said)
     return action
 
 

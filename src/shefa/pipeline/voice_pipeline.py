@@ -54,6 +54,8 @@ from shefa.pipeline.error_taxonomy import (
     backoff_delay,
 )
 from shefa.pipeline.language_detector import detect_language, evaluate_transcript
+from shefa.pipeline.language_request import ACKNOWLEDGEMENT, requested_language
+from shefa.pipeline.replycheck import speakable, tidy, whole_reply_ok
 from shefa.pipeline.social import classify_social, social_reply
 from shefa.pipeline.vad import EnergyVAD
 from shefa.session.manager import CallSession, SessionManager
@@ -360,6 +362,21 @@ class VoicePipeline:
                 )
                 break
 
+            asked_for = requested_language(stt_result.text)
+            if asked_for is not None:
+                session.language = asked_for
+                ack = ACKNOWLEDGEMENT[asked_for]
+                tts = await registry.get_tts()
+                await speak_to(tts, ack, asked_for.value, put_playback)
+                session.add_turn("user", stt_result.text, asked_for)
+                session.add_turn("assistant", ack, asked_for)
+                log_turn(call_sid, "user", stt_result.text, language=asked_for.value,
+                         confidence=stt_result.confidence, note="asked for a language")
+                log_turn(call_sid, "assistant", ack, language=asked_for.value)
+                await self._session_manager.save(session)
+                self._audio_buffers.setdefault(call_sid, [])
+                continue
+
             if detected_lang != session.language and _is_numeric(stt_result.text):
                 detected_lang = session.language  # digits are neutral: neither switch nor re-hear
             elif detected_lang != session.language and not _convincing_switch(stt_result):
@@ -589,6 +606,8 @@ class VoicePipeline:
         adapter after the text; the returned text is what enters history.
         """
         text_parts: list[str] = []
+        spoken: list[str] = []
+        stopped = False
         pending = ""
         tool_calls: list[dict[str, Any]] = []
         async for event in llm.generate_events(messages, tools=tools):
@@ -600,13 +619,24 @@ class VoicePipeline:
             pending += event.text
             sentences, pending = split_complete_sentences(pending)
             for sentence in sentences:
-                await self._emit(tts, sentence, language, put_playback)
+                if not stopped and speakable(sentence, language):
+                    await self._emit(tts, tidy(sentence), language, put_playback)
+                    spoken.append(tidy(sentence))
+                elif not stopped:
+                    logger.info("Dropped a reply sentence that is not fit to say: %r", sentence)
+                    stopped = True  # everything after a bad sentence is suspect too
 
         remainder = pending.strip()
-        if remainder:
-            await self._emit(tts, remainder, language, put_playback)
+        if remainder and not stopped and speakable(remainder, language):
+            await self._emit(tts, tidy(remainder), language, put_playback)
+            spoken.append(tidy(remainder))
 
-        reply_text = "".join(text_parts)
+        if stopped and not spoken:  # nothing usable came back: ask, rather than say nothing
+            prompts = settings.escalation.repeat_prompt
+            again = prompts.get(language, prompts.get("en", "Sorry, could you say that again?"))
+            await self._emit(tts, again, language, put_playback)
+            spoken.append(again)
+        reply_text = " ".join(spoken) if spoken else "".join(text_parts)
         if not reply_text.strip() and not tool_calls:
             raise MalformedLLMOutputError("LLM stream produced no text or tool calls")
         return reply_text, tool_calls
@@ -828,7 +858,10 @@ class VoicePipeline:
         except Exception:
             logger.warning("Grounded directory answer failed; using the template")
             return None
-        if not reply or not numbers_grounded(reply, messages[0]["content"]):
+        reply = tidy(reply)
+        if not whole_reply_ok(reply, language) or not numbers_grounded(
+            reply, messages[0]["content"]
+        ):
             logger.info("Directory answer rejected (empty or ungrounded): %r", reply[:80])
             return None
         await self._emit(tts, reply, language, put_playback)

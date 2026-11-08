@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -95,10 +96,20 @@ class MediaQueues:
             maxsize=playback_maxsize
         )
         self._audio_put_timeout_s = audio_put_timeout_s
+        self.audio_dropped = 0
         self._playback_put_timeout_s = playback_put_timeout_s
 
     async def put_audio(self, chunk: bytes) -> None:
-        await asyncio.wait_for(self.audio.put(chunk), timeout=self._audio_put_timeout_s)
+        """Queue live microphone audio. When the pipeline is busy thinking, the oldest audio is
+        dropped: stale sound is worth less than the line staying up (a full queue used to raise
+        and take the whole call down with it)."""
+        while self.audio.full():
+            with contextlib.suppress(asyncio.QueueEmpty):
+                self.audio.get_nowait()
+            self.audio_dropped += 1
+            if self.audio_dropped == 1:
+                logger.warning("Audio queue full: dropping oldest audio while the agent is busy")
+        self.audio.put_nowait(chunk)
 
     async def put_playback(self, frame: AudioFrame) -> None:
         await asyncio.wait_for(

@@ -167,9 +167,9 @@ class TestPipelineUsesTheHelper:
         assert "playback_queue.put" not in source, (
             "a speak site pushes to playback_queue directly instead of the helper"
         )
-        assert source.count("speak_to(") == 6, (
-            "expected all six speak sites (greeting, escalation, repeat, reply, "
-            "terminal transition, other-language transfer) to use the helper, "
+        assert source.count("speak_to(") == 7, (
+            "expected all seven speak sites (greeting, escalation, repeat, reply, "
+            "terminal transition, other-language transfer, language request) to use the helper, "
             f"found {source.count('speak_to(')}"
         )
 
@@ -254,7 +254,7 @@ class TestStreamReply:
         tts = FakeTTS([b"a" * 4])
 
         reply, tool_calls = await VoicePipeline()._stream_reply(
-            llm, tts, [], [], "bn", RecordingSink()
+            llm, tts, [], [], "en", RecordingSink()
         )
 
         assert reply == "One moment."
