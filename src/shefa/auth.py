@@ -59,7 +59,9 @@ MIN_PASSWORD_LENGTH = 10
 _DESK = ("sessions:read", "records:read", "records:write", "calls:place", "chat:use")
 BUILTIN_ROLES: dict[str, frozenset[str]] = {
     "desk": frozenset(_DESK),
-    "owner": frozenset({*_DESK, "config:read", "overview:read", "staff:manage"}),
+    "owner": frozenset(
+        {*_DESK, "config:read", "overview:read", "staff:manage", "records:export"}
+    ),
     "doctor": frozenset({"doctor:self"}),
 }
 BUILTIN_ROLES["admin"] = BUILTIN_ROLES["owner"]

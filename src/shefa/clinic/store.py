@@ -631,6 +631,33 @@ class ClinicStore:
             for r in rows
         ]
 
+    def appointments_between(
+        self, start: str, end: str, *, updated_since: float = 0.0
+    ) -> list[dict[str, Any]]:
+        """Every appointment from `start` to `end` (inclusive) changed since `updated_since`,
+        with the patient and doctor: what a hospital system needs to stay in step."""
+        rows = self.connection.execute(
+            "SELECT a.id, p.phone, p.name AS patient_name, d.name_en AS doctor_en,"
+            " d.name_bn AS doctor_bn, dep.name_en AS department_en"
+            " FROM appointments a JOIN patients p ON p.id = a.patient_id"
+            " JOIN doctors d ON d.id = a.doctor_id"
+            " JOIN departments dep ON dep.id = d.department_id"
+            " WHERE a.date BETWEEN ? AND ? AND a.updated_at >= ?"
+            " ORDER BY a.date, a.start_time, a.id",
+            (start, end, updated_since),
+        ).fetchall()
+        return [
+            {
+                **self.get_appointment(r["id"]),
+                "phone": r["phone"],
+                "patient_name": r["patient_name"],
+                "doctor_en": r["doctor_en"],
+                "doctor_bn": r["doctor_bn"],
+                "department_en": r["department_en"],
+            }
+            for r in rows
+        ]
+
     # -- outbound reminders and follow-ups ---------------------------------
 
     def mark_status(self, appointment_id: str | int, status: str) -> dict[str, Any]:

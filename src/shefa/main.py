@@ -9,7 +9,7 @@ import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -166,6 +166,8 @@ def _http_error_handler(request, exc: HTTPException) -> JSONResponse:
 def _validation_error_handler(request, exc: RequestValidationError) -> JSONResponse:
     return error_response("validation", details=exc.errors())
 
+MAX_EXPORT_DAYS = 93  # one quarter per request keeps an export a page, not a database dump
+
 # The permission each route requires, keyed by (method, path).
 # A permission value meaning "reachable without a credential". Distinct from
 # `None`, which means "undeclared, therefore refused": naming a route with this
@@ -200,6 +202,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/directory"): "records:read",
     ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
     ("POST", "/api/v1/appointments/{appointment_id}/confirm"): "records:write",
+    ("GET", "/api/v1/export/appointments"): "records:export",
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
@@ -1018,6 +1021,61 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             by="desk",
         )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
+    @app.get("/api/v1/export/appointments", response_model=None)
+    async def export_appointments(
+        request: Request,
+        start: str = "",
+        end: str = "",
+        updated_since: float = 0.0,
+        format: str = "json",  # noqa: A002 - the query parameter is part of the public contract
+    ) -> JSONResponse | Response:
+        """Appointments with full patient details, for a hospital system to import.
+
+        Needs ``records:export`` (the owner role, or a token you mint for the integration). Every
+        call is written to the audit trail. ``updated_since`` (a Unix time) makes it incremental:
+        poll with the largest ``updated_at`` you have seen.
+        """
+        from datetime import date as _date
+        from datetime import datetime, timedelta
+
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+        from shefa.export import EXPORT_FIELDS, appointments_csv, export_row
+
+        today = datetime.now(CLINIC_TZ).date()
+        try:
+            first = _date.fromisoformat(start) if start else today
+            last = _date.fromisoformat(end) if end else first + timedelta(days=30)
+        except ValueError:
+            return error_response("validation", "start and end must be dates like 2026-11-09.")
+        if last < first or (last - first).days > MAX_EXPORT_DAYS:
+            return error_response(
+                "validation", f"Ask for at most {MAX_EXPORT_DAYS} days, start before end."
+            )
+        if format not in {"json", "csv"}:
+            return error_response("validation", "format must be json or csv.")
+        rows = [
+            export_row(a)
+            for a in default_clinic_store().appointments_between(
+                first.isoformat(), last.isoformat(), updated_since=updated_since
+            )
+        ]
+        _audit(
+            request,
+            "appointments_exported",
+            start=first.isoformat(),
+            end=last.isoformat(),
+            count=len(rows),
+            format=format,
+        )
+        if format == "csv":
+            return Response(
+                appointments_csv(rows),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": 'attachment; filename="appointments.csv"'},
+            )
+        return JSONResponse({"fields": list(EXPORT_FIELDS), "appointments": rows})
 
     @app.post("/api/v1/appointments/{appointment_id}/confirm")
     async def confirm_appointment(appointment_id: str, request: Request) -> dict:
