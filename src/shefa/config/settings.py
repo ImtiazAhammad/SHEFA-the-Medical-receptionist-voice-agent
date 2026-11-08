@@ -361,6 +361,24 @@ class StorageConfig(StrictModel):
     transcript_retention_days: int = Field(default=90, ge=0)  # 0 = keep for ever
 
 
+class BookingConfig(StrictModel):
+    """The public patient booking page: what it allows and how hard it is to abuse.
+
+    Anyone on the internet can reach it, so every write is rate-limited per client
+    address and per phone number, and bookings are capped per phone.
+    """
+
+    enabled: bool = True
+    days_ahead: int = Field(default=14, ge=1, le=60)
+    min_lead_minutes: int = Field(default=30, ge=0)  # no booking for a slot starting sooner
+    max_open_per_phone: int = Field(default=3, ge=1)  # future bookings one phone may hold
+    writes_per_ip_per_hour: int = Field(default=10, ge=1)
+    writes_per_phone_per_day: int = Field(default=6, ge=1)
+    reads_per_ip_per_minute: int = Field(default=60, ge=1)
+    trust_forwarded_for: bool = False  # true only behind one proxy you run
+    callback_enabled: bool = True  # "call me to confirm" and "call me back" requests
+
+
 class ComplianceConfig(StrictModel):
     hipaa_enabled: bool = True
     encryption_algorithm: str = "AES-256-GCM"
@@ -558,6 +576,7 @@ class AppConfig(StrictModel):
     escalation: EscalationConfig = Field(default_factory=EscalationConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    booking: BookingConfig = Field(default_factory=BookingConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)

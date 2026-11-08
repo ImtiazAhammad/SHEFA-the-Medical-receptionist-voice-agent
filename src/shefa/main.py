@@ -81,6 +81,17 @@ ERROR_STATUS_MAP: dict[str, int] = {
     "not_configured": 503,
     "verified_number_missing": 503,
     "model_unavailable": 503,
+    "name_invalid": 422,
+    "phone_invalid": 422,
+    "slot_invalid": 422,
+    "doctor_unknown": 404,
+    "rate_limited": 429,
+    "too_many_open": 409,
+    "already_booked": 409,
+    "slot_taken": 409,
+    "booking_not_found": 404,
+    "not_cancellable": 409,
+    "booking_closed": 404,
 }
 
 DEFAULT_ERROR_MESSAGES: dict[str, str] = {
@@ -95,6 +106,17 @@ DEFAULT_ERROR_MESSAGES: dict[str, str] = {
     "not_configured": "Dependency not configured.",
     "verified_number_missing": "No verified number configured.",
     "model_unavailable": "The language model did not answer.",
+    "name_invalid": "Please give your name.",
+    "phone_invalid": "Please give a mobile number.",
+    "slot_invalid": "Please pick a day and a time.",
+    "doctor_unknown": "That doctor is not available.",
+    "rate_limited": "Too many requests. Please try again later.",
+    "too_many_open": "Too many open bookings for this number.",
+    "already_booked": "Already booked with this doctor that day.",
+    "slot_taken": "That time was just taken.",
+    "booking_not_found": "We could not find that booking.",
+    "not_cancellable": "This booking cannot be cancelled.",
+    "booking_closed": "Online booking is not available.",
 }
 
 
@@ -191,6 +213,15 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/app/{path:path}"): PUBLIC_PERMISSION,
     ("GET", "/api/v1/me"): PUBLIC_PERMISSION,
     ("POST", "/api/v1/logout"): PUBLIC_PERMISSION,
+    # The patient booking page: public by design, limited and validated in shefa.booking.
+    ("GET", "/api/v1/public/clinic"): PUBLIC_PERMISSION,
+    ("GET", "/api/v1/public/slots"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/public/appointments"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/public/appointments/lookup"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/public/appointments/cancel"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/public/callback-requests"): PUBLIC_PERMISSION,
+    ("GET", "/book"): PUBLIC_PERMISSION,
+    ("GET", "/book/{path:path}"): PUBLIC_PERMISSION,
 }
 
 
@@ -478,6 +509,11 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    from shefa.public_api import router as public_router
+
+    # Mounted flat (not include_router): the auth middleware finds a route's permission by
+    # walking app.routes, and an included router hides its routes from that walk.
+    app.router.routes.extend(public_router.routes)
     if APP_DIR.is_dir():
         app.mount(
             APP_ASSETS_PREFIX,

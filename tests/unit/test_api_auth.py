@@ -77,6 +77,21 @@ def _routes(app) -> list[tuple[str, str, str]]:
     return found
 
 
+# The patient booking page is public on purpose (see shefa.booking for its limits).
+# Listing the routes here keeps the rule strict: any other route served without a
+# credential still fails, and a new public route has to be named here to pass.
+PATIENT_PAGE_ROUTES = {
+    ("GET", "/api/v1/public/clinic"),
+    ("GET", "/api/v1/public/slots"),
+    ("POST", "/api/v1/public/appointments"),
+    ("POST", "/api/v1/public/appointments/lookup"),
+    ("POST", "/api/v1/public/appointments/cancel"),
+    ("POST", "/api/v1/public/callback-requests"),
+    ("GET", "/book"),
+    ("GET", "/book/{path:path}"),
+}
+
+
 class TestEveryRouteRequiresAuthentication:
     def test_an_unauthenticated_request_is_refused_everywhere(self, client):
         app = client.app
@@ -86,6 +101,8 @@ class TestEveryRouteRequiresAuthentication:
 
         allowed = []
         for method, path, _name in routes:
+            if (method, path) in PATIENT_PAGE_ROUTES:
+                continue
             response = client.request(method, path)
             if response.status_code not in (401, 403):
                 allowed.append((method, path, response.status_code))
