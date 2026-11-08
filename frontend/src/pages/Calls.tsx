@@ -1,9 +1,10 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Languages } from 'lucide-react'
 import { api, type CallDetail, type CallRow } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
 import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText } from '../components'
+import { useAuth } from '../lib/auth'
 import { CallStatus } from './Live'
 import { actionLabel, dispositionLabel } from '../lib/labels'
 
@@ -65,13 +66,28 @@ export function CallPage() {
   const { t, num, date, lang } = useI18n()
   const call = useLoad(() => api<CallDetail>(`/api/v1/calls/${encodeURIComponent(sid)}`), [sid], 3000)
   const d = call.data
+  const { can } = useAuth()
+  const navigate = useNavigate()
+
+  async function erase() {
+    if (!window.confirm(t('deleteConfirm'))) return
+    await api(`/api/v1/calls/${encodeURIComponent(sid)}`, { method: 'DELETE' })
+    navigate('/calls')
+  }
 
   return (
     <>
       <Link className="back" to="/calls">
         <ArrowLeft size={16} aria-hidden="true" /> {t('back')}
       </Link>
-      <PageHeader title={t('transcript')}>{d ? <CallStatus call={d} /> : null}</PageHeader>
+      <PageHeader title={t('transcript')}>
+        {d ? <CallStatus call={d} /> : null}
+        {d && can('records:write') ? (
+          <button type="button" className="btn btn-small" onClick={() => void erase()}>
+            {t('deleteCall')}
+          </button>
+        ) : null}
+      </PageHeader>
       {call.error ? <ErrorNote error={call.error} onRetry={call.reload} /> : null}
       {call.loading && !d ? <Skeleton rows={5} /> : null}
       {d ? (

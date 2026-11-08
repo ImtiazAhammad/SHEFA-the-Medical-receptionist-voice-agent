@@ -199,3 +199,13 @@ summary { cursor: pointer; min-height: 32px; font-weight: 550; }
   .skeleton-row { animation: none; }
   .btn { transition: none; }
 }
+
+/* Overview */
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 0; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.stat { padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); border-inline-end: 1px solid var(--line); margin: 0; }
+.stat dt { color: var(--ink-2); }
+.stat dd { margin: 0.2rem 0 0; font-size: var(--step-3); font-weight: 650; font-variant-numeric: tabular-nums; }
+.phone { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.side .seg { display: flex; }
+.side .seg button { flex: 1; }

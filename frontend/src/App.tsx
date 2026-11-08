@@ -7,6 +7,7 @@ import { Live } from './pages/Live'
 import { Calls, CallPage } from './pages/Calls'
 import { Appointments } from './pages/Appointments'
 import { Doctors } from './pages/Doctors'
+import { Overview } from './pages/Overview'
 import { Skeleton } from './components'
 
 function Gate() {
@@ -25,6 +26,7 @@ function Gate() {
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/live" replace />} />
         <Route path="live" element={<Live />} />
+        <Route path="overview" element={<Overview />} />
         <Route path="calls" element={<Calls />} />
         <Route path="calls/:sid" element={<CallPage />} />
         <Route path="appointments" element={<Appointments />} />

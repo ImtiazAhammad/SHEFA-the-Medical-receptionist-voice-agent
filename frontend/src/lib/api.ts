@@ -96,3 +96,26 @@ export interface Department {
   name_bn: string
   doctors: Doctor[]
 }
+
+export interface Callback {
+  id: number
+  created_at: number
+  call_sid: string | null
+  phone: string | null
+  language: string | null
+  reason: string
+}
+
+export interface Overview {
+  days: number
+  calls: {
+    calls: number
+    inbound: number
+    outbound: number
+    dispositions: Record<string, number>
+    average_seconds: number | null
+  }
+  booked_by_agent: number
+  open_callbacks: number
+  reminders: { attempted: number; completed: number }
+}
