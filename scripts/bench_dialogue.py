@@ -1,6 +1,6 @@
 """Score candidate models as the action router on MULTI-TURN dialogue, not single sentences.
 
-    PYTHONPATH=src python scripts/bench_dialogue.py gemma2:9b "hf.co/unsloth/gemma-3-12b-it-GGUF:Q4_K_M"
+    PYTHONPATH=src python scripts/bench_dialogue.py gemma2:9b qwen2.5:7b
     PYTHONPATH=src python scripts/bench_dialogue.py MODEL --host http://localhost:8000 --openai
 
 `bench_router.py` feeds one context-free sentence at a time, which a 9B model passes. A live call
@@ -333,7 +333,9 @@ def score(model, host, directories, args):
         by_category.setdefault(category, []).append(int(args_ok))
         if not args_ok:
             kind = "args" if tool_ok else "tool"
-            misses.append(f"{kind:4} [{category}] {said!r}: wanted {tool} {expect}; got {name} {arguments}")
+            misses.append(
+                f"{kind:4} [{category}] {said!r}: wanted {tool} {expect}; got {name} {arguments}"
+            )
     total = len(CASES)
     return {
         "model": model,
