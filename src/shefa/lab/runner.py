@@ -20,7 +20,8 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
+from datetime import time as clock_time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -272,6 +273,7 @@ class Lab:
     def _prepare_store(self, scenario: Scenario) -> Any:
         from shefa.clinic import ClinicStore
         from shefa.clinic.loader import import_directory_file
+        from shefa.clinic.store import CLINIC_TZ
 
         path = self.work_dir / f"{scenario.id}.db"
         for leftover in self.work_dir.glob(f"{scenario.id}.db*"):
@@ -285,7 +287,10 @@ class Lab:
         for booking in scenario.setup.get("appointments", []):
             patient = store.upsert_patient(scenario.phone, booking.get("name", ""))
             doctor = store.find_doctor(booking["doctor"])
-            store.book(patient, doctor["id"], booking["date"], booking["time"])
+            # Prepared state does not depend on what time it is now: book from the scenario's
+            # own morning, so a slot is open whatever the real clock says.
+            morning = datetime.combine(self.today, clock_time(0, 0), tzinfo=CLINIC_TZ)
+            store.book(patient, doctor["id"], booking["date"], booking["time"], now=morning)
         return store
 
     async def run(self, scenario: Scenario) -> ScenarioResult:

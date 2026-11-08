@@ -50,6 +50,17 @@ def _isolate_the_default_clinic_store(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_the_default_staff_store(tmp_path):
+    from shefa.store.staff import StaffStore, set_default_staff_store
+
+    store = StaffStore(tmp_path / "default-staff.db")
+    set_default_staff_store(store)
+    yield
+    set_default_staff_store(None)
+    store.close()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_the_default_calls_store(tmp_path):
     from shefa.call_log import set_default_calls_store
     from shefa.store.calls import CallsStore

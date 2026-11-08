@@ -45,9 +45,40 @@ class Principal:
     name: str
     role: str
     permissions: frozenset[str] = field(default_factory=frozenset)
+    doctor_id: int | None = None  # a doctor's account is tied to one doctor
+    display_name: str = ""
 
     def has(self, permission: str) -> bool:
         return permission in self.permissions
+
+
+MIN_PASSWORD_LENGTH = 10
+
+# What each staff role may do. Config roles add to these (never remove), so a config written
+# before roles existed keeps working: "admin" gets everything the owner has.
+_DESK = ("sessions:read", "records:read", "records:write", "calls:place", "chat:use")
+BUILTIN_ROLES: dict[str, frozenset[str]] = {
+    "desk": frozenset(_DESK),
+    "owner": frozenset({*_DESK, "config:read", "overview:read", "staff:manage"}),
+    "doctor": frozenset({"doctor:self"}),
+}
+BUILTIN_ROLES["admin"] = BUILTIN_ROLES["owner"]
+
+
+def hash_password(password: str, *, iterations: int = DEFAULT_ITERATIONS) -> str:
+    """Like `hash_token`, for a person's password: shorter minimum, same slow hash."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise TokenError(f"A password needs at least {MIN_PASSWORD_LENGTH} characters.")
+    salt = secrets.token_bytes(SALT_BYTES)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return "$".join(
+        [
+            KDF_ALGORITHM,
+            str(iterations),
+            base64.b64encode(salt).decode(),
+            base64.b64encode(digest).decode(),
+        ]
+    )
 
 
 def generate_token(length: int = 32) -> str:
@@ -119,14 +150,18 @@ class AuthStore:
         roles: dict[str, list[str]],
     ) -> None:
         self._principals = list(principals)
-        self._roles = {role: frozenset(perms) for role, perms in roles.items()}
+        merged = {role: set(perms) for role, perms in BUILTIN_ROLES.items()}
+        for role, perms in roles.items():
+            merged.setdefault(role, set()).update(perms)
+        self._roles = {role: frozenset(perms) for role, perms in merged.items()}
+        self.staff = None  # a StaffStore, once the app attaches one
         # Verified tokens only, keyed on a hash so no plaintext is retained.
         self._verified: dict[bytes, Principal] = {}
 
     @property
     def is_configured(self) -> bool:
         """False when no principal can authenticate, which must lock the API."""
-        return bool(self._principals)
+        return bool(self._principals) or (self.staff is not None and self.staff.has_users())
 
     def permissions_for(self, role: str) -> frozenset[str]:
         return self._roles.get(role, frozenset())
@@ -135,6 +170,17 @@ class AuthStore:
         """Return the caller for `token`, or None if it matches no principal."""
         if not token:
             return None
+
+        if self.staff is not None:
+            user = self.staff.user_for_session(token)
+            if user is not None:
+                return Principal(
+                    name=user["username"],
+                    role=user["role"],
+                    permissions=self.permissions_for(user["role"]),
+                    doctor_id=user["doctor_id"],
+                    display_name=user["display_name"],
+                )
 
         cache_key = hashlib.sha256(token.encode()).digest()
         cached = self._verified.get(cache_key)

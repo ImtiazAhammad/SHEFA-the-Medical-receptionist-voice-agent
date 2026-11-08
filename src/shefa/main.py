@@ -183,7 +183,10 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/api/v1/calls/{call_sid}"): "records:write",
     ("GET", "/api/v1/callbacks"): "records:read",
     ("POST", "/api/v1/callbacks/{callback_id}/resolve"): "records:write",
-    ("GET", "/api/v1/overview"): "records:read",
+    ("GET", "/api/v1/overview"): "overview:read",
+    ("GET", "/api/v1/me/day"): "doctor:self",
+    ("GET", "/api/v1/me/doctor"): "doctor:self",
+    ("POST", "/api/v1/me/appointments/{appointment_id}/status"): "doctor:self",
     ("GET", "/app"): PUBLIC_PERMISSION,
     ("GET", "/app/{path:path}"): PUBLIC_PERMISSION,
     ("GET", "/api/v1/me"): PUBLIC_PERMISSION,
@@ -388,7 +391,9 @@ def _telephony_router_allowed() -> bool:
 
 
 class LoginBody(BaseModel):
-    token: str
+    token: str | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 class RingBody(BaseModel):
@@ -446,6 +451,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     of depending on whatever the config happens to contain.
     """
     store = auth_store if auth_store is not None else build_auth_store()
+    from shefa.store.staff import default_staff_store
+
+    staff = default_staff_store()
+    store.staff = staff
     app = FastAPI(
         lifespan=_lifespan,
         title="SHEFA Receptionist",
@@ -642,6 +651,71 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             return error_response("callback_not_found")
         return {"id": callback_id, "resolved": True}
 
+    def _own_doctor(request: Request) -> int:
+        who = getattr(request.state, "principal", None)
+        if who is None or who.doctor_id is None:
+            raise HTTPException(
+                status_code=403, detail={"code": "insufficient_role", "message": "Not a doctor"}
+            )
+        return who.doctor_id
+
+    @app.get("/api/v1/me/doctor")
+    async def my_doctor(request: Request) -> dict:
+        """The signed-in doctor's own card."""
+        from shefa.clinic import default_clinic_store
+        from shefa.integrations.ehr import _doctor_card
+
+        doctor_id = _own_doctor(request)
+        for doc in default_clinic_store().doctors():
+            if doc["id"] == doctor_id:
+                return _doctor_card(doc)
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "No doctor"})
+
+    @app.get("/api/v1/me/day")
+    async def my_day(request: Request, date: str = "") -> list[dict]:
+        """The signed-in doctor's own appointments for a day, and nobody else's."""
+        from datetime import datetime
+
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+
+        doctor_id = _own_doctor(request)
+        day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        return [
+            {
+                "appointment_id": a["appointment_id"],
+                "date": a["date"],
+                "start_time": a["start_time"],
+                "patient_name": a["patient_name"],
+                "reason": a.get("reason", ""),
+                "status": a["status"],
+            }
+            for a in default_clinic_store().appointments_on(day, status=None)
+            if a["doctor_id"] == doctor_id
+        ]
+
+    @app.post("/api/v1/me/appointments/{appointment_id}/status")
+    async def my_appointment_status(
+        appointment_id: str, body: StatusBody, request: Request
+    ) -> dict:
+        """A doctor marks their own patient seen or absent; anyone else's is refused."""
+        from shefa.clinic import ClinicError, default_clinic_store
+
+        doctor_id = _own_doctor(request)
+        clinic = default_clinic_store()
+        try:
+            if clinic.get_appointment(appointment_id)["doctor_id"] != doctor_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "insufficient_role", "message": "Not your patient"},
+                )
+            updated = clinic.mark_status(appointment_id, body.status)
+        except ClinicError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "validation", "message": str(exc)}
+            ) from exc
+        return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
+
     @app.get("/api/v1/overview")
     async def overview(days: int = 7) -> dict:
         """What the owner asks first: is it working? Counts over the last `days` days."""
@@ -671,7 +745,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/appointments")
-    async def list_appointments(date: str = "") -> list[dict]:
+    async def list_appointments(date: str = "", status: str = "booked") -> list[dict]:
         """Booked appointments for a day (default: today, clinic time), phones masked."""
         from datetime import datetime
 
@@ -690,7 +764,9 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "phone": mask_phone(a["phone"]),
                 "status": a["status"],
             }
-            for a in default_clinic_store().appointments_on(day)
+            for a in default_clinic_store().appointments_on(
+                day, status=None if status == "all" else status
+            )
         ]
 
     @app.get("/console", response_class=HTMLResponse)
@@ -728,13 +804,17 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             return JSONResponse({"signed_in": False}, status_code=401)
         return {
             "signed_in": True,
-            "name": principal.name,
+            "name": principal.display_name or principal.name,
             "role": principal.role,
+            "doctor_id": principal.doctor_id,
             "permissions": sorted(store.permissions_for(principal.role)),
         }
 
     @app.post("/api/v1/logout")
     async def logout(request: Request) -> JSONResponse:
+        cookie = request.cookies.get(AUTH_COOKIE)
+        if cookie:
+            staff.sign_out(cookie)
         signed_in = getattr(request.state, "principal", None) is not None
         response = JSONResponse({"signed_in": False}, status_code=200 if signed_in else 401)
         response.delete_cookie(AUTH_COOKIE)
@@ -742,13 +822,16 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
     @app.post("/api/v1/login")
     async def api_login(body: LoginBody | None = None) -> JSONResponse:
-        principal = store.authenticate(body.token if body else None)
+        secret = body.token if body else None
+        if body and body.username and body.password:
+            secret = staff.sign_in(body.username, body.password)
+        principal = store.authenticate(secret)
         if principal is None:
             return error_response("authentication_required")
         response = JSONResponse({"name": principal.name, "role": principal.role})
         response.set_cookie(
             AUTH_COOKIE,
-            body.token if body else "",
+            secret or "",
             httponly=True,
             samesite="lax",
             secure=settings.auth.dev_mode is False,

@@ -212,7 +212,81 @@ def build_parser() -> argparse.ArgumentParser:
     token.add_argument("--name", required=True, help="principal name, e.g. front-desk")
     token.add_argument("--role", required=True, help="a role declared in auth.roles")
 
+    staff = sub.add_parser("staff", help="staff accounts: front desk, owner, doctors")
+    staff_sub = staff.add_subparsers(dest="staff_command", required=True)
+    add = staff_sub.add_parser("add", help="create an account (asks for the password)")
+    add.add_argument("username")
+    add.add_argument("--role", required=True, choices=["desk", "owner", "doctor"])
+    add.add_argument("--name", default="", help="how the name is shown, e.g. Dr. Rahman")
+    add.add_argument("--doctor", default="", help="for role doctor: which doctor, e.g. Rahman")
+    add.add_argument(
+        "--password-env", default="", help="read the password from this environment variable"
+    )
+    staff_sub.add_parser("list", help="show the accounts")
+    for name, text in (("passwd", "set a new password"), ("disable", "turn an account off"),
+                       ("enable", "turn an account back on")):
+        item = staff_sub.add_parser(name, help=text)
+        item.add_argument("username")
+        if name == "passwd":
+            item.add_argument("--password-env", default="")
+
     return parser
+
+
+def _ask_password(env_name: str) -> str | None:
+    """The password from an environment variable, or asked for twice without echo."""
+    import getpass
+    import os
+
+    if env_name:
+        return os.environ.get(env_name)
+    first = getpass.getpass("Password (10+ characters): ")
+    if first != getpass.getpass("Again: "):
+        print("The two passwords differ.", file=sys.stderr)
+        return None
+    return first
+
+
+def run_staff(args: argparse.Namespace) -> int:
+    from shefa.clinic import default_clinic_store
+    from shefa.store.staff import StaffError, default_staff_store
+
+    store = default_staff_store()
+    try:
+        if args.staff_command == "list":
+            for u in store.users():
+                scope = f" (doctor #{u['doctor_id']})" if u["doctor_id"] else ""
+                state = "" if u["active"] else "  [off]"
+                print(f"{u['username']:<16} {u['role']:<7} {u['display_name']}{scope}{state}")
+            return 0
+        if args.staff_command in {"disable", "enable"}:
+            store.set_active(args.username, args.staff_command == "enable")
+            print(f"{args.username}: {args.staff_command}d")
+            return 0
+        password = _ask_password(args.password_env)
+        if not password:
+            print("No password given.", file=sys.stderr)
+            return 1
+        if args.staff_command == "passwd":
+            store.set_password(args.username, password)
+            print(f"{args.username}: password changed; every sign-in of theirs ended")
+            return 0
+        doctor_id = None
+        if args.role == "doctor":
+            doctor, others = default_clinic_store().resolve_doctor(args.doctor)
+            if doctor is None:
+                names = ", ".join(d["name_en"] for d in others) or "none"
+                print(f"Which doctor? {args.doctor!r} matched: {names}", file=sys.stderr)
+                return 1
+            doctor_id = doctor["id"]
+        store.add_user(
+            args.username, password, args.role, display_name=args.name, doctor_id=doctor_id
+        )
+        print(f"Created {args.role} account {args.username}.")
+        return 0
+    except (StaffError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 async def _build_tts() -> Any:
@@ -822,6 +896,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "clinic":
         return run_clinic(args)
+
+    if args.command == "staff":
+        return run_staff(args)
 
     if args.command == "setup":
         return run_setup(args)
