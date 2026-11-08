@@ -7,9 +7,10 @@ Every model (speech-to-text, language model, text-to-speech) runs on the clinic'
 
 ## Goal and status
 
-The goal is a **finished product**, built before any clinic is approached. Twilio is being replaced
-with a self-hosted Asterisk PBX behind a Bangladeshi SIP trunk (cheaper per minute and not tied to a
-foreign cloud). Roadmap, in build order:
+The goal is a product a hospital can trust with its phone line. **It has not yet taken a real call
+over a real trunk, and no clinic has used it**; the claims below say what was measured and what was
+not. Twilio is being replaced with a self-hosted Asterisk PBX behind a Bangladeshi SIP trunk (cheaper
+per minute and not tied to a foreign cloud). Roadmap, in build order:
 
 | # | Piece | Status |
 |---|-------|--------|
@@ -19,7 +20,8 @@ foreign cloud). Roadmap, in build order:
 | 4 | Outbound reminder and follow-up scheduler (confirm / reschedule / cancel by voice) | **built** (`reminders.enabled`, `shefa reminders run-once`) |
 | 5 | Call log, owner console, reliability | **done**: web console (`/console`), call log, appointments, dependency health, `scripts/backup_db.py`; load test still to do |
 | 6 | Conversation and Bangla quality | **in progress**, see below |
-| 7 | Production frontend (staff, owner, doctor, public booking) | **planned**: [`PRODUCT.md`](PRODUCT.md), [brief](docs/superpowers/plans/2026-11-08-frontend-brief.md); awaiting visual direction |
+| 7 | Production frontend (staff, owner, doctor, public booking) | **built**: staff app `/app`, patient booking page `/book`; Bangla labels need a native reviewer; see [`PRODUCT.md`](PRODUCT.md) |
+| 8 | Safety, privacy and operations | **built**: encrypted transcripts, audit trail, emergency phrases with a recall test, medical-advice block, busy handling, fallback line, systemd units: [`docs/security.md`](docs/security.md), [`docs/deployment.md`](docs/deployment.md) |
 
 **How a call behaves now** (details: [`docs/research/2026-11-08-architecture-critique.md`](docs/research/2026-11-08-architecture-critique.md)):
 
@@ -33,11 +35,15 @@ foreign cloud). Roadmap, in build order:
   Missing details are asked for; names are matched fuzzily and an ambiguous surname asks "which
   one?"; thanks, "ok" and goodbye are handled in code, and goodbye hangs up.
 - Numbers, hours and dates are spoken as Bangla words (Piper misreads digits).
-- Measured: replies start about 1.7 s after the caller stops; the conversation lab passes 26/26
-  scenarios with the real models and voices; the router gets all 24 benchmark cases right
-  (tool and arguments) once days and times are grounded in code. Not yet measured: real phone audio, real
-  microphones, concurrency. Voice-quality targets and what the Verbex reel does and does not
-  show: [`docs/research/2026-11-08-verbex-demo-analysis.md`](docs/research/2026-11-08-verbex-demo-analysis.md).
+- Measured (development machine, RTX 4060 Ti 16 GB; not a phone line): the language model answers
+  in about 1 s on vLLM (95th percentile 1.56 s with 5 callers at once, against 7.8 s on Ollama:
+  [`docs/research/2026-11-09-vllm-vs-ollama.md`](docs/research/2026-11-09-vllm-vs-ollama.md)); the
+  router gets 24 of 29 multi-turn cases right on Ollama and 22 of 29 on vLLM
+  (`scripts/bench_dialogue.py`); the conversation lab passes its scenarios with the real models.
+  A live-call delay of 4-10 s was seen once before the speech and model fixes and has not been
+  re-measured on a call. **Not yet measured:** a real call over a real trunk, recognition accuracy
+  on telephone audio, the full multi-call load test, interruption handling. What the Verbex reel
+  does and does not show: [`docs/research/2026-11-08-verbex-demo-analysis.md`](docs/research/2026-11-08-verbex-demo-analysis.md).
 - Real doctors for a local demo: `scripts/import_labaid_directory.py` (public listing, robots.txt
   respected, output gitignored; schedules are placeholders). `configs/clinic.example.yaml` is fictional.
 
@@ -540,8 +546,10 @@ CMD ["uv", "run", "uvicorn", "shefa.main:app", "--host", "0.0.0.0", "--port", "8
 - [ ] Enable Prometheus metrics (`monitoring.prometheus_enabled: true`)
 - [ ] Configure Sentry DSN for error tracking
 - [ ] Set up log shipping (ELK/Loki) with PHI masking enabled
-- [ ] Load test with 50+ concurrent bilingual calls
-- [ ] Verify WER < 8% on Bangla medical corpus
+- [ ] Load test with speech, model and voice running together (3 simultaneous calls for 30 minutes)
+- [ ] Verify Bangla accuracy on 200 recorded 8 kHz phone utterances: overall WER at most 20% and
+      at least 90% correct on names, phone digits and dates (a clean-audio 8% target is not
+      realistic on a phone line)
 - [ ] Test emergency escalation flow end-to-end
 - [ ] Validate DTMF fallback for identity verification
 
