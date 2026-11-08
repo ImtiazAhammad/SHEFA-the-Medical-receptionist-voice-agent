@@ -4,7 +4,7 @@ import { api, ApiError, type Me } from './api'
 interface Auth {
   me: Me | null // null while the first check runs
   can: (permission: string) => boolean
-  signIn: (token: string) => Promise<boolean>
+  signIn: (credentials: { token: string } | { username: string; password: string }) => Promise<boolean>
   signOut: () => Promise<void>
   expire: () => void
 }
@@ -20,9 +20,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setMe({ signed_in: false })) // a 401 is the answer "signed out"
   }, [])
 
-  const signIn = useCallback(async (token: string) => {
+  const signIn = useCallback(async (credentials: object) => {
     try {
-      await api('/api/v1/login', { method: 'POST', body: JSON.stringify({ token }) })
+      await api('/api/v1/login', { method: 'POST', body: JSON.stringify(credentials) })
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) return false
       throw error

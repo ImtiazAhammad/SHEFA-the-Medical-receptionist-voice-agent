@@ -20,7 +20,7 @@ export function Appointments() {
   const [day, setDay] = useState(TODAY)
   const [saving, setSaving] = useState<string | null>(null)
   const [saveFailed, setSaveFailed] = useState(false)
-  const list = useLoad(() => api<Appointment[]>(`/api/v1/appointments?date=${day}`), [day], 15000)
+  const list = useLoad(() => api<Appointment[]>(`/api/v1/appointments?date=${day}&status=all`), [day], 15000)
 
   async function mark(id: string, status: string) {
     setSaving(id)

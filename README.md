@@ -81,6 +81,19 @@ is at <http://127.0.0.1:8000/app>. Its source is `frontend/`; the built files ar
 `src/shefa/static/app/`. To change it: `cd frontend && npm install && npm run dev` (proxies to the
 server on :8000), then `npm run build`.
 
+Accounts for the staff app (the admin access token keeps working):
+
+```bash
+uv run shefa staff add karim --role desk --name "Karim"        # asks for the password
+uv run shefa staff add dr.rahman --role doctor --doctor Rahman --name "Dr. Rahman"
+uv run shefa staff add owner --role owner
+uv run shefa staff list     # also: passwd, disable, enable
+```
+
+The front desk sees calls, appointments and doctors; the owner also sees the overview; a doctor sees
+only their own day and can mark their own patients seen or absent. Five wrong passwords lock an
+account for 15 minutes. Passwords are stored as slow salted hashes; sign-ins last 12 hours.
+
 After the first install the only command you need is `uv run shefa serve`, then open
 <http://127.0.0.1:8000/console>. If `ollama serve` says "address already in use", Ollama is already
 running in the background: that is fine.

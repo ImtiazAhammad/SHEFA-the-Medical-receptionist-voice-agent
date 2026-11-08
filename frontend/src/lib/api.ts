@@ -35,6 +35,7 @@ export interface Me {
   name?: string
   role?: string
   permissions?: string[]
+  doctor_id?: number | null
 }
 
 export interface CallRow {
@@ -118,4 +119,13 @@ export interface Overview {
   booked_by_agent: number
   open_callbacks: number
   reminders: { attempted: number; completed: number }
+}
+
+export interface MyAppointment {
+  appointment_id: string
+  date: string
+  start_time: string
+  patient_name: string | null
+  reason: string
+  status: string
 }
