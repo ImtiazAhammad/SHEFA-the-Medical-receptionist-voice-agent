@@ -17,9 +17,23 @@ import backup_db  # noqa: E402
 
 async def test_healthy_when_twilio_is_selected(monkeypatch):
     monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.TWILIO)
+    monkeypatch.setattr(settings.escalation, "on_call_numbers", ["+8801700000000"])
     report = await health.health_report()
     assert report["status"] == "healthy" and report["asterisk"] == "n/a"
-    assert report["database"] == "ok"
+    assert report["database"] == "ok" and report["emergency_transfer"] == "ok"
+
+
+async def test_a_phone_line_with_nowhere_to_send_an_emergency_is_degraded(monkeypatch):
+    monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.TWILIO)
+    monkeypatch.setattr(settings.escalation, "on_call_numbers", [])
+    report = await health.health_report()
+    assert report["status"] == "degraded" and report["emergency_transfer"] == "not_configured"
+
+
+async def test_the_browser_test_page_does_not_need_a_transfer_number(monkeypatch):
+    monkeypatch.setattr(settings.telephony, "provider", TelephonyProvider.BROWSER)
+    monkeypatch.setattr(settings.escalation, "on_call_numbers", [])
+    assert (await health.health_report())["status"] == "healthy"
 
 
 def _ari(monkeypatch, handler):

@@ -236,17 +236,33 @@ escalation:
          "passed out", "fainted", "lost consciousness", "is unconscious",
          "unresponsive", "having a seizure", "having a fit", "severe pain",
          "can't move", "cant move", "i'm dying", "im dying",
-         "is having a stroke", "had a stroke", "emergency", "unconscious"]
+         "is having a stroke", "had a stroke", "emergency", "unconscious",
+         "bleeding a lot", "bleeding heavily", "bleeding badly", "won't stop bleeding",
+         "wont stop bleeding", "stopped breathing", "difficulty breathing",
+         "trouble breathing", "hard to breathe", "short of breath", "choking",
+         "can't wake", "cant wake", "not waking up", "won't wake up", "not responding",
+         "overdose", "took poison", "swallowed poison", "snake bite", "snakebite",
+         "bitten by a snake", "suicide", "kill myself", "want to die", "convulsion",
+         "convulsions", "face is drooping", "slurred speech", "baby is not moving",
+         "baby not moving", "pregnant and bleeding", "heavy bleeding", "was electrocuted",
+         "badly burned", "accident"]
     bn: ["জরুরি", "অজ্ঞান", "বুকে ব্যথা", "বুক ব্যথা", "বুকে বেথা", "বুক বেথা",
          "তীব্র রক্তক্ষরণ", "শ্বাস নিতে পারছি না", "শ্বাস নিতে পারছিনা",
          "দম বন্ধ হয়ে আসছে", "বুকে চাপ লাগছে", "বুক চেপে ধরছে",
          "হার্ট অ্যাটাক",
          "অজ্ঞান হয়ে গেছি", "অজ্ঞান হয়ে গিয়েছে",
          "জ্ঞান হারিয়ে ফেলেছি", "খিচুনি আসছে", "পুড়ে গেছি",
-         "একটা দুর্ঘটনা হয়েছে"]
+         "একটা দুর্ঘটনা হয়েছে", "এক্সিডেন্ট", "দুর্ঘটনা", "অনেক রক্ত", "রক্ত থামছে না",
+         "রক্তক্ষরণ হচ্ছে", "শ্বাস নিতে কষ্ট", "শ্বাস কষ্ট", "নিঃশ্বাস নিতে পারছে না",
+         "শ্বাস নিতে পারছে না", "শ্বাস নিতে পারছেন না", "শ্বাস বন্ধ", "দম নিতে পারছে না",
+         "জ্ঞান নেই", "জ্ঞান হারিয়েছে", "অজ্ঞান হয়ে গেছে", "অজ্ঞান হয়ে গেছেন",
+         "সাড়া দিচ্ছে না", "সাড়া দিচ্ছেন না", "খিঁচুনি", "বিষ খেয়েছে", "বিষ খেয়েছেন",
+         "সাপে কেটেছে", "সাপে কামড়েছে", "আত্মহত্যা", "মরে যাচ্ছি", "মারা যাচ্ছে",
+         "স্ট্রোক", "বাচ্চা নড়ছে না", "বাচ্চা নড়াচড়া করছে না", "গর্ভবতী রক্ত",
+         "বুকে ব্যথা করছে", "হার্টে ব্যথা", "ইলেকট্রিক শক", "পুড়ে গেছে"]
   transfer_greeting:
-    en: "I'm transferring you to our receptionist now. Please hold."
-    bn: "আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
+    en: "If anyone is in danger, please call 999 now. I'm transferring you to our receptionist. Please hold."
+    bn: "কেউ বিপদে থাকলে এখনই ৯৯৯-এ ফোন করুন। আমি আপনাকে আমাদের রিসেপশনিস্টের কাছে স্থানান্তর করছি। অনুগ্রহ করে অপেক্ষা করুন।"
   repeat_prompt:
     en: "Sorry, I didn't catch that clearly. Could you say that again?"
     bn: "দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?"

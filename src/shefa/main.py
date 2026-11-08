@@ -444,6 +444,14 @@ class ResolveBody(BaseModel):
 async def _lifespan(_app: FastAPI):
     """Listen for Asterisk AudioSocket calls for as long as the server runs."""
     server = None
+    if settings.telephony.provider in (TelephonyProvider.ASTERISK, TelephonyProvider.TWILIO):
+        from shefa.health import emergency_transfer_status
+
+        if emergency_transfer_status() != "ok":
+            logger.error(
+                "escalation.on_call_numbers is empty: an emergency call cannot be handed to a "
+                "person. Set it before taking real calls."
+            )
     if settings.telephony.provider == TelephonyProvider.ASTERISK:
         from shefa.telephony.asterisk import start_audiosocket_server
 
