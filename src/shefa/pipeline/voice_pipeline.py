@@ -60,7 +60,7 @@ from shefa.pipeline.language_detector import (
     evaluate_transcript,
 )
 from shefa.pipeline.language_request import ACKNOWLEDGEMENT, requested_language
-from shefa.pipeline.replycheck import speakable, tidy, whole_reply_ok
+from shefa.pipeline.replycheck import gives_medical_advice, speakable, tidy, whole_reply_ok
 from shefa.pipeline.social import classify_social, social_reply
 from shefa.pipeline.vad import EnergyVAD
 from shefa.session.manager import CallSession, SessionManager
@@ -625,6 +625,7 @@ class VoicePipeline:
         text_parts: list[str] = []
         spoken: list[str] = []
         stopped = False
+        advised = False  # the model tried to give a dose or a diagnosis
         pending = ""
         tool_calls: list[dict[str, Any]] = []
         async for event in llm.generate_events(messages, tools=tools):
@@ -640,15 +641,25 @@ class VoicePipeline:
                     await self._emit(tts, tidy(sentence), language, put_playback)
                     spoken.append(tidy(sentence))
                 elif not stopped:
-                    logger.info("Dropped a reply sentence that is not fit to say: %r", sentence)
+                    advised = advised or gives_medical_advice(sentence)
+                    logger.info("Dropped a reply sentence that is not fit to say")
                     stopped = True  # everything after a bad sentence is suspect too
 
         remainder = pending.strip()
-        if remainder and not stopped and speakable(remainder, language):
-            await self._emit(tts, tidy(remainder), language, put_playback)
-            spoken.append(tidy(remainder))
+        if remainder and not stopped:
+            if speakable(remainder, language):
+                await self._emit(tts, tidy(remainder), language, put_playback)
+                spoken.append(tidy(remainder))
+            else:
+                advised = advised or gives_medical_advice(remainder)
+                stopped = True
 
-        if stopped and not spoken:  # nothing usable came back: ask, rather than say nothing
+        if advised:  # never leave the caller with a half answer or a dose: say what we can do
+            prompts = settings.escalation.medical_refusal
+            refusal = prompts.get(language, prompts.get("en", "I cannot give medical advice."))
+            await self._emit(tts, refusal, language, put_playback)
+            spoken.append(refusal)
+        elif stopped and not spoken:  # nothing usable came back: ask, rather than say nothing
             prompts = settings.escalation.repeat_prompt
             again = prompts.get(language, prompts.get("en", "Sorry, could you say that again?"))
             await self._emit(tts, again, language, put_playback)
