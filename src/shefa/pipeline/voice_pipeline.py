@@ -473,7 +473,9 @@ class VoicePipeline:
 
             try:
                 start = time.monotonic()
-                reply_text = await self._generate_reply(llm, tts, session, put_playback)
+                reply_text = await self._within_deadline(
+                    self._generate_reply(llm, tts, session, put_playback)
+                )
                 llm_ms = (time.monotonic() - start) * 1000
                 logger.info("LLM [%s]: '%s' (%.0fms)", call_sid, reply_text[:80], llm_ms)
             except asyncio.CancelledError:
@@ -515,6 +517,12 @@ class VoicePipeline:
             self._audio_buffers.setdefault(call_sid, [])
             if session.state in ENDED_STATES:  # the caller said goodbye: end the call
                 break
+
+    @staticmethod
+    async def _within_deadline(work: Any) -> Any:
+        """Run one turn, or fail it after ``pipeline.turn_deadline_s`` so a stalled model server
+        becomes the same retry-then-hand-over failure as any other, not silence."""
+        return await asyncio.wait_for(work, timeout=settings.pipeline.turn_deadline_s)
 
     @staticmethod
     def _default_greeting(session: CallSession) -> str:

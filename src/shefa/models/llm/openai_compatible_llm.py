@@ -35,7 +35,7 @@ class OpenAICompatibleLLM(BaseLLM):
         temperature: float = 0.3,
         max_tokens: int = 512,
         api_key: str = "",
-        timeout_s: float = 20.0,
+        timeout_s: float = 15.0,
         extra_body: dict[str, Any] | None = None,
     ):
         self.model = model

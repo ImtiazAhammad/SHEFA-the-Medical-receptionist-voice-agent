@@ -121,7 +121,7 @@ class LLMConfig(StrictModel):
     filler_after_s: float = 1.2
     # A model server that stops answering must not leave a caller on a silent line: give up
     # after this many seconds (the call then falls back to a repeat prompt or a handover).
-    timeout_s: float = Field(default=20.0, gt=0)
+    timeout_s: float = Field(default=15.0, gt=0)
     # Extra fields sent with every request to the model server. For a Qwen3-style model on vLLM
     # this turns off the "thinking" phase, which would add seconds of silence to every turn:
     #   {"chat_template_kwargs": {"enable_thinking": false}}
@@ -158,6 +158,9 @@ class PipelineConfig(StrictModel):
     )
     # Load the models at startup and keep the LLM resident (see shefa.warmup).
     warm_up: bool = True
+    # The longest one turn (router, reply, voice) may take before it counts as a failure and goes
+    # through the retry-then-hand-over path. A caller never waits longer than this on a dead line.
+    turn_deadline_s: float = Field(default=20.0, gt=0)
 
 
 class LanguagesConfig(StrictModel):
