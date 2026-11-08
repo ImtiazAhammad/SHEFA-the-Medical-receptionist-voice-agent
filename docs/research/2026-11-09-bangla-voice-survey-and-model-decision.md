@@ -76,8 +76,9 @@ Reading it:
 
 1. **Language model:** keep `gemma2:9b` as the default. Do not switch to Qwen3-14B. A 27-32B model
    might be worth it on a hospital GPU with 24-48 GB; test it there with the same benchmark.
-2. **vLLM:** supported as an option for concurrency (it batches callers), measured against Ollama
-   before it becomes the default.
+2. **vLLM:** measured against Ollama (`2026-11-09-vllm-vs-ollama.md`): at 5 simultaneous callers
+   p95 is 1.56 s against 7.80 s and throughput 4.5 times higher. **Use vLLM for any clinic with
+   more than one line**; Ollama stays the zero-setup path for a laptop demo.
 3. **TTS:** Piper stays. Run the bake-off in section 6 before adopting anything. No candidate can be
    judged for naturalness without a Bangladeshi listener.
 4. **ASR:** keep OmiKhan; benchmark omnilingual-asr 1B/3B on phone-degraded audio.
