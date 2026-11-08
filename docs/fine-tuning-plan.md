@@ -1,5 +1,22 @@
 # Fine-tuning plan (12 GB GPU)
 
+> **Update 2026-11-09.** Evidence since this plan was written, in
+> [`research/2026-11-09-bangla-voice-survey-and-model-decision.md`](research/2026-11-09-bangla-voice-survey-and-model-decision.md):
+> - Re-ordered by value: **(2) the phone-line speech model first**, then **(3) the recorded voice**,
+>   then (1) the language model. A larger router model did not beat gemma2:9b on 16 GB (24/29 vs
+>   Qwen3-14B 21/29), and picking a time from a list, confirming, and emergencies are now decided in
+>   code, so the router fine-tune matters least until real call transcripts exist.
+> - BnTTS (Verbex/Hishab) has no weights, code or licence, so it cannot be a starting point.
+> - No public Bangla voice has a Bangladeshi accent, a clean commercial licence and published
+>   quality together. That still points to **recording a consenting voice talent** and fine-tuning
+>   Piper, which also fixes the licence question.
+> - Every fine-tune is gated on a phone-path test set (8 kHz G.711) built from consented real calls,
+>   so "better" is measured on the line we sell, not on clean read speech.
+> - Success gates: speech model slot-critical words (name, phone digits, date) at least 90%
+>   correct on the phone test set; voice round-trip WER no worse than the current 14.6% and a
+>   Bangladeshi listener preferring it in a blind test; router at least 26/29 on
+>   `scripts/bench_dialogue.py` with zero invented arguments.
+
 Order of work: first **use the existing models** (done: see
 [`demo-guide.md`](demo-guide.md)), then **fine-tune**, then fall back to free providers only where a
 local model is not good enough. Everything below fits on one 12 GB card, but only with the live
