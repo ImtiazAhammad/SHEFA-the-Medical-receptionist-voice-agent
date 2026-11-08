@@ -72,6 +72,7 @@ ERROR_STATUS_MAP: dict[str, int] = {
     "insufficient_role": 403,
     "route_not_authorized": 403,
     "session_not_found": 404,
+    "call_not_found": 404,
     "validation": 422,
     "required_param": 422,
     "not_configured": 503,
@@ -84,6 +85,7 @@ DEFAULT_ERROR_MESSAGES: dict[str, str] = {
     "insufficient_role": "Insufficient role for this resource.",
     "route_not_authorized": "This route is not authorized.",
     "session_not_found": "Session not found",
+    "call_not_found": "Call not found.",
     "validation": "Request validation failed.",
     "required_param": "Required parameter missing.",
     "not_configured": "Dependency not configured.",
@@ -167,6 +169,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/login"): PUBLIC_PERMISSION,
     ("POST", "/api/v1/calls/ring"): "calls:place",
     ("GET", "/api/v1/calls/ringing"): "calls:place",
+    ("GET", "/api/v1/calls/{call_sid}"): "records:read",
     ("POST", "/api/v1/calls/ringing/{call_uuid}/decline"): "calls:place",
     ("GET", "/api/v1/directory"): "records:read",
     ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
@@ -659,6 +662,18 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         from shefa.telephony.browser import ringing_now
 
         return ringing_now()
+
+    @app.get("/api/v1/calls/{call_sid}", response_model=None)
+    async def call_detail(call_sid: str) -> dict | JSONResponse:
+        """One call with every turn: heard, how sure, what the agent did, what it said."""
+        from shefa.call_log import default_calls_store
+
+        calls = default_calls_store()
+        row = calls.get_call(call_sid)
+        if row is None or row.get("deleted_at"):
+            return error_response("call_not_found")
+        keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        return {**{k: row.get(k) for k in keys}, "turns": calls.turns_for(call_sid)}
 
     @app.post("/api/v1/calls/ringing/{call_uuid}/decline")
     async def decline_ring(call_uuid: str) -> dict:

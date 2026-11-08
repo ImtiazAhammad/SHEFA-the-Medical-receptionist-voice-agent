@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     PlaybackSink = Callable[[AudioFrame], Awaitable[None]]
 
 from shefa.audio import TARGET_RATE, AudioFrame
+from shefa.call_log import log_turn
 from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
@@ -393,6 +394,13 @@ class VoicePipeline:
                 tts = await registry.get_tts()
                 await speak_to(tts, escalation_msg, session.language.value, put_playback)
                 session.add_turn("assistant", escalation_msg, session.language)
+                log_turn(
+                    call_sid,
+                    "assistant",
+                    escalation_msg,
+                    language=session.language.value,
+                    note=f"escalated: heard {stt_result.text!r}",
+                )
                 session.state = "escalated"
                 await self._session_manager.save(session)
                 break
@@ -407,10 +415,26 @@ class VoicePipeline:
                 tts = await registry.get_tts()
                 await speak_to(tts, repeat_msg, session.language.value, put_playback)
                 session.add_turn("assistant", repeat_msg, session.language)
+                log_turn(
+                    call_sid,
+                    "assistant",
+                    repeat_msg,
+                    language=session.language.value,
+                    note=f"asked to repeat: heard {stt_result.text!r}"
+                    f" at {stt_result.confidence:.2f}",
+                )
                 self._audio_buffers.setdefault(call_sid, [])
                 continue
 
             session.add_turn("user", stt_result.text, detected_lang)
+            log_turn(
+                call_sid,
+                "user",
+                stt_result.text,
+                language=detected_lang.value,
+                confidence=stt_result.confidence,
+            )
+            actions_before = len(session.metadata.get("actions", []))
             tts = await registry.get_tts()
 
             try:
@@ -445,6 +469,13 @@ class VoicePipeline:
                 continue
 
             session.add_turn("assistant", reply_text, session.language)
+            log_turn(
+                call_sid,
+                "assistant",
+                reply_text,
+                language=session.language.value,
+                actions=session.metadata.get("actions", [])[actions_before:],
+            )
             await self._session_manager.save(session)
             self._failures[call_sid] = 0  # a successful turn resets the counter
             self._audio_buffers.setdefault(call_sid, [])
@@ -510,6 +541,7 @@ class VoicePipeline:
             session.language = detected
 
         session.add_turn("user", text, session.language)
+        log_turn(call_sid, "user", text, language=session.language.value, note="typed")
         # Typed text is never misheard, so only the emergency decision applies.
         if evaluate_transcript(text, session.language, 1.0).should_escalate:
             prompts = settings.escalation.transfer_greeting
@@ -528,6 +560,14 @@ class VoicePipeline:
             await self._session_manager.save(session)
             raise
         session.add_turn("assistant", reply, session.language)
+        log_turn(
+            call_sid,
+            "assistant",
+            reply,
+            language=session.language.value,
+            actions=list(session.metadata.get("actions", [])),
+            note="typed",
+        )
         await self._session_manager.save(session)
         return result(reply)
 

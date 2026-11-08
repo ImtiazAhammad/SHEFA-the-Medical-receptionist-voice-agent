@@ -10,6 +10,7 @@ never clears `deleted_at`, so deleted records cannot be resurrected.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -27,6 +28,19 @@ CREATE TABLE IF NOT EXISTS calls (
     created_at          REAL NOT NULL,
     deleted_at          REAL,
     deleted_by          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS call_turns (
+    call_sid   TEXT NOT NULL,
+    idx        INTEGER NOT NULL,
+    at         REAL NOT NULL,
+    role       TEXT NOT NULL,
+    language   TEXT,
+    text       TEXT NOT NULL,
+    confidence REAL,
+    actions    TEXT,
+    note       TEXT,
+    PRIMARY KEY (call_sid, idx)
 );
 """
 
@@ -96,6 +110,46 @@ class CallsStore:
                 "SELECT * FROM calls ORDER BY created_at"
             )
         ]
+
+    def add_turn(
+        self,
+        call_sid: str,
+        role: str,
+        text: str,
+        *,
+        language: str | None = None,
+        confidence: float | None = None,
+        actions: list[str] | None = None,
+        note: str | None = None,
+    ) -> None:
+        """Append one turn: what was heard or said, and what the agent did about it."""
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO call_turns (call_sid, idx, at, role, language, text, confidence,"
+                " actions, note) VALUES (?, (SELECT COALESCE(MAX(idx), -1) + 1 FROM call_turns"
+                " WHERE call_sid = ?), ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    call_sid,
+                    call_sid,
+                    time.time(),
+                    role,
+                    language,
+                    text,
+                    confidence,
+                    json.dumps(actions) if actions else None,
+                    note,
+                ),
+            )
+
+    def turns_for(self, call_sid: str) -> list[dict[str, Any]]:
+        out = []
+        for row in self.connection.execute(
+            "SELECT * FROM call_turns WHERE call_sid = ? ORDER BY idx", (call_sid,)
+        ):
+            turn = dict(row)
+            turn["actions"] = json.loads(turn["actions"]) if turn["actions"] else []
+            out.append(turn)
+        return out
 
     def count_for_day(self, day: str) -> int:
         """Calls that started on `day` (`YYYY-MM-DD`, UTC)."""

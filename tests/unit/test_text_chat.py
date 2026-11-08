@@ -198,3 +198,17 @@ def test_the_shared_text_pipeline_uses_the_listed_sessions(monkeypatch):
 
     assert pipeline is main_module.text_pipeline()
     assert pipeline._session_manager is main_module.session_manager
+
+
+def test_every_typed_turn_is_kept_with_the_action_it_led_to(chat):
+    from shefa.call_log import default_calls_store
+
+    chat.say("What departments do you have?", {"tool": "list_departments"})
+    chat.say("thanks")
+
+    turns = default_calls_store().turns_for("chat-1")
+    assert [t["role"] for t in turns] == ["user", "assistant", "user", "assistant"]
+    assert turns[0]["text"] == "What departments do you have?"
+    assert turns[1]["actions"] == ["list_departments"]
+    assert turns[2]["actions"] == [] and turns[3]["actions"] == []
+    assert all(t["language"] == "en" for t in turns)

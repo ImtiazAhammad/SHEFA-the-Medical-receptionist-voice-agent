@@ -66,3 +66,30 @@ def call_ended(call_sid: str, disposition: str = "completed") -> None:
         )
     except Exception:
         logger.exception("Could not record end of call %s", call_sid)
+
+
+def log_turn(
+    call_sid: str,
+    role: str,
+    text: str,
+    *,
+    language: str | None = None,
+    confidence: float | None = None,
+    actions: list[str] | None = None,
+    note: str | None = None,
+) -> None:
+    """Keep one turn of the conversation. Never raises: a log fault must not drop a call."""
+    if not text:
+        return
+    try:
+        default_calls_store().add_turn(
+            call_sid,
+            role,
+            text,
+            language=language,
+            confidence=confidence,
+            actions=actions,
+            note=note,
+        )
+    except Exception:
+        logger.exception("Could not record a turn of call %s", call_sid)
