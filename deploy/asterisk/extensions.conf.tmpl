@@ -1,12 +1,16 @@
 ; Calls reach SHEFA over AudioSocket (8 kHz signed linear). SHEFA_UUID is how SHEFA
 ; finds this channel again through ARI for transfer and hang-up.
+;
+; If FALLBACK_DIAL is set, a call that SHEFA never took (the service is down or restarting:
+; AudioSocket returns within 5 seconds) rings that line instead of dropping the caller.
 [shefa-inbound]
 exten => _X.,1,NoOp(Inbound call from ${CALLERID(num)})
  same => n,Answer()
  same => n,Set(SHEFA_UUID=${UUID()})
  same => n,Set(SHEFA_CALLER=${CALLERID(num)})
+ same => n,Set(SHEFA_UP=${EPOCH})
  same => n,AudioSocket(${SHEFA_UUID},{{AUDIOSOCKET_ADDRESS}})
- same => n,Hangup()
+{{FALLBACK_BLOCK}} same => n(done),Hangup()
 
 ; Outbound calls (reminders): ARI originates through the trunk, then lands here once answered.
 [shefa-outbound]

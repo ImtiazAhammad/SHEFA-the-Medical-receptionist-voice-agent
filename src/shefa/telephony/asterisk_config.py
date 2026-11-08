@@ -51,9 +51,7 @@ def template_dir() -> Path:
     return Path(str(resources.files("shefa"))).parents[1] / "deploy" / "asterisk"
 
 
-def render_asterisk_config(
-    env: Mapping[str, str], templates: Path | None = None
-) -> dict[str, str]:
+def render_asterisk_config(env: Mapping[str, str], templates: Path | None = None) -> dict[str, str]:
     """Map output file name -> text. Raises ValueError naming every missing variable."""
     # The carrier trunk is optional: with no SIP_TRUNK_HOST you get a softphone-only setup.
     trunk = bool(env.get("SIP_TRUNK_HOST"))
@@ -74,6 +72,18 @@ def render_asterisk_config(
             else ""
         ),
     }
+    fallback = env.get("FALLBACK_DIAL", "").strip()
+    if fallback and not re.fullmatch(r"[A-Za-z0-9_/@:.+&-]+", fallback):
+        raise ValueError(
+            "FALLBACK_DIAL must be a dial string such as PJSIP/1001 or PJSIP/trunk/+8801700000000"
+        )
+    values["FALLBACK_BLOCK"] = (
+        " same => n,GotoIf($[${EPOCH}-${SHEFA_UP}<5]?fallback:done)\n"
+        " same => n(fallback),NoOp(SHEFA unreachable: ringing the fallback line)\n"
+        f" same => n,Dial({fallback},40)\n"
+        if fallback
+        else ""
+    )
     softphone = env.get("SOFTPHONE_PASSWORD", "")
     values["SOFTPHONE_BLOCK"] = (
         _SOFTPHONE.replace("{{SOFTPHONE_PASSWORD}}", softphone) if softphone else ""

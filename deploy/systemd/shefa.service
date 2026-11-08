@@ -1,0 +1,33 @@
+# SHEFA application server. Install: sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+# Settings and secrets live in /etc/shefa/shefa.env (mode 0600), never in this file.
+[Unit]
+Description=SHEFA receptionist
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=shefa
+Group=shefa
+WorkingDirectory=/opt/shefa
+EnvironmentFile=/etc/shefa/shefa.env
+# SHEFA starts and supervises the model server itself (llm_server.engine); see docs/deployment.md.
+ExecStart=/opt/shefa/.venv/bin/shefa serve --host 127.0.0.1 --port 8000
+# A crash or a stuck process is restarted at once. Asterisk rings the fallback line meanwhile.
+Restart=always
+RestartSec=3
+# Loading the speech model and the language model takes a minute or two.
+TimeoutStartSec=900
+LimitNOFILE=65536
+
+# The service may write only its own data directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/shefa/data /opt/shefa/.shefa
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

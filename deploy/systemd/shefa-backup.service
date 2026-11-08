@@ -1,0 +1,10 @@
+[Unit]
+Description=SHEFA database backup (online, safe while the server runs)
+
+[Service]
+Type=oneshot
+User=shefa
+Group=shefa
+WorkingDirectory=/opt/shefa
+EnvironmentFile=/etc/shefa/shefa.env
+ExecStart=/opt/shefa/.venv/bin/python scripts/backup_db.py --db data/shefa.db --out /var/backups/shefa --keep 30

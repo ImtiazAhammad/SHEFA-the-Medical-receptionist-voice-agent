@@ -81,3 +81,22 @@ def test_softphone_extension_is_rendered_only_when_a_password_is_given():
     phone = render_asterisk_config({**ENV, "SOFTPHONE_PASSWORD": "phone-pass"})
     assert "username=1001" in phone["pjsip.conf"] and "password=phone-pass" in phone["pjsip.conf"]
     assert "exten => 1000,1" in phone["extensions.conf"]
+
+
+def test_a_fallback_line_is_dialled_when_shefa_never_takes_the_call():
+    files = render_asterisk_config({**ENV, "FALLBACK_DIAL": "PJSIP/1001"})
+    inbound = files["extensions.conf"].split("[shefa-outbound]")[0]
+
+    assert "Dial(PJSIP/1001,40)" in inbound and "${EPOCH}-${SHEFA_UP}<5" in inbound
+    assert inbound.index("AudioSocket(") < inbound.index("Dial(PJSIP/1001")
+    assert "{{" not in files["extensions.conf"]
+
+
+def test_without_a_fallback_the_dialplan_is_unchanged():
+    inbound = render_asterisk_config(ENV)["extensions.conf"].split("[shefa-outbound]")[0]
+    assert "Dial(" not in inbound and "same => n(done),Hangup()" in inbound
+
+
+def test_a_fallback_that_could_inject_dialplan_is_refused():
+    with pytest.raises(ValueError, match="FALLBACK_DIAL"):
+        render_asterisk_config({**ENV, "FALLBACK_DIAL": "PJSIP/1001)\n same => n,System(rm -rf /"})
