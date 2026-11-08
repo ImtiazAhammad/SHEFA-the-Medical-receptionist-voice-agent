@@ -381,13 +381,17 @@ class VllmConfig(StrictModel):
     leave room for speech recognition and the voice on the same card.
     """
 
-    model: str = "Qwen/Qwen3-14B-AWQ"  # a Hugging Face id, downloaded on first start
+    # A Hugging Face id, downloaded on first start. The default is gemma2-9b in 4-bit (about
+    # 5.5 GB): it scored best on our multi-turn router benchmark (docs/research/2026-11-09-*).
+    model: str = "hugging-quants/gemma-2-9b-it-AWQ-INT4"
+    # Gemma 2 refuses a system message; this template folds it into the first user turn.
+    chat_template: str = "configs/chat_templates/gemma2.jinja"
     served_name: str = "shefa-llm"  # the name the agent asks for; hides the checkpoint behind it
     port: int = Field(default=8001, ge=1, le=65535)  # 8000 is the SHEFA server itself
     # Share of the WHOLE GPU vLLM may take. Set it per model: the weights, a cache for the
     # callers, and room for speech recognition (about 2.5 GB with Whisper medium) must all fit.
-    # 0.78 suits a 4-bit 14B model on a 16 GB card.
-    gpu_memory_utilization: float = Field(default=0.78, gt=0.1, le=0.95)
+    # 0.60 (9.8 GB) suits a 4-bit 9B model on a 16 GB card; a 14B needs about 0.78.
+    gpu_memory_utilization: float = Field(default=0.60, gt=0.1, le=0.95)
     max_model_len: int = Field(default=4096, ge=512)  # longest prompt+reply; calls are short
     max_num_seqs: int = Field(default=6, ge=1)  # requests decoded together
     python: str = ".venv-vllm/bin/python"  # vLLM lives in its own virtualenv

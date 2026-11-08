@@ -81,8 +81,9 @@ def vllm_profile() -> dict[str, Any]:
             "llm": {
                 "provider": "local",
                 "model": cfg.served_name,
-                # Qwen3-style models "think" first by default, which is seconds of silence.
-                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                # For a Qwen3-style model add, under pipeline.llm in configs/local.yaml, the
+                # switch that stops it "thinking" first (seconds of silence per turn):
+                #   extra_body: {chat_template_kwargs: {enable_thinking: false}}
             }
         },
         "models": {
@@ -649,6 +650,7 @@ def vllm_command(cfg: Any) -> list[str]:
         "--max-num-seqs",
         str(cfg.max_num_seqs),
         "--enable-prefix-caching",  # every turn repeats the same long system prompt
+        *(["--chat-template", cfg.chat_template] if cfg.chat_template else []),
         *cfg.extra_args,
     ]
 

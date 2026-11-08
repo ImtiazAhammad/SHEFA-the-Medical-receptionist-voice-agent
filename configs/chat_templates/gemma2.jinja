@@ -1,0 +1,17 @@
+{#- Gemma 2's own template refuses a system message. SHEFA's router and reply prompts are system
+    messages, so this folds them into the first user turn (what Ollama does for gemma2), and it
+    does not insist that turns alternate: a trimmed history can have two user turns in a row. -#}
+{{- bos_token -}}
+{%- set ns = namespace(system='', pending=true) -%}
+{%- for m in messages -%}
+  {%- if m['role'] == 'system' -%}{%- set ns.system = ns.system + (m['content'] | trim) + '\n\n' -%}{%- endif -%}
+{%- endfor -%}
+{%- for m in messages -%}
+  {%- if m['role'] != 'system' -%}
+    {%- set role = 'model' if m['role'] == 'assistant' else 'user' -%}
+    {{- '<start_of_turn>' + role + '\n' -}}
+    {%- if ns.pending and role == 'user' -%}{{- ns.system -}}{%- set ns.pending = false -%}{%- endif -%}
+    {{- (m['content'] | trim) + '<end_of_turn>\n' -}}
+  {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}{{- '<start_of_turn>model\n' -}}{%- endif -%}

@@ -43,9 +43,6 @@ def test_the_vllm_profile_points_the_agent_at_the_server_it_starts():
     assert key == "" and overlay["llm_server"]["engine"] == "vllm"
     assert adapter["base_url"] == f"http://localhost:{cfg.port}/v1"
     assert adapter["model"] == cfg.served_name == overlay["pipeline"]["llm"]["model"]
-    assert overlay["pipeline"]["llm"]["extra_body"]["chat_template_kwargs"] == {
-        "enable_thinking": False
-    }
 
 
 async def test_extra_body_reaches_the_server():
@@ -81,3 +78,32 @@ def test_ollama_keep_alive_pings_are_skipped_on_vllm(monkeypatch):
     monkeypatch.setattr(settings.pipeline.llm, "provider", "local")
     # With Ollama this would POST /api/generate; on vLLM it must return without any request.
     asyncio.run(warmup.ping_llm())
+
+
+def test_the_default_model_is_the_one_that_won_the_benchmark():
+    cfg = VllmConfig()
+    assert "gemma-2-9b" in cfg.model and cfg.chat_template.endswith("gemma2.jinja")
+    command = cli.vllm_command(cfg)
+    assert command[command.index("--chat-template") + 1] == cfg.chat_template
+
+
+def test_the_gemma_template_folds_the_system_prompt_into_the_first_user_turn():
+    from pathlib import Path
+
+    from jinja2 import Environment
+
+    template = Environment().from_string(Path(VllmConfig().chat_template).read_text())
+    text = template.render(
+        bos_token="<bos>",
+        add_generation_prompt=True,
+        messages=[
+            {"role": "system", "content": "RULES"},
+            {"role": "assistant", "content": "Welcome."},
+            {"role": "user", "content": "Hi"},
+            {"role": "user", "content": "again"},
+        ],
+    )
+    assert text.startswith("<bos><start_of_turn>model\nWelcome.<end_of_turn>\n")
+    assert "<start_of_turn>user\nRULES\n\nHi<end_of_turn>" in text  # not lost on the greeting
+    assert text.count("RULES") == 1 and text.endswith("<start_of_turn>model\n")
+    assert "system" not in text.replace("RULES", "")
