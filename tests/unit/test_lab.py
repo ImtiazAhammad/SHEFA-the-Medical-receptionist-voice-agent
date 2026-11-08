@@ -237,8 +237,8 @@ def lab(tmp_path, monkeypatch):
     script = _Script()
     monkeypatch.setattr(registry, "_llm", script)
 
-    def make(**kwargs):
-        return Lab(clinic_file=CLINIC, work_dir=tmp_path / "work", today=WEDNESDAY,
+    def make(today=WEDNESDAY, **kwargs):
+        return Lab(clinic_file=CLINIC, work_dir=tmp_path / "work", today=today,
                    patient_llm=script, **kwargs)
 
     return SimpleNamespace(make=make, script=script)
@@ -246,10 +246,14 @@ def lab(tmp_path, monkeypatch):
 
 class TestRunner:
     async def test_a_scripted_booking_lands_in_its_own_clinic_database(self, lab):
+        # The pipeline reads the real clock (a past date rolls to next year), so this one test
+        # runs on the real "today" instead of the pinned Wednesday.
+        today = date.today()
+        sunday = resolve_day("sun", today)
         lab.script.actions = [
             None,
             {"tool": "book_appointment",
-             "arguments": {"doctor_name": "Hossain", "date": "2026-11-08", "time": "10:00"}},
+             "arguments": {"doctor_name": "Hossain", "date": sunday.isoformat(), "time": "10:00"}},
         ]  # the third turn is the caller's yes, handled without the router
         scenario = Scenario(
             id="booking", title="t", tests="t", phone="01711000001",
@@ -258,11 +262,11 @@ class TestRunner:
                           booked_dates=["{iso:Sun}"], reply_language="bn"),
         )
 
-        result = await lab.make().run(scenario)
+        result = await lab.make(today=today).run(scenario)
 
         assert result.error is None
         assert result.turns[0].greeting
-        assert result.turns[1].said == "রবিবার, ৮ নভেম্বর সকাল দশটায়"
+        assert result.turns[1].said == fill("{bn:Sun} সকাল দশটায়", today)
         assert result.turns[1].actions == []  # read back, not yet booked
         assert "বুক করব" in result.turns[1].reply
         assert result.turns[2].actions == ["book_appointment"]
