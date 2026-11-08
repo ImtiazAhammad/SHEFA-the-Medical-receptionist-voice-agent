@@ -1,8 +1,11 @@
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** The server's stable error code (for example "slot_taken"), when it sent one. */
+  code: string
+  constructor(status: number, message: string, code = '') {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -19,13 +22,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     let message = response.statusText
+    let code = ''
     try {
       const body = await response.json()
       message = body?.error?.message ?? body?.detail?.message ?? message
+      code = body?.error?.code ?? body?.detail?.code ?? ''
     } catch {
       /* not JSON */
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, code)
   }
   return (await response.json()) as T
 }
@@ -70,6 +75,9 @@ export interface Appointment {
   patient_name: string | null
   phone: string
   status: string
+  source?: string
+  /** False for a web booking the desk has not yet checked with the patient. */
+  confirmed?: boolean
 }
 
 export interface Doctor {

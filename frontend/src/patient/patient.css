@@ -1,0 +1,100 @@
+/* SHEFA patient page. Same family as the staff app, warmer: paper background, larger type,
+   bigger touch targets, one teal accent. Built for a phone on a slow connection. */
+.patient {
+  --p-bg: oklch(0.982 0.014 85);
+  --p-surface: oklch(1 0.004 85);
+  --p-line: oklch(0.89 0.02 85);
+  --p-ink: oklch(0.27 0.03 60);
+  --p-ink-2: oklch(0.47 0.03 60);
+  --p-accent: oklch(0.5 0.1 190);
+  --p-accent-hover: oklch(0.43 0.1 190);
+  --p-on-accent: oklch(0.99 0.005 190);
+  --p-wash: oklch(0.95 0.03 190);
+  --p-warm: oklch(0.95 0.045 85);
+  --p-bad: oklch(0.47 0.16 25);
+  --p-bad-wash: oklch(0.95 0.035 25);
+  --p-focus: oklch(0.55 0.17 250);
+  min-height: 100dvh;
+  background: var(--p-bg);
+  color: var(--p-ink);
+  font-size: 1.0625rem;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (prefers-color-scheme: dark) {
+  .patient {
+    --p-bg: oklch(0.21 0.015 60);
+    --p-surface: oklch(0.255 0.018 60);
+    --p-line: oklch(0.36 0.02 60);
+    --p-ink: oklch(0.94 0.01 85);
+    --p-ink-2: oklch(0.78 0.02 85);
+    --p-accent: oklch(0.74 0.11 190);
+    --p-accent-hover: oklch(0.8 0.11 190);
+    --p-on-accent: oklch(0.2 0.03 190);
+    --p-wash: oklch(0.31 0.05 190);
+    --p-warm: oklch(0.3 0.04 85);
+    --p-bad: oklch(0.8 0.12 25);
+    --p-bad-wash: oklch(0.31 0.06 25);
+    --p-focus: oklch(0.78 0.13 250);
+  }
+}
+.patient :focus-visible { outline: 3px solid var(--p-focus); outline-offset: 2px; border-radius: 6px; }
+.patient button, .patient input { font: inherit; }
+
+.p-top { display: flex; justify-content: space-between; align-items: center; max-width: 40rem; margin: 0 auto; padding: 0.9rem 1rem; }
+.p-brand { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; letter-spacing: 0.04em; color: var(--p-accent); }
+.p-lang { min-height: 44px; padding: 0.4rem 0.9rem; border-radius: 999px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); cursor: pointer; }
+.p-main { max-width: 40rem; margin: 0 auto; padding: 0 1rem 3rem; }
+.p-main h1 { font-size: 1.65rem; line-height: 1.25; margin: 0.5rem 0 0.25rem; }
+.p-main h1:focus { outline: none; }
+.p-main h2 { font-size: 1.15rem; margin: 1.5rem 0 0.6rem; }
+.p-lead { color: var(--p-ink-2); margin: 0 0 1rem; }
+.p-muted { color: var(--p-ink-2); font-size: 0.95rem; }
+.p-emergency { margin: 0 0 1rem; padding: 0.6rem 0.9rem; border-radius: 10px; background: var(--p-bad-wash); color: var(--p-bad); font-weight: 600; }
+
+.p-steps { display: flex; gap: 0.5rem; list-style: none; padding: 0; margin: 0 0 1rem; font-size: 0.9rem; color: var(--p-ink-2); }
+.p-steps li { flex: 1; padding-top: 0.45rem; border-top: 3px solid var(--p-line); }
+.p-steps li.on { border-top-color: var(--p-accent); color: var(--p-ink); font-weight: 600; }
+
+.p-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.p-chips button, .p-times button { min-height: 44px; padding: 0.45rem 1rem; border-radius: 999px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); cursor: pointer; }
+.p-chips button[aria-pressed='true'], .p-times button[aria-pressed='true'] { background: var(--p-accent); color: var(--p-on-accent); border-color: var(--p-accent); font-weight: 600; }
+.p-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 0.5rem; }
+.p-times button { border-radius: 12px; }
+
+.p-list { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.75rem; }
+.p-card { width: 100%; text-align: start; display: flex; flex-direction: column; gap: 0.15rem; padding: 1rem 1.1rem; min-height: 44px; border-radius: 14px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); cursor: pointer; box-shadow: 0 1px 2px oklch(0.3 0.03 60 / 0.06); }
+.p-card:hover { border-color: var(--p-accent); background: var(--p-wash); }
+.p-card strong { font-size: 1.1rem; }
+.p-fee { margin-top: 0.3rem; color: var(--p-accent); font-weight: 600; }
+.p-picked { font-weight: 600; margin: 0 0 0.5rem; }
+
+.p-field { display: flex; flex-direction: column; gap: 0.3rem; margin: 0 0 1rem; }
+.p-field span { font-weight: 600; }
+.p-field small { color: var(--p-ink-2); }
+.patient input[type='text'], .patient input[type='tel'], .patient .p-field input { min-height: 48px; padding: 0.5rem 0.8rem; border-radius: 10px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); font-size: 1.0625rem; }
+.patient input[aria-invalid='true'] { border-color: var(--p-bad); }
+.p-check { display: flex; gap: 0.7rem; align-items: flex-start; margin: 0 0 1rem; }
+.p-check input { width: 1.4rem; height: 1.4rem; margin-top: 0.15rem; accent-color: var(--p-accent); }
+.p-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+.p-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.2rem; }
+.p-btn { min-height: 48px; padding: 0.55rem 1.2rem; border-radius: 12px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); font-weight: 600; cursor: pointer; }
+.p-btn:hover:not(:disabled) { border-color: var(--p-accent); background: var(--p-wash); }
+.p-primary { background: var(--p-accent); color: var(--p-on-accent); border-color: var(--p-accent); }
+.p-primary:hover:not(:disabled) { background: var(--p-accent-hover); border-color: var(--p-accent-hover); }
+.p-danger { color: var(--p-bad); border-color: var(--p-bad); }
+.p-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.p-link { background: none; border: 0; padding: 0.5rem 0; color: var(--p-accent); text-decoration: underline; cursor: pointer; min-height: 44px; }
+.p-foot { margin: 1.5rem 0 0; }
+
+.p-note { padding: 0.8rem 1rem; border-radius: 12px; background: var(--p-warm); margin: 0.8rem 0; }
+.p-note p { margin: 0 0 0.5rem; }
+.p-error { background: var(--p-bad-wash); color: var(--p-bad); }
+.p-receipt { padding: 1.1rem 1.2rem; border-radius: 16px; background: var(--p-surface); border: 1px solid var(--p-line); margin: 1rem 0; }
+.p-receipt p { margin: 0.2rem 0; }
+.p-ref { font-size: 2rem; font-weight: 700; letter-spacing: 0.06em; color: var(--p-accent); font-variant-numeric: tabular-nums; }
+.p-callback { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--p-line); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .p-card, .p-btn, .p-chips button, .p-times button { transition: background 0.15s, border-color 0.15s; }
+}

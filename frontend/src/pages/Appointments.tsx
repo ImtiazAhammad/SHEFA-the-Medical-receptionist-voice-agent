@@ -39,6 +39,20 @@ export function Appointments() {
     }
   }
 
+  async function confirm(id: string) {
+    setSaving(id)
+    setSaveFailed(false)
+    try {
+      await api(`/api/v1/appointments/${encodeURIComponent(id)}/confirm`, { method: 'POST' })
+      list.reload()
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e
+      setSaveFailed(true)
+    } finally {
+      setSaving(null)
+    }
+  }
+
   const rows = [...(list.data ?? [])].sort((a, b) => a.start_time.localeCompare(b.start_time))
   const actions: [string, Key][] = [
     ['completed', 'markDone'],
@@ -97,8 +111,23 @@ export function Appointments() {
                     </td>
                     <td>
                       <Pill tone={s.tone}>{t(s.key)}</Pill>
+                      {a.status === 'booked' && a.confirmed === false ? (
+                        <div className="small">
+                          <Pill tone="warn">{t('unconfirmed')}</Pill>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="actions">
+                      {can('records:write') && a.status === 'booked' && a.confirmed === false ? (
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          disabled={saving === a.appointment_id}
+                          onClick={() => void confirm(a.appointment_id)}
+                        >
+                          {t('confirmBooking')}
+                        </button>
+                      ) : null}
                       {can('records:write')
                         ? a.status === 'booked'
                           ? actions.map(([status, label]) => (
