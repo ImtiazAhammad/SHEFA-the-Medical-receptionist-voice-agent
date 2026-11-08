@@ -47,6 +47,8 @@ def text_pipeline():
     return _text_pipeline
 
 STATIC_DIR = Path(__file__).parent / "static"
+APP_DIR = STATIC_DIR / "app"  # the built staff app (frontend/ -> npm run build)
+APP_ASSETS_PREFIX = "/app-assets"
 
 # --------------------------------------------------------------------------
 # Error envelope + status map (D-ENG14).
@@ -176,6 +178,10 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
+    ("GET", "/app"): PUBLIC_PERMISSION,
+    ("GET", "/app/{path:path}"): PUBLIC_PERMISSION,
+    ("GET", "/api/v1/me"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/logout"): PUBLIC_PERMISSION,
 }
 
 
@@ -207,6 +213,8 @@ def required_permission(app: FastAPI, method: str, path: str) -> str | None:
         return TELEPHONY_PERMISSION
     if path == "/static" or path.startswith("/static/"):
         return "sessions:read"
+    if path.startswith(APP_ASSETS_PREFIX + "/"):
+        return PUBLIC_PERMISSION  # the app's own script and styles: no data, and needed to sign in
     if path.startswith(("/docs", "/redoc", "/openapi")):
         return "config:read"
 
@@ -297,7 +305,13 @@ def _install_auth(app: FastAPI, store: AuthStore) -> None:
             public_principal = (
                 store.authenticate(token) if token is not None else None
             )
-            if token is not None and public_principal is None:
+            if (
+                token is not None
+                and public_principal is None
+                and request.headers.get("Authorization")
+            ):
+                # A bad header is a client bug and says so. A stale cookie (another server on
+                # the same host, an expired session) is just "signed out": the page must still load.
                 return error_response(
                     "authentication_required",
                     headers={"WWW-Authenticate": "Bearer"},
@@ -445,6 +459,12 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    if APP_DIR.is_dir():
+        app.mount(
+            APP_ASSETS_PREFIX,
+            StaticFiles(directory=str(APP_DIR)),
+            name="app-assets",
+        )
 
 
     @app.get("/health")
@@ -613,6 +633,43 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             content=(STATIC_DIR / page).read_text(encoding="utf-8"),
             status_code=200 if signed_in else 401,
         )
+
+    @app.get("/app", response_class=HTMLResponse)
+    @app.get("/app/{path:path}", response_class=HTMLResponse)
+    async def staff_app(request: Request, path: str = "") -> HTMLResponse:
+        """The staff app. Signed out it is a 401 that carries the app, which shows its own
+        sign-in form (like /console); the page holds no data, its API calls are protected."""
+        index = APP_DIR / "index.html"
+        if not index.is_file():
+            return HTMLResponse(
+                "<h1>The staff app is not built</h1><p>Run <code>npm install && npm run build"
+                "</code> in <code>frontend/</code>, or use <a href='/console'>/console</a>.</p>",
+                status_code=503,
+            )
+        signed_in = getattr(request.state, "principal", None) is not None
+        return HTMLResponse(
+            index.read_text(encoding="utf-8"), status_code=200 if signed_in else 401
+        )
+
+    @app.get("/api/v1/me", response_model=None)
+    async def me(request: Request) -> dict | JSONResponse:
+        """Who is signed in. Signed out is an answer, not an error: the app asks on load."""
+        principal = getattr(request.state, "principal", None)
+        if principal is None:
+            return JSONResponse({"signed_in": False}, status_code=401)
+        return {
+            "signed_in": True,
+            "name": principal.name,
+            "role": principal.role,
+            "permissions": sorted(store.permissions_for(principal.role)),
+        }
+
+    @app.post("/api/v1/logout")
+    async def logout(request: Request) -> JSONResponse:
+        signed_in = getattr(request.state, "principal", None) is not None
+        response = JSONResponse({"signed_in": False}, status_code=200 if signed_in else 401)
+        response.delete_cookie(AUTH_COOKIE)
+        return response
 
     @app.post("/api/v1/login")
     async def api_login(body: LoginBody | None = None) -> JSONResponse:

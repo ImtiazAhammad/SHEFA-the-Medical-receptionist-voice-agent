@@ -589,7 +589,8 @@ def run_serve(args: argparse.Namespace) -> int:
     scheme = "https" if ssl else "http"
     shown = _lan_addresses() if args.host == "0.0.0.0" else [args.host]  # noqa: S104
     for address in shown:
-        print(f"Console: {scheme}://{address}:{args.port}/console")
+        print(f"Staff app: {scheme}://{address}:{args.port}/app")
+        print(f"Console:   {scheme}://{address}:{args.port}/console")
     logging.getLogger("uvicorn.access").addFilter(_QuietPolling())
     if not os.environ.get("SHEFA_SKIP_WARMUP"):  # tests and CI bring their own services
         _ensure_ollama()

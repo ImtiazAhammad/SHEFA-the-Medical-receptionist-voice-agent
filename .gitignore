@@ -51,3 +51,7 @@ lab-report/
 research_notes/
 reports/
 voice-test/
+
+# Staff app (frontend/): dependencies are installed, the build is committed
+frontend/node_modules/
+.playwright-mcp/

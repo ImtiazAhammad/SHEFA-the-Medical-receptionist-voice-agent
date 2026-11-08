@@ -76,6 +76,11 @@ uv run shefa doctor           # every line should say ok
 uv run shefa serve            # starts Ollama if needed and loads the doctors if none are loaded
 ```
 
+The staff app (calls with transcripts, appointments, doctors; Bangla and English; phone and desktop)
+is at <http://127.0.0.1:8000/app>. Its source is `frontend/`; the built files are committed in
+`src/shefa/static/app/`. To change it: `cd frontend && npm install && npm run dev` (proxies to the
+server on :8000), then `npm run build`.
+
 After the first install the only command you need is `uv run shefa serve`, then open
 <http://127.0.0.1:8000/console>. If `ollama serve` says "address already in use", Ollama is already
 running in the background: that is fine.
