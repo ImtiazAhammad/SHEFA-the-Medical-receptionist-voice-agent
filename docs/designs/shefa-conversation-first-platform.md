@@ -67,3 +67,7 @@ Within 7 days, ask your uncle for one 30-minute meeting with the person who runs
 - You wrote "I strongly believe I can sell this solution if its performance is that good": you tie the sale to performance, which is the right instinct, and then built security and infrastructure before the conversation was good.
 - When asked about listening to real calls you said "it's not a thing we didn't know": you know the patient side of the call; the desk side is where the hospital's expectation comes from.
 - You first chose the full platform, then changed your mind after the reasoning: acting on a better argument quickly is a strength.
+
+## Build log
+- 2026-11-09: guided booking built (`src/shefa/pipeline/guided.py`): who -> day -> time -> name/number -> read-back -> yes, all in code; unclear twice goes to a person with a call-back; phone bookings land unconfirmed for the desk (`booking.phone_needs_desk_confirmation`); the old router mode is `pipeline.guided_booking: false`.
+- Exit test so far: 225 Bangla/English call variants and a noise test pass (`tests/unit/test_guided_matrix.py`); the 2026-11-09 transcript is replayed in `tests/unit/test_guided_real_transcript.py`. Still unmeasured: real phone audio, real callers.

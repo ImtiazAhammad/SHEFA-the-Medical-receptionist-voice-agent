@@ -958,6 +958,9 @@ class VoicePipeline:
             )
             if handled is not None:
                 return handled
+        if settings.pipeline.guided_booking and (gap := guided.unknown_specialty(said, language)):
+            await self._emit(tts, gap, language, put_playback)
+            return gap
         focus = session.metadata.get("focus")
         if focus and wants_other_doctor(said):
             text, new_offer = other_doctor_reply(focus, language)

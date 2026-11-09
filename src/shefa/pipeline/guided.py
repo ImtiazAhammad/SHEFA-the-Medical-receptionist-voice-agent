@@ -657,6 +657,43 @@ _STEPS = {
 }
 
 
+_SPECIALIST = re.compile(
+    r"([\u0980-\u09ffA-Za-z]{3,})\s*(?:বিশেষজ্ঞ[\u0980-\u09ff]*|স্পেশালিস্ট[\u0980-\u09ff]*|specialists?|doctors?)\s*"
+    r"(?:কেউ|আছে|আছেন|পাওয়া|নাকি|available|here|do you have)"
+    r"|(?:any|is there an?|do you have an?)\s+([A-Za-z]{3,})\s*(?:specialists?|doctors?)",
+    re.IGNORECASE,
+)
+_NOT_A_SPECIALTY = frozenset(
+    {"কোন", "কোনো", "একজন", "একটা", "আপনাদের", "এখানে", "ওনাকে", "ভালো", "অন্য", "আর", "any",
+     "other", "good", "another", "the", "your"}
+)  # fmt: skip
+
+
+def unknown_specialty(said: str, language: str) -> str | None:
+    """ "Is there a cancer specialist?" when there is none: say so, and say what there is."""
+    match = _SPECIALIST.search(said)
+    if not match:
+        return None
+    asked = (match.group(1) or match.group(2) or "").strip()
+    if not asked or asked.lower() in _NOT_A_SPECIALTY:
+        return None
+    store = default_clinic_store()
+    if store.find_department(said) is not None or _symptom_department(said) is not None:
+        return None
+    if _doctors_named(said):
+        return None
+    departments = [d["name_bn"] if language == "bn" else d["name_en"] for d in store.departments()]
+    if language == "bn":
+        return (
+            f"দুঃখিত, {asked} বিশেষজ্ঞ আমাদের এখানে নেই। আমাদের আছে "
+            f"{spoken_list(departments, 'bn')} বিভাগ। এর মধ্যে কোনটা দরকার?"
+        )
+    return (
+        f"Sorry, we do not have a {asked} specialist here. We have "
+        f"{spoken_list(departments, 'en')}. Which of these do you need?"
+    )
+
+
 def finish(session: Any) -> None:
     """The booking was made or dropped: leave guided mode."""
     session.metadata.pop("guided", None)

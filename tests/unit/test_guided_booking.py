@@ -270,3 +270,19 @@ async def test_other_requests_do_not_start_a_booking(monkeypatch, said):
     call = start(monkeypatch)
     await call.say(said)
     assert "guided" not in call.session.metadata
+
+
+async def test_a_specialty_the_clinic_lacks_is_said_plainly(monkeypatch):
+    call = start(monkeypatch)
+    reply = await call.say("ক্যান্সার বিশেষজ্ঞে কেউ আছে")
+    assert "নেই" in reply and "শিশু" in reply and len(reply) < 300
+
+    english = start(monkeypatch, language=Language.ENGLISH)
+    reply = await english.say("do you have an oncology specialist")
+    assert "do not have a oncology specialist" in reply and "Pediatrics" in reply
+
+
+async def test_cancelling_is_not_a_booking(monkeypatch):
+    call = start(monkeypatch)
+    await call.say("আমার অ্যাপয়েন্টমেন্ট বাতিল করতে চাই", {"tool": None})
+    assert "guided" not in call.session.metadata
