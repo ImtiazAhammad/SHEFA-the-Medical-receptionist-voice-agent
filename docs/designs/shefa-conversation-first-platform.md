@@ -5,7 +5,7 @@ Branch: feat/dialogue-manager
 Repo: ImtiazAhammad/SHEFA-the-Medical-receptionist-voice-agent
 Status: DRAFT
 Mode: Startup
-Supersedes: imtiaz-feat-first-clinic-shefa-design-20260925-064500.md (narrow "unmanned window" wedge). REVERSAL: the founder chose the full platform (Approach B) over the recommended guided overflow line (A). See "Decision and risk".
+Supersedes: imtiaz-feat-first-clinic-shefa-design-20260925-064500.md. Revision 1 (2026-11-09): founder first chose the full platform (B), then switched to the recommended guided overflow line (A). The platform is the later destination, gated by pilot numbers.
 
 ## Problem Statement
 Bangladeshi hospitals take most outpatient bookings by phone. A busy person answers, talks, and writes the booking on paper. At busy hours and on holidays patients wait minutes. SHEFA is a Bangla voice agent that answers many calls at once, books, and takes load off the desk. The product is not yet sellable: in the founder's own test call (2026-11-09) the Bangla conversation failed on first contact.
@@ -20,7 +20,7 @@ A human answers, converses and writes on paper; online booking exists at a few h
 
 ## Target User & Narrowest Wedge
 - Buyer (unproven): a hospital executive at the founder's uncle's group; the founder has not named the receptionist or the person who owns missed calls.
-- Wedge chosen by founder: the full platform for chains (inbound + outbound, multi-branch). Recommended wedge was a guided overflow line; not taken.
+- Wedge chosen by founder (final): Approach A, a guided overflow line. The agent leads with short closed questions, hands off to a person when unsure, and the desk confirms each booking with one tap.
 
 ## Premises (all four agreed)
 1. The real pain is overflow and missed calls (busy hours, holidays, after hours), not replacing the desk.
@@ -37,16 +37,16 @@ A human answers, converses and writes on paper; online booking exists at a few h
 Cause: open-ended routing by a 9B model on error-prone phone speech, with defaults when it is unsure. Fixed already: "another doctor" now stays in the department; long doctor lists summarised; third-language misroute removed (commits 6110cbe, debe848).
 
 ## Approaches Considered
-- A. Guided overflow line (agent leads with short closed questions, hands off when unsure, desk confirms): recommended. Not chosen.
-- B. Full platform for chains: CHOSEN by the founder.
+- A. Guided overflow line (agent leads with short closed questions, hands off when unsure, desk confirms): CHOSEN (final).
+- B. Full platform for chains: first chosen, then dropped by the founder; it returns only after pilot numbers.
 - C. Missed-call call-back (agent rings back missed callers, agent-led): not chosen alone; kept as the first outbound feature.
 
-## Decision and risk
-Founder chose B. Risk recorded: B scales the open conversation that currently fails and has no customer. Mitigation built into the plan: B is delivered in this order, and no step starts before the previous step passes its exit test.
-1. Conversation core (exit: 95% of 100 scripted + recorded Bangla calls reach the right action or a clean handover, no invented times, no dumped lists).
-2. Guided slot-filling as the default dialogue mode (open chat only for FAQ answered from the directory).
-3. Outbound (missed-call call-back, reminders) reusing step 2.
-4. Hospital integration and multi-branch only after a hospital pilot yields numbers.
+## Decision and build order
+Final: A. Build order, each step gated by an exit test.
+1. Guided booking flow as the default dialogue (department/doctor, day, time, name, number, read-back, yes). Exit: 95 of 100 scripted Bangla calls end in the right booking or a clean handover; no invented times, no dumped lists.
+2. Every phone booking lands as unconfirmed; the desk confirms with one tap; unclear calls become a call-back with a reason.
+3. Missed-call call-back (outbound, same guided flow).
+4. Platform features (many branches, integrations, reports) only after a hospital pilot yields numbers.
 
 ## Open Questions
 - What does the uncle's hospital mean by "the expectation"? Ask for: daily call volume, missed-call rate, peak hours, top 10 reasons for calling, how bookings are recorded (serial number in chamber hours vs time slots), the hotline/call-centre setup, and who owns missed calls.
@@ -66,4 +66,4 @@ Within 7 days, ask your uncle for one 30-minute meeting with the person who runs
 ## What I noticed about how you think
 - You wrote "I strongly believe I can sell this solution if its performance is that good": you tie the sale to performance, which is the right instinct, and then built security and infrastructure before the conversation was good.
 - When asked about listening to real calls you said "it's not a thing we didn't know": you know the patient side of the call; the desk side is where the hospital's expectation comes from.
-- You chose the full platform against the recommendation: that is a conviction call, and the staged exit tests above are how it avoids repeating today's failure.
+- You first chose the full platform, then changed your mind after the reasoning: acting on a better argument quickly is a strength.
