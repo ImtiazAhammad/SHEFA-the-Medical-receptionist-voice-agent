@@ -180,11 +180,16 @@ class TestLanguagePick:
             ("en", 0.8, {"en": 0.8, "bn": 0.1}, "en"),
             ("en", 0.7, {}, "en"),
             ("hi", 0.6, {"hi": 0.6, "bn": 0.1, "en": 0.2}, "en"),  # unsure: stay in the pair
-            ("hi", 0.95, {"hi": 0.95}, "hi"),  # sure: a third language
+            ("zh", 0.97, {"zh": 0.97, "bn": 0.01, "en": 0.01}, "bn"),  # noise heard as Chinese
+            ("hi", 0.95, {"hi": 0.95}, "bn"),  # third languages are off unless listed
         ],
     )
     def test_pick(self, top, probability, probabilities, expected):
         assert pick_language(top, probability, probabilities) == expected
+
+    def test_a_listed_third_language_is_chosen_when_sure(self):
+        assert pick_language("hi", 0.95, {"hi": 0.95}, frozenset({"hi"})) == "hi"
+        assert pick_language("zh", 0.97, {"zh": 0.97}, frozenset({"hi"})) == "bn"
 
 
 class _Stt:
@@ -229,7 +234,7 @@ class TestRoutedSpeech:
 
     async def test_a_third_language_is_heard_by_the_multilingual_model(self):
         english = _Stt("multi", ("hi", 0.97, {"hi": 0.97}))
-        stt = LanguageRoutedSTT(english, {"bn": _Stt("bn"), "en": english})
+        stt = LanguageRoutedSTT(english, {"bn": _Stt("bn"), "en": english}, frozenset({"hi"}))
 
         result = await stt.transcribe(b"pcm")
 

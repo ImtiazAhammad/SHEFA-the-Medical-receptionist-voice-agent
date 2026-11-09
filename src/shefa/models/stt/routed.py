@@ -24,9 +24,23 @@ BANGLA_ALIASES = frozenset({"bn", "as"})
 OTHER_LANGUAGE_CONFIDENCE = 0.8
 
 
-def pick_language(top: str, probability: float, probabilities: Mapping[str, float]) -> str:
-    """'bn', 'en', or another code only when the detector is confident it is neither."""
-    if top not in BANGLA_ALIASES | {"en"} and probability >= OTHER_LANGUAGE_CONFIDENCE:
+def pick_language(
+    top: str,
+    probability: float,
+    probabilities: Mapping[str, float],
+    other_languages: frozenset[str] = frozenset(),
+) -> str:
+    """'bn' or 'en'; another code only if it is listed in `other_languages` and sure.
+
+    Whisper labels noise, music and clipped mic audio as Chinese, Japanese or Korean with
+    high confidence. A clinic line is Bangla or English, so by default a third language is
+    never chosen: the turn stays in the bn/en pair and is heard by the likelier model.
+    """
+    if (
+        top in other_languages
+        and top not in BANGLA_ALIASES | {"en"}
+        and probability >= OTHER_LANGUAGE_CONFIDENCE
+    ):
         return top
     bangla = sum(probabilities.get(code, 0.0) for code in BANGLA_ALIASES)
     if top in BANGLA_ALIASES:
@@ -36,14 +50,20 @@ def pick_language(top: str, probability: float, probabilities: Mapping[str, floa
 
 
 class LanguageRoutedSTT(BaseSTT):
-    def __init__(self, detector: Any, models: Mapping[str, BaseSTT]) -> None:
+    def __init__(
+        self,
+        detector: Any,
+        models: Mapping[str, BaseSTT],
+        other_languages: frozenset[str] = frozenset(),
+    ) -> None:
         self.detector = detector
         self.models = dict(models)
+        self.other_languages = frozenset(other_languages)
 
     async def transcribe(self, audio_data: bytes, language: str = "auto") -> STTResult:
         if language == "auto":
             top, probability, probabilities = await self.detector.detect_language(audio_data)
-            language = pick_language(top, probability, probabilities)
+            language = pick_language(top, probability, probabilities, self.other_languages)
         model = self.models.get(language)
         if model is None:  # a third language: let the multilingual model say what it heard
             return await self.detector.transcribe(audio_data, language)
