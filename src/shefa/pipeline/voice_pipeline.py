@@ -41,6 +41,7 @@ from shefa.pipeline.actions import (
     numbers_grounded,
     tool_result_note,
 )
+from shefa.pipeline.alternatives import other_doctor_reply, remember_focus, wants_other_doctor
 from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import (
     NEEDS_CONFIRMATION,
@@ -174,8 +175,9 @@ def _remember_offer(session: CallSession, name: str, result: dict[str, Any]) -> 
 
     A bare "ঠিক আছে" or "yes" then means that booking, instead of being treated as small talk.
     """
-    session.metadata.pop("offer", None)
-    session.metadata.pop("choices", None)
+    if name == "check_appointment_slots":  # an info answer must not wipe the doctor offer
+        session.metadata.pop("offer", None)
+        session.metadata.pop("choices", None)
     times = [s["time"] for s in result.get("available_slots") or [] if s.get("time")]
     if (
         name == "check_appointment_slots"
@@ -720,6 +722,7 @@ class VoicePipeline:
             if action.name in NEEDS_CONFIRMATION:
                 return await self._propose(llm, tts, session, action, put_playback)
             tool_result = await execute_tool(action.name, action.arguments, session)
+            remember_focus(session, action.name, tool_result)
             if action.name in INFO_TOOLS and not tool_result.get("error"):
                 answered = await self._grounded_answer(
                     llm, tts, session, action.name, tool_result, put_playback
@@ -883,6 +886,14 @@ class VoicePipeline:
                 await self._emit(tts, text, language, put_playback)
                 return text
             session.metadata.pop("pending")  # a new request: the old question is void
+        focus = session.metadata.get("focus")
+        if focus and wants_other_doctor(said):
+            text, new_offer = other_doctor_reply(focus, language)
+            if text:
+                if new_offer:
+                    session.metadata["offer"] = new_offer
+                await self._emit(tts, text, language, put_playback)
+                return text
         if (kind := classify_social(said)) is not None:
             text = social_reply(kind, language)
             await self._emit(tts, text, language, put_playback)

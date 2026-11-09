@@ -426,7 +426,10 @@ def info_note(name: str, result: dict[str, Any], question: str, language: str) -
         f"above and this tool result, answer exactly what was asked in one or two short spoken "
         f"sentences in {answer_language}. Do not list everything. Do not give medical advice or "
         "a diagnosis: if they describe a problem, name the doctor or department whose 'sees' "
-        "list fits and offer to book. Say times and dates as words, never as digits like 16:00. "
+        "list fits and offer to book. When you recommend a doctor, speak warmly like a caring "
+        "receptionist: give the qualification or years of experience from the directory and the "
+        "next free time, then offer the booking. Say times and dates as words, never as digits "
+        "like 16:00. "
         f"Tool {name} returned: "
         + json.dumps(_spoken_doctor_result(result, language), ensure_ascii=False)
     )
@@ -540,12 +543,32 @@ def _confirm_departments(result: dict[str, Any]) -> dict[str, str] | None:
     }
 
 
+MAX_DOCTORS_READ = 4  # more names than this are summarised by department
+
+
 def _confirm_doctors(result: dict[str, Any]) -> dict[str, str] | None:
     items = result.get("doctors") or []
     if not items or not isinstance(items[0], dict):
         return None
     if len(items) == 1:
         return _confirm_doctor_info(items[0])  # one match: give the whole card
+    if len(items) > MAX_DOCTORS_READ:
+        # Seventeen names in one breath is a phone menu, not a receptionist. Say how big the
+        # clinic is, name the departments, and ask what the caller needs.
+        departments = list(dict.fromkeys(d.get("department", "") for d in items))
+        departments_bn = list(
+            dict.fromkeys(d.get("department_bn") or d.get("department", "") for d in items)
+        )
+        return {
+            "en": f"We have {len(items)} doctors across "
+            + spoken_list(departments, "en")
+            + ". Tell me what the problem is, or which department or doctor you need, "
+            "and I will find the right person and a time.",
+            "bn": f"আমাদের এখানে {spoken_number(len(items), 'bn')} জন ডাক্তার আছেন, বিভাগ: "
+            + spoken_list(departments_bn, "bn")
+            + "। আপনার কী সমস্যা, বা কোন বিভাগ বা ডাক্তারকে দেখাতে চান বললে আমি "
+            "সঠিক ডাক্তার আর সময় খুঁজে দেব।",
+        }
     return {
         "en": "Our doctors are "
         + spoken_list(
