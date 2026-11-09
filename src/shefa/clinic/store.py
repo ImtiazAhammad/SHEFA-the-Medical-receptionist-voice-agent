@@ -505,6 +505,7 @@ class ClinicStore:
         *,
         reason: str = "",
         source: str = "phone",
+        confirmed: bool | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         slot = next(
@@ -528,7 +529,7 @@ class ClinicStore:
                         slot["end_time"],
                         reason,
                         source,
-                        0 if source == "web" else 1,
+                        int(confirmed) if confirmed is not None else (0 if source == "web" else 1),
                         stamp,
                         stamp,
                     ),

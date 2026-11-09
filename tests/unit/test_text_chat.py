@@ -65,6 +65,7 @@ class _Script:
 
 @pytest.fixture
 def chat(monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "guided_booking", False)  # these drive the router
     monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
     monkeypatch.setattr(settings.languages, "primary", "en")
     import_directory(default_clinic_store(), DIRECTORY)

@@ -158,6 +158,9 @@ class PipelineConfig(StrictModel):
     )
     # Load the models at startup and keep the LLM resident (see shefa.warmup).
     warm_up: bool = True
+    # A booking request is run by code, one short closed question at a time (pipeline.guided),
+    # instead of by the language model. Off = the router decides every turn.
+    guided_booking: bool = True
     # The longest one turn (router, reply, voice) may take before it counts as a failure and goes
     # through the retry-then-hand-over path. A caller never waits longer than this on a dead line.
     turn_deadline_s: float = Field(default=20.0, gt=0)
@@ -437,6 +440,9 @@ class BookingConfig(StrictModel):
     reads_per_ip_per_minute: int = Field(default=60, ge=1)
     trust_forwarded_for: bool = False  # true only behind one proxy you run
     callback_enabled: bool = True  # "call me to confirm" and "call me back" requests
+    # A booking taken by the agent holds the slot but the front desk confirms it with one tap
+    # (overflow line: a person has the last word). Switch off once a clinic trusts the agent.
+    phone_needs_desk_confirmation: bool = True
 
 
 class ComplianceConfig(StrictModel):

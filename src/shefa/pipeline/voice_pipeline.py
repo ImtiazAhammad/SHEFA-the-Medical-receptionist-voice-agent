@@ -30,6 +30,7 @@ from shefa.call_log import log_turn
 from shefa.config.settings import settings
 from shefa.models.base import Language
 from shefa.models.registry import registry
+from shefa.pipeline import guided
 from shefa.pipeline.actions import (
     FILLERS,
     INFO_TOOLS,
@@ -679,7 +680,48 @@ class VoicePipeline:
             raise MalformedLLMOutputError("LLM stream produced no text or tool calls")
         return reply_text, tool_calls
 
+    async def _guided_turn(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        reply: Any,
+        put_playback: PlaybackSink,
+    ) -> str | None:
+        """Speak what the guided booking decided; None hands the turn to the router."""
+        language = session.language.value
+        if reply.pass_to_router:
+            return None
+        if reply.propose is not None:
+            session.metadata.setdefault("actions", [])
+            action = SimpleNamespace(name="book_appointment", arguments=reply.propose)
+            text = await self._propose(llm, tts, session, action, put_playback)
+            if "pending" not in session.metadata:
+                guided.finish(session)  # the slot was lost on the way; the error was spoken
+            return text
+        await self._emit(tts, reply.text, language, put_playback)
+        if reply.handover:
+            session.state = "escalated"
+        return reply.text
+
     async def _generate_reply(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+    ) -> str:
+        """The reply to the caller's turn; an info answer in the middle of a guided booking is
+        followed by the question the booking was waiting on."""
+        reply = await self._reply(llm, tts, session, put_playback)
+        if session.metadata.pop("guided_resume", False) and session.metadata.get("guided"):
+            again = guided.reprompt(session)
+            if again:
+                await self._emit(tts, again, session.language.value, put_playback)
+                reply = f"{reply} {again}".strip()
+        return reply
+
+    async def _reply(
         self,
         llm: Any,
         tts: Any,
@@ -870,6 +912,7 @@ class VoicePipeline:
             answer = yes_no(said)
             if answer is True:
                 session.metadata.pop("pending")
+                guided.finish(session)
                 session.metadata.setdefault("actions", []).append(pending["name"])
                 result = await execute_tool(pending["name"], pending["arguments"], session)
                 return await self._speak_tool_result(
@@ -877,6 +920,7 @@ class VoicePipeline:
                 )
             if answer is False:
                 session.metadata.pop("pending")
+                guided.finish(session)
                 text = declined_text(language)
                 await self._emit(tts, text, language, put_playback)
                 return text
@@ -886,6 +930,34 @@ class VoicePipeline:
                 await self._emit(tts, text, language, put_playback)
                 return text
             session.metadata.pop("pending")  # a new request: the old question is void
+        state = session.metadata.get("guided") if settings.pipeline.guided_booking else None
+        if state and state.get("step") == "confirm":
+            guided.finish(session)  # the read-back was dropped; a new request starts fresh
+            state = None
+        if state:
+            if wants_other_doctor(said) and state.get("step") not in {"who", "pick_doctor"}:
+                guided.finish(session)  # "someone else?" is handled below, then a new booking
+                state = None
+            else:
+                handled = await self._guided_turn(
+                    llm, tts, session, guided.advance(session, said), put_playback
+                )
+                if handled is not None:
+                    return handled
+        elif not settings.pipeline.guided_booking:
+            pass
+        elif guided.is_how_to_book(said):
+            text = guided.how_to_book(language)
+            await self._emit(tts, text, language, put_playback)
+            first = guided.start(session, "")
+            await self._emit(tts, first.text, language, put_playback)
+            return f"{text} {first.text}"
+        elif guided.wants_to_book(said):
+            handled = await self._guided_turn(
+                llm, tts, session, guided.start(session, said), put_playback
+            )
+            if handled is not None:
+                return handled
         focus = session.metadata.get("focus")
         if focus and wants_other_doctor(said):
             text, new_offer = other_doctor_reply(focus, language)

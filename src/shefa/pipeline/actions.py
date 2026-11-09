@@ -441,11 +441,13 @@ def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
     en, bn = _say(result, "en"), _say(result, "bn")
     with_en = f" with {en['doctor']}" if en["doctor"] else ""
     with_bn = f" {bn['doctor']}-এর সাথে" if bn["doctor"] else ""
+    desk_en = " The front desk will confirm it shortly." if result.get("confirmed") is False else ""
+    desk_bn = " আমাদের ডেস্ক শীঘ্রই এটি নিশ্চিত করবে।" if result.get("confirmed") is False else ""
     return {
-        "en": f"Your appointment{with_en} is booked for {en['date']} at {en['at']}. "
-        f"Your reference number is {en['ref']}.",
-        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {bn['date']} {bn['at']}{with_bn} বুক হয়েছে। "
-        f"আপনার রেফারেন্স নম্বর {bn['ref']}।",
+        "en": f"Your appointment{with_en} is booked for {en['date']} at {en['at']}."
+        f"{desk_en} Your reference number is {en['ref']}.",
+        "bn": f"আপনার অ্যাপয়েন্টমেন্ট {bn['date']} {bn['at']}{with_bn} বুক হয়েছে।"
+        f"{desk_bn} আপনার রেফারেন্স নম্বর {bn['ref']}।",
     }
 
 

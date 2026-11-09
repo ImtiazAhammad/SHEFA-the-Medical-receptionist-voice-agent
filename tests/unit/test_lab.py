@@ -245,7 +245,8 @@ def lab(tmp_path, monkeypatch):
 
 
 class TestRunner:
-    async def test_a_scripted_booking_lands_in_its_own_clinic_database(self, lab):
+    async def test_a_scripted_booking_lands_in_its_own_clinic_database(self, lab, monkeypatch):
+        monkeypatch.setattr(settings.pipeline, "guided_booking", False)  # scripted router turns
         # The pipeline reads the real clock (a past date rolls to next year), so this one test
         # runs on the real "today" instead of the pinned Wednesday.
         today = date.today()

@@ -112,6 +112,7 @@ async def sink(frame):
 
 @pytest.fixture
 def call(monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "guided_booking", False)  # these drive the router
     monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
     monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0)
     store = default_clinic_store()

@@ -129,7 +129,16 @@ async def book_appointment(
         doctors = _resolve_doctor(store, doctor_name or None, doctor_id=doctor_id)
         if len(doctors) != 1:
             return {"error": "Which doctor would the patient like to see?"}
-        booked = store.book(_patient_id(patient_id), doctors[0]["id"], date, time, reason=reason)
+        from shefa.config.settings import settings
+
+        booked = store.book(
+            _patient_id(patient_id),
+            doctors[0]["id"],
+            date,
+            time,
+            reason=reason,
+            confirmed=not settings.booking.phone_needs_desk_confirmation,
+        )
     except ClinicError as exc:
         return error_result(exc)
     return {
@@ -140,6 +149,7 @@ async def book_appointment(
         "doctor": booked["doctor_en"],
         "doctor_bn": booked["doctor_bn"],
         "patient_id": patient_id,
+        "confirmed": bool(booked.get("confirmed", 1)),
     }
 
 
