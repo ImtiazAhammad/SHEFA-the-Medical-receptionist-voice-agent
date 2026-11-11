@@ -109,6 +109,26 @@ two or three decode at once (`models.adapters.stt_whisper_local.concurrency`) he
 test is deliberately harsher than real callers, who listen as well as talk, so treat these as an
 upper bound on latency. **A real-call load test over the trunk has not been done.**
 
+## 9b. A public demo page (for showing SHEFA to a buyer)
+
+`/demo` lets anyone with the link talk (microphone) or type to SHEFA with no sign-in. Run it on a
+**separate server loaded with the sample clinic** (`configs/clinic.example.yaml`), never on a
+clinic's real server: bookings made on it are real rows in its database.
+
+```yaml
+# configs/local.yaml on the demo server
+demo:
+  enabled: true
+  max_call_seconds: 180      # every call is cut off here
+  max_concurrent_calls: 2    # a third visitor hears "busy" and can type instead
+  calls_per_ip_per_hour: 6
+```
+
+Put it behind HTTPS (browsers only give the microphone to https pages) and set
+`booking.trust_forwarded_for: true` only behind a proxy you run. Calls from other websites are
+refused (same-origin check). It is off by default, and the routes do not exist unless it is on.
+Not verified: a voice call through the demo page on a real phone browser.
+
 ## 10. Go-live checklist
 
 - [ ] Real doctors, schedules and fees imported and checked by the clinic.

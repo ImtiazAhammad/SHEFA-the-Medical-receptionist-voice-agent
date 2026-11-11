@@ -107,3 +107,28 @@ For each candidate, in an isolated virtualenv (several need old dependency pins)
 - https://huggingface.co/ai4bharat/indic-parler-tts , https://huggingface.co/ai4bharat/IndicF5
 - https://github.com/facebookresearch/omnilingual-asr
 - https://huggingface.co/OmiKhan/bangla-asr-whisper-medium
+
+## Re-test, 2026-11-11: is there a better brain on a 16 GB card?
+
+The founder noticed the agent misses what callers want and asked for the best model the card can
+carry, not necessarily 9B. Same 29-case multi-turn router test (`scripts/bench_dialogue.py`), same
+machine (RTX 4060 Ti 16 GB), Ollama, think-mode off:
+
+| Model | Right tool | Right tool + arguments | Median reply |
+|---|---|---|---|
+| **gemma2:9b** (current) | 25/29 | **24/29** | 1.62 s |
+| aya-expanse:8b (Cohere, 23 languages incl. Bengali) | 23/29 | 22/29 | 1.66 s |
+| qwen3:14b | 21/29 | 21/29 | 1.54 s |
+| TigerLLM-9B (Bangla fine-tune) | 18/29 | 16/29 | 1.49 s |
+
+Earlier runs: Qwen3-8B 18/29, Gemma3-12B 16/29. **No model that fits beside the speech model
+(about 12 GB left) beats gemma2:9b on this test**, so it stays. Not testable here: gpt-oss-20b (the
+model most often recommended for 16 GB) needs a newer Ollama than is installed; update Ollama
+(`curl -fsSL https://ollama.com/install.sh | sh`, needs sudo) and run
+`ollama pull gpt-oss:20b && PYTHONPATH=src uv run python scripts/bench_dialogue.py gpt-oss:20b`.
+It is a reasoning model, so check its latency against the 2.5 s turn target before adopting it, and
+note it needs about 13 GB, which leaves little for the speech model on a 16 GB card.
+
+What actually reduced "not understanding what the customer wants" was taking decisions away from
+the model: the booking is a guided flow in code (`pipeline/guided.py`), so the model is only asked
+about side questions.

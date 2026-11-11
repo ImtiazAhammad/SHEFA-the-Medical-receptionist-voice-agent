@@ -1,0 +1,32 @@
+/* SHEFA demo page: the patient page's paper-and-teal look with one large call button. */
+.demo .demo-sample { font-size: 0.9rem; color: var(--p-ink-2); background: var(--p-warm); border-radius: 0.6rem; padding: 0.6rem 0.8rem; margin: 0 0 1.25rem; }
+.demo-call { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.25rem 0 0.5rem; }
+.demo-orb { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; width: 9.5rem; height: 9.5rem; border-radius: 50%; border: 0; cursor: pointer; background: var(--p-accent); color: var(--p-on-accent); box-shadow: 0 0 0 0 color-mix(in oklch, var(--p-accent) 45%, transparent); font-weight: 600; transition: transform 0.15s ease, background 0.15s ease; }
+.demo-orb:hover:not(:disabled) { background: var(--p-accent-hover); transform: scale(1.03); }
+.demo-orb:disabled { opacity: 0.7; cursor: progress; }
+.demo-orb.live { background: var(--p-bad); animation: demo-pulse 1.8s ease-out infinite; }
+@keyframes demo-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--p-bad) 45%, transparent); } 100% { box-shadow: 0 0 0 1.6rem transparent; } }
+@media (prefers-reduced-motion: reduce) { .demo-orb.live { animation: none; } .demo-orb { transition: none; } }
+.demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--p-ink-2); }
+.demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; }
+.demo-chips button { min-height: 44px; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); cursor: pointer; text-align: left; }
+.demo-chips button:hover:not(:disabled) { border-color: var(--p-accent); background: var(--p-wash); }
+.demo-chips button:disabled { opacity: 0.55; cursor: not-allowed; }
+.demo-chat { margin-top: 1.25rem; }
+.demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; max-height: 22rem; overflow-y: auto; }
+.demo-line { max-width: 85%; padding: 0.55rem 0.8rem; border-radius: 0.8rem; background: var(--p-surface); border: 1px solid var(--p-line); }
+.demo-line small { color: var(--p-ink-2); font-size: 0.75rem; }
+.demo-line p { margin: 0.1rem 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.demo-user { align-self: flex-end; background: var(--p-wash); border-color: transparent; }
+.demo-form label { display: block; font-size: 0.9rem; color: var(--p-ink-2); margin-bottom: 0.3rem; }
+.demo-row { display: flex; gap: 0.5rem; }
+.demo-row input { flex: 1; min-height: 48px; padding: 0.5rem 0.8rem; border-radius: 0.6rem; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); }
+.demo-row button { min-width: 48px; min-height: 48px; border-radius: 0.6rem; border: 0; background: var(--p-accent); color: var(--p-on-accent); cursor: pointer; }
+.demo-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+.demo-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.demo-steps li { display: grid; gap: 0.1rem; padding: 0.7rem 0.9rem; border-left: 3px solid var(--p-accent); background: var(--p-surface); border-radius: 0 0.6rem 0.6rem 0; }
+.demo-steps span { color: var(--p-ink-2); }
+.demo-safe { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.4rem; color: var(--p-ink-2); }
+.demo-foot { margin: 2rem 0 0; color: var(--p-ink-2); font-size: 0.9rem; }
+.demo-foot a { color: var(--p-accent); }
+@media (max-width: 30rem) { .demo-line { max-width: 95%; } }

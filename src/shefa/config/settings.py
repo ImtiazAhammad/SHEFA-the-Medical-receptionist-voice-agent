@@ -445,6 +445,21 @@ class BookingConfig(StrictModel):
     phone_needs_desk_confirmation: bool = True
 
 
+class DemoConfig(StrictModel):
+    """A public "talk to SHEFA" page for showing the product (run on a separate demo server).
+
+    Anyone who finds the address can start a call, so it is off by default, capped in length,
+    concurrency and rate, and must point at a sample clinic, never a real one.
+    """
+
+    enabled: bool = False
+    max_call_seconds: int = Field(default=180, ge=30, le=900)
+    max_concurrent_calls: int = Field(default=2, ge=1, le=10)
+    calls_per_ip_per_hour: int = Field(default=6, ge=1)
+    chat_messages_per_ip_per_minute: int = Field(default=20, ge=1)
+    max_messages_per_chat: int = Field(default=40, ge=1)
+
+
 class ComplianceConfig(StrictModel):
     hipaa_enabled: bool = True
     encryption_algorithm: str = "AES-256-GCM"
@@ -646,6 +661,7 @@ class AppConfig(StrictModel):
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     booking: BookingConfig = Field(default_factory=BookingConfig)
+    demo: DemoConfig = Field(default_factory=DemoConfig)
     llm_server: LLMServerConfig = Field(default_factory=LLMServerConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)

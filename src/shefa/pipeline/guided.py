@@ -37,7 +37,8 @@ SEARCH_DAYS = 30
 START = re.compile(
     r"সিরিয়াল|অ্যাপয়েন্ট|এ্যাপয়েন্ট|অ্যাপয়েন্টমেন্ট|এপয়েন্ট|অ্যাপোয়েন্ট|বুকিং|বুক |বুক$"
     r"|দেখাতে চাই|দেখাতে চাচ্ছি|দেখাবো|দেখাব|দেখা করতে|দেখাতে হবে|ডাক্তার দেখা|ডাক্তার দেখাই"
-    r"|\bappointment\b|\bbook(?:ing)?\b|\bsee (?:a |the )?(?:doctor|dr)\b|\bserial\b|\bvisit\b",
+    r"|\bappointment\b|\bbook(?:ing)?\b|\bsee (?:an? |the )?(?:\w+ ){0,2}(?:doctor|dr|specialist|\w+ologist|\w+iatrician|physician)\b"
+    r"|\bserial\b|\bvisit\b",
     re.IGNORECASE,
 )
 INFO_QUESTION = re.compile(

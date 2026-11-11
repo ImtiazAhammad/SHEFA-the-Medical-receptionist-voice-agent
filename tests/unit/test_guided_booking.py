@@ -286,3 +286,18 @@ async def test_cancelling_is_not_a_booking(monkeypatch):
     call = start(monkeypatch)
     await call.say("আমার অ্যাপয়েন্টমেন্ট বাতিল করতে চাই", {"tool": None})
     assert "guided" not in call.session.metadata
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "I want to see a heart doctor tomorrow",
+        "i need to see the pediatrician",
+        "I would like to see a doctor",
+        "can I book an appointment",
+    ],
+)
+async def test_english_ways_of_asking_start_a_booking(monkeypatch, said):
+    call = start(monkeypatch, language=Language.ENGLISH)
+    await call.say(said)
+    assert "guided" in call.session.metadata

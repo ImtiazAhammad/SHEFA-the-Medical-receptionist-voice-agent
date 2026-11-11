@@ -231,6 +231,11 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/public/callback-requests"): PUBLIC_PERMISSION,
     ("GET", "/book"): PUBLIC_PERMISSION,
     ("GET", "/book/{path:path}"): PUBLIC_PERMISSION,
+    # The public demo page: only mounted when demo.enabled (shefa.demo_api).
+    ("GET", "/api/v1/public/demo"): PUBLIC_PERMISSION,
+    ("POST", "/api/v1/public/demo/chat"): PUBLIC_PERMISSION,
+    ("GET", "/demo"): PUBLIC_PERMISSION,
+    ("GET", "/demo/{path:path}"): PUBLIC_PERMISSION,
 }
 
 
@@ -547,6 +552,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     # Mounted flat (not include_router): the auth middleware finds a route's permission by
     # walking app.routes, and an included router hides its routes from that walk.
     app.router.routes.extend(public_router.routes)
+    if settings.demo.enabled:
+        from shefa.demo_api import router as demo_router
+
+        app.router.routes.extend(demo_router.routes)
     if APP_DIR.is_dir():
         app.mount(
             APP_ASSETS_PREFIX,
