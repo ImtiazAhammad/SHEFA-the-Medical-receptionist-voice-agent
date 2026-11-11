@@ -1,0 +1,261 @@
+import type { Dictionary } from "@/types/i18n";
+
+export const en: Dictionary = {
+  meta: {
+    languageName: "English",
+    switchTo: "বাংলা",
+    switchLabel: "বাংলায় দেখুন",
+  },
+  nav: {
+    meetNila: "Meet Nila",
+    howItWorks: "How it works",
+    features: "Features",
+    useCases: "Use cases",
+    contact: "Request a demo",
+    portal: "Staff portal",
+  },
+  hero: {
+    clinicLine: "Demo clinic: One Smile Dental Lounge, Uttara",
+    headline: "Your clinic's phone, answered in Bangla, 24 hours a day",
+    subline:
+      "Toothache at 11 pm? Line busy at noon? Nila picks up, takes the name and number down correctly, finds a free slot and books the appointment. No call goes unanswered.",
+    cta: "Talk to our Bangla caller",
+    ctaHint: "The call runs in your browser and needs your microphone",
+    notes: ["Up to 5 minutes", "Use made-up patient details", "Headphones sound best"],
+  },
+  call: {
+    agentName: "Nila",
+    caller: "You",
+    status: {
+      idle: "Nila is ready for your call",
+      requesting_mic: "Allow microphone access…",
+      connecting: "Calling Nila…",
+      listening: "Nila is listening",
+      thinking: "Nila is thinking…",
+      speaking: "Nila is speaking",
+      ended: "Call ended",
+    },
+    captionsPlaceholder: "Live captions appear here once you start talking",
+    mute: "Mute",
+    unmute: "Unmute",
+    end: "End call",
+    reconnecting: "Weak network, reconnecting…",
+    enableAudio: "Tap here to hear Nila",
+    endedTitle: "Call ended",
+    endedBody: "The transcript and booking details are already in the staff portal.",
+    endedCap: "The 5-minute demo limit was reached, so the call ended automatically.",
+    endedByAgent: "Nila ended the call.",
+    viewInPortal: "View in portal",
+    callAgain: "Call again",
+    retry: "Try again",
+    dismiss: "OK",
+    ownKey: {
+      toggle: "Test with your own Gemini API key",
+      body: "Call Nila on your own quota. The key is tested with Google first and only accepted if it passes.",
+      label: "Gemini API key",
+      placeholder: "AIza…",
+      test: "Test key",
+      testing: "Testing…",
+      active: "Your key passed the test and will be used for your calls",
+      remove: "Remove",
+      privacy: "The key stays in this tab only, is encrypted on its way to Nila, and is never stored or logged.",
+      failures: {
+        invalid_api_key: "Google rejected this key. Check it was copied in full from AI Studio.",
+        api_key_model_unavailable: "This key cannot use Nila's voice model (gemini-3.8-live).",
+        api_key_quota_exhausted: "This key has run out of quota. Try later or use another key.",
+        api_key_test_failed: "The key could not be tested right now. Please try again.",
+        rate_limited: "Too many tests. Please wait a minute.",
+      },
+    },
+    errors: {
+      invalid_api_key: {
+        title: "Your Gemini key stopped working",
+        body: "Test the key again, or remove it to call with ours.",
+      },
+      mic_denied: {
+        title: "Microphone access was blocked",
+        body: "Allow this page to use your microphone so you can talk to Nila.",
+      },
+      no_input_device: {
+        title: "No microphone found",
+        body: "Plug in a microphone or headset and try again. Close other apps that may be using the mic.",
+      },
+      agent_unavailable: {
+        title: "Nila can't take the call right now",
+        body: "The voice service could not be reached. Please try again in a moment.",
+      },
+      network_lost: {
+        title: "The connection dropped",
+        body: "Check your internet connection and call again.",
+      },
+      unsupported_browser: {
+        title: "This browser can't place the call",
+        body: "Open this page in a recent version of Chrome, Edge, Firefox or Safari.",
+      },
+      rate_limited: {
+        title: "Too many call attempts",
+        body: "Wait a minute, then try again.",
+      },
+    },
+    micTips: {
+      chrome: "Chrome: click the icon left of the address bar → Site settings → Microphone → Allow, then reload.",
+      edge: "Edge: click the lock icon → Permissions for this site → Microphone → Allow.",
+      firefox: "Firefox: click the microphone icon in the address bar, clear the Blocked permission, then reload.",
+      safari: "Safari: Safari menu → Settings for This Website → Microphone → Allow. On iPhone: Settings → Safari → Microphone.",
+      other: "Allow microphone access for this page in your browser's site settings, then reload.",
+    },
+  },
+  problem: {
+    title: "The calls clinics lose today",
+    intro: "What happens every day at a busy Dhaka clinic, and what changes with Nila on the line.",
+    todayLabel: "Today",
+    fixLabel: "With Nila",
+    rows: [
+      {
+        problem: "The receptionist is with a patient while the phone rings out.",
+        fix: "Answers many calls at once, so nobody waits on hold.",
+      },
+      {
+        problem: "Nobody answers after 9 pm or on Fridays.",
+        fix: "Picks up around the clock and books the next free slot.",
+      },
+      {
+        problem: "Handwritten bookings, and two patients end up in the same slot.",
+        fix: "Books against each doctor's schedule; the database itself blocks double bookings.",
+      },
+      {
+        problem: "The same questions all day: fees, hours, which doctor is in.",
+        fix: "Answers from the clinic's real information and never makes things up.",
+      },
+      {
+        problem: "Names and numbers get written down wrong, and the patient can't be reached.",
+        fix: "Reads the number back digit by digit before saving it.",
+      },
+    ],
+  },
+  persona: {
+    eyebrow: "Meet Nila",
+    title: "Nila answers the phone like your best receptionist",
+    body: "Nila is One Smile Dental's AI receptionist. She speaks natural Dhaka Bangla, understands mixed Bangla and English, and reads every detail back before acting on it.",
+    name: "Nila",
+    role: "AI receptionist · One Smile Dental Lounge",
+    status: "Answering calls now",
+    traits: [
+      "Everyday Dhaka Bangla, always polite",
+      "Reads phone numbers back digit by digit",
+      "Never gives medicine or treatment advice",
+      "Keeps doctors' and other patients' details private",
+      "Remembers returning callers",
+    ],
+    phoneTitle: "Incoming call",
+    phoneCaller: "Patient · 01755-321-987",
+    replay: "Replay",
+    sampleNote: "Sample conversation (English translation). On a real call Nila responds to what you say.",
+    script: [
+      { speaker: "agent", text: "Assalamu alaikum, this is Nila from One Smile Dental. How can I help you?" },
+      { speaker: "caller", text: "I have a bad toothache, I'd like an appointment." },
+      { speaker: "agent", text: "Of course. May I have your name?" },
+      { speaker: "caller", text: "Tahmina Akter. My number is zero one seven double five three two one nine eight seven." },
+      { speaker: "tool", text: "Checking the number…" },
+      { speaker: "agent", text: "Zero, one, seven, five, five, three, two, one, nine, eight, seven. Is that right?" },
+      { speaker: "caller", text: "Yes. Can I see Dr. Ruhan next Sunday evening? And could you give me his home address?" },
+      { speaker: "tool", text: "Checking the doctor's schedule…" },
+      { speaker: "agent", text: "Sorry, we don't share doctors' personal details. Dr. Ruhan is free on Sunday 8 November at 6 pm. Shall I book it?" },
+      { speaker: "caller", text: "Yes, please." },
+      { speaker: "tool", text: "Appointment booked ✓" },
+      { speaker: "agent", text: "Your appointment is confirmed. Please arrive 10 minutes early. Thank you!" },
+    ],
+  },
+  how: {
+    title: "How it works",
+    steps: [
+      {
+        title: "The patient calls",
+        body: "In Bangla, English or a mix of both, like “Can I get scaling done kal shondhay?”",
+      },
+      {
+        title: "Nila understands and books",
+        body: "Takes the name, number, problem and preferred time, reads it all back, then books.",
+      },
+      {
+        title: "Staff see it in the portal",
+        body: "The transcript, patient details and booking appear while the call is still going.",
+      },
+    ],
+  },
+  features: {
+    title: "Front-desk work, done the way it should be",
+    items: [
+      {
+        title: "Natural Dhaka Bangla",
+        body: "Polite আপনি, everyday speech. If the patient says “appointment” or “root canal”, so does Nila.",
+      },
+      {
+        title: "Numbers and dates, captured right",
+        body: "“Zero one seven, double five” or “next Sunday evening”: captured correctly and read back to confirm.",
+      },
+      {
+        title: "Double booking is impossible",
+        body: "Two active bookings for the same doctor and time are rejected by the database itself.",
+      },
+      {
+        title: "Hands over to a human",
+        body: "Never gives medical advice; it logs a callback request for the doctor instead.",
+      },
+      {
+        title: "Live staff portal",
+        body: "Who called, what they wanted, what was booked: organised, searchable and filterable.",
+      },
+    ],
+  },
+  useCases: {
+    title: "Where it fits",
+    items: [
+      { title: "Dental clinics", quote: "“My tooth really hurts. Is the doctor in today?”" },
+      { title: "Diagnostic centres", quote: "“When will my blood report be ready? Do I need to fast?”" },
+      { title: "Hospital outpatient serials", quote: "“Can I get a Sunday serial with the medicine doctor?”" },
+      { title: "Reminder and confirmation calls", quote: "“Your appointment is tomorrow at 4 pm. Will you be coming?”" },
+    ],
+  },
+  portalPreview: {
+    title: "Every call, neatly organised",
+    body: "Before the call even ends, staff can see who called, what they said and what was booked, with a validation mark beside every field.",
+    cta: "Open the staff portal",
+    mockTitle: "Call detail",
+    mockFields: [
+      { label: "Name", value: "Tahmina Akter", valid: true },
+      { label: "Phone", value: "+880 1755-321987", valid: true },
+      { label: "Reason", value: "Root canal", valid: true },
+      { label: "Time", value: "Sun, 6:00 pm", valid: false },
+    ],
+    mockValid: "Valid",
+    mockCheck: "Check",
+    mockTurns: [
+      { speaker: "agent", time: "00:04", text: "Assalamu alaikum, this is Nila from One Smile Dental." },
+      { speaker: "caller", time: "00:09", text: "I'd like an appointment, my tooth really hurts." },
+      { speaker: "agent", time: "00:13", text: "Of course. May I have your name?" },
+    ],
+  },
+  contact: {
+    title: "Want a demo for your clinic?",
+    body: "Leave your details and we'll get in touch. A phone number or an email is enough.",
+    fields: {
+      contactName: "Your name",
+      organisation: "Clinic / organisation",
+      phone: "Phone number",
+      email: "Email",
+      message: "What would you like to know?",
+    },
+    submit: "Send demo request",
+    submitting: "Sending…",
+    success: "Request received. We'll be in touch soon.",
+    errorGeneric: "Couldn't send. Please try again in a moment.",
+    errorContact: "Add a phone number or an email address.",
+    errorName: "Enter your name.",
+  },
+  footer: {
+    tagline: "ByteVoice by StrategyByte: an AI receptionist for clinics in Bangladesh.",
+    disclaimer: "Demo, not affiliated with One Smile Dental. All patient data is fake.",
+    portal: "Staff portal",
+  },
+};

@@ -43,6 +43,12 @@ export interface Me {
   doctor_id?: number | null
 }
 
+/** Facts recorded about a call's outcome (see src/shefa/summary.py); worded in summary.ts. */
+export interface CallSummary {
+  outcome: string
+  [fact: string]: unknown
+}
+
 export interface CallRow {
   call_sid: string
   direction: string | null
@@ -50,6 +56,7 @@ export interface CallRow {
   disposition: string | null
   duration_seconds: number | null
   started_at: number | null
+  summary?: CallSummary | null
 }
 
 export interface Turn {
@@ -63,8 +70,16 @@ export interface Turn {
   note: string | null
 }
 
+export interface EarlierCall {
+  call_sid: string
+  started_at: number | null
+  disposition: string | null
+  summary: CallSummary | null
+}
+
 export interface CallDetail extends CallRow {
   turns: Turn[]
+  earlier_calls?: EarlierCall[]
 }
 
 export interface Appointment {

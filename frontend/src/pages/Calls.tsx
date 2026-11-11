@@ -7,12 +7,26 @@ import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText } from '../c
 import { useAuth } from '../lib/auth'
 import { CallStatus } from './Live'
 import { actionLabel, dispositionLabel } from '../lib/labels'
+import { summaryText, type Formatters } from '../lib/summary'
 
 const LOW_CONFIDENCE = 0.6
+
+/** Day and clock words in the staff member's language, for the one-line call summary. */
+function useFormatters(): Formatters {
+  const { num, date } = useI18n()
+  return {
+    day: (iso) => date(iso, { dateStyle: 'medium', timeZone: 'Asia/Dhaka' }),
+    clock: (hhmm) => {
+      const [h, m] = hhmm.split(':').map(Number)
+      return `${num(h)}:${m < 10 ? num(0) : ''}${num(m)}`
+    },
+  }
+}
 
 export function Calls() {
   const { t, num, date, lang } = useI18n()
   const calls = useLoad(() => api<CallRow[]>('/api/v1/calls?limit=200'), [], 10000)
+  const fmt = useFormatters()
   return (
     <>
       <PageHeader title={t('callsTitle')} />
@@ -27,7 +41,7 @@ export function Calls() {
                 <th scope="col">{t('started')}</th>
                 <th scope="col">{t('direction')}</th>
                 <th scope="col">{t('status')}</th>
-                <th scope="col">{t('disposition')}</th>
+                <th scope="col">{t('whatHappened')}</th>
                 <th scope="col" className="num">
                   {t('duration')}
                 </th>
@@ -46,7 +60,19 @@ export function Calls() {
                   <td>
                     <CallStatus call={c} />
                   </td>
-                  <td>{dispositionLabel(c.disposition, lang)}</td>
+                  <td>
+                    {(() => {
+                      const line = summaryText(c.summary, lang, fmt)
+                      return line ? (
+                        <>
+                          <Pill tone={line.tone}>{dispositionLabel(c.disposition, lang)}</Pill>
+                          <div className="call-summary">{line.text}</div>
+                        </>
+                      ) : (
+                        dispositionLabel(c.disposition, lang)
+                      )
+                    })()}
+                  </td>
                   <td className="num">{durationText(c.duration_seconds, t, num)}</td>
                   <td>
                     <Link to={`/calls/${encodeURIComponent(c.call_sid)}`}>{t('open')}</Link>
@@ -66,6 +92,7 @@ export function CallPage() {
   const { t, num, date, lang } = useI18n()
   const call = useLoad(() => api<CallDetail>(`/api/v1/calls/${encodeURIComponent(sid)}`), [sid], 3000)
   const d = call.data
+  const fmt = useFormatters()
   const { can } = useAuth()
   const navigate = useNavigate()
 
@@ -97,6 +124,32 @@ export function CallPage() {
             {durationText(d.duration_seconds, t, num)}
             {d.disposition ? ` · ${dispositionLabel(d.disposition, lang)}` : ''}
           </p>
+          {(() => {
+            const line = summaryText(d.summary, lang, fmt)
+            return line ? (
+              <section className="summary-card" aria-label={t('whatHappened')}>
+                <h2>{t('whatHappened')}</h2>
+                <p>
+                  <Pill tone={line.tone}>{dispositionLabel(d.disposition, lang)}</Pill> {line.text}
+                </p>
+              </section>
+            ) : null
+          })()}
+          {d.earlier_calls && d.earlier_calls.length > 0 ? (
+            <section className="summary-card" aria-label={t('earlierCalls')}>
+              <h2>{t('earlierCalls')}</h2>
+              <ul className="earlier">
+                {d.earlier_calls.map((e) => (
+                  <li key={e.call_sid}>
+                    <Link to={`/calls/${encodeURIComponent(e.call_sid)}`}>
+                      {e.started_at ? date(e.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
+                    </Link>{' '}
+                    <span className="muted">{summaryText(e.summary, lang, fmt)?.text ?? dispositionLabel(e.disposition, lang)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {d.turns.length === 0 ? (
             <Empty title={t('noTurns')} />
           ) : (

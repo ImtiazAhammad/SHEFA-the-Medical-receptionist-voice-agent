@@ -157,6 +157,57 @@ _BN_RELATIVE_RE = tuple(
 )
 
 
+_DAY_OF_MONTH = re.compile(
+    r"(?<![\d:.])(\d{1,2})\s*(?:তারিখ|তারিখে|তারিখের|th\b|st\b|nd\b|rd\b)", re.IGNORECASE
+)
+
+
+def _day_of_month(text: str, today: date) -> str | None:
+    """"১০ তারিখ" / "the 10th": the next time that day of the month comes round (today counts)."""
+    match = _DAY_OF_MONTH.search(text.translate(_BN_DIGITS))
+    if not match:
+        return None
+    day = int(match[1])
+    if not 1 <= day <= 31:
+        return None
+    year, month = today.year, today.month
+    for _ in range(13):
+        try:
+            candidate = date(year, month, day)
+        except ValueError:
+            candidate = None
+        if candidate is not None and candidate >= today:
+            return candidate.isoformat()
+        month += 1
+        if month > 12:
+            year, month = year + 1, 1
+    return None
+
+
+# Hours (24h, start inclusive, end exclusive) a caller means by a part of the day.
+_PERIOD_HOURS = (
+    (re.compile(r"ভোর|\bdawn\b"), (4, 7)),
+    (re.compile(r"সকাল|\bmorning\b"), (6, 12)),
+    (re.compile(r"দুপুর|\bnoon\b|\bmidday\b"), (11, 16)),
+    (re.compile(r"বিকাল|বিকেল|\bafternoon\b"), (14, 18)),
+    (re.compile(r"সন্ধ্যা|সন্ধ্যায়|\bevening\b"), (17, 21)),
+    (re.compile(r"রাত|\bnight\b"), (19, 24)),
+)
+
+
+def parse_period(text: str) -> tuple[int, int] | None:
+    """The hours of "সন্ধ্যার দিকে" / "in the morning"; None when no part of the day is named."""
+    for pattern, hours in _PERIOD_HOURS:
+        if pattern.search(text.lower()):
+            return hours
+    return None
+
+
+def in_period(clock: str, period: tuple[int, int]) -> bool:
+    hour = int(clock.split(":")[0])
+    return period[0] <= hour < period[1]
+
+
 def parse_date(text: str, today: date) -> str | None:
     """ISO date from "কাল", "সোমবার", "৯ নভেম্বর" or "next Friday"; None when there is none.
 
@@ -178,6 +229,8 @@ def parse_date(text: str, today: date) -> str | None:
                 relative.append((match.start(), today + timedelta(days=offset)))
     if relative:
         return max(relative)[1].isoformat()
+    if (monthday := _day_of_month(text, today)) is not None:
+        return monthday
     weekdays: list[tuple[int, date]] = []
     for index in range(7):
         at = text.rfind(WEEKDAYS_BN[index])

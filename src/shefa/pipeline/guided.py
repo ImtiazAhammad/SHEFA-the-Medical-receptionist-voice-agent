@@ -27,7 +27,7 @@ from shefa.phone_words import is_bd_mobile, parse_spoken_digits
 from shefa.pipeline.alternatives import _facts
 from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import yes_no
-from shefa.pipeline.grounding import parse_date, parse_time
+from shefa.pipeline.grounding import in_period, parse_date, parse_period, parse_time
 from shefa.spoken import spoken_date, spoken_doctor, spoken_list, spoken_time
 
 MAX_MISSES = 2  # the same step not understood this many times in a row -> a person
@@ -191,6 +191,8 @@ def reprompt(session: Any) -> str:
         return ask_name(lang)
     if step == "phone":
         return ask_phone(lang)
+    if step == "phone_confirm":
+        return g.get("question", "")
     return ""
 
 
@@ -329,8 +331,33 @@ def start(session: Any, said: str) -> Reply:
     session.metadata["guided"] = {"step": "who", "misses": 0}
     session.metadata.pop("offer", None)
     if _find_who(said)[0] == "none":  # "I want an appointment": nothing to use yet, so ask
-        return Reply(text=ask_who(session.language.value))
-    return advance(session, said)
+        reply = Reply(text=ask_who(session.language.value))
+    else:
+        reply = advance(session, said)
+    if reply.text and not reply.handover:
+        reply.text = _already_booked(session) + reply.text
+    return reply
+
+
+def _already_booked(session: Any) -> str:
+    """Tell a caller who already holds a visit about it, once, before booking another."""
+    if session.metadata.get("memory_told"):
+        return ""
+    session.metadata["memory_told"] = True
+    from shefa.summary import memory_for
+
+    upcoming = memory_for(getattr(session, "patient_id", None)).get("upcoming")
+    if not upcoming:
+        return ""
+    lang = session.language.value
+    visit = upcoming[0]
+    doctor = spoken_doctor(visit["doctor_bn"] if lang == "bn" else visit["doctor"], lang)
+    when = _when(visit["date"], visit["time"], lang)
+    return _t(
+        lang,
+        f"আপনার {doctor}-এর সাথে {when} একটি অ্যাপয়েন্টমেন্ট আছে। ",
+        f"You already have an appointment with {doctor} on {when}. ",
+    )
 
 
 def advance(session: Any, said: str, *, today: date | None = None) -> Reply:
@@ -490,7 +517,26 @@ def _handle_day(
     if clock is not None:
         g["time"] = clock  # "tomorrow at 9:30": the caller already chose, so do not ask again
         return _next_after_time(session, g, lang)
+    slots, lead = _narrow_to_period(said, slots, lang, lead, doctor, day)
     return _offer_times(g, slots, lang, lead, doctor, day)
+
+
+def _narrow_to_period(
+    said: str, slots: list[dict[str, Any]], lang: str, lead: str, doctor: str, day: str
+) -> tuple[list[dict[str, Any]], str]:
+    """ "আগামী রবিবার সন্ধ্যায়": offer the evening times, or say there are none that part of the day."""
+    period = parse_period(said)
+    if period is None:
+        return slots, lead
+    inside = [s for s in slots if in_period(s["time"], period)]
+    if inside:
+        return inside, lead
+    note = _t(
+        lang,
+        f"{spoken_date(day, 'bn')} ওই সময়ে {doctor}-এর খালি নেই, অন্য সময় আছে। ",
+        f"{doctor} has nothing free then on {spoken_date(day, 'en')}, but there are other times. ",
+    )
+    return slots, lead + note
 
 
 def _when(day: str, clock: str, lang: str) -> str:
@@ -575,6 +621,11 @@ def _step_time(session: Any, g: dict[str, Any], said: str, lang: str, today: dat
     if chosen is None and (parse_date(said, today) is not None):
         g["step"] = "day"
         return _handle_day(session, g, said, lang, today)
+    if chosen is None and (period := parse_period(said)) is not None:
+        inside = [t for t in times if in_period(t, period)]
+        if inside:  # "সন্ধ্যার দিকে": offer that part of the day
+            doctor = spoken_doctor(g["doctor_name_bn"] if lang == "bn" else g["doctor_name"], lang)
+            return _offer_times(g, [{"time": t} for t in inside], lang, "", doctor, g["date"])
     if chosen is None:
         return _miss(session, g, lang, _ask_time(lang, True) + " " + g.get("question", ""), said)
     g["time"] = chosen
@@ -615,25 +666,60 @@ def _step_name(session: Any, g: dict[str, Any], said: str, lang: str, today: dat
     if name is None:
         return _miss(session, g, lang, ask_name(lang, retry=True), said)
     g["patient_name"] = name
+    session.metadata["patient_name"] = name
     patient = _caller(session)
     if patient is not None and not (patient.get("name") or "").strip():
         default_clinic_store().upsert_patient(patient["phone"], name)
     return _propose(session, g, lang)
 
 
+_DIGITS_BN = ("শূন্য", "এক", "দুই", "তিন", "চার", "পাঁচ", "ছয়", "সাত", "আট", "নয়")
+_DIGITS_EN = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+
+
+def read_digits(number: str, lang: str) -> str:
+    """ "01755321987" as words, one digit at a time, so the caller can catch a wrong one."""
+    words = _DIGITS_BN if lang == "bn" else _DIGITS_EN
+    return ", ".join(words[int(d)] for d in number if d.isdigit())
+
+
 def _step_phone(session: Any, g: dict[str, Any], said: str, lang: str, today: date) -> Reply:
     phone = parse_spoken_digits(said)
     if not is_bd_mobile(phone):
         return _miss(session, g, lang, ask_phone(lang, retry=True), said)
-    session.patient_id = str(
-        default_clinic_store().upsert_patient(phone, g.get("patient_name", ""))
+    g.update(step="phone_confirm", phone_candidate=phone, misses=0)
+    g["question"] = _t(
+        lang,
+        f"আপনার নম্বর {read_digits(phone, 'bn')}। ঠিক আছে?",
+        f"Your number is {read_digits(phone, 'en')}. Is that right?",
     )
-    return _next_after_time(session, g, lang)
+    return Reply(text=g["question"])
+
+
+def _step_phone_confirm(
+    session: Any, g: dict[str, Any], said: str, lang: str, today: date
+) -> Reply:
+    answer = yes_no(said)
+    if answer is True:
+        session.patient_id = str(
+            default_clinic_store().upsert_patient(g["phone_candidate"], g.get("patient_name", ""))
+        )
+        g.pop("phone_candidate", None)
+        return _next_after_time(session, g, lang)
+    if answer is False:
+        g.update(step="phone", misses=0)
+        g.pop("phone_candidate", None)
+        return Reply(
+            text=_t(lang, "ঠিক আছে, নম্বরটা আবার বলুন।", "All right, please say the number again.")
+        )
+    return _miss(session, g, lang, g["question"], said)
 
 
 def _propose(session: Any, g: dict[str, Any], lang: str) -> Reply:
     patient = _caller(session) or {}
     who = g.get("patient_name") or patient.get("name") or ""
+    if who:
+        session.metadata["patient_name"] = who
     g["step"] = "confirm"
     return Reply(
         propose={
@@ -654,6 +740,7 @@ _STEPS = {
     "time": _step_time,
     "name": _step_name,
     "phone": _step_phone,
+    "phone_confirm": _step_phone_confirm,
 }
 
 

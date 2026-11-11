@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     # here turns a stalled playback consumer into a call that hangs forever.
     PlaybackSink = Callable[[AudioFrame], Awaitable[None]]
 
+from shefa import summary as call_summary
 from shefa.audio import TARGET_RATE, AudioFrame
 from shefa.call_log import log_turn
 from shefa.config.settings import settings
@@ -427,6 +428,9 @@ class VoicePipeline:
             decision = evaluate_transcript(stt_result.text, session.language, stt_result.confidence)
 
             if decision.should_escalate:
+                session.metadata["handover_reason"] = (
+                    "emergency" if decision.is_emergency else "asked_for_person"
+                )
                 escalation_msg = escalation_prompt(decision, session.language)
                 tts = await registry.get_tts()
                 await speak_to(tts, escalation_msg, session.language.value, put_playback)
@@ -590,6 +594,9 @@ class VoicePipeline:
         # Typed text is never misheard, so only the emergency decision applies.
         typed = evaluate_transcript(text, session.language, 1.0)
         if typed.should_escalate:
+            session.metadata["handover_reason"] = (
+                "emergency" if typed.is_emergency else "asked_for_person"
+            )
             reply = escalation_prompt(typed, session.language)
             session.add_turn("assistant", reply, session.language)
             session.state = "escalated"
@@ -702,6 +709,7 @@ class VoicePipeline:
         await self._emit(tts, reply.text, language, put_playback)
         if reply.handover:
             session.state = "escalated"
+            session.metadata["handover_reason"] = "not_understood"
         return reply.text
 
     async def _generate_reply(
@@ -915,6 +923,8 @@ class VoicePipeline:
                 guided.finish(session)
                 session.metadata.setdefault("actions", []).append(pending["name"])
                 result = await execute_tool(pending["name"], pending["arguments"], session)
+                if pending["name"] == "book_appointment":
+                    call_summary.note_booking(session, result)
                 return await self._speak_tool_result(
                     llm, tts, session, pending["name"], result, put_playback
                 )

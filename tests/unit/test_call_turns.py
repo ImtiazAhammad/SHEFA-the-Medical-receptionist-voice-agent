@@ -73,3 +73,24 @@ def test_an_unknown_or_deleted_call_is_a_404(client):
 
 def test_ringing_is_still_its_own_route(client):
     assert client.get("/api/v1/calls/ringing").status_code in {200, 403}
+
+
+def test_the_detail_endpoint_carries_the_summary_and_the_callers_earlier_calls(client):
+    store = default_calls_store()
+    for sid, when, outcome in (("OLD1", 100.0, "information"), ("NOW", 200.0, "booked")):
+        store.upsert_call(
+            {
+                "call_sid": sid, "direction": "inbound", "status": "completed",
+                "disposition": "completed", "started_at": when, "patient_id": 7,
+                "summary": {"outcome": outcome},
+            }
+        )  # fmt: skip
+
+    body = client.get("/api/v1/calls/NOW").json()
+    listed = {c["call_sid"]: c for c in client.get("/api/v1/calls").json()}
+
+    assert body["summary"] == {"outcome": "booked"}
+    assert [c["call_sid"] for c in body["earlier_calls"]] == ["OLD1"]
+    assert body["earlier_calls"][0]["summary"] == {"outcome": "information"}
+    assert listed["NOW"]["summary"]["outcome"] == "booked"
+    assert "patient_id" not in body and "patient_id" not in listed["NOW"]

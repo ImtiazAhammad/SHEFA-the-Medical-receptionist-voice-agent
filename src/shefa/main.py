@@ -696,7 +696,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
         rows = default_calls_store().list_calls()
         rows = [r for r in rows if not r.get("deleted_at")]
-        keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        keys = (
+            "call_sid", "direction", "status", "disposition", "duration_seconds", "started_at",
+            "summary",
+        )  # fmt: skip
         return [{k: r.get(k) for k in keys} for r in reversed(rows)][: max(1, min(limit, 500))]
 
     @app.delete("/api/v1/calls/{call_sid}", response_model=None)
@@ -994,9 +997,21 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         row = calls.get_call(call_sid)
         if row is None or row.get("deleted_at"):
             return error_response("call_not_found")
-        keys = ("call_sid", "direction", "status", "disposition", "duration_seconds", "started_at")
+        keys = (
+            "call_sid", "direction", "status", "disposition", "duration_seconds", "started_at",
+            "summary",
+        )  # fmt: skip
         _audit(request, "transcript_viewed", call_sid=call_sid)
-        return {**{k: row.get(k) for k in keys}, "turns": calls.turns_for(call_sid)}
+        earlier = (
+            calls.previous_calls(row["patient_id"], limit=3, before=row.get("started_at"))
+            if row.get("patient_id") and row.get("started_at")
+            else []
+        )
+        return {
+            **{k: row.get(k) for k in keys},
+            "turns": calls.turns_for(call_sid),
+            "earlier_calls": earlier,
+        }
 
     @app.post("/api/v1/calls/ringing/{call_uuid}/decline")
     async def decline_ring(call_uuid: str) -> dict:

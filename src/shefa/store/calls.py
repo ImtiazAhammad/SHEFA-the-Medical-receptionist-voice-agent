@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS calls (
     started_at          REAL,
     created_at          REAL NOT NULL,
     deleted_at          REAL,
-    deleted_by          TEXT
+    deleted_by          TEXT,
+    patient_id          INTEGER,
+    summary             TEXT
 );
 
 CREATE TABLE IF NOT EXISTS call_turns (
@@ -65,6 +67,8 @@ _CALL_FIELDS = (
     "disposition",
     "duration_seconds",
     "started_at",
+    "patient_id",
+    "summary",
 )
 
 
@@ -80,6 +84,10 @@ class CallsStore:
         self.connection.execute("PRAGMA synchronous=NORMAL")
         self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.executescript(_CALLS_SCHEMA)
+        existing = {r[1] for r in self.connection.execute("PRAGMA table_info(calls)")}
+        for column, kind in (("patient_id", "INTEGER"), ("summary", "TEXT")):
+            if column not in existing:  # a database made before call summaries
+                self.connection.execute(f"ALTER TABLE calls ADD COLUMN {column} {kind}")
         self.connection.commit()
 
     def close(self) -> None:
@@ -100,7 +108,7 @@ class CallsStore:
         columns = "call_sid, " + ", ".join(_CALL_FIELDS)
         values = "?, " + ", ".join("?" for _ in _CALL_FIELDS) + ", ?"
         params: list[Any] = [call["call_sid"]]
-        params += [call.get(field) for field in _CALL_FIELDS]
+        params += [self._stored(field, call.get(field)) for field in _CALL_FIELDS]
         params.append(call.get("created_at", time.time()))
         updates = ", ".join(f"{field} = excluded.{field}" for field in _CALL_FIELDS)
         with self.connection:
@@ -111,19 +119,57 @@ class CallsStore:
             )
         return cur.rowcount > 0
 
+    @staticmethod
+    def _stored(field: str, value: Any) -> Any:
+        """The summary holds what a caller asked for, so it is encrypted like the words."""
+        if field == "summary" and isinstance(value, dict):
+            return default_cipher().encrypt(json.dumps(value, ensure_ascii=False))
+        return value
+
+    @staticmethod
+    def _readable(row: sqlite3.Row) -> dict[str, Any]:
+        out = dict(row)
+        raw = default_cipher().decrypt(out.get("summary")) if out.get("summary") else None
+        try:
+            out["summary"] = json.loads(raw) if raw else None
+        except ValueError:
+            out["summary"] = None
+        return out
+
     def get_call(self, call_sid: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM calls WHERE call_sid = ?", (call_sid,)
         ).fetchone()
-        return dict(row) if row else None
+        return self._readable(row) if row else None
 
     def list_calls(self) -> list[dict[str, Any]]:
         return [
-            dict(row)
-            for row in self.connection.execute(
-                "SELECT * FROM calls ORDER BY created_at"
-            )
+            self._readable(row)
+            for row in self.connection.execute("SELECT * FROM calls ORDER BY created_at")
         ]
+
+    def previous_calls(
+        self, patient_id: int, *, limit: int = 3, before: float | None = None
+    ) -> list[dict[str, Any]]:
+        """The last few finished, undeleted calls from this patient: when and how they ended."""
+        rows = self.connection.execute(
+            "SELECT * FROM calls WHERE patient_id = ? AND deleted_at IS NULL"
+            " AND status = 'completed' AND (? IS NULL OR started_at < ?)"
+            " ORDER BY started_at DESC LIMIT ?",
+            (patient_id, before, before, limit),
+        ).fetchall()
+        out = []
+        for row in rows:
+            call = self._readable(row)
+            out.append(
+                {
+                    "call_sid": call["call_sid"],
+                    "started_at": call["started_at"],
+                    "disposition": call["disposition"],
+                    "summary": call["summary"],
+                }
+            )
+        return out
 
     def add_turn(
         self,

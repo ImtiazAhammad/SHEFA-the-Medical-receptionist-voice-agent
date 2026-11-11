@@ -126,6 +126,27 @@ def disposition_for(state: str | None) -> str:
     return DISPOSITIONS.get(state or "", "caller_hung_up")
 
 
+def _keep_summary(call_sid: str, session: object | None, disposition: str) -> None:
+    """Store what the call did and who it was with, so the desk and the next call can use it."""
+    try:
+        from shefa.summary import build_summary
+
+        store = default_calls_store()
+        row = store.get_call(call_sid)
+        if row is None or session is None:
+            return
+        patient_id = getattr(session, "patient_id", None)
+        store.upsert_call(
+            {
+                **row,
+                "patient_id": int(patient_id) if patient_id else None,
+                "summary": build_summary(session, disposition),
+            }
+        )
+    except Exception:
+        logger.exception("Could not summarise call %s", call_sid)
+
+
 def finish_call(call_sid: str, session: object | None) -> None:
     """End the call record with its real outcome, and queue a call-back when a person is owed.
 
@@ -134,6 +155,7 @@ def finish_call(call_sid: str, session: object | None) -> None:
     state = getattr(session, "state", None)
     disposition = disposition_for(state)
     call_ended(call_sid, disposition)
+    _keep_summary(call_sid, session, disposition)
     if disposition != "handed_over":
         return
     try:
