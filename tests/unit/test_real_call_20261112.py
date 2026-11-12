@@ -67,3 +67,32 @@ async def test_a_plain_book_it_after_a_wandering_reply_brings_the_booking_back(m
     assert "নিশ্চিত করছি" in again  # read back again, not a fresh "which doctor?"
     await call.say("হ্যাঁ")
     assert len(call.store.appointments_for_patient(call.patient)) == 1
+
+
+async def test_a_question_about_two_doctors_is_answered_for_both(monkeypatch):
+    call = start(monkeypatch)
+    await call.say("আমার জ্বর এসেছে, একটা ডাক্তার দেখাতে চাই")
+
+    reply = await call.say("হোসেন কবে বসেন? আর আমজাদ কবে বসেন?")
+
+    assert "হোসেন" in reply and "আমজাদ" in reply  # neither is dropped
+    assert "দুজনেই" in reply and reply.count("বসেন") == 1  # same hours: said once, not twice
+    assert "পরের খালি সময়" in reply
+    assert "কার কাছে দেখাবেন" in reply  # and the booking carries on where it was
+    day = await call.say("আমজাদ")
+    assert "আমজাদ" in day and "কোন দিন" in day
+
+
+async def test_a_question_about_one_doctor_still_goes_to_the_router(monkeypatch):
+    from shefa.pipeline import guided
+
+    call = start(monkeypatch)
+    assert guided.schedule_answer(call.session, "ডাক্তার হোসেন কবে বসেন?") is None
+    assert guided.schedule_answer(call.session, "হোসেন আর আমজাদকে দেখাতে চাই") is None
+
+
+async def test_the_doctor_question_is_plain_speech(monkeypatch):
+    call = start(monkeypatch)
+    ask = await call.say("আমার জ্বর এসেছে, একটা ডাক্তার দেখাতে চাই")
+    assert "যে কেউ হলে বলুন" not in ask
+    assert "নাম বলুন, অথবা বলুন যে কেউ" in ask

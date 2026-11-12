@@ -28,7 +28,13 @@ from shefa.pipeline.alternatives import _facts, wants_other_doctor
 from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import yes_no
 from shefa.pipeline.grounding import in_period, parse_date, parse_period, parse_time
-from shefa.spoken import spoken_date, spoken_doctor, spoken_list, spoken_time
+from shefa.spoken import (
+    spoken_date,
+    spoken_doctor,
+    spoken_list,
+    spoken_schedule,
+    spoken_time,
+)
 
 MAX_MISSES = 2  # the same step not understood this many times in a row -> a person
 OFFER_AT_MOST = 3  # times read out at once
@@ -171,6 +177,81 @@ def handover_text(language: str) -> str:
         "দুঃখিত, আমি ঠিক বুঝতে পারছি না। আমাদের স্টাফ আপনাকে ফোন করে অ্যাপয়েন্টমেন্ট করে দেবেন। ধন্যবাদ।",
         "Sorry, I am not understanding. Our staff will call you back and book it for you. Thank you.",
     )
+
+
+SCHEDULE_QUESTION = re.compile(
+    r"কবে বস|কখন বস|কয়টা.{0,12}বস|কোন দিন.{0,8}বস|কোন কোন দিন|সময়সূচি|শিডিউল|রোস্টার"
+    r"|\bschedule|\bwhen (?:does|do|is|are)\b|what days|which days",
+    re.IGNORECASE,
+)
+MAX_SCHEDULES = 3  # each one is a long sentence to listen to
+
+
+_CLAUSES = re.compile(r"[?।,;]|\bআর\b|\bএবং\b|\band\b|\bও\b", re.IGNORECASE)
+
+
+def _named_in_each_clause(said: str) -> list[dict[str, Any]]:
+    """Doctors named in the sentence, looking at each clause on its own: a full name in one
+    clause ("F M Siddiqui") must not hide a short name in the next ("Hossain")."""
+    found: dict[int, dict[str, Any]] = {}
+    for clause in _CLAUSES.split(said):
+        for doctor in _doctors_named(clause):
+            found.setdefault(doctor["id"], doctor)
+    return list(found.values())
+
+
+def schedule_answer(session: Any, said: str) -> str | None:
+    """Days, hours and next free time for EVERY doctor named in one question.
+
+    "When does Hossain sit, and when does Siddiqui?" used to be answered for one of them and the
+    other was silently dropped, so the caller had to ask twice. Several doctors are answered
+    here, in code, from the directory; a question about one doctor still goes to the router.
+    """
+    if not SCHEDULE_QUESTION.search(said):
+        return None
+    named = _named_in_each_clause(said)
+    if len(named) < 2:
+        return None
+    from shefa.integrations.ehr import _doctor_card
+
+    lang = session.language.value
+    groups: dict[tuple, list[str]] = {}  # doctors with the same hours are said once
+    for doctor in named[:MAX_SCHEDULES]:
+        card = _doctor_card(doctor)
+        nxt = card.get("next_available") or {}
+        key = (
+            tuple(card.get("schedule") or []),
+            nxt.get("date") if nxt.get("time") else None,
+            nxt.get("time"),
+        )
+        name = card.get("name_bn") or card["name"] if lang == "bn" else card["name"]
+        groups.setdefault(key, []).append(spoken_doctor(name, lang))
+    parts = []
+    for (lines, date_, time_), names in groups.items():
+        who = spoken_list(names, lang)
+        many = len(names) > 1
+        if lang == "bn":
+            text = (
+                f"{who} {'দুজনেই' if len(names) == 2 else 'সবাই' if many else ''} "
+                f"{spoken_schedule(list(lines), 'bn')} বসেন।"
+                if lines
+                else f"{who} অ্যাপয়েন্টমেন্টে বসেন।"
+            )
+            if date_:
+                text += f" পরের খালি সময় {spoken_date(date_, 'bn')} {spoken_time(time_, 'bn', at=True)}।"
+        else:
+            text = (
+                f"{who} {'both ' if len(names) == 2 else 'all ' if many else ''}sit "
+                f"{spoken_schedule(list(lines), 'en')}."
+                if lines
+                else f"{who} {'see' if many else 'sees'} patients by appointment."
+            )
+            if date_:
+                text += f" Next free: {spoken_date(date_, 'en')} at {spoken_time(time_, 'en')}."
+        parts.append(re.sub(r"\s{2,}", " ", text))
+    answer = " ".join(parts)
+    again = reprompt(session)
+    return f"{answer} {again}".strip()
 
 
 def reprompt(session: Any) -> str:
@@ -409,9 +490,15 @@ def _doctor_question(g: dict[str, Any], lang: str) -> str:
     dept = g.get("department_name", "")
     if lang == "bn":
         head = f"{dept} বিভাগে " if dept else ""
-        return f"{head}{spoken_list(names, 'bn')} আছেন। কার কাছে দেখাবেন? যে কেউ হলে বলুন, যে কেউ।"
+        return (
+            f"{head}{spoken_list(names, 'bn')} আছেন। কার কাছে দেখাবেন? "
+            "নাম বলুন, অথবা বলুন যে কেউ, তাহলে যিনি সবচেয়ে আগে আছেন তাঁকে দেখব।"
+        )
     head = f"In {dept}, " if dept else ""
-    return f"{head}we have {spoken_list(names, 'en')}. Who would you like? Say anyone if you don't mind."
+    return (
+        f"{head}we have {spoken_list(names, 'en')}. Who would you like? "
+        "Name one, or say anyone and I will take whoever is free first."
+    )
 
 
 def _choose_doctor(

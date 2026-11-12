@@ -544,10 +544,15 @@ def test_every_module_imports_cleanly():
 REGISTRY_PY = REPO_ROOT / "src" / "shefa" / "models" / "registry.py"
 
 
-def test_q12_resolved_model_key_is_single_source():
+def test_q12_resolved_model_key_is_single_source(tmp_path):
     """Q12 (D-ENG20): pipeline.llm.model and the resolved local adapter
-    must agree — the two-key drift must fail loudly, not reconcile silently."""
-    config = load_config(DEFAULT_YAML)
+    must agree — the two-key drift must fail loudly, not reconcile silently.
+
+    Read from a copy of the shipped file: this machine's configs/local.yaml (vLLM, say) must
+    not decide what the shipped defaults are."""
+    shipped = tmp_path / "default.yaml"
+    shipped.write_text(DEFAULT_YAML.read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(shipped)
     assert config.pipeline.llm.provider == "local"
     assert config.pipeline.llm.model == "gemma2:9b"
     key, adapter = config.models.resolve_llm_adapter("local")

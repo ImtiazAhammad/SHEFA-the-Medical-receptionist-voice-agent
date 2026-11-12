@@ -970,6 +970,11 @@ class VoicePipeline:
                     "name": pending["name"],
                     "arguments": pending["arguments"],
                 }
+        if settings.pipeline.guided_booking and (
+            text := guided.schedule_answer(session, said)
+        ):
+            await self._emit(tts, text, language, put_playback)
+            return text
         state = session.metadata.get("guided") if settings.pipeline.guided_booking else None
         if state and state.get("step") == "confirm":
             guided.finish(session)  # the read-back was dropped; a new request starts fresh
