@@ -879,7 +879,8 @@ class VoicePipeline:
         if not phone:
             return ""
         if session.language.value == "bn":
-            return f"নম্বর লাগবে না, যে নম্বর থেকে ফোন করেছেন সেটাই রাখা হয়েছে: {guided.read_digits(phone, 'bn')}।"
+            digits = guided.read_digits(phone, "bn")
+            return f"নম্বর লাগবে না, যে নম্বর থেকে ফোন করেছেন সেটাই রাখা হয়েছে: {digits}।"
         return f"The booking is under your number, {guided.read_digits(phone, 'en')}."
 
     async def _dialogue_state(
