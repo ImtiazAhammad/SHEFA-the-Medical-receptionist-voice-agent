@@ -48,6 +48,7 @@ from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import (
     NEEDS_CONFIRMATION,
     declined_text,
+    leading_yes,
     read_back,
     reask_text,
     yes_no,
@@ -870,6 +871,17 @@ class VoicePipeline:
         await self._emit(tts, text, session.language.value, put_playback)
         return text
 
+    @staticmethod
+    def _number_note(session: CallSession) -> str:
+        """Which phone number the booking is under, said when the caller worried about it."""
+        patient = guided._caller(session)
+        phone = (patient or {}).get("phone") or ""
+        if not phone:
+            return ""
+        if session.language.value == "bn":
+            return f"নম্বর লাগবে না, যে নম্বর থেকে ফোন করেছেন সেটাই রাখা হয়েছে: {guided.read_digits(phone, 'bn')}।"
+        return f"The booking is under your number, {guided.read_digits(phone, 'en')}."
+
     async def _dialogue_state(
         self,
         llm: Any,
@@ -918,6 +930,12 @@ class VoicePipeline:
                 return text
         if pending:
             answer = yes_no(said)
+            # "Yes, book it, but will you not take my number?": a yes that goes on talking is
+            # still a yes unless the rest asks for something different. It used to be treated
+            # as a new request, which threw the read-back away and lost the whole booking.
+            aside = answer is None and leading_yes(said) and not guided.changes_request(said)
+            if aside:
+                answer = True
             if answer is True:
                 session.metadata.pop("pending")
                 guided.finish(session)
@@ -925,9 +943,13 @@ class VoicePipeline:
                 result = await execute_tool(pending["name"], pending["arguments"], session)
                 if pending["name"] == "book_appointment":
                     call_summary.note_booking(session, result)
-                return await self._speak_tool_result(
+                spoken = await self._speak_tool_result(
                     llm, tts, session, pending["name"], result, put_playback
                 )
+                if aside and result.get("success") and (note := self._number_note(session)):
+                    await self._emit(tts, note, language, put_playback)
+                    spoken = f"{spoken} {note}"
+                return spoken
             if answer is False:
                 session.metadata.pop("pending")
                 guided.finish(session)
@@ -940,6 +962,13 @@ class VoicePipeline:
                 await self._emit(tts, text, language, put_playback)
                 return text
             session.metadata.pop("pending")  # a new request: the old question is void
+            if not guided.changes_request(said):
+                # Not a change, just not a yes or no: keep the booking alive so a plain "book it"
+                # on the next turn (even a misheard one) still reads it back and books it.
+                session.metadata["offer"] = {
+                    "name": pending["name"],
+                    "arguments": pending["arguments"],
+                }
         state = session.metadata.get("guided") if settings.pipeline.guided_booking else None
         if state and state.get("step") == "confirm":
             guided.finish(session)  # the read-back was dropped; a new request starts fresh

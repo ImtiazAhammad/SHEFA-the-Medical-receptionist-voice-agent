@@ -16,6 +16,18 @@ from shefa.bangla import _BN_0_99, MONTHS_BN, WEEKDAYS_BN
 
 _BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 _WORD_NUMBERS: dict[str, int] = {word: n for n, word in enumerate(_BN_0_99)}
+# Spellings people actually say and the speech model actually writes. "তিরিশ" is the everyday
+# word for 30: with only "ত্রিশ" known, "দশটা তিরিশ মিনিটে" read as plain 10:00 and booked the
+# wrong time.
+_WORD_NUMBERS.update(
+    {
+        "তিরিশ": 30, "ত্রিস": 30, "তিরিস": 30, "পনের": 15, "ষোল": 16, "সতের": 17, "আঠার": 18,
+        "এগার": 11, "তের": 13, "উনত্রিশ": 29, "উনত্রিস": 29, "ঊনত্রিস": 29, "পঁচিস": 25,
+        "পচিশ": 25, "ছাব্বিস": 26, "সাতাস": 27, "আটাস": 28, "চল্লিস": 40, "পয়তাল্লিশ": 45,
+        "পঁয়তাল্লিস": 45, "পয়ত্রিশ": 35, "পঞ্চাস": 50, "উনচল্লিশ": 39, "উনপঞ্চাশ": 49,
+        "বাইস": 22, "তেইস": 23, "চব্বিস": 24, "একুস": 21,
+    }  # fmt: skip
+)
 _WORD_NUMBERS.update(
     {
         "one": 1,
@@ -97,6 +109,8 @@ def parse_time(text: str) -> str | None:
         period = _period_before(digits, match.start())
         if hour is None or not 1 <= hour <= 12 or period is None:
             continue
+        if not match["minute"] and "মিনিট" in digits[match.end() : match.end() + 24]:
+            continue  # "ten, <something I cannot read> minutes": not ten o'clock sharp
         minute = _int(match["minute"]) if match["minute"] else 0
         fraction = match["fraction"]
         if fraction == "সাড়ে":

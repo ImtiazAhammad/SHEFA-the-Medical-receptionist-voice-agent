@@ -24,7 +24,7 @@ from shefa.clinic import default_clinic_store
 from shefa.clinic.names import fold, tokens
 from shefa.clinic.store import clinic_today
 from shefa.phone_words import is_bd_mobile, parse_spoken_digits
-from shefa.pipeline.alternatives import _facts
+from shefa.pipeline.alternatives import _facts, wants_other_doctor
 from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import yes_no
 from shefa.pipeline.grounding import in_period, parse_date, parse_period, parse_time
@@ -358,6 +358,19 @@ def _already_booked(session: Any) -> str:
         lang,
         f"আপনার {doctor}-এর সাথে {when} একটি অ্যাপয়েন্টমেন্ট আছে। ",
         f"You already have an appointment with {doctor} on {when}. ",
+    )
+
+
+def changes_request(said: str, *, today: date | None = None) -> bool:
+    """True when the words ask for something different from what was read back: another time,
+    day, part of the day or doctor. "Yes, but will you not take my number?" does not."""
+    today = today or clinic_today()
+    return bool(
+        parse_time(said) is not None
+        or parse_date(said, today) is not None
+        or parse_period(said) is not None
+        or wants_other_doctor(said)
+        or re.search(r"\d", said.translate(_BN_TO_EN))
     )
 
 

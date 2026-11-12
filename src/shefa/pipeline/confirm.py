@@ -17,11 +17,13 @@ NEEDS_CONFIRMATION = frozenset({"book_appointment", "cancel_appointment", "resch
 _YES = frozenset(
     {
         "হ্যাঁ", "হ্যা", "হাঁ", "জি", "জ্বি", "ওকে", "অকে", "করুন", "করেন", "করো",
-        "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm", "correct", "right",
+        "আচ্ছা", "ঠিকাছে", "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm",
+        "correct", "right",
     }
 )  # fmt: skip
 _YES_PHRASES = (
-    "ঠিক আছে", "ঠিকআছে", "go ahead", "please do", "that's right", "thats right",
+    "ঠিক আছে", "ঠিকআছে", "বুক করো", "বুক করুন", "বুক করেন", "বুক গরম", "বুক করে দিন",
+    "বুক করে দেন", "go ahead", "please do", "that's right", "thats right",
     "go with that", "that one", "that works", "sounds good", "book it", "book that",
     "ওটাই", "এটাই", "ওটা দিন", "এটা দিন",
 )  # fmt: skip
@@ -47,6 +49,21 @@ def yes_no(text: str) -> bool | None:
     if said_yes == said_no:
         return None
     return said_yes
+
+
+def leading_yes(text: str) -> bool:
+    """A reply that STARTS with a clear yes and then goes on ("yes, book it, but will you not
+    take my number?"). The short-reply rule above would call that a new request and throw the
+    read-back away; the caller of this checks the rest for a change (a time, a day, another
+    doctor) before treating it as a yes."""
+    words = _tokens(text)
+    if len(words) <= MAX_WORDS or any(w in _NO for w in words[:3]):
+        return False
+    head = " ".join(words[:4])
+    # "আচ্ছা" alone is a yes, but at the start of a long sentence it only means "well..."
+    return (words[0] in _YES and words[0] != "আচ্ছা") or any(
+        head.startswith(p) for p in _YES_PHRASES
+    )
 
 
 def _when(date: str, time: str, language: str, *, at: bool) -> str:
