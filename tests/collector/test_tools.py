@@ -68,8 +68,13 @@ def test_export_leaves_out_rejected_withdrawn_and_unreviewed(pub, config, ctx, t
     assert report["clips"]["train"] == 1
 
 
-def test_export_leaves_out_the_front_desk_side_by_default(person, ctx, tmp_path):
-    reviewed(person, ctx, "বলুন কীভাবে সাহায্য করতে পারি", headers={"x-role": "desk", "x-room": "ABCDEF"})
+def test_export_leaves_out_the_front_desk_side_by_default(person, pub, config, ctx, tmp_path):
+    caller = Person(pub, config)
+    room = pub.post("/api/c/room", json={}, headers=caller.h).json()["code"]
+    pub.post(
+        "/api/c/room/join", json={"code": room}, headers=person.h
+    )  # `person` is the front desk
+    reviewed(person, ctx, "বলুন কীভাবে সাহায্য করতে পারি", headers={"x-room": room})
     assert tools.do_export(ctx.store, tmp_path / "a")["clips"]["train"] == 0
     assert tools.do_export(ctx.store, tmp_path / "b", include_desk=True)["clips"]["train"] == 1
 

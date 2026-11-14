@@ -229,3 +229,28 @@ def test_impact_note_reaches_contributors(priv, pub, staff):
 def test_many_wrong_tokens_are_slowed_down(priv):
     codes = {priv.get("/api/review/me", headers=bearer("w" * 40)).status_code for _ in range(40)}
     assert 401 in codes and 429 in codes
+
+
+def test_staff_removal_guards(priv, ctx, staff):
+    h = bearer(staff["admin"])
+    assert priv.delete("/api/admin/staff/9999", headers=h).status_code == 404
+    admin_id = next(s["id"] for s in ctx.store.list_staff() if s["role"] == "admin")
+    assert (
+        priv.delete(f"/api/admin/staff/{admin_id}", headers=h).status_code == 409
+    )  # the last admin
+    reviewer_id = next(s["id"] for s in ctx.store.list_staff() if s["name"] == "second")
+    assert priv.delete(f"/api/admin/staff/{reviewer_id}", headers=h).status_code == 200
+    assert priv.get("/api/review/me", headers=bearer(staff["second"])).status_code == 401
+
+
+def test_only_draft_mode_ever_shows_a_draft(priv, person, ctx, staff):
+    clip = upload(person, ctx, "train")
+    ctx.store.set_draft(clip, "খসড়া")
+    for role in ("reviewer", "second"):
+        priv.post(
+            "/api/review/submit",
+            headers=bearer(staff[role]),
+            json={"clip_id": clip, "text": "কাল সকালে" if role == "reviewer" else "পরশু সকালে"},
+        )
+    item = priv.get("/api/review/next", headers=bearer(staff["adjudicator"])).json()["item"]
+    assert item["mode"] == "adjudicate" and item["draft"] is None

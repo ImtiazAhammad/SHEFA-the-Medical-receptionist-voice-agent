@@ -129,14 +129,15 @@ def test_profile_only_accepts_known_values_and_names_are_opt_in(person, pub, ctx
         },
         headers=person.h,
     )
-    row = ctx.store._one("SELECT * FROM contributors WHERE id=?", (person.info["contributor_id"],))
+    row = ctx.store._one("SELECT * FROM speakers WHERE id=?", (person.info["speaker_id"],))
     assert row["age_band"] == "25-34" and row["division"] == "" and "<" not in row["nickname"]
     assert pub.get("/api/c/thanks").json()["names"] == ["bRinab"]
 
 
 def test_pass_the_phone_gives_each_person_their_own_speaker(person, pub):
-    second = pub.post("/api/c/speaker", headers=person.h).json()["speaker_id"]
-    assert second != person.info["speaker_id"]
+    made = pub.post("/api/c/speaker", headers=person.h).json()
+    second = made["speaker_id"]
+    assert second != person.info["speaker_id"] and made["delete_code"] != person.info["delete_code"]
     headers = {**person.h, "x-speaker": second}
     assert (
         pub.put(f"/api/c/clip/{'1' * 32}", content=make_wav(seed=21), headers=headers).status_code
@@ -185,3 +186,65 @@ def test_two_phone_room(person, pub, config):
         pub.get(f"/api/c/room/{room['code']}/clip/{'2' * 32}", headers=other.h).status_code == 200
     )
     assert pub.get(f"/api/c/room/{room['code']}", headers=third.h).status_code == 404
+
+
+def test_each_person_on_a_shared_phone_has_their_own_delete_code_and_profile(person, pub, ctx):
+    first_clip = person.clip().json()["clip_id"]
+    made = pub.post("/api/c/speaker", headers=person.h).json()
+    second_headers = {**person.h, "x-speaker": made["speaker_id"]}
+    pub.put(f"/api/c/clip/{'3' * 32}", content=make_wav(seed=77), headers=second_headers)
+    pub.post(
+        "/api/c/profile",
+        json={"gender": "female", "nickname": "Mina", "credit_ok": True},
+        headers=second_headers,
+    )
+    pub.post("/api/c/profile", json={"gender": "male"}, headers=person.h)
+    rows = {r["id"]: r for r in ctx.store._q("SELECT * FROM speakers")}
+    assert (
+        rows[made["speaker_id"]]["gender"] == "female"
+        and rows[person.info["speaker_id"]]["gender"] == "male"
+    )
+    # the second person withdraws: the first person's clip is untouched
+    assert (
+        pub.post("/api/c/delete", json={"delete_code": made["delete_code"]}).json()["deleted"] == 1
+    )
+    assert ctx.store.get_clip(first_clip) is not None and ctx.store.get_clip("3" * 32) is None
+    assert pub.get("/api/c/thanks").json()["names"] == []
+    assert person.clip().status_code == 200  # the phone's first person can carry on
+    # the withdrawn speaker can no longer upload
+    assert (
+        pub.put(
+            f"/api/c/clip/{'4' * 32}", content=make_wav(seed=78), headers=second_headers
+        ).status_code
+        == 401
+    )
+
+
+def test_room_clips_are_only_accepted_from_members_and_the_server_sets_the_role(
+    person, pub, config
+):
+    other, stranger = Person(pub, config), Person(pub, config)
+    room = pub.post("/api/c/room", json={}, headers=person.h).json()["code"]
+    pub.post("/api/c/room/join", json={"code": room}, headers=other.h)
+    assert stranger.clip(headers={"x-room": room, "x-role": "caller"}).status_code == 403
+    sent = other.clip(headers={"x-room": room, "x-role": "caller", "x-turn": "2"})
+    assert sent.status_code == 200
+    state = pub.get(f"/api/c/room/{room}", headers=person.h).json()
+    assert state["clips"][-1]["role"] == "desk"  # the phone said "caller"; the server knows better
+
+
+def test_a_voice_that_never_pauses_is_not_called_silent(person):
+    import io
+    import wave
+
+    import numpy as np
+
+    t = np.arange(int(2.0 * 16000)) / 16000
+    x = 0.25 * np.sin(2 * np.pi * 200 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * 4 * t))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes((x * 32767).astype("<i2").tobytes())
+    assert person.clip(buf.getvalue()).status_code == 200

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="bn" data-title-key="ad_page_title">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:,">
+  <title>অ্যাডমিন</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+  <script type="module" src="js/admin.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">মূল অংশে যান</a>
+  <header class="topbar">
+    <span class="brand" data-i18n="app_name">SHEFA ভয়েস কমন্স</span>
+    <span class="who" id="who"></span>
+    <a class="btn small-btn" href="review.html" data-i18n="to_review">লেখা যাচাই</a>
+    <button type="button" class="small-btn" id="refresh" data-i18n="refresh">নতুন করে আনুন</button>
+    <button type="button" class="small-btn" id="lang"></button>
+    <button type="button" class="small-btn" id="signout" data-i18n="sign_out">বের হই</button>
+  </header>
+
+  <div class="tabs" role="tablist" id="tabs" data-i18n-aria-label="ad_sections" aria-label="বিভাগ">
+    <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" data-tab="overview" data-i18n="tab_overview">সারসংক্ষেপ</button>
+    <button type="button" role="tab" id="tab-coverage" aria-controls="panel-coverage" aria-selected="false" tabindex="-1" data-tab="coverage" data-i18n="tab_coverage">কভারেজ</button>
+    <button type="button" role="tab" id="tab-campaigns" aria-controls="panel-campaigns" aria-selected="false" tabindex="-1" data-tab="campaigns" data-i18n="tab_campaigns">ক্যাম্পেইন</button>
+    <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1" data-tab="team" data-i18n="tab_team">রিভিউয়ার</button>
+    <button type="button" role="tab" id="tab-clips" aria-controls="panel-clips" aria-selected="false" tabindex="-1" data-tab="clips" data-i18n="tab_clips">ক্লিপ</button>
+    <button type="button" role="tab" id="tab-audit" aria-controls="panel-audit" aria-selected="false" tabindex="-1" data-tab="audit" data-i18n="tab_audit">লগ ও সাহায্য</button>
+  </div>
+
+  <main id="main" class="page stack">
+    <h1 class="sr-only" data-i18n="ad_page_title">অ্যাডমিন</h1>
+    <p id="loading" class="muted" role="status" data-i18n="loading">লোড হচ্ছে…</p>
+    <section id="error" class="banner error" role="alert" hidden>
+      <p id="error-text"></p>
+      <button type="button" id="error-retry" data-i18n="retry">আবার চেষ্টা করুন</button>
+    </section>
+
+    <!-- ===== Overview ===== -->
+    <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" class="stack" hidden>
+      <div class="card pause-switch" id="pause-card">
+        <div>
+          <h2 data-i18n="pause_title">আপলোড চালু/বন্ধ</h2>
+          <p class="state" id="pause-state" role="status"></p>
+          <p class="hint" data-i18n="pause_hint">বন্ধ করলে কেউ নতুন রেকর্ডিং পাঠাতে পারবে না (ফোনে জমা থাকবে)।</p>
+        </div>
+        <button type="button" class="big" id="pause-btn"></button>
+      </div>
+
+      <div class="stat-grid" id="stat-grid"></div>
+
+      <div class="card stack">
+        <h2 data-i18n="goal_title">দলের লক্ষ্য</h2>
+        <div class="meter" id="goal-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+        <p id="goal-text" role="status"></p>
+        <form id="goal-form" class="row">
+          <div class="grow">
+            <label for="goal-input" data-i18n="goal_label">লক্ষ্য (মিনিট)</label>
+            <input type="number" id="goal-input" min="1" max="100000" step="1" inputmode="numeric" required>
+          </div>
+          <button type="submit" class="primary" data-i18n="save">সংরক্ষণ</button>
+        </form>
+        <form id="impact-form" class="stack">
+          <div class="field">
+            <label for="impact-input" data-i18n="impact_label">অবদানের বার্তা (কনট্রিবিউটররা ধন্যবাদ পাতায় দেখবেন)</label>
+            <textarea id="impact-input" class="plain" rows="3" maxlength="300" lang="bn" data-i18n-placeholder="impact_placeholder" aria-describedby="impact-hint"></textarea>
+            <p class="hint" id="impact-hint"><span data-i18n="impact_hint">যেমন: আপনাদের ২ ঘণ্টার রেকর্ডিং দিয়ে প্রথম মডেল পরীক্ষা সম্ভব হয়েছে।</span> <span id="impact-count"></span></p>
+          </div>
+          <div><button type="submit" class="primary" data-i18n="save">সংরক্ষণ</button></div>
+        </form>
+      </div>
+
+      <div class="card stack">
+        <h2 data-i18n="disk_title">ডিস্কে খালি জায়গা</h2>
+        <div class="meter" id="disk-meter" role="meter" aria-valuemin="0"><i></i></div>
+        <p id="disk-text" role="status"></p>
+      </div>
+
+      <div class="card"><h2 data-i18n="status_title">ক্লিপ অবস্থা অনুযায়ী</h2><div class="bars" id="bars-status"></div></div>
+      <div class="card"><h2 data-i18n="split_title">ট্রেন / ডেভ / টেস্ট</h2><div class="bars" id="bars-split"></div></div>
+    </section>
+
+    <!-- ===== Coverage ===== -->
+    <section id="panel-coverage" role="tabpanel" aria-labelledby="tab-coverage" class="stack" hidden>
+      <div class="card" id="gate-card" aria-live="polite">
+        <h2 data-i18n="gate_title">ফাইন-টিউনিং শুরুর শর্ত (go / no-go)</h2>
+        <p id="gate-verdict" class="banner"></p>
+        <div class="gate-row"><span id="gate-speakers-label"></span><div class="meter" id="gate-speakers"><i></i></div></div>
+        <div class="gate-row"><span id="gate-hours-label"></span><div class="meter" id="gate-hours"><i></i></div></div>
+        <p class="hint" data-i18n="gate_note">শর্ত: অন্তত প্রায় ১০০ জন বক্তা এবং ৮–১০ ঘণ্টা ব্যবহারযোগ্য রেকর্ডিং, তার সাথে ২০+ আলাদা বক্তার ১–২ ঘণ্টার দুজনে-মেলানো টেস্ট সেট। এই সংখ্যাগুলো আনুমানিক, মাপা ফল নয়। এখানকার মিনিটে এখনো দেখা হয়নি এমন ক্লিপও ধরা আছে।</p>
+      </div>
+      <div class="card"><h2 data-i18n="cov_slot">প্রশ্নের ধরন অনুযায়ী মিনিট</h2><div class="bars" id="bars-slot"></div></div>
+      <div class="card"><h2 data-i18n="cov_setting">পরিবেশ অনুযায়ী মিনিট</h2><div class="bars" id="bars-setting"></div></div>
+      <div class="card"><h2 data-i18n="cov_division">বিভাগ অনুযায়ী জন</h2><div class="bars" id="bars-division"></div></div>
+      <div class="card"><h2 data-i18n="cov_age">বয়স অনুযায়ী জন</h2><div class="bars" id="bars-age"></div></div>
+      <div class="card"><h2 data-i18n="cov_gender">লিঙ্গ অনুযায়ী জন</h2><div class="bars" id="bars-gender"></div></div>
+      <p class="hint" data-i18n="cov_people_note">বিভাগ, বয়স ও লিঙ্গের সংখ্যা কনট্রিবিউটর ধরে (যাঁরা এখনো ক্লিপ দেননি তাঁরাও আছেন), বক্তা ধরে নয়।</p>
+    </section>
+
+    <!-- ===== Campaigns ===== -->
+    <section id="panel-campaigns" role="tabpanel" aria-labelledby="tab-campaigns" class="stack" hidden>
+      <div class="card stack">
+        <h2 data-i18n="pub_title">পাবলিক ঠিকানা</h2>
+        <p class="muted" data-i18n="pub_hint">এই পাতা স্টাফ পোর্টে চলে, কিন্তু কনট্রিবিউটররা পাবলিক ঠিকানায় আসেন। লিংক বানাতে সেই ঠিকানা এখানে লিখুন (যেমন https://example.trycloudflare.com)।</p>
+        <div class="field">
+          <label for="pub-input" data-i18n="pub_label">পাবলিক ঠিকানা</label>
+          <input type="url" id="pub-input" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://" aria-describedby="pub-msg">
+          <p id="pub-msg" class="hint" role="status"></p>
+        </div>
+      </div>
+      <form class="card stack" id="camp-form">
+        <h2 data-i18n="camp_new">নতুন ক্যাম্পেইন</h2>
+        <div class="field"><label for="camp-name" data-i18n="camp_name">নাম</label><input type="text" id="camp-name" maxlength="80" required></div>
+        <div class="field"><label for="camp-from" data-i18n="camp_from">প্রেরকের নাম (পাতায় দেখানো হবে)</label><input type="text" id="camp-from" maxlength="60" lang="bn"></div>
+        <div><button type="submit" class="primary" data-i18n="camp_create">তৈরি করুন</button></div>
+      </form>
+      <div class="stack" id="camp-list"></div>
+    </section>
+
+    <!-- ===== Team ===== -->
+    <section id="panel-team" role="tabpanel" aria-labelledby="tab-team" class="stack" hidden>
+      <div id="token-slot"></div>
+      <form class="card stack" id="staff-form">
+        <h2 data-i18n="staff_new">নতুন স্টাফ যোগ করুন</h2>
+        <div class="field"><label for="staff-name" data-i18n="staff_name">নাম</label><input type="text" id="staff-name" maxlength="60" lang="bn" required></div>
+        <div class="field">
+          <label for="staff-role" data-i18n="staff_role">ভূমিকা</label>
+          <select id="staff-role">
+            <option value="reviewer" data-i18n="role_reviewer">রিভিউয়ার</option>
+            <option value="adjudicator" data-i18n="role_adjudicator">নিষ্পত্তিকারী</option>
+            <option value="admin" data-i18n="role_admin">অ্যাডমিন</option>
+          </select>
+        </div>
+        <div><button type="submit" class="primary" data-i18n="staff_add">যোগ করুন</button></div>
+      </form>
+      <div class="card">
+        <h2 data-i18n="team_title">স্টাফ</h2>
+        <p class="hint" data-i18n="team_hint">সিড মিলের ত্রুটি (seed CER) যত কম তত ভালো। ০.২৫-এর বেশি হলে সাবধান।</p>
+        <div class="table-wrap"><table class="data-table stackable" id="team-table"></table></div>
+      </div>
+    </section>
+
+    <!-- ===== Clips ===== -->
+    <section id="panel-clips" role="tabpanel" aria-labelledby="tab-clips" class="stack" hidden>
+      <div class="card row">
+        <div class="grow">
+          <label for="clip-status" data-i18n="clip_filter">অবস্থা</label>
+          <select id="clip-status"></select>
+        </div>
+        <button type="button" id="clip-prev" data-i18n="prev">আগের</button>
+        <span id="clip-page" class="muted" role="status"></span>
+        <button type="button" id="clip-next" data-i18n="next">পরের</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table class="data-table stackable" id="clip-table"></table></div></div>
+    </section>
+
+    <!-- ===== Audit and help ===== -->
+    <section id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" class="stack" hidden>
+      <div class="card stack">
+        <h2 data-i18n="help_title">ব্যাকআপ ও ট্রেনিং সেট</h2>
+        <p class="muted" data-i18n="help_intro">এই কমান্ডগুলো এই কম্পিউটারের টার্মিনালে, প্রজেক্ট ফোল্ডার থেকে চালান।</p>
+        <div id="cmd-list"></div>
+      </div>
+      <div class="card">
+        <h2 data-i18n="audit_title">কার্যবিবরণী (অডিট লগ)</h2>
+        <div class="table-wrap"><table class="data-table stackable" id="audit-table"></table></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

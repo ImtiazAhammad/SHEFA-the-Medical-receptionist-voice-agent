@@ -45,7 +45,9 @@ CREATE TABLE IF NOT EXISTS contributors (
   consent_version TEXT NOT NULL, consent_at REAL NOT NULL, created_at REAL NOT NULL, deleted_at REAL);
 CREATE TABLE IF NOT EXISTS speakers (
   id TEXT PRIMARY KEY, contributor_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',
-  split TEXT NOT NULL, created_at REAL NOT NULL);
+  split TEXT NOT NULL, created_at REAL NOT NULL, delete_hash TEXT NOT NULL DEFAULT '',
+  age_band TEXT NOT NULL DEFAULT '', gender TEXT NOT NULL DEFAULT '', division TEXT NOT NULL DEFAULT '',
+  nickname TEXT NOT NULL DEFAULT '', credit_ok INTEGER NOT NULL DEFAULT 0, deleted_at REAL);
 CREATE TABLE IF NOT EXISTS clips (
   id TEXT PRIMARY KEY, speaker_id TEXT NOT NULL, contributor_id TEXT NOT NULL,
   card_id TEXT NOT NULL DEFAULT '', step_id TEXT NOT NULL DEFAULT '', slot TEXT NOT NULL DEFAULT '',
@@ -132,7 +134,23 @@ class CollectorStore:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript(_SCHEMA)
+        self._migrate()
         os.chmod(config.db_path, 0o600)
+
+    def _migrate(self) -> None:
+        """Older databases made before speakers carried their own profile and delete code."""
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(speakers)")}
+        for column, ddl in (
+            ("delete_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("age_band", "TEXT NOT NULL DEFAULT ''"),
+            ("gender", "TEXT NOT NULL DEFAULT ''"),
+            ("division", "TEXT NOT NULL DEFAULT ''"),
+            ("nickname", "TEXT NOT NULL DEFAULT ''"),
+            ("credit_ok", "INTEGER NOT NULL DEFAULT 0"),
+            ("deleted_at", "REAL"),
+        ):
+            if column not in have:
+                self.db.execute(f"ALTER TABLE speakers ADD COLUMN {column} {ddl}")
 
     # ---- helpers -------------------------------------------------------------------------
     def _q(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
@@ -186,6 +204,16 @@ class CollectorStore:
         return [dict(r) | {"token_hash": ""} for r in self._q("SELECT * FROM staff ORDER BY id")]
 
     def deactivate_staff(self, staff_id: int) -> None:
+        row = self._one("SELECT role, active FROM staff WHERE id=?", (staff_id,))
+        if not row:
+            raise StoreError("no_staff", "no such person", 404)
+        if row["role"] == "admin" and row["active"]:
+            others = self._one(
+                "SELECT COUNT(*) n FROM staff WHERE role='admin' AND active=1 AND id!=?",
+                (staff_id,),
+            )
+            if not others["n"]:
+                raise StoreError("last_admin", "you cannot remove the last admin", 409)
         self._x("UPDATE staff SET active=0 WHERE id=?", (staff_id,))
 
     # ---- campaigns -----------------------------------------------------------------------
@@ -237,7 +265,7 @@ class CollectorStore:
                 time.time(),
             ),
         )
-        speaker = self.new_speaker(cid)
+        speaker = self.new_speaker(cid, delete_code=delete_code)["speaker_id"]
         return {
             "contributor_id": cid,
             "secret": secret,
@@ -251,7 +279,8 @@ class CollectorStore:
         )
         return bool(row) and hmac.compare_digest(row["secret_hash"], _sha(secret or ""))
 
-    def set_profile(self, cid: str, **fields: Any) -> None:
+    def set_profile(self, speaker_id: str, **fields: Any) -> None:
+        """Optional details about ONE person (a shared phone has several)."""
         allowed = {"age_band", "gender", "division", "nickname", "credit_ok"}
         values = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if "credit_ok" in values:
@@ -262,10 +291,13 @@ class CollectorStore:
         if not values:
             return
         sets = ",".join(f"{k}=?" for k in values)
-        self._x(f"UPDATE contributors SET {sets} WHERE id=?", (*values.values(), cid))
+        self._x(f"UPDATE speakers SET {sets} WHERE id=?", (*values.values(), speaker_id))
 
-    def new_speaker(self, cid: str, label: str = "") -> str:
+    def new_speaker(self, cid: str, label: str = "", delete_code: str = "") -> dict[str, str]:
+        """A person on a phone. Each person has their own delete code, so one family member cannot
+        erase another's recordings."""
         sid = uuid.uuid4().hex
+        code = delete_code or "-".join(secrets.token_hex(2).upper() for _ in range(3))
         draw = _fraction(sid)
         split = (
             "test"
@@ -275,13 +307,16 @@ class CollectorStore:
             else "train"
         )
         self._x(
-            "INSERT INTO speakers(id,contributor_id,label,split,created_at) VALUES (?,?,?,?,?)",
-            (sid, cid, label.strip()[:30], split, time.time()),
+            "INSERT INTO speakers(id,contributor_id,label,split,created_at,delete_hash) VALUES (?,?,?,?,?,?)",
+            (sid, cid, label.strip()[:30], split, time.time(), _sha(code)),
         )
-        return sid
+        return {"speaker_id": sid, "delete_code": code}
 
     def speaker(self, sid: str, cid: str) -> dict[str, Any] | None:
-        row = self._one("SELECT * FROM speakers WHERE id=? AND contributor_id=?", (sid, cid))
+        row = self._one(
+            "SELECT * FROM speakers WHERE id=? AND contributor_id=? AND deleted_at IS NULL",
+            (sid, cid),
+        )
         return dict(row) if row else None
 
     def clips_today(self, cid: str) -> int:
@@ -380,19 +415,22 @@ class CollectorStore:
         return [dict(r) for r in rows]
 
     # ---- deletion ------------------------------------------------------------------------
-    def delete_contributor(self, delete_code: str) -> int:
-        """Remove every clip of the person who holds this code; leave tombstones. Returns clips deleted."""
+    def delete_by_code(self, delete_code: str) -> int:
+        """Remove every clip of the person who holds this code and leave tombstones.
+        Returns the number of clips deleted."""
         row = self._one(
-            "SELECT id FROM contributors WHERE delete_hash=? AND deleted_at IS NULL",
+            "SELECT id, contributor_id FROM speakers WHERE delete_hash=? AND deleted_at IS NULL",
             (_sha(delete_code.strip().upper()),),
         )
         if not row:
             raise StoreError("unknown_code", "that delete code was not found", 404)
-        return self._erase(row["id"], "withdrawn by contributor")
+        return self._erase_speaker(row["id"], row["contributor_id"], "withdrawn by contributor")
 
-    def _erase(self, cid: str, reason: str) -> int:
+    delete_contributor = delete_by_code  # the first name of this method; kept for callers
+
+    def _erase_speaker(self, sid: str, cid: str, reason: str) -> int:
         clips = self._q(
-            "SELECT id,sha256,path FROM clips WHERE contributor_id=? AND deleted_at IS NULL", (cid,)
+            "SELECT id,sha256,path FROM clips WHERE speaker_id=? AND deleted_at IS NULL", (sid,)
         )
         now = time.time()
         for clip in clips:
@@ -408,10 +446,14 @@ class CollectorStore:
                 (now, clip["id"]),
             )
         self._x(
-            "UPDATE contributors SET deleted_at=?, nickname='', age_band='', gender='', division='', "
-            "device='', credit_ok=0 WHERE id=?",
-            (now, cid),
+            "UPDATE speakers SET deleted_at=?, nickname='', age_band='', gender='', division='', credit_ok=0 "
+            "WHERE id=?",
+            (now, sid),
         )
+        if not self._one(
+            "SELECT 1 FROM speakers WHERE contributor_id=? AND deleted_at IS NULL", (cid,)
+        ):
+            self._x("UPDATE contributors SET deleted_at=?, device='' WHERE id=?", (now, cid))
         self.audit("contributor", "withdrawn", f"{len(clips)} clips")
         return len(clips)
 
@@ -475,8 +517,8 @@ class CollectorStore:
 
     def _queue_item(self, clip: dict[str, Any], mode: str) -> dict[str, Any]:
         hide_draft = (
-            mode in ("blind", "seed", "adjudicate") and clip["split"] == "test" or mode == "seed"
-        )
+            mode != "draft"
+        )  # a draft anchors reviewers, so only the one mode that wants it sees it
         item = {
             "clip_id": clip["id"],
             "mode": mode,
@@ -640,16 +682,17 @@ class CollectorStore:
 
     def thanks(self, limit: int = 60) -> list[str]:
         rows = self._q(
-            "SELECT nickname FROM contributors WHERE credit_ok=1 AND nickname!='' AND deleted_at IS NULL "
+            "SELECT nickname FROM speakers WHERE credit_ok=1 AND nickname!='' AND deleted_at IS NULL "
             "ORDER BY created_at DESC LIMIT ?",
             (limit,),
         )
         return [r["nickname"] for r in rows]
 
     def stats(self) -> dict[str, Any]:
-        def group(column: str, table: str = "contributors") -> dict[str, int]:
+        def group(column: str) -> dict[str, int]:
+            """People by a profile field, counted as speakers (pass-the-phone makes several per phone)."""
             rows = self._q(
-                f"SELECT {column} k, COUNT(*) n FROM {table} WHERE deleted_at IS NULL GROUP BY {column}"
+                f"SELECT {column} k, COUNT(*) n FROM speakers WHERE deleted_at IS NULL GROUP BY {column}"
             )
             return {(r["k"] or "unknown"): r["n"] for r in rows}
 
@@ -691,6 +734,7 @@ class CollectorStore:
             "by_age": group("age_band"),
             "by_gender": group("gender"),
             "disk_free_mb": self.audio.free_mb(),
+            "min_free_disk_mb": self.config.min_free_disk_mb,
             "kill_switch": self.get_setting("kill_switch") == "1",
         }
 

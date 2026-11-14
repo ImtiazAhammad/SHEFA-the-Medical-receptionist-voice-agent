@@ -91,8 +91,13 @@ def measure(samples: np.ndarray, codec: str = "") -> Quality:
     energy = np.sqrt(np.mean(shaped**2, axis=1))
     floor = float(np.percentile(energy, 10)) + 1e-6
     loud = float(np.percentile(energy, 90)) + 1e-6
-    threshold = max(floor * 3.0, 0.01)
-    speech_ratio = float(np.mean(energy > threshold))
+    if loud < 0.012:  # nothing in the clip is loud enough to be a voice
+        speech_ratio = 0.0
+    else:
+        # A clip with no pauses has a "noise floor" as loud as the voice, so judge against the
+        # loud end too: whatever is at least half as loud as the loud part counts as speech.
+        threshold = min(max(floor * 3.0, 0.01), loud * 0.5)
+        speech_ratio = float(np.mean(energy > threshold))
     snr_db = 20 * math.log10(loud / floor)
     return Quality(duration, rms_db, peak, clip_fraction, speech_ratio, snr_db, codec)
 

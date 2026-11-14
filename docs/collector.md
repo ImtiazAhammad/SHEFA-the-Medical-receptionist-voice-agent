@@ -20,8 +20,8 @@ uv run shefa collect staff Rina reviewer        # one token per reviewer; "adjud
 `init` prints your admin token once. Keep it in a password manager. Optional settings go in
 `configs/collector.yaml` (ignored by git); every key is in `src/shefa/collector/config.py`.
 
-Add a short welcome voice note from yourself (about 20 seconds, Ogg/Opus) as
-`data/collector/voice_note.ogg`; the page plays it on the first screen. People answer a person.
+Add a short welcome voice note from yourself (about 20 seconds; **m4a or mp3 so iPhones can play it**) as
+`data/collector/voice_note.m4a` (`.mp3`, `.ogg` and `.webm` also work); the page plays it on the first screen. People answer a person.
 
 ## Running a collection day
 
@@ -121,7 +121,7 @@ English:
   ones and must not share them. Flag them and the clip is excluded.
 * The audio never leaves your computer except through the tunnel's encrypted connection (Cloudflare
   passes the traffic). Reviewers hear audio only through short-lived signed links.
-* A contributor's delete code removes their recordings and leaves a tombstone so they cannot
+* Each person (also each person on a shared phone) has their own delete code, which removes only their recordings and leaves a tombstone so they cannot
   return from a backup. The consent text says a model that has already been trained cannot un-learn.
 * Uploads pause by themselves when disk space is low or when you press Pause on the staff page.
 * **Have a lawyer read Bangladesh's current personal-data rules** before a wide campaign (voice may

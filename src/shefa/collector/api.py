@@ -77,6 +77,23 @@ def _ext_for(data: bytes) -> str:
     return ".bin"
 
 
+VOICE_NOTE_TYPES = {
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".webm": "audio/webm",
+}
+
+
+def _voice_note_path(cfg: CollectorConfig) -> Path | None:
+    """The founder's welcome note. m4a/mp3 first: iPhones cannot play Ogg."""
+    for ext in VOICE_NOTE_TYPES:
+        path = cfg.data_dir / f"voice_note{ext}"
+        if path.exists():
+            return path
+    return None
+
+
 class Ctx:
     """What the routes share: the store, the card bank, the limiters and the signing key."""
 
@@ -215,7 +232,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "progress": store.progress(),
             "age_bands": sorted(AGE_BANDS),
             "divisions": sorted(DIVISIONS),
-            "voice_note": (cfg.data_dir / "voice_note.ogg").exists(),
+            "voice_note": _voice_note_path(cfg) is not None,
             "impact_note": store.get_setting("impact_note"),
         }
 
@@ -238,7 +255,7 @@ def public_router(ctx: Ctx) -> APIRouter:
         got = who(request)
         if isinstance(got, JSONResponse):
             return got
-        return {"speaker_id": store.new_speaker(got[0])}
+        return store.new_speaker(got[0])
 
     @r.get("/api/c/cards")
     async def cards(request: Request, n: int = 3, seen: str = "", kinds: str = ""):
@@ -314,6 +331,14 @@ def public_router(ctx: Ctx) -> APIRouter:
             None,
         )
         setting = request.headers.get("x-setting", "")
+        room_code, role = request.headers.get("x-room", "")[:8].upper(), ""
+        if room_code:  # a two-person clip counts only if the uploader really is in that room
+            room_row = store.get_room(room_code)
+            if not room_row or cid not in (room_row["caller_cid"], room_row["desk_cid"]):
+                return err("no_room", "you are not in that room", 403)
+            role = (
+                "caller" if room_row["caller_cid"] == cid else "desk"
+            )  # the server decides the role
         meta = {
             "card_id": card["id"] if card else "",
             "step_id": step["id"] if step else "",
@@ -323,8 +348,8 @@ def public_router(ctx: Ctx) -> APIRouter:
             "expected_text": step["expected_text"] if step else None,
             "facts": step["facts"] if step else {},
             "setting": setting if setting in SETTING_IDS else "",
-            "room": request.headers.get("x-room", "")[:8].upper(),
-            "role": request.headers.get("x-role", "")[:8],
+            "room": room_code,
+            "role": role,
             "turn": request.headers.get("x-turn", "0")[:3],
         }
         try:
@@ -360,7 +385,7 @@ def public_router(ctx: Ctx) -> APIRouter:
         if isinstance(got, JSONResponse):
             return got
         store.set_profile(
-            got[0],
+            got[1]["id"],
             age_band=body.age_band if body.age_band in AGE_BANDS else "",
             gender=body.gender if body.gender in GENDERS else "",
             division=body.division if body.division in DIVISIONS else "",
@@ -375,7 +400,7 @@ def public_router(ctx: Ctx) -> APIRouter:
         if not ctx.limiter.allow(f"del:{ip}", 12, 3600):
             return err("slow_down", "too many tries", 429)
         try:
-            count = store.delete_contributor(body.delete_code)
+            count = store.delete_by_code(body.delete_code)
         except StoreError as e:
             return err(e.code, e.message, e.status)
         return {"ok": True, "deleted": count}
@@ -467,10 +492,10 @@ def public_router(ctx: Ctx) -> APIRouter:
 
     @r.get("/voice-note")
     async def voice_note():
-        path = cfg.data_dir / "voice_note.ogg"
-        if not path.exists():
+        path = _voice_note_path(cfg)
+        if path is None:
             return err("not_found", "not found", 404)
-        return FileResponse(path, media_type="audio/ogg")
+        return FileResponse(path, media_type=VOICE_NOTE_TYPES[path.suffix])
 
     return r
 
@@ -642,7 +667,10 @@ def admin_router(ctx: Ctx) -> APIRouter:
         s = gate(request)
         if isinstance(s, JSONResponse):
             return s
-        store.deactivate_staff(staff_id)
+        try:
+            store.deactivate_staff(staff_id)
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
         store.audit(s["name"], "staff_deactivated", str(staff_id))
         return {"ok": True}
 

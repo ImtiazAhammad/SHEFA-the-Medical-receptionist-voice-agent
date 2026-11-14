@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="bn" data-title-key="rv_page_title">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:,">
+  <title>লেখা যাচাই</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+  <script type="module" src="js/review.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">মূল অংশে যান</a>
+  <header class="topbar">
+    <span class="brand" data-i18n="app_name">SHEFA ভয়েস কমন্স</span>
+    <span class="who" id="who"></span>
+    <a class="btn small-btn" id="admin-link" href="admin.html" hidden data-i18n="to_admin">অ্যাডমিন</a>
+    <button type="button" class="small-btn" id="lang"></button>
+    <button type="button" class="small-btn" id="signout" data-i18n="sign_out">বের হই</button>
+  </header>
+
+  <main id="main" class="page">
+    <h1 class="sr-only" data-i18n="rv_page_title">লেখা যাচাই</h1>
+    <p id="loading" class="muted" role="status" data-i18n="loading">লোড হচ্ছে…</p>
+
+    <section id="error" class="banner error" role="alert" hidden>
+      <p id="error-text"></p>
+      <button type="button" id="error-retry" data-i18n="retry">আবার চেষ্টা করুন</button>
+    </section>
+
+    <section id="empty" class="card empty" hidden>
+      <h1 data-i18n="rv_empty_title">আজকের মতো শেষ</h1>
+      <p data-i18n="rv_empty_body">এখন দেখার মতো আর কোনো ক্লিপ নেই। ধন্যবাদ! নতুন ক্লিপ এলে নিচের বোতামে চাপুন।</p>
+      <p class="muted" id="empty-count"></p>
+      <button type="button" class="primary big" id="empty-refresh" data-i18n="rv_refresh">আবার দেখি</button>
+    </section>
+
+    <div id="work" class="cols review" hidden>
+      <div class="stack">
+        <!-- What the agent asked: context for what the caller then said. -->
+        <section class="card" aria-labelledby="ctx-h">
+          <h2 id="ctx-h" class="small muted" data-i18n="rv_question_label">এজেন্ট যা জিজ্ঞেস করেছিল</h2>
+          <p class="question" id="question" lang="bn"></p>
+          <div class="meta-chips" id="chips"></div>
+        </section>
+
+        <section class="card player" aria-label="Audio" id="player" data-i18n-aria-label="rv_player">
+          <audio id="audio" preload="auto"></audio>
+          <div class="controls">
+            <button type="button" class="big primary" id="play" data-i18n="rv_play">শুনুন</button>
+            <button type="button" class="big" id="replay" data-i18n="rv_replay">আবার শুনুন</button>
+          </div>
+          <div class="seek">
+            <input type="range" id="seek" min="0" max="1000" step="1" value="0" data-i18n-aria-label="rv_seek" aria-label="অডিওর অবস্থান">
+            <div class="timeline"><span id="time" aria-hidden="true">0:00 / 0:00</span></div>
+          </div>
+          <div class="speeds" role="group" data-i18n-aria-label="rv_speed" aria-label="গতি">
+            <span class="muted small" data-i18n="rv_speed">গতি</span>
+            <button type="button" data-speed="0.75" aria-pressed="false">০.৭৫×</button>
+            <button type="button" data-speed="1" aria-pressed="true">১×</button>
+            <button type="button" data-speed="1.25" aria-pressed="false">১.২৫×</button>
+          </div>
+          <p id="audio-msg" class="hint" role="status"></p>
+          <div class="row">
+            <button type="button" class="danger-outline" id="cant-hear" data-i18n="rv_cant_hear">ঠিকমতো শুনতে পারছি না</button>
+            <label class="flagbox small" for="autoplay"><input type="checkbox" id="autoplay" checked><span data-i18n="rv_autoplay">পরের ক্লিপ নিজে চালু হোক</span></label>
+          </div>
+        </section>
+
+        <section class="card stack" aria-labelledby="ans-h" id="answer">
+          <h2 id="ans-h" class="sr-only" data-i18n="rv_answer">আপনার লেখা</h2>
+
+          <div id="draft-warn" class="banner warn" hidden>
+            <strong data-i18n="rv_draft_warn_head">সতর্কতা:</strong>
+            <span data-i18n="rv_draft_warn">মেশিনের লেখা প্রায়ই ভুল হয়। আগে পুরো ক্লিপটা শুনুন, তারপর যা শুনেছেন সেটাই লিখুন।</span>
+            <span id="no-draft" hidden data-i18n="rv_no_draft"> (এই ক্লিপের জন্য খসড়া নেই।)</span>
+          </div>
+
+          <div id="verify-box" hidden>
+            <p class="muted small" data-i18n="rv_verify_prompt">ক্লিপে কি এটাই বলা হয়েছে?</p>
+            <p class="expected" id="expected" lang="bn"></p>
+            <div class="verify-actions">
+              <button type="button" class="primary big" id="yes" data-i18n="rv_yes">হ্যাঁ, এটাই বলেছে</button>
+              <button type="button" class="big" id="fix" data-i18n="rv_fix">ঠিক করি</button>
+            </div>
+          </div>
+
+          <div id="adj-box" hidden>
+            <p class="banner info" data-i18n="rv_adj_intro">দুজনের লেখা মেলেনি। শুনে সঠিকটা বেছে নিন, দরকার হলে নিজে ঠিক করে লিখুন।</p>
+            <div class="candidates" id="candidates"></div>
+          </div>
+
+          <div id="text-box">
+            <label for="text" id="text-label" data-i18n="rv_text_label">যা শুনলেন তা লিখুন</label>
+            <textarea id="text" lang="bn" maxlength="600" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" data-i18n-placeholder="rv_placeholder" placeholder="এখানে বাংলায় লিখুন…" aria-describedby="rules-line"></textarea>
+            <p class="hint" id="rules-line" data-i18n="rv_rules_line">যা শুনছেন ঠিক তাই লিখুন · সংখ্যা কথায় (অঙ্ক লিখলে সার্ভার কথায় বদলাবে) · ফোন নম্বর অঙ্কে · ইংরেজি শব্দ বাংলা হরফে · কোনো যতিচিহ্ন নয়</p>
+          </div>
+
+          <fieldset class="flags">
+            <legend data-i18n="rv_flags">কোনো সমস্যা আছে?</legend>
+            <div class="flag-group">
+              <p class="muted small" data-i18n="rv_flags_reject">এগুলো দিলে ক্লিপটি বাদ যাবে, লেখা লাগবে না:</p>
+              <label class="flagbox"><input type="checkbox" name="flag" value="unusable"><span data-i18n="flag_unusable">নষ্ট / শোনা যায় না</span></label>
+              <label class="flagbox"><input type="checkbox" name="flag" value="other_language"><span data-i18n="flag_other_language">অন্য ভাষা</span></label>
+              <label class="flagbox"><input type="checkbox" name="flag" value="personal_details"><span data-i18n="flag_personal_details">আসল নাম বা নম্বর</span></label>
+              <label class="flagbox"><input type="checkbox" name="flag" value="offensive"><span data-i18n="flag_offensive">আপত্তিকর</span></label>
+            </div>
+            <div class="flag-group">
+              <p class="muted small" data-i18n="rv_flags_keep">এগুলো দিলেও ক্লিপ থাকবে, লেখাও লিখতে হবে:</p>
+              <label class="flagbox"><input type="checkbox" name="flag" value="noisy"><span data-i18n="flag_noisy">গোলমাল আছে</span></label>
+              <label class="flagbox"><input type="checkbox" name="flag" value="unclear"><span data-i18n="flag_unclear">কিছু অংশ অস্পষ্ট</span></label>
+            </div>
+          </fieldset>
+          <p id="reject-note" class="banner warn" hidden data-i18n="rv_reject_note">এই ক্লিপ বাদ যাবে, তাই লেখা লাগবে না।</p>
+
+          <p id="msg" class="banner error" role="alert" hidden></p>
+          <button type="button" class="primary big" id="submit" data-i18n="rv_submit">জমা দিন</button>
+        </section>
+
+        <section id="done" class="card stack" hidden aria-live="polite">
+          <h2 data-i18n="rv_saved">জমা হয়েছে। সংরক্ষিত লেখা:</h2>
+          <p class="result-box" id="done-text" lang="bn"></p>
+          <ul id="done-notes" class="muted"></ul>
+          <button type="button" class="primary big" id="next-now" data-i18n="rv_next_now">পরের ক্লিপ</button>
+        </section>
+      </div>
+
+      <aside class="stack sticky">
+        <details class="guide" id="guide" open>
+          <summary data-i18n="sg_title">লেখার নিয়ম (স্টাইল গাইড)</summary>
+          <div class="body">
+            <ol>
+              <li data-i18n="sg_1">যা শুনছেন ঠিক তাই লিখুন। নিজে ঠিক বা সম্পূর্ণ করবেন না।</li>
+              <li data-i18n="sg_2">সংখ্যা, তারিখ ও সময় বাংলা কথায় লিখুন (যেমন: সকাল দশটা তিরিশ)। অঙ্কে লিখলেও চলবে, সার্ভার কথায় বদলে দেবে এবং আপনাকে জানাবে।</li>
+              <li data-i18n="sg_3">ফোন নম্বর অঙ্কে লিখুন, টানা ৮টি বা বেশি অঙ্ক (যেমন: ০১৭১২৩৪৫৬৭৮)। এটি কথায় বদলানো হয় না।</li>
+              <li data-i18n="sg_4">ইংরেজি শব্দ বাংলা হরফে লিখুন (যেমন: অ্যাপয়েন্টমেন্ট, ডক্টর)।</li>
+              <li data-i18n="sg_5">কোনো যতিচিহ্ন (দাঁড়ি, কমা, প্রশ্নচিহ্ন) দেবেন না।</li>
+              <li data-i18n="sg_6">নিশ্চিত না হলে অনুমান করবেন না। ফ্ল্যাগ দিন: অস্পষ্ট হলে "কিছু অংশ অস্পষ্ট", ব্যবহারের অযোগ্য হলে "নষ্ট / শোনা যায় না"।</li>
+            </ol>
+          </div>
+        </details>
+
+        <section class="card" aria-labelledby="keys-h">
+          <h2 id="keys-h" data-i18n="kb_title">কিবোর্ড শর্টকাট</h2>
+          <ul class="shortcuts">
+            <li><kbd>Ctrl</kbd>+<kbd>Space</kbd> <span class="muted">/</span> <kbd>F8</kbd> <span data-i18n="kb_replay">আবার শুনুন</span></li>
+            <li><kbd>F9</kbd> <span data-i18n="kb_back">৩ সেকেন্ড পিছনে</span></li>
+            <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> <span data-i18n="kb_submit">জমা দিন (যাচাইয়ে "হ্যাঁ")</span></li>
+          </ul>
+          <p class="hint" data-i18n="kb_note">বাংলা কিবোর্ড বদলাতে Ctrl+Space ব্যবহার হলে সেটা কাজ নাও করতে পারে, তখন F8 চাপুন।</p>
+          <p class="muted" id="counter" role="status"></p>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
