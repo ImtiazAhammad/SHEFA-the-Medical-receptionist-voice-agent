@@ -76,6 +76,7 @@ export const STRINGS = {
   rv_draft_warn_head: S("সতর্কতা:", "Careful:"),
   rv_draft_warn: S("মেশিনের লেখা প্রায়ই ভুল হয়। আগে পুরো ক্লিপটা শুনুন, তারপর যা শুনেছেন সেটাই লিখুন।", "The machine draft is often wrong. Listen to the whole clip first, then write what you heard."),
   rv_no_draft: S(" (এই ক্লিপের জন্য খসড়া নেই।)", " (There is no draft for this clip.)"),
+  rv_verify_note: S("এই ক্লিপে সম্ভবত শুধু এটুকু বলা হয়েছে, তাই লেখাটা আগে থেকে বসানো আছে। শুনে মিলিয়ে নিন। আগে-পরে যা বলা হয়েছে (যেমন “রোগীর নাম…”) সেটাও যোগ করুন, কম হলে কেটে দিন।", "The expected words are filled in. Listen and make the text match EVERYTHING that was said: add any words before or after (such as \"the patient's name is...\") and delete anything that was not said."),
   rv_verify_prompt: S("ক্লিপে কি এটাই বলা হয়েছে?", "Is this what was said in the clip?"),
   rv_yes: S("হ্যাঁ, এটাই বলেছে", "Yes, this is what was said"),
   rv_fix: S("ঠিক করি", "I'll fix it"),

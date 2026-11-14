@@ -19,9 +19,12 @@ export function viewFor(item) {
   }
   if (mode === "verify") {
     const expected = typeof item.expected === "string" ? item.expected : "";
-    // Without an expected text there is nothing to confirm: fall back to plain typing.
+    // The expected text is only the slot value ("জুবায়ের", the digits), but contributors answer in
+    // their own words ("রোগীর নাম জুবায়ের"). A one-tap "yes" would store the bare slot value and drop
+    // the words around it, which is exactly the data the speech model needs. So the text is put in
+    // an editable box and the reviewer must make it match EVERYTHING that was said.
     if (!expected) return { ui: "type", prefill: "", noDraft: false, expected: "", candidates: [] };
-    return { ui: "verify", prefill: expected, noDraft: false, expected, candidates: [] };
+    return { ui: "type", prefill: expected, noDraft: false, expected: "", candidates: [], verifyNote: true };
   }
   if (mode === "adjudicate") {
     const candidates = Array.isArray(item.candidates)

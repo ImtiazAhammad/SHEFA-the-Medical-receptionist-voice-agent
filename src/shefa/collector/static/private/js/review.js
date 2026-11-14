@@ -16,7 +16,7 @@ const ui = {
   loading: $("#loading"), error: $("#error"), errorText: $("#error-text"), empty: $("#empty"),
   emptyCount: $("#empty-count"), work: $("#work"), question: $("#question"), chips: $("#chips"),
   audioMsg: $("#audio-msg"), draftWarn: $("#draft-warn"), noDraft: $("#no-draft"),
-  verifyBox: $("#verify-box"), expected: $("#expected"), adjBox: $("#adj-box"), candidates: $("#candidates"),
+  verifyNote: $("#verify-note"), verifyBox: $("#verify-box"), expected: $("#expected"), adjBox: $("#adj-box"), candidates: $("#candidates"),
   textBox: $("#text-box"), text: $("#text"), msg: $("#msg"), rejectNote: $("#reject-note"),
   submit: $("#submit"), yes: $("#yes"), fix: $("#fix"), done: $("#done"), doneText: $("#done-text"),
   doneNotes: $("#done-notes"), counter: $("#counter"), who: $("#who"), answer: $("#answer"),
@@ -127,6 +127,7 @@ function paintMode() {
   const rejecting = isRejecting(currentFlags());
   ui.draftWarn.hidden = view.ui !== "draft";
   ui.noDraft.hidden = !(view.ui === "draft" && view.noDraft);
+  ui.verifyNote.hidden = !view.verifyNote;
   ui.verifyBox.hidden = view.ui !== "verify" || fixing;
   ui.adjBox.hidden = view.ui !== "adjudicate";
   ui.textBox.hidden = view.ui === "verify" && !fixing;
