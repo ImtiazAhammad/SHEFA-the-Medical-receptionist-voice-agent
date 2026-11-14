@@ -5,6 +5,29 @@ Working name: "Shefa Kontho" (name not final). Inputs: three adversarial reviews
 contributor experience, risk/privacy/free tier), the repo's own `docs/fine-tuning-plan.md` and
 `docs/model-selection.md`.
 
+## Revision 1 (2026-11-15): decisions taken, and what changed from the draft below
+
+The founder delegated every decision. A fourth reviewer checked the architecture change. Where
+the sections below disagree with this box, this box wins.
+
+| Decision | Choice | Why |
+|---|---|---|
+| Where it runs | **Local-first**: a separate FastAPI app on the founder's PC, audio on their disk, a free tunnel for contributors, optional static page on free hosting | Removes the download-and-clear step, the 1 GB and 5 GB/month caps, the 7-day pause and a foreign cloud holding voices; testable end to end. A cloud adapter was left out because it could not be tested against a real account |
+| Static shell | Provided (`collect shell`) | A WhatsApp link must not die when the PC does; phones queue clips meanwhile |
+| Recording | 16 kHz 16-bit **WAV** (AudioWorklet), MediaRecorder fallback | Lossy Opus then a codec simulation would damage the data twice; disk is plentiful now |
+| Signed-upload function | Dropped | The app itself checks limits (optional Cloudflare Turnstile) |
+| D1 live call | `Call a friend` as **voice messages** through a room code; live WebRTC not built | Reviewers: two strangers are never online together, relays are not free, and a phone cannot reliably record while another app holds the microphone |
+| D2 reviewers | 2-3 named people with tokens, never a public page; review routes only on the public port during a `--with-review` session | |
+| D4 numbers | Words everywhere, **phone numbers as digits**, one normaliser (`collector/text.py`) | Matches the booking parser and what Whisper prints |
+| D5 | No cloud function | See above |
+| D6 | **Never published**; any release needs fresh consent | |
+| D7 | Founder plus one native-speaker reviewer to start; pilot about 60 speakers; the 100-speaker, 8-hour gate stays | |
+| Admin and staff | Separate port (8101), localhost only | Admin must never be on the tunnel |
+
+Sections 5 and 7 (pull-and-clear and the Supabase budget) and feature A8 (keep-alive) are obsolete.
+Replaced by: `collect backup` (verified copy to another disk, withdrawn clips never survive in it)
+and a disk meter with an automatic upload pause. Run instructions: [`../collector.md`](../collector.md).
+
 ## 1. What it is, in one paragraph
 
 A free web page anyone can open from a link. They see a made-up hospital-phone situation, hear the
@@ -164,8 +187,9 @@ in about 6 days; a daily pull would use about 4.8 GB of the 5 GB monthly downloa
 - **Baseline first.** The current model is already a Bangla fine-tune: 16.5% WER on FLEURS, 17.7%
   on phone-band audio (`docs/model-selection.md`). The 38.3% clinic figure is synthetic
   single-voice babble, so it is weak evidence. Nobody has measured WER on real callers.
-- **Cheap tests before any training:** give the speech model the doctor names and booking words as
-  hints (hotwords/initial prompt), and snap its output to the vocabulary the agent expects at that
+- **Cheap tests before any training:** ~~give the speech model the doctor names and booking words as
+  hints~~ (tested 2026-11-15: hints make this model much WORSE, 22% to 54-110% word error on synthetic
+  clips; see `docs/research/2026-11-15-stt-hints-and-synthetic-baseline.md`), and snap its output to the vocabulary the agent expects at that
   turn (doctor names, weekdays, digits). If slot accuracy is already at 90%, skip fine-tuning.
 - **Go for fine-tuning only if** the collection reaches at least about 100 speakers and 8-10 usable
   hours (7,200 clips of 5 s is 10 hours; 150 speakers x 48 clips), plus a blind two-reviewer gold set

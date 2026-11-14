@@ -204,6 +204,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="azure: Azure's Bangladeshi neural voices (free tier) instead of local voices",
     )
 
+    from shefa.collector.cli import register as register_collect
+
+    register_collect(sub)
+
     lab = sub.add_parser("lab", help="conversation lab: scripted and simulated patient calls")
     lab_sub = lab.add_subparsers(dest="lab_command")
     lab_run = lab_sub.add_parser("run", help="run the scenarios and write an HTML report")
@@ -1053,6 +1057,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "lab":
         return run_lab(args)
+
+    if args.command == "collect":
+        from shefa.collector.cli import run as run_collect
+
+        return run_collect(args)
 
     parser.print_help()
     return 2

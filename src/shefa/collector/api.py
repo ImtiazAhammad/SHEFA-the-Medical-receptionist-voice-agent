@@ -1,0 +1,769 @@
+"""HTTP surface of the collection app.
+
+Two apps share this module. The PUBLIC app is what the tunnel exposes: the contributor page, the
+upload endpoint and a few aggregate numbers. The PRIVATE app (localhost only) adds the reviewer
+and admin pages. `shefa collect serve --with-review` mounts the review routes on the public app
+for a review session, never the admin ones.
+"""
+# ruff: noqa: E501, N812, TC001, TC003
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import os
+import random
+import re
+import time
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from shefa.booking import RateLimiter
+from shefa.collector import audio as A
+from shefa.collector import prompts as P
+from shefa.collector.config import CONSENT_BN, CONSENT_EN, CollectorConfig
+from shefa.collector.store import CLIP_ID, CollectorStore, StoreError
+
+STATIC = Path(__file__).parent / "static"
+SETTING_IDS = {s["id"] for s in P.settings_choices()}
+AGE_BANDS = {"18-24", "25-34", "35-49", "50-64", "65+"}
+GENDERS = {"female", "male", "other", "skip"}
+DIVISIONS = {
+    "dhaka",
+    "chattogram",
+    "rajshahi",
+    "khulna",
+    "barishal",
+    "sylhet",
+    "rangpur",
+    "mymensingh",
+    "abroad",
+    "skip",
+}
+AUDIO_TYPES = {".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg", ".mp4": "audio/mp4"}
+KIND_WEIGHTS = {"booking": 0.6, "info": 0.15, "correction": 0.15, "digits": 0.10}
+
+REJECTION_BN = {
+    "too_short": "খুব ছোট রেকর্ডিং, আবার বলুন।",
+    "too_long": "রেকর্ডিং বেশি লম্বা, ছোট করে আবার বলুন।",
+    "silent": "কথা শোনা যায়নি, ফোনের কাছে এসে আবার বলুন।",
+    "clipped": "আওয়াজ ফেটে গেছে, একটু আস্তে বা দূরে থেকে বলুন।",
+    "unreadable": "রেকর্ডিং পড়া যায়নি, আবার চেষ্টা করুন।",
+    "duplicate": "এই রেকর্ডিং আগেই এসেছে।",
+}
+
+
+def err(code: str, message: str, status: int = 400, **extra: Any) -> JSONResponse:
+    return JSONResponse({"error": {"code": code, "message": message, **extra}}, status_code=status)
+
+
+def _ext_for(data: bytes) -> str:
+    head = data[:16]
+    if head.startswith(b"RIFF") and data[8:12] == b"WAVE":
+        return ".wav"
+    if head.startswith(b"\x1a\x45\xdf\xa3"):
+        return ".webm"
+    if head.startswith(b"OggS"):
+        return ".ogg"
+    if data[4:8] == b"ftyp":
+        return ".mp4"
+    return ".bin"
+
+
+class Ctx:
+    """What the routes share: the store, the card bank, the limiters and the signing key."""
+
+    def __init__(self, config: CollectorConfig, store: CollectorStore | None = None):
+        self.config = config
+        self.store = store or CollectorStore(config)
+        self.limiter = RateLimiter()
+        self.cards = P.load_bank(config.prompts_dir / "cards.json")
+        self.cards_by_id = {c["id"]: c for c in self.cards}
+        key = self.store.get_setting("audio_key")
+        if not key:
+            key = os.urandom(32).hex()
+            self.store.set_setting("audio_key", key)
+        self.key = bytes.fromhex(key)
+
+    def address(self, request: Request) -> str:
+        if self.config.trust_forwarded_for:
+            for header in ("cf-connecting-ip", "x-forwarded-for"):
+                value = request.headers.get(header, "")
+                if value:
+                    return value.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
+
+    def sign(self, clip_id: str, ttl: int | None = None) -> str:
+        exp = int(time.time()) + (ttl or self.config.audio_url_ttl_s)
+        sig = hmac.new(self.key, f"{clip_id}.{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+        return f"exp={exp}&sig={sig}"
+
+    def verify(self, clip_id: str, exp: int, sig: str) -> bool:
+        if exp < time.time():
+            return False
+        good = hmac.new(self.key, f"{clip_id}.{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+        return hmac.compare_digest(good, sig or "")
+
+    def maintenance(self) -> str:
+        if self.store.get_setting("kill_switch") == "1":
+            return "paused"
+        if self.store.audio.free_mb() < self.config.min_free_disk_mb:
+            return "disk_low"
+        return ""
+
+    def cards_for(
+        self, seen: set[str], n: int, kinds: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        rng = random.Random()
+        pool = [c for c in self.cards if c["id"] not in seen and (not kinds or c["kind"] in kinds)]
+        if not pool:
+            pool = [c for c in self.cards if not kinds or c["kind"] in kinds]
+        out: list[dict[str, Any]] = []
+        while pool and len(out) < n:
+            kind = rng.choices(list(KIND_WEIGHTS), weights=list(KIND_WEIGHTS.values()))[0]
+            choices = [c for c in pool if c["kind"] == kind] or pool
+            pick = rng.choice(choices)
+            out.append(pick)
+            pool.remove(pick)
+        return out
+
+
+# --------------------------------------------------------------------------- public routes
+class StartBody(BaseModel):
+    consent: bool
+    consent_version: str
+    campaign: str = Field(default="", max_length=20)
+    from_name: str = Field(default="", max_length=40)
+    device: str = Field(default="", max_length=120)
+    turnstile: str = Field(default="", max_length=2000)
+
+
+class ProfileBody(BaseModel):
+    age_band: str = ""
+    gender: str = ""
+    division: str = ""
+    nickname: str = Field(default="", max_length=30)
+    credit_ok: bool = False
+
+
+class DeleteBody(BaseModel):
+    delete_code: str = Field(max_length=40)
+
+
+class RoomBody(BaseModel):
+    card_id: str = ""
+    code: str = ""
+
+
+async def _verify_turnstile(ctx: Ctx, token: str, ip: str) -> bool:
+    if not ctx.config.turnstile_site_key:
+        return True
+    secret = os.environ.get(ctx.config.turnstile_secret_env, "")
+    if not secret or not token:
+        return False
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            reply = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": secret, "response": token, "remoteip": ip},
+            )
+        return bool(reply.json().get("success"))
+    except Exception:  # noqa: BLE001 - a failed check is a failed check
+        return False
+
+
+def public_router(ctx: Ctx) -> APIRouter:
+    r = APIRouter()
+    store, cfg = ctx.store, ctx.config
+
+    def who(request: Request) -> tuple[str, dict[str, Any]] | JSONResponse:
+        cid = request.headers.get("x-cid", "")
+        if not store.check_contributor(cid, request.headers.get("x-secret", "")):
+            return err("not_signed_in", "please start again", 401)
+        speaker = store.speaker(request.headers.get("x-speaker", ""), cid)
+        if not speaker:
+            return err("no_speaker", "please start again", 401)
+        return cid, speaker
+
+    @r.get("/health")
+    async def health() -> dict[str, Any]:
+        return {"ok": True, "maintenance": ctx.maintenance()}
+
+    @r.get("/api/c/config")
+    async def config(c: str = "") -> dict[str, Any]:
+        camp = store.campaign(c)
+        return {
+            "consent_version": cfg.consent_version,
+            "consent_bn": CONSENT_BN,
+            "consent_en": CONSENT_EN,
+            "turnstile_site_key": cfg.turnstile_site_key,
+            "min_clip_s": cfg.min_clip_s,
+            "max_clip_s": cfg.max_clip_s,
+            "settings": P.settings_choices(),
+            "from_name": (camp or {}).get("from_name", ""),
+            "campaign": (camp or {}).get("code", ""),
+            "maintenance": ctx.maintenance(),
+            "progress": store.progress(),
+            "age_bands": sorted(AGE_BANDS),
+            "divisions": sorted(DIVISIONS),
+            "voice_note": (cfg.data_dir / "voice_note.ogg").exists(),
+            "impact_note": store.get_setting("impact_note"),
+        }
+
+    @r.post("/api/c/start")
+    async def start(body: StartBody, request: Request):
+        ip = ctx.address(request)
+        if not ctx.limiter.allow(f"start:{ip}", cfg.starts_per_ip_per_hour, 3600):
+            return err("slow_down", "too many new visitors from here, try again later", 429)
+        if not body.consent or body.consent_version != cfg.consent_version:
+            return err("consent", "please read and accept the consent", 400)
+        if not await _verify_turnstile(ctx, body.turnstile, ip):
+            return err("challenge", "the human check failed, reload and retry", 403)
+        made = store.start_contributor(
+            campaign=body.campaign, from_name=body.from_name, ip=ip, device=body.device
+        )
+        return {**made, "maintenance": ctx.maintenance()}
+
+    @r.post("/api/c/speaker")
+    async def speaker(request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        return {"speaker_id": store.new_speaker(got[0])}
+
+    @r.get("/api/c/cards")
+    async def cards(request: Request, n: int = 3, seen: str = "", kinds: str = ""):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        picked = ctx.cards_for(
+            {s for s in seen.split(",") if s},
+            max(1, min(n, 8)),
+            [k for k in kinds.split(",") if k] or None,
+        )
+        return {"cards": picked}
+
+    @r.put("/api/c/clip/{clip_id}")
+    async def upload(clip_id: str, request: Request):
+        if not CLIP_ID.match(clip_id):
+            return err("bad_id", "bad clip id")
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        cid, speaker_row = got
+        if reason := ctx.maintenance():
+            return err(
+                "paused",
+                "the collection is paused right now, your clip stays on your phone",
+                503,
+                reason=reason,
+            )
+        ip = ctx.address(request)
+        if not ctx.limiter.allow(f"clip:{ip}", cfg.clips_per_ip_per_hour, 3600):
+            return err("slow_down", "too many recordings from here, try again later", 429)
+        if store.clips_today(cid) >= cfg.clips_per_contributor_per_day:
+            return err("daily_cap", "that is plenty for today, thank you!", 429)
+        declared = int(request.headers.get("content-length") or 0)
+        if declared > cfg.max_clip_bytes:
+            return err("too_big", "recording is too large", 413)
+        data = b""
+        async for chunk in request.stream():
+            data += chunk
+            if len(data) > cfg.max_clip_bytes:
+                return err("too_big", "recording is too large", 413)
+        sha = hashlib.sha256(data).hexdigest()
+        claimed = request.headers.get("x-sha256", "")
+        if claimed and claimed != sha:
+            return err(
+                "corrupt", "the recording was damaged on the way, it will be sent again", 422
+            )
+        try:
+            samples, codec = await run_in_threadpool(A.decode, data)
+        except A.AudioError:
+            return err("unreadable", REJECTION_BN["unreadable"], 422, reason="unreadable")
+        quality = A.measure(samples, codec)
+        reason = (
+            "too_short"
+            if quality.duration_s < cfg.min_clip_s
+            else "too_long"
+            if quality.duration_s > cfg.max_clip_s
+            else "silent"
+            if quality.speech_ratio < cfg.min_speech_ratio
+            else "clipped"
+            if quality.clip_fraction > cfg.max_clip_fraction
+            else ""
+        )
+        if reason:
+            return err("rejected", REJECTION_BN[reason], 422, reason=reason)
+        card = ctx.cards_by_id.get(request.headers.get("x-card", ""))
+        step = next(
+            (
+                s
+                for s in (card or {}).get("steps", [])
+                if s["id"] == request.headers.get("x-step", "")
+            ),
+            None,
+        )
+        setting = request.headers.get("x-setting", "")
+        meta = {
+            "card_id": card["id"] if card else "",
+            "step_id": step["id"] if step else "",
+            "slot": step["slot"] if step else request.headers.get("x-slot", "")[:20],
+            "kind": card["kind"] if card else request.headers.get("x-kind", "")[:20],
+            "question_bn": step["question_bn"] if step else "",
+            "expected_text": step["expected_text"] if step else None,
+            "facts": step["facts"] if step else {},
+            "setting": setting if setting in SETTING_IDS else "",
+            "room": request.headers.get("x-room", "")[:8].upper(),
+            "role": request.headers.get("x-role", "")[:8],
+            "turn": request.headers.get("x-turn", "0")[:3],
+        }
+        try:
+            if store._one(
+                "SELECT 1 FROM clips WHERE sha256=? AND id!=? AND deleted_at IS NULL",
+                (sha, clip_id),
+            ):
+                return err("duplicate", REJECTION_BN["duplicate"], 409, reason="duplicate")
+            out = await run_in_threadpool(
+                lambda: store.add_clip(
+                    clip_id=clip_id,
+                    speaker=speaker_row,
+                    cid=cid,
+                    meta=meta,
+                    quality=quality,
+                    data=data,
+                    ext=_ext_for(data),
+                    ua=request.headers.get("user-agent", ""),
+                )
+            )
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return {
+            "ok": True,
+            **out,
+            "duration_s": round(quality.duration_s, 1),
+            "snr_db": round(quality.snr_db, 1),
+        }
+
+    @r.post("/api/c/profile")
+    async def profile(body: ProfileBody, request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        store.set_profile(
+            got[0],
+            age_band=body.age_band if body.age_band in AGE_BANDS else "",
+            gender=body.gender if body.gender in GENDERS else "",
+            division=body.division if body.division in DIVISIONS else "",
+            nickname=re.sub(r"[^\w\u0980-\u09ff .\-]", "", body.nickname),
+            credit_ok=body.credit_ok,
+        )
+        return {"ok": True}
+
+    @r.post("/api/c/delete")
+    async def delete(body: DeleteBody, request: Request):
+        ip = ctx.address(request)
+        if not ctx.limiter.allow(f"del:{ip}", 12, 3600):
+            return err("slow_down", "too many tries", 429)
+        try:
+            count = store.delete_contributor(body.delete_code)
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return {"ok": True, "deleted": count}
+
+    @r.get("/api/c/progress")
+    async def progress() -> dict[str, Any]:
+        return store.progress()
+
+    @r.get("/api/c/thanks")
+    async def thanks() -> dict[str, Any]:
+        return {"names": store.thanks()}
+
+    # ---- call a friend: two phones, one code, turns kept in step ----------------------
+    @r.post("/api/c/room")
+    async def room_create(body: RoomBody, request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        card = ctx.cards_by_id.get(body.card_id) or ctx.cards_for(set(), 1, ["booking"])[0]
+        return {"code": store.create_room(got[0], card["id"]), "card": card, "role": "caller"}
+
+    @r.post("/api/c/room/join")
+    async def room_join(body: RoomBody, request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        try:
+            room = store.join_room(body.code, got[0])
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        role = "caller" if room["caller_cid"] == got[0] else "desk"
+        return {
+            "code": room["code"],
+            "role": role,
+            "card": ctx.cards_by_id.get(room["card_id"]),
+            "state": room["state"],
+            "sheet": P.CLINIC_SHEET if role == "desk" else None,
+        }
+
+    @r.get("/api/c/room/{code}")
+    async def room_state(code: str, request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        room = store.get_room(code)
+        if not room or got[0] not in (room["caller_cid"], room["desk_cid"]):
+            return err("no_room", "no such room", 404)
+        role = "caller" if room["caller_cid"] == got[0] else "desk"
+        return {
+            "state": room["state"],
+            "role": role,
+            "clips": store.room_clips(room["code"]),
+            "partner_here": bool(room["desk_cid"]),
+            "card": ctx.cards_by_id.get(room["card_id"]),
+            "sheet": P.CLINIC_SHEET if role == "desk" else None,
+        }
+
+    @r.get("/api/c/room/{code}/clip/{clip_id}")
+    async def room_clip(code: str, clip_id: str, request: Request):
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        room = store.get_room(code)
+        clip = store.get_clip(clip_id) if CLIP_ID.match(clip_id) else None
+        if (
+            not room
+            or not clip
+            or clip["room"] != room["code"]
+            or got[0] not in (room["caller_cid"], room["desk_cid"])
+        ):
+            return err("no_clip", "not found", 404)
+        path = Path(clip["path"])
+        return Response(
+            path.read_bytes(),
+            media_type=AUDIO_TYPES.get(path.suffix, "application/octet-stream"),
+            headers={"Cache-Control": "private, max-age=600"},
+        )
+
+    @r.get("/q/{name}.wav")
+    async def question_audio(name: str):
+        if not re.fullmatch(r"[a-f0-9]{16}", name):
+            return err("not_found", "not found", 404)
+        path = cfg.prompts_dir / "q" / f"{name}.wav"
+        if not path.exists():
+            return err("not_found", "not found", 404)
+        return FileResponse(
+            path, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"}
+        )
+
+    @r.get("/voice-note")
+    async def voice_note():
+        path = cfg.data_dir / "voice_note.ogg"
+        if not path.exists():
+            return err("not_found", "not found", 404)
+        return FileResponse(path, media_type="audio/ogg")
+
+    return r
+
+
+# --------------------------------------------------------------------------- staff routes
+def _staff(ctx: Ctx, request: Request, roles: set[str]) -> dict[str, Any] | JSONResponse:
+    header = request.headers.get("authorization", "")
+    token = (
+        header[7:]
+        if header.lower().startswith("bearer ")
+        else request.query_params.get("token", "")
+    )
+    staff = ctx.store.staff_for(token)
+    if not staff:
+        # Tokens are 256-bit random, so guessing is hopeless; this only stops log spam and hammering.
+        if not ctx.limiter.allow(f"badtoken:{ctx.address(request)}", 30, 600):
+            return err("slow_down", "too many wrong tokens, wait a few minutes", 429)
+        return err("unauthorized", "sign in with your token", 401)
+    if staff["role"] not in roles:
+        return err("forbidden", "this token cannot do that", 403)
+    return staff
+
+
+class ReviewBody(BaseModel):
+    clip_id: str
+    text: str = Field(default="", max_length=600)
+    flags: list[str] = Field(default_factory=list, max_length=8)
+    seconds: float | None = None
+
+
+def review_router(ctx: Ctx, *, public: bool) -> APIRouter:
+    r = APIRouter()
+    roles = {"reviewer", "adjudicator"} if public else {"reviewer", "adjudicator", "admin"}
+
+    @r.get("/api/review/me")
+    async def me(request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        mine = ctx.store._one(
+            "SELECT COUNT(*) n FROM reviews WHERE staff_id=? AND kind!='seed'", (staff["id"],)
+        )
+        return {"name": staff["name"], "role": staff["role"], "reviewed": mine["n"]}
+
+    @r.get("/api/review/next")
+    async def nxt(request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        item = ctx.store.next_for_review(staff)
+        if not item:
+            return {"item": None}
+        item["audio_url"] = f"/api/review/audio/{item['clip_id']}?{ctx.sign(item['clip_id'])}"
+        return {"item": item}
+
+    @r.post("/api/review/submit")
+    async def submit(body: ReviewBody, request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        if not ctx.limiter.allow(f"rv:{staff['id']}", 600, 3600):
+            return err("slow_down", "slow down a little", 429)
+        try:
+            out = await run_in_threadpool(
+                ctx.store.submit_review, staff, body.clip_id, body.text, body.flags, body.seconds
+            )
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return out
+
+    @r.get("/api/review/audio/{clip_id}")
+    async def audio(clip_id: str, exp: int = 0, sig: str = ""):
+        if not CLIP_ID.match(clip_id) or not ctx.verify(clip_id, exp, sig):
+            return err("expired", "this link has expired, reload", 403)
+        clip = ctx.store.get_clip(clip_id)
+        if not clip or not clip["path"]:
+            return err("not_found", "not found", 404)
+        path = Path(clip["path"])
+        return Response(
+            path.read_bytes(),
+            media_type=AUDIO_TYPES.get(path.suffix, "application/octet-stream"),
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    return r
+
+
+class CampaignBody(BaseModel):
+    name: str = Field(max_length=80)
+    from_name: str = Field(default="", max_length=60)
+    note: str = Field(default="", max_length=200)
+
+
+class StaffBody(BaseModel):
+    name: str = Field(max_length=60)
+    role: str
+
+
+class SettingBody(BaseModel):
+    kill_switch: bool | None = None
+    goal_minutes: int | None = Field(default=None, ge=1, le=100000)
+    impact_note: str | None = Field(
+        default=None, max_length=300
+    )  # shown to contributors: what their clips achieved
+
+
+class RemoveBody(BaseModel):
+    reason: str = Field(default="removed by admin", max_length=120)
+
+
+def admin_router(ctx: Ctx) -> APIRouter:
+    r = APIRouter()
+    store = ctx.store
+
+    def gate(request: Request):
+        return _staff(ctx, request, {"admin"})
+
+    @r.get("/api/admin/stats")
+    async def stats(request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        return {
+            **store.stats(),
+            "impact_note": store.get_setting("impact_note"),
+            "reviewers": store.reviewer_report(),
+            "backlog": {
+                "to_review": store._one(
+                    "SELECT COUNT(*) n FROM clips WHERE deleted_at IS NULL AND status='pending'"
+                )["n"],
+                "disputed": store._one(
+                    "SELECT COUNT(*) n FROM clips WHERE deleted_at IS NULL AND status='disputed'"
+                )["n"],
+            },
+        }
+
+    @r.get("/api/admin/campaigns")
+    async def campaigns(request: Request):
+        s = gate(request)
+        return s if isinstance(s, JSONResponse) else {"campaigns": store.list_campaigns()}
+
+    @r.post("/api/admin/campaigns")
+    async def new_campaign(body: CampaignBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        code = store.create_campaign(body.name, body.from_name, body.note)
+        store.audit(s["name"], "campaign_created", body.name)
+        return {"code": code, "path": f"/?c={code}"}
+
+    @r.get("/api/admin/staff")
+    async def staff(request: Request):
+        s = gate(request)
+        return s if isinstance(s, JSONResponse) else {"staff": store.list_staff()}
+
+    @r.post("/api/admin/staff")
+    async def new_staff(body: StaffBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        try:
+            token = store.create_staff(body.name, body.role)
+        except StoreError as e:
+            return err(e.code, e.message)
+        return {"token": token, "note": "shown once, copy it now"}
+
+    @r.delete("/api/admin/staff/{staff_id}")
+    async def drop_staff(staff_id: int, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        store.deactivate_staff(staff_id)
+        store.audit(s["name"], "staff_deactivated", str(staff_id))
+        return {"ok": True}
+
+    @r.get("/api/admin/clips")
+    async def clips(request: Request, status: str = "", limit: int = 100, offset: int = 0):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        rows = store.clip_rows(status, min(limit, 500), offset)
+        for row in rows:
+            row["audio_url"] = f"/api/review/audio/{row['id']}?{ctx.sign(row['id'])}"
+        return {"clips": rows}
+
+    @r.post("/api/admin/clips/{clip_id}/remove")
+    async def remove(clip_id: str, body: RemoveBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        return {"ok": store.remove_clip(clip_id, s["name"], body.reason)}
+
+    @r.post("/api/admin/settings")
+    async def settings(body: SettingBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        if body.kill_switch is not None:
+            store.set_setting("kill_switch", "1" if body.kill_switch else "0")
+            store.audit(s["name"], "kill_switch", str(body.kill_switch))
+        if body.goal_minutes is not None:
+            store.set_setting("goal_minutes", str(body.goal_minutes))
+        if body.impact_note is not None:
+            store.set_setting("impact_note", body.impact_note.strip())
+            store.audit(s["name"], "impact_note", body.impact_note.strip()[:120])
+        return {"ok": True}
+
+    @r.get("/api/admin/audit")
+    async def audit(request: Request, limit: int = 100):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        return {
+            "events": [
+                dict(row)
+                for row in store._q(
+                    "SELECT * FROM audit ORDER BY id DESC LIMIT ?", (min(limit, 500),)
+                )
+            ]
+        }
+
+    return r
+
+
+# --------------------------------------------------------------------------- apps
+HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "microphone=(self), camera=(), geolocation=()",
+    "Cache-Control": "no-cache",
+}
+
+
+def _wrap(app: FastAPI, cfg: CollectorConfig, *, public: bool) -> None:
+    turnstile = " https://challenges.cloudflare.com" if cfg.turnstile_site_key else ""
+    csp = (
+        f"default-src 'self'; script-src 'self'{turnstile}; style-src 'self' 'unsafe-inline'; "
+        f"img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'{turnstile}; "
+        f"frame-src{turnstile or ' ' + chr(39) + 'none' + chr(39)}; base-uri 'none'; form-action 'self'"
+    )
+
+    @app.middleware("http")
+    async def secure(request: Request, call_next):
+        response = await call_next(request)
+        for key, value in HEADERS.items():
+            response.headers.setdefault(key, value)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Content-Security-Policy"] = csp
+        if public is False:
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    if cfg.allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cfg.allowed_origins,
+            allow_methods=["GET", "POST", "PUT"],
+            allow_headers=["*"],
+            max_age=600,
+        )
+
+
+def create_public_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAPI:
+    ctx = ctx or Ctx(config)
+    app = FastAPI(title="SHEFA Voice Commons", docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.ctx = ctx
+    _wrap(app, config, public=True)
+    app.include_router(public_router(ctx))
+    if config.reviewers_on_public:
+        app.include_router(review_router(ctx, public=True))
+        if (STATIC / "private").exists():
+            app.mount(
+                "/review", StaticFiles(directory=STATIC / "private", html=True), name="review"
+            )
+    if (STATIC / "public").exists():
+        app.mount("/", StaticFiles(directory=STATIC / "public", html=True), name="public")
+    return app
+
+
+def create_private_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAPI:
+    ctx = ctx or Ctx(config)
+    app = FastAPI(
+        title="SHEFA Voice Commons (staff)", docs_url=None, redoc_url=None, openapi_url=None
+    )
+    app.state.ctx = ctx
+    _wrap(app, config, public=False)
+    app.include_router(review_router(ctx, public=False))
+    app.include_router(admin_router(ctx))
+
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        return {"ok": True}
+
+    if (STATIC / "private").exists():
+        app.mount("/", StaticFiles(directory=STATIC / "private", html=True), name="private")
+    return app
