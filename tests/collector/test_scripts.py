@@ -1,6 +1,6 @@
 """Version 2 scripts: branching calls to one fictional clinic, and the desk's recorded voices."""
 
-# ruff: noqa: E501
+# ruff: noqa: E501, N812
 import random
 
 import pytest

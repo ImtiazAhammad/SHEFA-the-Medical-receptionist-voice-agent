@@ -19,7 +19,7 @@ lists, and it recommends the most senior one when asked; the patient is offered 
 the day the caller asked for; and a "wrong read-back" really is wrong, so there is something to
 correct.
 """
-# ruff: noqa: E501, RUF001
+# ruff: noqa: E501, RUF001, TC003
 
 from __future__ import annotations
 
