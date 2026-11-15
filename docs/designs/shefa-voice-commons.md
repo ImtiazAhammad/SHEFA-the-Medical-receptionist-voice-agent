@@ -28,6 +28,28 @@ Sections 5 and 7 (pull-and-clear and the Supabase budget) and feature A8 (keep-a
 Replaced by: `collect backup` (verified copy to another disk, withdrawn clips never survive in it)
 and a disk meter with an automatic upload pause. Run instructions: [`../collector.md`](../collector.md).
 
+## Revision 2 (2026-11-16): after the first 221 clips from 30 people
+
+The founder's findings and two reviews (conversation design; security and privacy) led to these
+changes. Web contract: [`collector-api-v2.md`](collector-api-v2.md).
+
+| Finding | Change |
+|---|---|
+| Every round was the same six steps; calls could not go longer | Scripts are branching graphs (`collector/scripts.py`): 5 to 16 turns, forks where the caller chooses what to say, optional extra questions, a goodbye |
+| The desk never greeted | Four openings with salam + clinic name + "how can I help?" |
+| Patients ask which doctor is better | One fictional clinic, 8 departments x 3 doctors (অধ্যাপক, সহযোগী অধ্যাপক, সহকারী অধ্যাপক). The desk lists them; asked for advice it recommends the most senior and says so as seniority, not as a quality claim |
+| Relation/name mismatches | The patient is a PAIR to choose from; names are gender- and age-tagged; department limits who the patient can be |
+| People did not know when to speak | The desk's words are always visible, a clear "your turn" cue, the record button can never stay disabled. Reviewer's judgement: this, not the synthetic voice, was the main cause |
+| "Use real recorded voices" | Staff voice packs (opt-in, admin-approved, one voice per call). NOT built: playing contributors' clips to other contributors; their consent says "not published" |
+| The time offered ignored the day asked for; "correct it" had nothing to correct | Offers follow the doctor's days; a wrong read-back is really wrong |
+| Clips were cut at 14 s and kept | Open turns allow 20 s; a cut clip is flagged (`auto_stopped`) and the person is asked to redo it |
+| Token sign-in | Username + password, sessions, one-time passwords, per-place lockout; the admin can never sign in through the tunnel |
+| One reviewer's flag rejects a clip for good | The admin can restore a rejected clip |
+
+Not changed: contributors have no accounts; the first version's cards still resolve for clips that
+waited on a phone. Still untested with real people: whether forks are understood, whether labels
+get read aloud, the auto-stop rate, and which rank words callers really say ("প্রফেসর", "বড় ডাক্তার").
+
 ## 1. What it is, in one paragraph
 
 A free web page anyone can open from a link. They see a made-up hospital-phone situation, hear the
