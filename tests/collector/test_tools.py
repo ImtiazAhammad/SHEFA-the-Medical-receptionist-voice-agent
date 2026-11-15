@@ -179,3 +179,11 @@ def test_shell_builder_points_the_page_at_the_server(config, tmp_path, monkeypat
     assert t.build_shell(config, out, "https://x.trycloudflare.com/") == 0
     assert 'window.SHEFA_API = "https://x.trycloudflare.com"' in (out / "config.js").read_text()
     assert t.build_shell(config, out, "not-a-url") == 2
+
+
+def test_compact_audio_encodes_any_length():
+    rng = np.random.default_rng(0)
+    for n in (16000, 68267, 68268, 204801):  # lengths that once gave two packets the same timestamp
+        x = (rng.standard_normal(n) * 0.1).astype(np.float32)
+        back, codec = A.decode(A.encode_m4a(x, normalise=True))
+        assert codec == "aac" and abs(len(back) - n) < 2500

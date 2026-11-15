@@ -13,6 +13,7 @@ import io
 import math
 import wave
 from dataclasses import dataclass
+from fractions import Fraction
 
 import av
 import numpy as np
@@ -128,8 +129,19 @@ def encode_m4a(samples: np.ndarray, *, normalise: bool = False, bit_rate: int = 
     stream.bit_rate = bit_rate
     frame = av.AudioFrame.from_ndarray(pcm16.reshape(1, -1), format="s16", layout="mono")
     frame.sample_rate = RATE
-    resampler = av.AudioResampler(format=stream.format.name, layout="mono", rate=24000)
+    # AAC takes frames of exactly its own size (the last one may be shorter), so the resampler
+    # is told to cut them that way; uneven frames fail with "Invalid argument".
+    size = stream.codec_context.frame_size or 1024
+    resampler = av.AudioResampler(format=stream.format.name, layout="mono", rate=24000, frame_size=size)
+    written = 0
     for piece in list(resampler.resample(frame)) + list(resampler.resample(None) or []):
+        if piece.samples == 0:
+            continue
+        # Explicit timestamps: without them some lengths give two packets the same time and the
+        # container refuses the file.
+        piece.pts = written
+        piece.time_base = Fraction(1, 24000)
+        written += piece.samples
         for packet in stream.encode(piece):
             out.mux(packet)
     for packet in stream.encode(None):
