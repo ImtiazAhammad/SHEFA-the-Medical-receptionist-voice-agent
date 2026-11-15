@@ -101,6 +101,7 @@ class Ctx:
         self.config = config
         self.store = store or CollectorStore(config)
         self.limiter = RateLimiter()
+        self.private_limiter = RateLimiter()  # a flood on the public address must not block staff
         self.cards = P.load_bank(config.prompts_dir / "cards.json")
         self.cards_by_id = {c["id"]: c for c in self.cards}
         key = self.store.get_setting("audio_key")
@@ -303,6 +304,8 @@ def public_router(ctx: Ctx) -> APIRouter:
             return err(
                 "corrupt", "the recording was damaged on the way, it will be sent again", 422
             )
+        if _ext_for(data) == ".bin":  # only the containers a browser recorder makes are decoded
+            return err("unreadable", REJECTION_BN["unreadable"], 422, reason="unreadable")
         try:
             samples, codec = await run_in_threadpool(A.decode, data)
         except A.AudioError:
@@ -427,6 +430,8 @@ def public_router(ctx: Ctx) -> APIRouter:
         got = who(request)
         if isinstance(got, JSONResponse):
             return got
+        if not ctx.limiter.allow(f"join:{ctx.address(request)}", 30, 600):
+            return err("slow_down", "too many tries, wait a few minutes", 429)
         try:
             room = store.join_room(body.code, got[0])
         except StoreError as e:
@@ -501,22 +506,77 @@ def public_router(ctx: Ctx) -> APIRouter:
 
 
 # --------------------------------------------------------------------------- staff routes
-def _staff(ctx: Ctx, request: Request, roles: set[str]) -> dict[str, Any] | JSONResponse:
+def _bearer(request: Request) -> str:
     header = request.headers.get("authorization", "")
-    token = (
-        header[7:]
-        if header.lower().startswith("bearer ")
-        else request.query_params.get("token", "")
-    )
-    staff = ctx.store.staff_for(token)
+    return header[7:] if header.lower().startswith("bearer ") else ""
+
+
+def _staff(
+    ctx: Ctx, request: Request, roles: set[str], *, allow_must_change: bool = False
+) -> dict[str, Any] | JSONResponse:
+    staff = ctx.store.staff_for(_bearer(request))
     if not staff:
-        # Tokens are 256-bit random, so guessing is hopeless; this only stops log spam and hammering.
-        if not ctx.limiter.allow(f"badtoken:{ctx.address(request)}", 30, 600):
-            return err("slow_down", "too many wrong tokens, wait a few minutes", 429)
-        return err("unauthorized", "sign in with your token", 401)
+        # Session tokens are 256-bit random, so guessing is hopeless; this only stops hammering.
+        if not ctx.limiter.allow(f"badtoken:{ctx.address(request)}", 60, 600):
+            return err("slow_down", "too many tries, wait a few minutes", 429)
+        return err("unauthorized", "please sign in", 401)
     if staff["role"] not in roles:
-        return err("forbidden", "this token cannot do that", 403)
+        return err("forbidden", "this account cannot do that here", 403)
+    if staff.get("must_change") and not allow_must_change:
+        return err("must_change", "choose your own password first", 403)
     return staff
+
+
+class LoginBody(BaseModel):
+    username: str = Field(max_length=60)
+    password: str = Field(max_length=200)
+
+
+class PasswordBody(BaseModel):
+    old: str = Field(max_length=200)
+    new: str = Field(max_length=200)
+
+
+def account_router(ctx: Ctx, *, public: bool) -> APIRouter:
+    """Sign in, sign out, change your own password. On the public address an admin account is
+    refused even with the right password: the admin works on the clinic computer only."""
+    r = APIRouter()
+    roles = {"reviewer", "adjudicator"} if public else {"reviewer", "adjudicator", "admin"}
+
+    @r.post("/api/staff/login")
+    async def login(body: LoginBody, request: Request):
+        ip = ctx.address(request)
+        limiter = ctx.limiter if public else ctx.private_limiter
+        if not limiter.allow(f"login:{ip}", 30, 600):
+            return err("slow_down", "too many tries from here, wait a few minutes", 429)
+        try:
+            out = await run_in_threadpool(
+                ctx.store.sign_in, body.username, body.password, ip, roles
+            )
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        out.pop("id", None)
+        return out
+
+    @r.post("/api/staff/logout")
+    async def logout(request: Request):
+        ctx.store.sign_out(_bearer(request))
+        return {"ok": True}
+
+    @r.post("/api/staff/password")
+    async def password(body: PasswordBody, request: Request):
+        staff = _staff(ctx, request, roles, allow_must_change=True)
+        if isinstance(staff, JSONResponse):
+            return staff
+        if not ctx.limiter.allow(f"pw:{staff['id']}", 10, 600):
+            return err("slow_down", "too many tries, wait a few minutes", 429)
+        try:
+            token = await run_in_threadpool(ctx.store.change_password, staff, body.old, body.new)
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return {"ok": True, "token": token}
+
+    return r
 
 
 class ReviewBody(BaseModel):
@@ -532,13 +592,19 @@ def review_router(ctx: Ctx, *, public: bool) -> APIRouter:
 
     @r.get("/api/review/me")
     async def me(request: Request):
-        staff = _staff(ctx, request, roles)
+        staff = _staff(ctx, request, roles, allow_must_change=True)
         if isinstance(staff, JSONResponse):
             return staff
         mine = ctx.store._one(
             "SELECT COUNT(*) n FROM reviews WHERE staff_id=? AND kind!='seed'", (staff["id"],)
         )
-        return {"name": staff["name"], "role": staff["role"], "reviewed": mine["n"]}
+        return {
+            "name": staff["name"],
+            "username": staff.get("username") or "",
+            "role": staff["role"],
+            "reviewed": mine["n"],
+            "must_change": bool(staff.get("must_change")),
+        }
 
     @r.get("/api/review/next")
     async def nxt(request: Request):
@@ -592,6 +658,7 @@ class CampaignBody(BaseModel):
 class StaffBody(BaseModel):
     name: str = Field(max_length=60)
     role: str
+    username: str = Field(default="", max_length=30)
 
 
 class SettingBody(BaseModel):
@@ -657,10 +724,30 @@ def admin_router(ctx: Ctx) -> APIRouter:
         if isinstance(s, JSONResponse):
             return s
         try:
-            token = store.create_staff(body.name, body.role)
+            made = await run_in_threadpool(
+                store.create_staff, body.name, body.role, body.username or None
+            )
         except StoreError as e:
-            return err(e.code, e.message)
-        return {"token": token, "note": "shown once, copy it now"}
+            return err(e.code, e.message, e.status)
+        store.audit(s["name"], "staff_added", made["username"])
+        return {
+            "username": made["username"],
+            "password": made["password"],
+            "note": "shown once; the person must change it at first sign-in",
+        }
+
+    @r.post("/api/admin/staff/{staff_id}/reset")
+    async def reset_staff(staff_id: int, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        try:
+            secret = await run_in_threadpool(store.set_password, staff_id)
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        store.audit(s["name"], "password_reset", str(staff_id))
+        row = next((p for p in store.list_staff() if p["id"] == staff_id), {})
+        return {"username": row.get("username"), "password": secret}
 
     @r.delete("/api/admin/staff/{staff_id}")
     async def drop_staff(staff_id: int, request: Request):
@@ -690,6 +777,13 @@ def admin_router(ctx: Ctx) -> APIRouter:
         if isinstance(s, JSONResponse):
             return s
         return {"ok": store.remove_clip(clip_id, s["name"], body.reason)}
+
+    @r.post("/api/admin/clips/{clip_id}/restore")
+    async def restore(clip_id: str, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        return {"ok": store.restore_clip(clip_id, s["name"])}
 
     @r.post("/api/admin/settings")
     async def settings(body: SettingBody, request: Request):
@@ -768,6 +862,7 @@ def create_public_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAP
     _wrap(app, config, public=True)
     app.include_router(public_router(ctx))
     if config.reviewers_on_public:
+        app.include_router(account_router(ctx, public=True))
         app.include_router(review_router(ctx, public=True))
         if (STATIC / "private").exists():
             app.mount(
@@ -785,6 +880,17 @@ def create_private_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastA
     )
     app.state.ctx = ctx
     _wrap(app, config, public=False)
+
+    @app.middleware("http")
+    async def local_only(request: Request, call_next):
+        # The staff app answers only when addressed as this computer. A web page elsewhere that
+        # points a made-up name at 127.0.0.1 (DNS rebinding) is refused.
+        host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]")
+        if host not in ("127.0.0.1", "localhost", "::1", "testserver"):
+            return err("forbidden", "open this page as http://127.0.0.1", 403)
+        return await call_next(request)
+
+    app.include_router(account_router(ctx, public=False))
     app.include_router(review_router(ctx, public=False))
     app.include_router(admin_router(ctx))
 

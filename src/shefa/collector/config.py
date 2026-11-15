@@ -48,6 +48,8 @@ class CollectorConfig(BaseModel):
     turnstile_secret_env: str = "SHEFA_TURNSTILE_SECRET"
     reviewers_on_public: bool = False  # `serve --with-review` turns this on for a review session
     audio_url_ttl_s: int = 600
+    session_hours: int = 12  # a staff sign-in lasts this long
+    password_iterations: int = 600_000  # PBKDF2 rounds; tests lower it
     test_fraction: float = 0.10
     dev_fraction: float = 0.05
     seed_fraction: float = 0.05  # known-answer clips mixed into a reviewer's queue

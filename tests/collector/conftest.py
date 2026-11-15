@@ -33,7 +33,9 @@ def make_wav(seconds=1.6, amp=0.3, noise=0.002, clip=False, seed=0, rate=16000) 
 
 @pytest.fixture
 def config(tmp_path):
-    return CollectorConfig(data_dir=tmp_path / "collector", min_free_disk_mb=1)
+    return CollectorConfig(
+        data_dir=tmp_path / "collector", min_free_disk_mb=1, password_iterations=1000
+    )
 
 
 @pytest.fixture

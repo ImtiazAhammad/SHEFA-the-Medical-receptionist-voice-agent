@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import shutil
 import sqlite3
@@ -405,6 +406,7 @@ def do_backup(store: CollectorStore, dest: Path) -> int:
     with store._lock:
         store.db.backup(target)
     target.close()
+    os.chmod(snapshot, 0o600)
     copied = skipped = bad = 0
     rows = store._q("SELECT id,sha256,path,bytes FROM clips WHERE deleted_at IS NULL AND path!=''")
     for r in rows:

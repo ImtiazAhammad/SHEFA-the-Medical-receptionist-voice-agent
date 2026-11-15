@@ -14,9 +14,14 @@ def bearer(token):
 
 @pytest.fixture
 def staff(ctx):
-    return {
-        role: ctx.store.create_staff(role, role) for role in ("admin", "adjudicator", "reviewer")
-    } | {"second": ctx.store.create_staff("second", "reviewer")}
+    """Session tokens for one account of each role (and a second reviewer)."""
+
+    def session(name, role):
+        return ctx.store.open_session(ctx.store.create_staff(name, role, password="correct horse 9")["id"])
+
+    return {role: session(role, role) for role in ("admin", "adjudicator", "reviewer")} | {
+        "second": session("second", "reviewer")
+    }
 
 
 def upload(person, ctx, split="train", expected=None, card=("b000", "b000.who")):
@@ -182,10 +187,14 @@ def test_admin_can_make_campaign_links_staff_and_pause(priv, pub, ctx, staff):
         "/api/admin/campaigns", headers=h, json={"name": "family eid", "from_name": "রাহুল"}
     ).json()
     assert pub.get(f"/api/c/config?c={made['code']}").json()["from_name"] == "রাহুল"
+    made = priv.post(
+        "/api/admin/staff", headers=h, json={"name": "New Person", "role": "reviewer"}
+    ).json()
+    assert made["username"] == "new.person" and made["password"]
     token = priv.post(
-        "/api/admin/staff", headers=h, json={"name": "new person", "role": "reviewer"}
+        "/api/staff/login", json={"username": "new.person", "password": made["password"]}
     ).json()["token"]
-    assert priv.get("/api/review/me", headers=bearer(token)).status_code == 200
+    assert priv.get("/api/review/me", headers=bearer(token)).json()["must_change"] is True
     assert (
         priv.post("/api/admin/staff", headers=h, json={"name": "x", "role": "root"}).status_code
         == 400
@@ -227,7 +236,7 @@ def test_impact_note_reaches_contributors(priv, pub, staff):
 
 
 def test_many_wrong_tokens_are_slowed_down(priv):
-    codes = {priv.get("/api/review/me", headers=bearer("w" * 40)).status_code for _ in range(40)}
+    codes = {priv.get("/api/review/me", headers=bearer("w" * 40)).status_code for _ in range(80)}
     assert 401 in codes and 429 in codes
 
 

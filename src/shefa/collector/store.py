@@ -19,13 +19,25 @@ import shutil
 import sqlite3
 import threading
 import time
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any
 
+from shefa.auth import hash_password, verify_token
 from shefa.collector import text as T
 from shefa.collector.config import CollectorConfig
 
+USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,29}$")
+MIN_PASSWORD = 10
+MAX_FAILURES = 5
+LOCKOUT_SECONDS = 15 * 60
+TEMP_PASSWORD_HOURS = 72
+ROOM_JOIN_HOURS = 24
+COMMON_PASSWORDS = frozenset(
+    {"password", "password1", "12345678", "123456789", "1234567890", "qwertyui", "qwerty123",
+     "bangladesh", "iloveyou", "11111111", "00000000", "abcd1234", "admin123", "shefa123"}
+)
 CLIP_ID = re.compile(r"^[a-f0-9]{32}$")
 REJECT_FLAGS = frozenset({"unusable", "other_language", "personal_details", "offensive"})
 STAFF_ROLES = ("admin", "adjudicator", "reviewer")
@@ -34,6 +46,8 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS staff (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
   active INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY, staff_id INTEGER NOT NULL, created_at REAL NOT NULL, expires_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS campaigns (
   code TEXT PRIMARY KEY, name TEXT NOT NULL, from_name TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL);
@@ -78,6 +92,13 @@ CREATE TABLE IF NOT EXISTS audit (
 
 def _sha(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _small_int(value: Any) -> int:
+    try:
+        return max(0, min(int(value or 0), 999))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _fraction(key: str) -> float:
@@ -129,8 +150,11 @@ class CollectorStore:
         config.data_dir.mkdir(parents=True, exist_ok=True)
         self.audio = LocalAudioStore(config.audio_dir)
         self._lock = threading.RLock()
+        self._failures: dict[str, list[float]] = {}
+        self._dummy_hash = hash_password("not-a-real-password", iterations=config.password_iterations)
         self.db = sqlite3.connect(config.db_path, check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA busy_timeout=5000")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript(_SCHEMA)
@@ -139,6 +163,19 @@ class CollectorStore:
 
     def _migrate(self) -> None:
         """Older databases made before speakers carried their own profile and delete code."""
+        staff_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(staff)")}
+        for column, ddl in (
+            ("username", "TEXT"),
+            ("password_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("must_change", "INTEGER NOT NULL DEFAULT 0"),
+            ("temp_until", "REAL"),
+        ):
+            if column not in staff_cols:
+                self.db.execute(f"ALTER TABLE staff ADD COLUMN {column} {ddl}")
+        self.db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS staff_username ON staff(username COLLATE NOCASE) "
+            "WHERE username IS NOT NULL"
+        )
         have = {r["name"] for r in self.db.execute("PRAGMA table_info(speakers)")}
         for column, ddl in (
             ("delete_hash", "TEXT NOT NULL DEFAULT ''"),
@@ -183,25 +220,200 @@ class CollectorStore:
         )
 
     # ---- staff ---------------------------------------------------------------------------
-    def create_staff(self, name: str, role: str) -> str:
+    # Accounts are a username and a password. A sign-in makes a random session token; only its
+    # hash is stored, so a copy of the database signs nobody in. The long tokens of the first
+    # version keep working only for a person who has not been given a password yet.
+    def _check_username(self, username: str) -> str:
+        username = username.strip().lower()
+        if not USERNAME.match(username):
+            raise StoreError(
+                "bad_username", "a username is 3 to 30 letters, digits, dot, dash or underscore"
+            )
+        return username
+
+    def _hash(self, password: str, username: str = "") -> str:
+        password = unicodedata.normalize("NFC", password)
+        if username and password.lower() == username.lower():
+            raise StoreError("weak_password", "the password must not be the username")
+        if password.isdigit():  # a mobile number is the first thing anyone would try
+            raise StoreError("weak_password", "use some letters too, not only digits")
+        if len(password) < MIN_PASSWORD or len(password) > 200:
+            raise StoreError("weak_password", f"a password needs at least {MIN_PASSWORD} characters")
+        if password.lower() in COMMON_PASSWORDS:
+            raise StoreError("weak_password", "that password is too easy to guess")
+        return hash_password(password, iterations=self.config.password_iterations)
+
+    @staticmethod
+    def temp_password() -> str:
+        """Easy to read out or type on a phone: four groups of letters and digits."""
+        alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+        return "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
+
+    def create_staff(
+        self, name: str, role: str, username: str | None = None, password: str | None = None
+    ) -> dict[str, Any]:
+        """A new account. Without a password one is generated; it must be changed at first sign-in."""
         if role not in STAFF_ROLES:
             raise StoreError("bad_role", f"role must be one of {STAFF_ROLES}")
-        token = secrets.token_urlsafe(32)
-        self._x(
-            "INSERT INTO staff(name,role,token_hash,created_at) VALUES (?,?,?,?)",
-            (name.strip()[:60] or "staff", role, _sha(token), time.time()),
+        if not username:  # "Rina Akter" -> "rina.akter"; a Bangla name needs a typed username
+            username = re.sub(r"[^a-z0-9._-]+", ".", name.strip().lower()).strip(".")
+        username = self._check_username(username)
+        if self._one("SELECT 1 FROM staff WHERE username=? COLLATE NOCASE", (username,)):
+            raise StoreError("taken", "that username is already used", 409)
+        generated = password is None
+        secret = password or self.temp_password()
+        cur = self._x(
+            "INSERT INTO staff(name,role,token_hash,created_at,username,password_hash,must_change) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (
+                name.strip()[:60] or username,
+                role,
+                "x:" + secrets.token_hex(16),  # never matches a token: tokens are retired
+                time.time(),
+                username,
+                self._hash(secret, username),
+                1 if generated else 0,
+            ),
         )
-        self.audit("system", "staff_created", f"{name} ({role})")
+        if generated:
+            self._x("UPDATE staff SET temp_until=? WHERE id=?", (time.time() + TEMP_PASSWORD_HOURS * 3600, cur.lastrowid))
+        self.audit("system", "staff_created", f"{username} ({role})")
+        return {"id": cur.lastrowid, "username": username, "password": secret if generated else None}
+
+    def set_password(self, staff_id: int, password: str | None = None, *, username: str | None = None,
+                     must_change: bool | None = None) -> str | None:
+        """Set (or generate) a password; every open session of that person ends. Returns a
+        generated password, shown once."""
+        row = self._one("SELECT * FROM staff WHERE id=?", (staff_id,))
+        if not row:
+            raise StoreError("no_staff", "no such person", 404)
+        generated = password is None
+        secret = password or self.temp_password()
+        name = row["username"]
+        if username or not name:
+            name = self._check_username(username or row["name"])
+            clash = self._one(
+                "SELECT 1 FROM staff WHERE username=? COLLATE NOCASE AND id!=?", (name, staff_id)
+            )
+            if clash:
+                raise StoreError("taken", "that username is already used", 409)
+        flag = generated if must_change is None else must_change
+        self._x(
+            "UPDATE staff SET username=?, password_hash=?, must_change=?, token_hash=?, temp_until=? WHERE id=?",
+            (
+                name,
+                self._hash(secret, name),
+                1 if flag else 0,
+                "x:" + secrets.token_hex(16),
+                time.time() + TEMP_PASSWORD_HOURS * 3600 if generated else None,
+                staff_id,
+            ),
+        )
+        self._x("DELETE FROM sessions WHERE staff_id=?", (staff_id,))
+        self.audit("system", "password_set", name)
+        return secret if generated else None
+
+    def open_session(self, staff_id: int) -> str:
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        self._x("DELETE FROM sessions WHERE expires_at<?", (now,))
+        self._x(
+            "INSERT INTO sessions(token_hash,staff_id,created_at,expires_at) VALUES (?,?,?,?)",
+            (_sha(token), staff_id, now, now + self.config.session_hours * 3600),
+        )
         return token
+
+    def _locked(self, key: str) -> bool:
+        now = time.time()
+        recent = [t for t in self._failures.get(key, []) if now - t < LOCKOUT_SECONDS]
+        self._failures[key] = recent
+        return len(recent) >= MAX_FAILURES
+
+    def sign_in(
+        self, username: str, password: str, where: str = "", roles: set[str] | None = None
+    ) -> dict[str, Any]:
+        """A session for a correct username and password.
+
+        Wrong tries are counted per username AND place they came from, so a stranger hammering a
+        name through the tunnel locks only themselves out, not the real person on another network.
+        A locked pair also refuses the right password, so guessing cannot be told from a lock.
+        """
+        username = username.strip().lower()[:60]
+        password = unicodedata.normalize("NFC", password)
+        key = f"{username}|{where}"
+        if len(self._failures) > 5000:  # forget old failures rather than grow without bound
+            self._failures.clear()
+        bad = StoreError("bad_login", "wrong username or password", 401)
+        if self._locked(key):
+            raise StoreError("locked", "too many wrong tries, wait 15 minutes", 429)
+        row = self._one("SELECT * FROM staff WHERE username=? COLLATE NOCASE AND active=1", (username,))
+        ok = False
+        # An account that may not sign in here (the admin, through the tunnel) is treated exactly
+        # like a name that does not exist, so the public address cannot be used to test its password.
+        if row is not None and roles is not None and row["role"] not in roles:
+            row = None
+        if row is not None and row["must_change"] and row["temp_until"] and row["temp_until"] < time.time():
+            row = None  # a one-time password that was never used has expired; the admin resets it
+        if row is not None and row["password_hash"]:
+            try:
+                ok = verify_token(password, row["password_hash"])
+            except ValueError:
+                ok = False
+        else:  # spend the same time on an unknown name, so names cannot be probed by timing
+            verify_token(password, self._dummy_hash)
+        if not ok:
+            self._failures.setdefault(key, []).append(time.time())
+            self.audit("staff", "sign_in_failed", username[:30])
+            raise bad
+        self._failures.pop(key, None)
+        self.audit(row["username"], "signed_in", where)
+        return {
+            "token": self.open_session(row["id"]),
+            "name": row["name"],
+            "role": row["role"],
+            "must_change": bool(row["must_change"]),
+            "id": row["id"],
+        }
+
+    def change_password(self, staff: dict[str, Any], old: str, new: str) -> str:
+        """The person changes their own password; other sessions end, a fresh one is returned."""
+        row = self._one("SELECT * FROM staff WHERE id=?", (staff["id"],))
+        try:
+            ok = bool(row and row["password_hash"]) and verify_token(old, row["password_hash"])
+        except ValueError:
+            ok = False
+        if not ok:
+            raise StoreError("bad_login", "the current password is wrong", 401)
+        if old == new:
+            raise StoreError("weak_password", "choose a new password, not the same one")
+        self.set_password(staff["id"], new, must_change=False)
+        return self.open_session(staff["id"])
+
+    def sign_out(self, token: str) -> None:
+        self._x("DELETE FROM sessions WHERE token_hash=?", (_sha(token or ""),))
 
     def staff_for(self, token: str) -> dict[str, Any] | None:
         if not token or len(token) < 20:
             return None
-        row = self._one("SELECT * FROM staff WHERE token_hash=? AND active=1", (_sha(token),))
+        digest = _sha(token)
+        row = self._one(
+            "SELECT s.* FROM sessions k JOIN staff s ON s.id=k.staff_id "
+            "WHERE k.token_hash=? AND k.expires_at>? AND s.active=1",
+            (digest, time.time()),
+        )
+        if row is None:  # a first-version token, valid until its owner gets a password
+            row = self._one(
+                "SELECT * FROM staff WHERE token_hash=? AND active=1 AND password_hash=''", (digest,)
+            )
         return dict(row) if row else None
 
     def list_staff(self) -> list[dict[str, Any]]:
-        return [dict(r) | {"token_hash": ""} for r in self._q("SELECT * FROM staff ORDER BY id")]
+        rows = self._q("SELECT * FROM staff ORDER BY id")
+        return [
+            {k: r[k] for k in ("id", "name", "role", "active", "created_at", "username", "must_change")}
+            | {"has_password": bool(r["password_hash"])}
+            for r in rows
+        ]
 
     def deactivate_staff(self, staff_id: int) -> None:
         row = self._one("SELECT role, active FROM staff WHERE id=?", (staff_id,))
@@ -215,6 +427,7 @@ class CollectorStore:
             if not others["n"]:
                 raise StoreError("last_admin", "you cannot remove the last admin", 409)
         self._x("UPDATE staff SET active=0 WHERE id=?", (staff_id,))
+        self._x("DELETE FROM sessions WHERE staff_id=?", (staff_id,))
 
     # ---- campaigns -----------------------------------------------------------------------
     def create_campaign(self, name: str, from_name: str = "", note: str = "") -> str:
@@ -370,7 +583,7 @@ class CollectorStore:
                     meta.get("setting", ""),
                     meta.get("room", ""),
                     meta.get("role", ""),
-                    int(meta.get("turn") or 0),
+                    _small_int(meta.get("turn")),
                     speaker["split"],
                     quality.duration_s,
                     quality.rms_db,
@@ -631,6 +844,18 @@ class CollectorStore:
         self._x("UPDATE clips SET status=?, final_text=? WHERE id=?", (status, final, clip_id))
         return status
 
+    def restore_clip(self, clip_id: str, actor: str) -> bool:
+        """Undo a rejection (one reviewer's flag is enough to reject, so the admin can reverse it)."""
+        clip = self.get_clip(clip_id)
+        if not clip or clip["status"] != "rejected":
+            return False
+        for r in self._q("SELECT id, flags FROM reviews WHERE clip_id=?", (clip_id,)):
+            if set(json.loads(r["flags"])) & REJECT_FLAGS:
+                self._x("DELETE FROM reviews WHERE id=?", (r["id"],))
+        self._resolve(clip_id)
+        self.audit(actor, "clip_restored", clip_id)
+        return True
+
     def reviewer_report(self) -> list[dict[str, Any]]:
         rows = self._q(
             "SELECT s.id, s.name, s.role, s.active, COUNT(r.id) reviews, "
@@ -656,6 +881,8 @@ class CollectorStore:
         room = dict(room)
         if cid in (room["caller_cid"], room["desk_cid"]):
             return room
+        if time.time() - room["created_at"] > ROOM_JOIN_HOURS * 3600:
+            raise StoreError("no_room", "no such room", 404)
         if room["desk_cid"]:
             raise StoreError("room_full", "this room already has two people", 409)
         self._x("UPDATE rooms SET desk_cid=?, state='active' WHERE code=?", (cid, code.upper()))
