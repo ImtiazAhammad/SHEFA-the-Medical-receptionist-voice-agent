@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -28,6 +29,7 @@ from pydantic import BaseModel, Field
 from shefa.booking import RateLimiter
 from shefa.collector import audio as A
 from shefa.collector import prompts as P
+from shefa.collector import scripts as S
 from shefa.collector.config import CONSENT_BN, CONSENT_EN, CollectorConfig
 from shefa.collector.store import CLIP_ID, CollectorStore, StoreError
 
@@ -48,7 +50,8 @@ DIVISIONS = {
     "skip",
 }
 AUDIO_TYPES = {".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg", ".mp4": "audio/mp4"}
-KIND_WEIGHTS = {"booking": 0.6, "info": 0.15, "correction": 0.15, "digits": 0.10}
+KIND_WEIGHTS = {"booking": 0.65, "info": 0.25, "digits": 0.10}
+NAME16 = re.compile(r"^[a-f0-9]{16}$")
 
 REJECTION_BN = {
     "too_short": "খুব ছোট রেকর্ডিং, আবার বলুন।",
@@ -62,6 +65,40 @@ REJECTION_BN = {
 
 def err(code: str, message: str, status: int = 400, **extra: Any) -> JSONResponse:
     return JSONResponse({"error": {"code": code, "message": message, **extra}}, status_code=status)
+
+
+def _step_meta(card: dict[str, Any] | None, request: Request) -> dict[str, Any] | None:
+    """What this clip answers, read from the card on the server (the phone only sends ids)."""
+    if not card:
+        return None
+    wanted = request.headers.get("x-step", "")
+    if card.get("v") != 2:  # a first-version card: a plain list of steps
+        return next((s for s in card.get("steps", []) if s["id"] == wanted), None)
+    node = card["nodes"].get(wanted)
+    if not node or not node["choices"]:
+        return None
+    choice_id = request.headers.get("x-choice", "")
+    choice = next((c for c in node["choices"] if c["id"] == choice_id), node["choices"][0])
+    persona_id = request.headers.get("x-persona", "")
+    persona = next((p for p in card.get("personas", []) if p["id"] == persona_id), None)
+    facts = dict(choice["facts"]) | {"choice": choice["id"]}
+    if persona:
+        facts |= {
+            "persona": persona["id"],
+            "relation": persona["label_bn"],
+            "gender": persona["gender"],
+        }
+    return {
+        "id": f"{node['id']}#{choice['id']}",
+        "slot": node["slot"],
+        "question_bn": node["line_bn"],
+        "expected_text": S.resolve(choice["expected"], persona),
+        "facts": facts,
+    }
+
+
+def _sheet_for(card: dict[str, Any] | None) -> dict[str, Any]:
+    return S.clinic_sheet() if (card or {}).get("v") == 2 else P.CLINIC_SHEET
 
 
 def _ext_for(data: bytes) -> str:
@@ -102,8 +139,13 @@ class Ctx:
         self.store = store or CollectorStore(config)
         self.limiter = RateLimiter()
         self.private_limiter = RateLimiter()  # a flood on the public address must not block staff
-        self.cards = P.load_bank(config.prompts_dir / "cards.json")
-        self.cards_by_id = {c["id"]: c for c in self.cards}
+        # Version 2 scripts are what people get now. The first version's cards stay known by id,
+        # so a clip that waited on a phone, or an old two-person room, still finds its card.
+        self.cards = S.load_bank(config.prompts_dir / "cards2.json")
+        legacy = P.load_bank(config.prompts_dir / "cards.json")
+        self.cards_by_id = {c["id"]: c for c in legacy} | {c["id"]: c for c in self.cards}
+        self.pack_lines = S.pack_lines(self.cards)
+        self.line_text = S.all_lines(self.cards)
         key = self.store.get_setting("audio_key")
         if not key:
             key = os.urandom(32).hex()
@@ -150,7 +192,27 @@ class Ctx:
             pick = rng.choice(choices)
             out.append(pick)
             pool.remove(pick)
-        return out
+        return [self.with_voice(card, rng) for card in out]
+
+    def with_voice(self, card: dict[str, Any], rng: random.Random | None = None) -> dict[str, Any]:
+        """Sometimes the desk speaks in a recorded human voice: one voice for the whole call, used
+        only when that person recorded this call's opening line."""
+        rng = rng or random.Random()
+        try:
+            share = float(
+                self.store.get_setting("human_voice_share", str(self.config.human_voice_share))
+            )
+        except ValueError:
+            share = self.config.human_voice_share
+        if card.get("v") != 2 or rng.random() >= share:
+            return card
+        opening = card["nodes"][card["start"]]["audio_name"]
+        packs = [p for p in self.store.playable_packs() if opening in p["names"]]
+        if not packs:
+            return card
+        pack = rng.choice(packs)
+        names = sorted({n["audio_name"] for n in card["nodes"].values()} & pack["names"])
+        return card | {"voice": {"pack": pack["public_id"], "names": names}}
 
 
 # --------------------------------------------------------------------------- public routes
@@ -226,6 +288,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "turnstile_site_key": cfg.turnstile_site_key,
             "min_clip_s": cfg.min_clip_s,
             "max_clip_s": cfg.max_clip_s,
+            "clinic_bn": S.CLINIC,
             "settings": P.settings_choices(),
             "from_name": (camp or {}).get("from_name", ""),
             "campaign": (camp or {}).get("code", ""),
@@ -325,14 +388,7 @@ def public_router(ctx: Ctx) -> APIRouter:
         if reason:
             return err("rejected", REJECTION_BN[reason], 422, reason=reason)
         card = ctx.cards_by_id.get(request.headers.get("x-card", ""))
-        step = next(
-            (
-                s
-                for s in (card or {}).get("steps", [])
-                if s["id"] == request.headers.get("x-step", "")
-            ),
-            None,
-        )
+        step = _step_meta(card, request)
         setting = request.headers.get("x-setting", "")
         room_code, role = request.headers.get("x-room", "")[:8].upper(), ""
         if room_code:  # a two-person clip counts only if the uploader really is in that room
@@ -349,7 +405,8 @@ def public_router(ctx: Ctx) -> APIRouter:
             "kind": card["kind"] if card else request.headers.get("x-kind", "")[:20],
             "question_bn": step["question_bn"] if step else "",
             "expected_text": step["expected_text"] if step else None,
-            "facts": step["facts"] if step else {},
+            "facts": (step["facts"] if step else {})
+            | ({"auto_stopped": True} if request.headers.get("x-autostop") == "1" else {}),
             "setting": setting if setting in SETTING_IDS else "",
             "room": room_code,
             "role": role,
@@ -442,7 +499,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "role": role,
             "card": ctx.cards_by_id.get(room["card_id"]),
             "state": room["state"],
-            "sheet": P.CLINIC_SHEET if role == "desk" else None,
+            "sheet": _sheet_for(ctx.cards_by_id.get(room["card_id"])) if role == "desk" else None,
         }
 
     @r.get("/api/c/room/{code}")
@@ -460,7 +517,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "clips": store.room_clips(room["code"]),
             "partner_here": bool(room["desk_cid"]),
             "card": ctx.cards_by_id.get(room["card_id"]),
-            "sheet": P.CLINIC_SHEET if role == "desk" else None,
+            "sheet": _sheet_for(ctx.cards_by_id.get(room["card_id"])) if role == "desk" else None,
         }
 
     @r.get("/api/c/room/{code}/clip/{clip_id}")
@@ -483,6 +540,25 @@ def public_router(ctx: Ctx) -> APIRouter:
             media_type=AUDIO_TYPES.get(path.suffix, "application/octet-stream"),
             headers={"Cache-Control": "private, max-age=600"},
         )
+
+    @r.get("/q2/{name}.m4a")
+    async def line_audio(name: str):
+        path = cfg.prompts_dir / "q2" / f"{name}.m4a"
+        if not NAME16.match(name) or not path.exists():
+            return err("not_found", "not found", 404)
+        return FileResponse(
+            path, media_type="audio/mp4", headers={"Cache-Control": "public, max-age=86400"}
+        )
+
+    @r.get("/hv/{pack}/{name}.m4a")
+    async def human_line(pack: str, name: str):
+        """A desk line in a staff member's recorded voice. Served only while the admin keeps that
+        pack switched on; the address carries a random id, never who the person is."""
+        row = store.pack_by_public_id(pack) if re.fullmatch(r"[a-f0-9]{32}", pack) else None
+        path = store.voice_line_path(row["staff_id"], name) if row and NAME16.match(name) else None
+        if path is None:
+            return err("not_found", "not found", 404)
+        return FileResponse(path, media_type="audio/mp4", headers={"Cache-Control": "no-store"})
 
     @r.get("/q/{name}.wav")
     async def question_audio(name: str):
@@ -632,6 +708,93 @@ def review_router(ctx: Ctx, *, public: bool) -> APIRouter:
             return err(e.code, e.message, e.status)
         return out
 
+    # ---- record the desk's lines in your own voice (played to contributors) ------------------
+    @r.get("/api/voice/lines")
+    async def voice_lines(request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        pack = ctx.store.voice_pack(staff["id"])
+        have = ctx.store.voice_names(staff["id"])
+        return {
+            "consented": bool(pack["consent_at"]),
+            "enabled": bool(pack["enabled"]),
+            "lines": [line | {"recorded": line["name"] in have} for line in ctx.pack_lines],
+        }
+
+    @r.post("/api/voice/consent")
+    async def voice_consent(request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        ctx.store.voice_consent(staff["id"])
+        return {"ok": True}
+
+    @r.put("/api/voice/line/{name}")
+    async def voice_put(name: str, request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        if name not in {line["name"] for line in ctx.pack_lines}:
+            return err("not_found", "no such line", 404)
+        data = b""
+        async for chunk in request.stream():
+            data += chunk
+            if len(data) > 1_500_000:
+                return err("too_big", "recording is too large", 413)
+        if _ext_for(data) == ".bin":
+            return err("unreadable", REJECTION_BN["unreadable"], 422, reason="unreadable")
+        try:
+            samples, codec = await run_in_threadpool(A.decode, data)
+        except A.AudioError:
+            return err("unreadable", REJECTION_BN["unreadable"], 422, reason="unreadable")
+        quality = A.measure(samples, codec)
+        reason = (
+            "too_short"
+            if quality.duration_s < 1.0
+            else "too_long"
+            if quality.duration_s > 30
+            else "silent"
+            if quality.speech_ratio < ctx.config.min_speech_ratio
+            else "clipped"
+            if quality.clip_fraction > ctx.config.max_clip_fraction
+            else ""
+        )
+        if reason:
+            return err("rejected", REJECTION_BN[reason], 422, reason=reason)
+        encoded = await run_in_threadpool(lambda: A.encode_m4a(samples, normalise=True))
+        try:
+            ctx.store.save_voice_line(staff["id"], name, encoded, quality.duration_s)
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return {"ok": True, "duration_s": round(quality.duration_s, 1)}
+
+    @r.get("/api/voice/line/{name}")
+    async def voice_get(name: str, request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        path = ctx.store.voice_line_path(staff["id"], name)
+        if path is None:
+            return err("not_found", "not found", 404)
+        return Response(
+            path.read_bytes(), media_type="audio/mp4", headers={"Cache-Control": "no-store"}
+        )
+
+    @r.delete("/api/voice/line/{name}")
+    async def voice_delete(name: str, request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        return {"ok": True, "deleted": ctx.store.delete_voice_lines(staff["id"], name)}
+
+    @r.delete("/api/voice")
+    async def voice_delete_all(request: Request):
+        staff = _staff(ctx, request, roles)
+        if isinstance(staff, JSONResponse):
+            return staff
+        return {"ok": True, "deleted": ctx.store.delete_voice_lines(staff["id"])}
+
     @r.get("/api/review/audio/{clip_id}")
     async def audio(clip_id: str, exp: int = 0, sig: str = ""):
         if not CLIP_ID.match(clip_id) or not ctx.verify(clip_id, exp, sig):
@@ -661,8 +824,13 @@ class StaffBody(BaseModel):
     username: str = Field(default="", max_length=30)
 
 
+class VoicePackBody(BaseModel):
+    enabled: bool
+
+
 class SettingBody(BaseModel):
     kill_switch: bool | None = None
+    human_voice_share: float | None = Field(default=None, ge=0, le=1)
     goal_minutes: int | None = Field(default=None, ge=1, le=100000)
     impact_note: str | None = Field(
         default=None, max_length=300
@@ -688,6 +856,9 @@ def admin_router(ctx: Ctx) -> APIRouter:
         return {
             **store.stats(),
             "impact_note": store.get_setting("impact_note"),
+            "human_voice_share": float(
+                store.get_setting("human_voice_share", str(ctx.config.human_voice_share))
+            ),
             "reviewers": store.reviewer_report(),
             "backlog": {
                 "to_review": store._one(
@@ -778,6 +949,47 @@ def admin_router(ctx: Ctx) -> APIRouter:
             return s
         return {"ok": store.remove_clip(clip_id, s["name"], body.reason)}
 
+    @r.get("/api/admin/voices")
+    async def voices(request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        share = store.get_setting("human_voice_share", str(ctx.config.human_voice_share))
+        packs = [
+            {k: p[k] for k in ("staff_id", "name", "lines", "active")}
+            | {"enabled": bool(p["enabled"]), "consented": bool(p["consent_at"])}
+            for p in store.voice_packs()
+        ]
+        return {
+            "packs": packs,
+            "share": float(share),
+            "total_lines": len(ctx.pack_lines),
+            "lines": ctx.pack_lines,
+        }
+
+    @r.post("/api/admin/voices/{staff_id}")
+    async def voice_enable(staff_id: int, body: VoicePackBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        try:
+            store.set_pack_enabled(staff_id, body.enabled, s["name"])
+        except StoreError as e:
+            return err(e.code, e.message, e.status)
+        return {"ok": True}
+
+    @r.get("/api/admin/voices/{staff_id}/{name}")
+    async def voice_listen(staff_id: int, name: str, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        path = store.voice_line_path(staff_id, name)
+        if path is None:
+            return err("not_found", "not found", 404)
+        return Response(
+            path.read_bytes(), media_type="audio/mp4", headers={"Cache-Control": "no-store"}
+        )
+
     @r.post("/api/admin/clips/{clip_id}/restore")
     async def restore(clip_id: str, request: Request):
         s = gate(request)
@@ -795,6 +1007,8 @@ def admin_router(ctx: Ctx) -> APIRouter:
             store.audit(s["name"], "kill_switch", str(body.kill_switch))
         if body.goal_minutes is not None:
             store.set_setting("goal_minutes", str(body.goal_minutes))
+        if body.human_voice_share is not None:
+            store.set_setting("human_voice_share", str(body.human_voice_share))
         if body.impact_note is not None:
             store.set_setting("impact_note", body.impact_note.strip())
             store.audit(s["name"], "impact_note", body.impact_note.strip()[:120])
@@ -860,6 +1074,7 @@ def create_public_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAP
     app = FastAPI(title="SHEFA Voice Commons", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx
     _wrap(app, config, public=True)
+    app.add_middleware(GZipMiddleware, minimum_size=4000)  # a script is ~15 KB of JSON
     app.include_router(public_router(ctx))
     if config.reviewers_on_public:
         app.include_router(account_router(ctx, public=True))

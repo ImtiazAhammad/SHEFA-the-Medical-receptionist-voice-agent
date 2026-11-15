@@ -17,7 +17,9 @@ def staff(ctx):
     """Session tokens for one account of each role (and a second reviewer)."""
 
     def session(name, role):
-        return ctx.store.open_session(ctx.store.create_staff(name, role, password="correct horse 9")["id"])
+        return ctx.store.open_session(
+            ctx.store.create_staff(name, role, password="correct horse 9")["id"]
+        )
 
     return {role: session(role, role) for role in ("admin", "adjudicator", "reviewer")} | {
         "second": session("second", "reviewer")

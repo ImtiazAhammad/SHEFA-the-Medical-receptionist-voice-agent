@@ -112,6 +112,32 @@ def write_wav(path, samples: np.ndarray, rate: int = RATE) -> None:
         handle.writeframes(data)
 
 
+def encode_m4a(samples: np.ndarray, *, normalise: bool = False, bit_rate: int = 40_000) -> bytes:
+    """Small AAC audio every phone can play (a 9 s line is about 45 KB instead of 290 KB of WAV).
+    `normalise` evens out loudness, so a quiet human recording and the synthetic voice match."""
+    x = samples.astype(np.float32)
+    if normalise:
+        peak = float(np.max(np.abs(x))) if x.size else 0.0
+        if peak > 1e-4:
+            x = x * (0.7 / peak)
+    pcm16 = (np.clip(x, -1, 1) * 32767).astype(np.int16)
+    buf = io.BytesIO()
+    out = av.open(buf, "w", format="ipod")
+    stream = out.add_stream("aac", rate=24000)
+    stream.layout = "mono"
+    stream.bit_rate = bit_rate
+    frame = av.AudioFrame.from_ndarray(pcm16.reshape(1, -1), format="s16", layout="mono")
+    frame.sample_rate = RATE
+    resampler = av.AudioResampler(format=stream.format.name, layout="mono", rate=24000)
+    for piece in list(resampler.resample(frame)) + list(resampler.resample(None) or []):
+        for packet in stream.encode(piece):
+            out.mux(packet)
+    for packet in stream.encode(None):
+        out.mux(packet)
+    out.close()
+    return buf.getvalue()
+
+
 def phone_round_trip(
     samples: np.ndarray, law: str = "mulaw", noise_db: float | None = None, seed: int = 0
 ) -> np.ndarray:

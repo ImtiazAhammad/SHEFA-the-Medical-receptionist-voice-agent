@@ -35,8 +35,22 @@ LOCKOUT_SECONDS = 15 * 60
 TEMP_PASSWORD_HOURS = 72
 ROOM_JOIN_HOURS = 24
 COMMON_PASSWORDS = frozenset(
-    {"password", "password1", "12345678", "123456789", "1234567890", "qwertyui", "qwerty123",
-     "bangladesh", "iloveyou", "11111111", "00000000", "abcd1234", "admin123", "shefa123"}
+    {
+        "password",
+        "password1",
+        "12345678",
+        "123456789",
+        "1234567890",
+        "qwertyui",
+        "qwerty123",
+        "bangladesh",
+        "iloveyou",
+        "11111111",
+        "00000000",
+        "abcd1234",
+        "admin123",
+        "shefa123",
+    }
 )
 CLIP_ID = re.compile(r"^[a-f0-9]{32}$")
 REJECT_FLAGS = frozenset({"unusable", "other_language", "personal_details", "offensive"})
@@ -48,6 +62,12 @@ CREATE TABLE IF NOT EXISTS staff (
   active INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY, staff_id INTEGER NOT NULL, created_at REAL NOT NULL, expires_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS voice_packs (
+  staff_id INTEGER PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, enabled INTEGER NOT NULL DEFAULT 0,
+  consent_at REAL, created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS voice_lines (
+  staff_id INTEGER NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL, duration_s REAL NOT NULL,
+  created_at REAL NOT NULL, PRIMARY KEY (staff_id, name));
 CREATE TABLE IF NOT EXISTS campaigns (
   code TEXT PRIMARY KEY, name TEXT NOT NULL, from_name TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL);
@@ -151,7 +171,9 @@ class CollectorStore:
         self.audio = LocalAudioStore(config.audio_dir)
         self._lock = threading.RLock()
         self._failures: dict[str, list[float]] = {}
-        self._dummy_hash = hash_password("not-a-real-password", iterations=config.password_iterations)
+        self._dummy_hash = hash_password(
+            "not-a-real-password", iterations=config.password_iterations
+        )
         self.db = sqlite3.connect(config.db_path, check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA busy_timeout=5000")
@@ -238,7 +260,9 @@ class CollectorStore:
         if password.isdigit():  # a mobile number is the first thing anyone would try
             raise StoreError("weak_password", "use some letters too, not only digits")
         if len(password) < MIN_PASSWORD or len(password) > 200:
-            raise StoreError("weak_password", f"a password needs at least {MIN_PASSWORD} characters")
+            raise StoreError(
+                "weak_password", f"a password needs at least {MIN_PASSWORD} characters"
+            )
         if password.lower() in COMMON_PASSWORDS:
             raise StoreError("weak_password", "that password is too easy to guess")
         return hash_password(password, iterations=self.config.password_iterations)
@@ -276,12 +300,25 @@ class CollectorStore:
             ),
         )
         if generated:
-            self._x("UPDATE staff SET temp_until=? WHERE id=?", (time.time() + TEMP_PASSWORD_HOURS * 3600, cur.lastrowid))
+            self._x(
+                "UPDATE staff SET temp_until=? WHERE id=?",
+                (time.time() + TEMP_PASSWORD_HOURS * 3600, cur.lastrowid),
+            )
         self.audit("system", "staff_created", f"{username} ({role})")
-        return {"id": cur.lastrowid, "username": username, "password": secret if generated else None}
+        return {
+            "id": cur.lastrowid,
+            "username": username,
+            "password": secret if generated else None,
+        }
 
-    def set_password(self, staff_id: int, password: str | None = None, *, username: str | None = None,
-                     must_change: bool | None = None) -> str | None:
+    def set_password(
+        self,
+        staff_id: int,
+        password: str | None = None,
+        *,
+        username: str | None = None,
+        must_change: bool | None = None,
+    ) -> str | None:
         """Set (or generate) a password; every open session of that person ends. Returns a
         generated password, shown once."""
         row = self._one("SELECT * FROM staff WHERE id=?", (staff_id,))
@@ -346,13 +383,20 @@ class CollectorStore:
         bad = StoreError("bad_login", "wrong username or password", 401)
         if self._locked(key):
             raise StoreError("locked", "too many wrong tries, wait 15 minutes", 429)
-        row = self._one("SELECT * FROM staff WHERE username=? COLLATE NOCASE AND active=1", (username,))
+        row = self._one(
+            "SELECT * FROM staff WHERE username=? COLLATE NOCASE AND active=1", (username,)
+        )
         ok = False
         # An account that may not sign in here (the admin, through the tunnel) is treated exactly
         # like a name that does not exist, so the public address cannot be used to test its password.
         if row is not None and roles is not None and row["role"] not in roles:
             row = None
-        if row is not None and row["must_change"] and row["temp_until"] and row["temp_until"] < time.time():
+        if (
+            row is not None
+            and row["must_change"]
+            and row["temp_until"]
+            and row["temp_until"] < time.time()
+        ):
             row = None  # a one-time password that was never used has expired; the admin resets it
         if row is not None and row["password_hash"]:
             try:
@@ -403,14 +447,18 @@ class CollectorStore:
         )
         if row is None:  # a first-version token, valid until its owner gets a password
             row = self._one(
-                "SELECT * FROM staff WHERE token_hash=? AND active=1 AND password_hash=''", (digest,)
+                "SELECT * FROM staff WHERE token_hash=? AND active=1 AND password_hash=''",
+                (digest,),
             )
         return dict(row) if row else None
 
     def list_staff(self) -> list[dict[str, Any]]:
         rows = self._q("SELECT * FROM staff ORDER BY id")
         return [
-            {k: r[k] for k in ("id", "name", "role", "active", "created_at", "username", "must_change")}
+            {
+                k: r[k]
+                for k in ("id", "name", "role", "active", "created_at", "username", "must_change")
+            }
             | {"has_password": bool(r["password_hash"])}
             for r in rows
         ]
@@ -428,6 +476,7 @@ class CollectorStore:
                 raise StoreError("last_admin", "you cannot remove the last admin", 409)
         self._x("UPDATE staff SET active=0 WHERE id=?", (staff_id,))
         self._x("DELETE FROM sessions WHERE staff_id=?", (staff_id,))
+        self._x("UPDATE voice_packs SET enabled=0 WHERE staff_id=?", (staff_id,))
 
     # ---- campaigns -----------------------------------------------------------------------
     def create_campaign(self, name: str, from_name: str = "", note: str = "") -> str:
@@ -843,6 +892,98 @@ class CollectorStore:
                     status, final = "single" if len(texts) == 1 else "agreed", texts[0]
         self._x("UPDATE clips SET status=?, final_text=? WHERE id=?", (status, final, clip_id))
         return status
+
+    # ---- voice packs: a named staff member records the desk's lines in their own voice --------
+    def voice_pack(self, staff_id: int) -> dict[str, Any]:
+        row = self._one("SELECT * FROM voice_packs WHERE staff_id=?", (staff_id,))
+        if not row:
+            self._x(
+                "INSERT INTO voice_packs(staff_id,public_id,created_at) VALUES (?,?,?)",
+                (staff_id, secrets.token_hex(16), time.time()),
+            )
+            row = self._one("SELECT * FROM voice_packs WHERE staff_id=?", (staff_id,))
+        return dict(row)
+
+    def voice_consent(self, staff_id: int) -> None:
+        self.voice_pack(staff_id)
+        self._x("UPDATE voice_packs SET consent_at=? WHERE staff_id=?", (time.time(), staff_id))
+        self.audit(str(staff_id), "voice_consent", "")
+
+    def voice_names(self, staff_id: int) -> set[str]:
+        return {
+            r["name"] for r in self._q("SELECT name FROM voice_lines WHERE staff_id=?", (staff_id,))
+        }
+
+    def save_voice_line(self, staff_id: int, name: str, data: bytes, duration_s: float) -> None:
+        pack = self.voice_pack(staff_id)
+        if not pack["consent_at"]:
+            raise StoreError("consent", "agree to the voice notice first", 403)
+        folder = self.config.data_dir / "voices" / pack["public_id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{name}.m4a"
+        path.write_bytes(data)
+        self._x(
+            "INSERT INTO voice_lines(staff_id,name,path,duration_s,created_at) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(staff_id,name) DO UPDATE SET path=excluded.path, duration_s=excluded.duration_s, "
+            "created_at=excluded.created_at",
+            (staff_id, name, str(path), duration_s, time.time()),
+        )
+
+    def voice_line_path(self, staff_id: int, name: str) -> Path | None:
+        row = self._one(
+            "SELECT path FROM voice_lines WHERE staff_id=? AND name=?", (staff_id, name)
+        )
+        return Path(row["path"]) if row and Path(row["path"]).exists() else None
+
+    def delete_voice_lines(self, staff_id: int, name: str | None = None) -> int:
+        """Remove one line, or the whole pack (it also stops being played at once)."""
+        rows = self._q(
+            "SELECT name,path FROM voice_lines WHERE staff_id=?" + (" AND name=?" if name else ""),
+            (staff_id, name) if name else (staff_id,),
+        )
+        for r in rows:
+            Path(r["path"]).unlink(missing_ok=True)
+            self._x("DELETE FROM voice_lines WHERE staff_id=? AND name=?", (staff_id, r["name"]))
+        if not name:
+            self._x("UPDATE voice_packs SET enabled=0 WHERE staff_id=?", (staff_id,))
+        return len(rows)
+
+    def set_pack_enabled(self, staff_id: int, enabled: bool, actor: str) -> None:
+        pack = self.voice_pack(staff_id)
+        if enabled and not pack["consent_at"]:
+            raise StoreError("consent", "this person has not agreed to the voice notice", 409)
+        self._x(
+            "UPDATE voice_packs SET enabled=? WHERE staff_id=?", (1 if enabled else 0, staff_id)
+        )
+        self.audit(actor, "voice_pack_enabled" if enabled else "voice_pack_disabled", str(staff_id))
+
+    def voice_packs(self) -> list[dict[str, Any]]:
+        rows = self._q(
+            "SELECT p.staff_id, p.public_id, p.enabled, p.consent_at, s.name, s.active, "
+            "(SELECT COUNT(*) FROM voice_lines l WHERE l.staff_id=p.staff_id) lines "
+            "FROM voice_packs p JOIN staff s ON s.id=p.staff_id ORDER BY p.staff_id"
+        )
+        return [dict(r) for r in rows]
+
+    def playable_packs(self) -> list[dict[str, Any]]:
+        """Packs the public page may play: enabled by the admin, owner still active, consent given."""
+        return [
+            {
+                "public_id": p["public_id"],
+                "names": self.voice_names(p["staff_id"]),
+                "staff_id": p["staff_id"],
+            }
+            for p in self.voice_packs()
+            if p["enabled"] and p["active"] and p["consent_at"] and p["lines"]
+        ]
+
+    def pack_by_public_id(self, public_id: str) -> dict[str, Any] | None:
+        row = self._one(
+            "SELECT p.* FROM voice_packs p JOIN staff s ON s.id=p.staff_id "
+            "WHERE p.public_id=? AND p.enabled=1 AND s.active=1",
+            (public_id,),
+        )
+        return dict(row) if row else None
 
     def restore_clip(self, clip_id: str, actor: str) -> bool:
         """Undo a rejection (one reviewer's flag is enough to reject, so the admin can reverse it)."""

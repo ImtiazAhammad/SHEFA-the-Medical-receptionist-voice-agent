@@ -1,4 +1,5 @@
 """Staff sign in with a username and a password; the long tokens of the first version retire."""
+
 # ruff: noqa: E501
 import time
 
@@ -22,14 +23,29 @@ def test_sign_in_change_password_and_sign_out(priv, ctx):
     first = login(priv, "RINA", made["password"]).json()  # usernames ignore case
     assert first["role"] == "reviewer" and first["must_change"] is True
     # until the password is changed nothing else is allowed
-    assert priv.get("/api/review/next", headers=bearer(first["token"])).json()["error"]["code"] == "must_change"
+    assert (
+        priv.get("/api/review/next", headers=bearer(first["token"])).json()["error"]["code"]
+        == "must_change"
+    )
     assert priv.get("/api/review/me", headers=bearer(first["token"])).status_code == 200
-    weak = priv.post("/api/staff/password", headers=bearer(first["token"]), json={"old": made["password"], "new": "12345678"})
+    weak = priv.post(
+        "/api/staff/password",
+        headers=bearer(first["token"]),
+        json={"old": made["password"], "new": "12345678"},
+    )
     assert weak.json()["error"]["code"] == "weak_password"
-    wrong = priv.post("/api/staff/password", headers=bearer(first["token"]), json={"old": "nope", "new": GOOD})
+    wrong = priv.post(
+        "/api/staff/password", headers=bearer(first["token"]), json={"old": "nope", "new": GOOD}
+    )
     assert wrong.status_code == 401
-    changed = priv.post("/api/staff/password", headers=bearer(first["token"]), json={"old": made["password"], "new": GOOD}).json()
-    assert priv.get("/api/review/next", headers=bearer(first["token"])).status_code == 401  # old session ended
+    changed = priv.post(
+        "/api/staff/password",
+        headers=bearer(first["token"]),
+        json={"old": made["password"], "new": GOOD},
+    ).json()
+    assert (
+        priv.get("/api/review/next", headers=bearer(first["token"])).status_code == 401
+    )  # old session ended
     assert priv.get("/api/review/next", headers=bearer(changed["token"])).status_code == 200
     assert login(priv, "rina", made["password"]).status_code == 401
     again = login(priv, "rina", GOOD).json()
@@ -60,7 +76,9 @@ def test_wrong_tries_lock_only_the_place_they_came_from(ctx):
     with pytest.raises(StoreError) as locked:
         ctx.store.sign_in("rina", GOOD, "attacker-ip")  # locked there, even with the right one
     assert locked.value.code == "locked"
-    assert ctx.store.sign_in("rina", GOOD, "home-ip")["role"] == "reviewer"  # the real person is fine
+    assert (
+        ctx.store.sign_in("rina", GOOD, "home-ip")["role"] == "reviewer"
+    )  # the real person is fine
 
 
 def test_unknown_names_and_wrong_passwords_look_the_same(priv, ctx):
@@ -75,14 +93,16 @@ def test_an_admin_cannot_sign_in_through_the_public_address(ctx, config, priv):
     on = CollectorConfig(**{**config.model_dump(), "reviewers_on_public": True})
     public = TestClient(create_public_app(on, ctx))
     refused, unknown = login(public, "boss", GOOD), login(public, "nobody", GOOD)
-    assert refused.status_code == 401 and refused.json() == unknown.json()  # looks like no such account
+    assert (
+        refused.status_code == 401 and refused.json() == unknown.json()
+    )  # looks like no such account
     assert ctx.store._one("SELECT COUNT(*) n FROM sessions")["n"] == 0
     assert login(public, "rina", GOOD).status_code == 200
     assert login(priv, "boss", GOOD).status_code == 200
 
 
 def test_without_a_review_session_the_public_address_has_no_login(pub):
-    assert login(pub, "anyone", "whatever-pass") .status_code in (404, 405)
+    assert login(pub, "anyone", "whatever-pass").status_code in (404, 405)
 
 
 def test_admin_resets_a_password_and_usernames_are_unique(priv, ctx):
@@ -93,9 +113,15 @@ def test_admin_resets_a_password_and_usernames_are_unique(priv, ctx):
     assert out["username"] == "rina" and out["password"]
     assert priv.get("/api/review/me", headers=bearer(old)).status_code == 401
     assert login(priv, "rina", out["password"]).json()["must_change"] is True
-    dup = priv.post("/api/admin/staff", headers=bearer(admin), json={"name": "x", "role": "reviewer", "username": "RINA"})
+    dup = priv.post(
+        "/api/admin/staff",
+        headers=bearer(admin),
+        json={"name": "x", "role": "reviewer", "username": "RINA"},
+    )
     assert dup.status_code == 409
-    bad = priv.post("/api/admin/staff", headers=bearer(admin), json={"name": "রিনা", "role": "reviewer"})
+    bad = priv.post(
+        "/api/admin/staff", headers=bearer(admin), json={"name": "রিনা", "role": "reviewer"}
+    )
     assert bad.json()["error"]["code"] == "bad_username"
     listed = priv.get("/api/admin/staff", headers=bearer(admin)).json()["staff"]
     assert all("password_hash" not in p and "token_hash" not in p for p in listed)
@@ -121,7 +147,10 @@ def test_password_rules(ctx):
     for bad in ("01712345678", "rina.akter", "short1", "password1"):
         with pytest.raises(StoreError):
             ctx.store.create_staff("Rina", "reviewer", "rina.akter", bad)
-    assert ctx.store.create_staff("Rina", "reviewer", "rina.akter", "আমার গোপন কথা ৯")["password"] is None
+    assert (
+        ctx.store.create_staff("Rina", "reviewer", "rina.akter", "আমার গোপন কথা ৯")["password"]
+        is None
+    )
 
 
 def test_an_unused_one_time_password_expires(priv, ctx):
@@ -141,7 +170,11 @@ def test_admin_can_undo_a_rejection(priv, person, ctx):
     admin = ctx.store.open_session(ctx.store.create_staff("Boss", "admin", "boss", GOOD)["id"])
     rev = ctx.store.open_session(ctx.store.create_staff("Rina", "reviewer", "rina", GOOD)["id"])
     clip = upload(person, ctx, "train")
-    priv.post("/api/review/submit", headers=bearer(rev), json={"clip_id": clip, "text": "", "flags": ["offensive"]})
+    priv.post(
+        "/api/review/submit",
+        headers=bearer(rev),
+        json={"clip_id": clip, "text": "", "flags": ["offensive"]},
+    )
     assert ctx.store.get_clip(clip)["status"] == "rejected"
     assert priv.post(f"/api/admin/clips/{clip}/restore", headers=bearer(admin)).json()["ok"] is True
     assert ctx.store.get_clip(clip)["status"] == "pending"

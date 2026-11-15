@@ -32,9 +32,9 @@ class CollectorConfig(BaseModel):
     port: int = 8100
     private_port: int = 8101  # admin and review, never put on the public tunnel
     consent_version: str = CONSENT_VERSION
-    max_clip_bytes: int = 450_000
+    max_clip_bytes: int = 700_000
     min_clip_s: float = 0.6
-    max_clip_s: float = 14.0
+    max_clip_s: float = 21.0  # open turns allow 20 s; each node carries its own cap
     min_speech_ratio: float = 0.08
     max_clip_fraction: float = 0.2  # more than this many clipped samples is unusable
     clips_per_contributor_per_day: int = 400
@@ -48,6 +48,9 @@ class CollectorConfig(BaseModel):
     turnstile_secret_env: str = "SHEFA_TURNSTILE_SECRET"
     reviewers_on_public: bool = False  # `serve --with-review` turns this on for a review session
     audio_url_ttl_s: int = 600
+    human_voice_share: float = (
+        0.5  # share of calls that use a recorded human desk voice, when one exists
+    )
     session_hours: int = 12  # a staff sign-in lasts this long
     password_iterations: int = 600_000  # PBKDF2 rounds; tests lower it
     test_fraction: float = 0.10

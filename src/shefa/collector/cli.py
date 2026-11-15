@@ -9,7 +9,7 @@ import sys
 import threading
 from pathlib import Path
 
-from shefa.collector import prompts as P
+from shefa.collector import scripts as S
 from shefa.collector.config import CollectorConfig, load_config
 
 
@@ -32,14 +32,25 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="also put the reviewer page on the public port (a review session)",
     )
 
-    staff = c.add_parser("staff", help="add a reviewer, adjudicator or admin and print their token")
-    staff.add_argument("name")
-    staff.add_argument("role", choices=["reviewer", "adjudicator", "admin"])
+    staff = c.add_parser("staff", help="staff accounts: add, list, set a password")
+    staff_sub = staff.add_subparsers(dest="staff_command", required=True)
+    add = staff_sub.add_parser("add", help="create an account and print its one-time password")
+    add.add_argument("username")
+    add.add_argument("role", choices=["reviewer", "adjudicator", "admin"])
+    add.add_argument("--name", default="", help="the person's name as shown in the staff page")
+    staff_sub.add_parser("list", help="show the accounts")
+    passwd = staff_sub.add_parser(
+        "passwd",
+        help="set a password (asks for it), or --generate a one-time one; ends their sessions",
+    )
+    passwd.add_argument("who", help="the username, or the old name of a first-version token holder")
+    passwd.add_argument("--username", default=None, help="give (or change) the username")
+    passwd.add_argument("--generate", action="store_true")
 
     prompts = c.add_parser(
         "build-prompts", help="generate the situation cards and the agent's spoken questions"
     )
-    prompts.add_argument("--seed", type=int, default=7)
+    prompts.add_argument("--seed", type=int, default=11)
     prompts.add_argument("--no-audio", action="store_true", help="cards only; skip the voice")
 
     draft = c.add_parser(
@@ -92,11 +103,7 @@ def run(args: argparse.Namespace) -> int:
     if command == "serve":
         return _serve(config, args)
     if command == "staff":
-        from shefa.collector.store import CollectorStore
-
-        token = CollectorStore(config).create_staff(args.name, args.role)
-        print(f"Token for {args.name} ({args.role}), shown once:\n  {token}")
-        return 0
+        return _staff(config, args)
     if command == "build-prompts":
         return asyncio.run(_build_prompts(config, args.seed, not args.no_audio))
     if command == "doctor":
@@ -106,24 +113,73 @@ def run(args: argparse.Namespace) -> int:
     return tools.run(command, config, args)
 
 
+def _staff(config: CollectorConfig, args: argparse.Namespace) -> int:
+    import getpass
+
+    from shefa.collector.store import CollectorStore, StoreError
+
+    store = CollectorStore(config)
+    try:
+        if args.staff_command == "add":
+            made = store.create_staff(args.name or args.username, args.role, args.username)
+            print(
+                f"Account {made['username']} ({args.role}). One-time password, shown once:\n  {made['password']}"
+            )
+            print("They must choose their own password at first sign-in. It expires in 72 hours.")
+        elif args.staff_command == "list":
+            for person in store.list_staff():
+                state = "active" if person["active"] else "off"
+                login = person["username"] or "(no username yet: first-version token)"
+                print(
+                    f"{person['id']:>3}  {login:<24} {person['role']:<12} {state}  {person['name']}"
+                )
+        else:
+            row = store._one(
+                "SELECT id FROM staff WHERE username=? COLLATE NOCASE OR (username IS NULL AND name=?)",
+                (args.who, args.who),
+            )
+            if not row:
+                print(
+                    f"No account called {args.who!r}. See: shefa collect staff list",
+                    file=sys.stderr,
+                )
+                return 2
+            if args.generate:
+                secret = store.set_password(row["id"], username=args.username)
+                print(f"One-time password, shown once:\n  {secret}")
+            else:
+                first = getpass.getpass("New password (10 characters or more): ")
+                if first != getpass.getpass("Again: "):
+                    print("The two did not match.", file=sys.stderr)
+                    return 2
+                store.set_password(row["id"], first, username=args.username)
+                print("Password set. Their open sessions were ended.")
+    except StoreError as error:
+        print(error.message, file=sys.stderr)
+        return 2
+    return 0
+
+
 def _init(config: CollectorConfig) -> int:
     from shefa.collector.store import CollectorStore
 
     store = CollectorStore(config)
     config.prompts_dir.mkdir(parents=True, exist_ok=True)
-    bank = config.prompts_dir / "cards.json"
+    bank = config.prompts_dir / "cards2.json"
     if not bank.exists():
-        P.write_bank(bank, P.generate())
-    first = not store.list_staff()
+        S.write_bank(bank, S.generate())
     print(f"Collection folder: {config.data_dir.resolve()}")
-    print(f"Cards: {len(P.load_bank(bank))} ({bank})")
-    if first:
-        token = store.create_staff("founder", "admin")
-        print(f"\nYour admin token (shown once, keep it safe):\n  {token}")
+    print(f"Scripts: {len(S.load_bank(bank))} ({bank})")
+    if not store.list_staff():
+        made = store.create_staff("Founder", "admin", "admin")
+        print(
+            f"\nAdmin account: username  {made['username']}\n               password  {made['password']}"
+        )
+        print("(a one-time password, shown once; you choose your own at first sign-in)")
     else:
-        print("An admin already exists; use `shefa collect staff NAME admin` for another token.")
+        print("An admin already exists; see `shefa collect staff list`.")
     print(
-        "\nNext: shefa collect build-prompts   (adds the agent's voice)\n      shefa collect serve"
+        "\nNext: shefa collect build-prompts   (adds the desk's voice)\n      shefa collect serve"
     )
     return 0
 
@@ -170,42 +226,41 @@ def _serve(config: CollectorConfig, args: argparse.Namespace) -> int:
 
 
 async def _build_prompts(config: CollectorConfig, seed: int, voice: bool) -> int:
-    cards = P.generate(seed)
+    cards = S.generate(seed)
     config.prompts_dir.mkdir(parents=True, exist_ok=True)
-    made: dict[str, str] = {}
+    made: set[str] = set()
     if voice:
         import numpy as np
 
-        from shefa.collector.audio import RATE, write_wav
+        from shefa.collector.audio import RATE, encode_m4a
         from shefa.models.registry import ModelRegistry
 
         tts = await ModelRegistry().get_tts()
-        out = config.prompts_dir / "q"
+        out = config.prompts_dir / "q2"
         out.mkdir(exist_ok=True)
-        questions = {
-            P.audio_name(s["question_bn"]): s["question_bn"] for c in cards for s in c["steps"]
-        }
-        for i, (name, text) in enumerate(sorted(questions.items()), 1):
-            path = out / f"{name}.wav"
-            if path.exists():
-                made[name] = str(path)
-                continue
-            result = await tts.synthesize(text, "bn")
-            pcm = np.frombuffer(result.audio_bytes, dtype="<i2").astype(np.float32) / 32768.0
-            if result.sample_rate != RATE:
-                pcm = np.interp(
-                    np.linspace(
-                        0, pcm.size, int(pcm.size * RATE / result.sample_rate), endpoint=False
-                    ),
-                    np.arange(pcm.size),
-                    pcm,
-                ).astype(np.float32)
-            write_wav(path, pcm)
-            made[name] = str(path)
-            print(f"\r{i}/{len(questions)}", end="", flush=True)
+        lines = S.all_lines(cards)
+        for i, (name, text) in enumerate(sorted(lines.items()), 1):
+            path = out / f"{name}.m4a"
+            if not path.exists():
+                result = await tts.synthesize(text, "bn")
+                pcm = np.frombuffer(result.audio_bytes, dtype="<i2").astype(np.float32) / 32768.0
+                if result.sample_rate != RATE:
+                    pcm = np.interp(
+                        np.linspace(
+                            0, pcm.size, int(pcm.size * RATE / result.sample_rate), endpoint=False
+                        ),
+                        np.arange(pcm.size),
+                        pcm,
+                    ).astype(np.float32)
+                tmp = path.with_suffix(".part")
+                tmp.write_bytes(encode_m4a(pcm, normalise=True))
+                tmp.replace(path)
+            made.add(name)
+            if i % 20 == 0 or i == len(lines):
+                print(f"\r{i}/{len(lines)}", end="", flush=True)
         print()
-    P.write_bank(config.prompts_dir / "cards.json", cards, made)
-    print(f"{len(cards)} cards, {len(made)} spoken questions -> {config.prompts_dir}")
+    S.write_bank(config.prompts_dir / "cards2.json", cards, made)
+    print(f"{len(cards)} scripts, {len(made)} spoken desk lines -> {config.prompts_dir}")
     return 0
 
 
@@ -220,11 +275,11 @@ def _doctor(config: CollectorConfig) -> int:
         // 1_000_000
     )
     print(f"disk free: {free} MB (uploads pause below {config.min_free_disk_mb} MB)")
-    bank = config.prompts_dir / "cards.json"
-    print(f"cards: {'ready' if bank.exists() else 'missing, run build-prompts'}")
+    bank = config.prompts_dir / "cards2.json"
+    print(f"scripts: {'ready' if bank.exists() else 'missing, run build-prompts'}")
     spoken = (
-        len(list((config.prompts_dir / "q").glob("*.wav")))
-        if (config.prompts_dir / "q").exists()
+        len(list((config.prompts_dir / "q2").glob("*.m4a")))
+        if (config.prompts_dir / "q2").exists()
         else 0
     )
     print(f"spoken questions: {spoken}")

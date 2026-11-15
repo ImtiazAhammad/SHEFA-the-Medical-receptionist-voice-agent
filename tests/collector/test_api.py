@@ -58,7 +58,7 @@ def test_the_same_audio_under_a_new_id_is_refused(person):
 
 def test_bad_recordings_are_refused_with_a_reason(person):
     assert person.clip(make_wav(seconds=0.2)).json()["error"]["reason"] == "too_short"
-    assert person.clip(make_wav(seconds=20)).status_code in (413, 422)
+    assert person.clip(make_wav(seconds=25)).status_code in (413, 422)
     assert (
         person.clip(make_wav(amp=0.0004, noise=0.0004, seed=2)).json()["error"]["reason"]
         == "silent"
@@ -147,7 +147,7 @@ def test_pass_the_phone_gives_each_person_their_own_speaker(person, pub):
 
 def test_cards_are_served_and_avoid_repeats(person, pub):
     first = pub.get("/api/c/cards?n=4", headers=person.h).json()["cards"]
-    assert len(first) == 4 and all(card["steps"] for card in first)
+    assert len(first) == 4 and all(card["nodes"] and card["v"] == 2 for card in first)
     seen = ",".join(card["id"] for card in first)
     again = pub.get(f"/api/c/cards?n=4&seen={seen}", headers=person.h).json()["cards"]
     assert not {c["id"] for c in again} & {c["id"] for c in first}
