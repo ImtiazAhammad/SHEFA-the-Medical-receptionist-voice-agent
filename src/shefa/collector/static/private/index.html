@@ -16,17 +16,60 @@
     <button type="button" class="small-btn" id="lang"></button>
   </header>
   <main class="page narrow">
-    <form class="card signin-card stack" id="form" autocomplete="off" novalidate>
+    <p id="checking" class="muted signin-card" role="status" data-i18n="loading" hidden>লোড হচ্ছে…</p>
+
+    <!-- ===== Sign in: username and password ===== -->
+    <form class="card signin-card stack" id="form" method="post" novalidate>
       <h1 data-i18n="si_title">স্টাফ সাইন-ইন</h1>
-      <p data-i18n="si_intro">আপনাকে দেওয়া টোকেনটি লিখুন। টোকেন শুধু এই ট্যাবে থাকে, ট্যাব বন্ধ করলে মুছে যায়।</p>
+      <p data-i18n="si_intro">আপনার ইউজারনেম ও পাসওয়ার্ড লিখুন। সাইন-ইন শুধু এই ট্যাবে থাকে, ট্যাব বন্ধ করলে শেষ হয়ে যায়।</p>
       <p id="flash" class="banner warn" role="alert" hidden></p>
       <div class="field">
-        <label for="token" data-i18n="si_token">টোকেন</label>
-        <input type="password" id="token" name="staff-token" autocomplete="off" autocapitalize="off" spellcheck="false" required aria-describedby="token-msg">
-        <label class="flagbox small" for="show"><input type="checkbox" id="show"><span data-i18n="si_show">টোকেন দেখাও</span></label>
+        <label for="username" data-i18n="si_username">ইউজারনেম</label>
+        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="60" lang="en" required aria-describedby="login-msg">
       </div>
-      <p id="token-msg" class="banner error" role="alert" hidden></p>
+      <div class="field">
+        <label for="password" data-i18n="si_password">পাসওয়ার্ড</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="200" required aria-describedby="login-msg">
+        <label class="flagbox small" for="show"><input type="checkbox" id="show"><span data-i18n="si_show">পাসওয়ার্ড দেখাও</span></label>
+      </div>
+      <p id="login-msg" class="banner error" role="alert" hidden></p>
       <button type="submit" class="primary big" id="go" data-i18n="si_go">ঢুকি</button>
+      <p class="hint" data-i18n="si_forgot">পাসওয়ার্ড ভুলে গেলে অ্যাডমিনকে বলুন, তিনি নতুন একবারের পাসওয়ার্ড দেবেন।</p>
+    </form>
+
+    <!-- ===== Choose your own password (first sign-in, or "change password") ===== -->
+    <form class="card signin-card stack" id="pw-form" method="post" novalidate hidden>
+      <h1 id="pw-title">নিজের পাসওয়ার্ড ঠিক করুন</h1>
+      <p id="pw-intro"></p>
+      <div class="field">
+        <label for="pw-username" data-i18n="si_username">ইউজারনেম</label>
+        <input type="text" id="pw-username" name="username" autocomplete="username" readonly lang="en" tabindex="-1">
+      </div>
+      <div class="field">
+        <label for="pw-old" id="pw-old-label"></label>
+        <input type="password" id="pw-old" name="current-password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="200" required aria-describedby="pw-msg">
+      </div>
+      <div class="field">
+        <label for="pw-new" data-i18n="pw_new">নতুন পাসওয়ার্ড</label>
+        <input type="password" id="pw-new" name="new-password" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="200" required aria-describedby="pw-rules pw-msg">
+      </div>
+      <div class="field">
+        <label for="pw-again" data-i18n="pw_again">নতুন পাসওয়ার্ড আবার লিখুন</label>
+        <input type="password" id="pw-again" name="new-password-again" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="200" required aria-describedby="pw-rules pw-msg">
+        <label class="flagbox small" for="pw-show"><input type="checkbox" id="pw-show"><span data-i18n="si_show">পাসওয়ার্ড দেখাও</span></label>
+      </div>
+      <ul class="rules" id="pw-rules" data-i18n-aria-label="pw_rules" aria-label="পাসওয়ার্ডের নিয়ম">
+        <li data-rule="length"><span class="mark" aria-hidden="true"></span><span data-i18n="pw_rule_length">অন্তত ১০ অক্ষর</span></li>
+        <li data-rule="digits"><span class="mark" aria-hidden="true"></span><span data-i18n="pw_rule_digits">শুধু সংখ্যা নয় (মোবাইল নম্বর চলবে না)</span></li>
+        <li data-rule="username"><span class="mark" aria-hidden="true"></span><span data-i18n="pw_rule_username">ইউজারনেমের মতো নয়</span></li>
+        <li data-rule="match"><span class="mark" aria-hidden="true"></span><span data-i18n="pw_rule_match">দুবার একই লেখা</span></li>
+      </ul>
+      <p id="pw-msg" class="banner error" role="alert" hidden></p>
+      <button type="submit" class="primary big" id="pw-go" data-i18n="pw_go">পাসওয়ার্ড সংরক্ষণ করুন</button>
+      <div class="row">
+        <a class="btn small-btn" id="pw-back" href="review.html" hidden data-i18n="pw_back">ফিরে যাই</a>
+        <button type="button" class="small-btn" id="pw-signout" data-i18n="sign_out">বের হই</button>
+      </div>
     </form>
   </main>
   <div id="toast" role="status" aria-live="polite"></div>
