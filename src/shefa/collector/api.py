@@ -1073,12 +1073,27 @@ def _wrap(app: FastAPI, cfg: CollectorConfig, *, public: bool) -> None:
         )
 
 
+class _ApiGzip:
+    """Compress JSON from /api/ only. Audio is already compressed, and a gzipped partial (206)
+    response breaks the audio player on iPhones, which asks for byte ranges."""
+
+    def __init__(self, app: Any):
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=4000)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope["path"].startswith("/api/"):
+            await self.gzip(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
 def create_public_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAPI:
     ctx = ctx or Ctx(config)
     app = FastAPI(title="SHEFA Voice Commons", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx
     _wrap(app, config, public=True)
-    app.add_middleware(GZipMiddleware, minimum_size=4000)  # a script is ~15 KB of JSON
+    app.add_middleware(_ApiGzip)  # a script is ~15 KB of JSON; audio is never compressed
     app.include_router(public_router(ctx))
     if config.reviewers_on_public:
         app.include_router(account_router(ctx, public=True))

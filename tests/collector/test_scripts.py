@@ -312,3 +312,15 @@ def test_a_deactivated_person_is_no_longer_heard(priv, pub, ctx, voices):
     assert pub.get(f"/hv/{pack}/{name}.m4a").status_code == 200
     priv.delete(f"/api/admin/staff/{voices['rina_id']}", headers=bearer(voices["admin"]))
     assert pub.get(f"/hv/{pack}/{name}.m4a").status_code == 404
+
+
+def test_cards_json_is_compressed_but_audio_never_is(pub, person, ctx):
+    cards = pub.get("/api/c/cards?n=3", headers={**person.h, "accept-encoding": "gzip"})
+    assert cards.headers.get("content-encoding") == "gzip"
+    folder = ctx.config.prompts_dir / "q2"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / ("a" * 16 + ".m4a")).write_bytes(b"\0" * 9000)
+    audio = pub.get(
+        "/q2/" + "a" * 16 + ".m4a", headers={"accept-encoding": "gzip", "range": "bytes=0-1"}
+    )
+    assert audio.status_code == 206 and "content-encoding" not in audio.headers
