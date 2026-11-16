@@ -133,8 +133,11 @@ const D = {
   more_call: ["আরেকটা কল করি", "Make another call"],
   rec_cut: ["সময় শেষ হয়ে কথা কেটে গেছে। একটু ছোট করে আবার বলুন।", "Time ran out and the end was cut off. Please say it again, a little shorter."],
   rec_keep_cut: ["যেমন আছে রাখুন", "Keep it as it is"],
-  rm_goals: ["এই কলে আপনি যা যা করবেন (নিজের ভাষায়)", "What to get done in this call (in your own words)"],
   rm_end: ["কল শেষ করি", "End the call"],
+  rm_desk_say: ["এবার আপনি বলুন (নিজের ভাষায়, পেশাদারভাবে)", "Your turn (in your own words, professionally)"],
+  rm_desk_rule: ["রোগী যা জিজ্ঞেস করবেন শুধু তার উত্তর দিন, আর সিরিয়ালের দরকারি তথ্য নিন। নিজে থেকে কথা বাড়াবেন না।", "Answer only what the patient asks and take what the booking needs. Do not extend the call yourself."],
+  rm_desk_last: ["এটাই কলের শেষ কথা।", "This is the last line of the call."],
+  rm_desk_said: ["ফ্রন্ট ডেস্ক মোটামুটি এটা বলেছেন", "Roughly what the front desk said"],
   cards_fail: ["নতুন কার্ড আনা যাচ্ছে না।", "Could not get a new card."],
 
   rej_too_short: ["খুব ছোট রেকর্ডিং, আবার বলুন।", "That was too short. Please say it again."],

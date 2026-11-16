@@ -118,12 +118,7 @@ export function runRoom(view, { code, onFinish, onSolo }) {
           h("span", { class: "muted" }, T("rm_fee"), ` ${n(d.fee)} · `, T("rm_room"), ` ${d.room}`)))))));
   }
 
-  function goalsBox(card) {
-    const goals = (card.goals_bn || []).map((g) => resolve(g, room.persona)).filter(Boolean);
-    if (!goals.length) return null;
-    return h("section", { class: "box hint" }, h("h2", { class: "small" }, T("rm_goals")),
-      h("ol", { class: "goals" }, goals.map((g) => h("li", null, g))), h("p", { class: "nudge" }, T("nudge")));
-  }
+
 
   function renderWaiting() {
     const link = `${pageLink()}?room=${room.code}`;
@@ -166,8 +161,14 @@ export function runRoom(view, { code, onFinish, onSolo }) {
       return;
     }
     if (room.role === "caller" && !room.persona && people.length === 1) room.persona = people[0];
+    // Where the call is in its script. The server works it out from the caller's choices, so both
+    // phones agree; the front desk only answers and never moves the call on by itself.
+    const nodeId = room.node === undefined ? card.start : room.node;
+    const node = nodeId && card.nodes ? card.nodes[nodeId] : null;
+    const deskSaidIt = !!node && room.clips.some((c) => c.role === "desk" && c.step_id === nodeId);
+    const over = finished || !node || (node.choices.length === 0 && deskSaidIt);
     const last = room.clips.filter((c) => c.role !== room.role).sort((a, b) => (+b.turn) - (+a.turn))[0];
-    const stateKey = [finished, mine, next, last && last.id, partnerUrls.get(last && last.id), room.role].join("|");
+    const stateKey = [over, mine, next, nodeId, last && last.id, partnerUrls.get(last && last.id), room.role].join("|");
     if (view._rk === stateKey && view.firstChild) return; // nothing changed: do not disturb a recording in progress
     if (cap && cap.busy()) return;
     view._rk = stateKey;
@@ -175,7 +176,7 @@ export function runRoom(view, { code, onFinish, onSolo }) {
 
     const head = h("div", { class: "row between" }, h("span", { class: "chip tag" }, room.code),
       h("strong", null, T(room.role === "caller" ? "rm_caller" : "rm_desk")));
-    if (finished) {
+    if (over) {
       fill(view, h("div", { class: "stack center" }, head, h("h1", { tabindex: "-1" }, T("rm_done")),
         partnerBox(last), h("button", { type: "button", class: "btn primary big", onclick: () => { destroy(); onFinish(); } }, T("finish"))));
       return;
@@ -185,12 +186,15 @@ export function runRoom(view, { code, onFinish, onSolo }) {
         h("p", { class: "waiting" }, T(next === 1 ? "rm_turn_first" : "rm_turn_wait")), partnerBox(last)));
       return;
     }
+    let choice = node.choices.length === 1 ? node.choices[0] : null;
+    if (room.role === "caller" && room.picked && room.picked.node === nodeId) choice = room.picked.choice;
     cap = createCapture({
-      maxS: S.cfg.max_clip_s, minS: S.cfg.min_clip_s,
+      maxS: (node.cap_s || S.cfg.max_clip_s) + 0.4, minS: S.cfg.min_clip_s,
       onAccept: async (res) => {
         const person = me();
-        const meta = { card: card.id, setting: person.setting, room: room.code, role: room.role, turn: next,
+        const meta = { card: card.id, setting: person.setting, room: room.code, role: room.role, turn: next, step: nodeId,
           persona: room.persona ? room.persona.id : "", autostop: res.cut ? "1" : "" };
+        if (room.role === "caller") meta.choice = choice.id;
         const id = await Q.add({ blob: res.blob, speaker: S.session.speaker, dur: res.dur, meta });
         myLast = next;
         person.n++; person.sec += res.dur;
@@ -199,19 +203,47 @@ export function runRoom(view, { code, onFinish, onSolo }) {
           myLast = next - 1; person.n--; person.sec -= res.dur;
           return { redo: true, redoText: rejectionText(out.reason, out.message) };
         }
+        room.picked = null;
         view._rk = "";
         refresh();
         return undefined;
       },
     });
-    const body = room.role === "caller"
-      ? [h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn),
-          patientLine(room.persona)), goalsBox(card), settingBlock()]
-      : [h("p", { class: "q" }, T(next === 1 ? "rm_open" : "rm_ask")), sheetBox(), settingBlock()];
+
+    let body;
+    if (room.role === "desk") {
+      // The front desk is guided: the line to say (in their own words), the rule to stay
+      // professional, and the clinic sheet to answer from.
+      body = [
+        h("section", { class: "bubble" }, h("p", { class: "bubble-who" }, T("rm_desk_say")),
+          h("p", { class: "bubble-text", lang: "bn" }, node.line_bn),
+          node.choices.length === 0 && h("p", { class: "muted" }, T("rm_desk_last"))),
+        h("p", { class: "nudge" }, T("rm_desk_rule")),
+        sheetBox(), settingBlock()];
+    } else {
+      const hintText = h("p", { class: "hint-text" });
+      const hintBox = h("section", { class: "box hint" }, h("h2", { class: "small" }, T("hint_title2")), hintText, h("p", { class: "nudge" }, T("nudge")));
+      const paintHint = () => { hintBox.hidden = !choice; if (choice) fill(hintText, resolve(choice.hint_bn, room.persona)); };
+      let fork = null;
+      if (node.choices.length > 1) {
+        const chips = node.choices.map((c) => h("button", { type: "button", class: "chip pick", "aria-pressed": String(choice === c), onclick: () => {
+          choice = c; room.picked = { node: nodeId, choice: c };
+          chips.forEach((b, k) => b.setAttribute("aria-pressed", String(node.choices[k] === c)));
+          paintHint(); cap.enable(!!choice);
+        } }, c.label_bn || c.id));
+        fork = h("section", { class: "box fork" }, h("h2", { class: "small" }, T("fork_ask")), h("div", { class: "chips" }, chips));
+      }
+      paintHint();
+      body = [
+        h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn),
+          patientLine(room.persona)),
+        h("section", { class: "bubble" }, h("p", { class: "bubble-who" }, T("rm_desk_said")), h("p", { class: "bubble-text", lang: "bn" }, node.line_bn)),
+        fork, hintBox, settingBlock()];
+    }
     const end = h("button", { type: "button", class: "linkbtn", onclick: () => { room.ended = true; view._rk = ""; render(); } }, T("rm_end"));
     fill(view, h("div", { class: "stack" }, head, h("p", { class: "turn" }, T("rm_turn_you"), " · ", T("turn_n", { n: next })),
       partnerBox(last), ...body, cap.el, h("div", { class: "row links" }, end)));
-    cap.enable(true);
+    cap.enable(room.role === "desk" || !!choice);
   }
 
   function destroy() {

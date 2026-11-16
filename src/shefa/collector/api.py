@@ -97,6 +97,30 @@ def _step_meta(card: dict[str, Any] | None, request: Request) -> dict[str, Any] 
     }
 
 
+def _room_node(card: dict[str, Any] | None, clips: list[dict[str, Any]]) -> str:
+    """Where a two-person call has got to in its script: the node the front desk speaks next (or
+    the one the caller is answering). The caller's choices move the call on; the front desk only
+    answers, so it never decides where the call goes. "" = the script has ended."""
+    if not card or card.get("v") != 2:
+        return ""
+    node = card["start"]
+    for clip in sorted(
+        (c for c in clips if c["role"] == "caller"),
+        key=lambda c: (int(c["turn"] or 0), c["created_at"]),
+    ):
+        nid, _, cid = (clip.get("step_id") or "").partition("#")
+        current = card["nodes"].get(nid)
+        if not current or nid != node:
+            continue  # an answer to an earlier line (a retry): it does not move the call
+        choice = next((c for c in current["choices"] if c["id"] == cid), None)
+        if choice is None:
+            continue
+        node = choice["next"] or ""
+        if not node:
+            break
+    return node
+
+
 def _sheet_for(card: dict[str, Any] | None) -> dict[str, Any]:
     return S.clinic_sheet() if (card or {}).get("v") == 2 else P.CLINIC_SHEET
 
@@ -399,6 +423,8 @@ def public_router(ctx: Ctx) -> APIRouter:
             role = (
                 "caller" if room_row["caller_cid"] == cid else "desk"
             )  # the server decides the role
+            card = ctx.cards_by_id.get(room_row["card_id"])  # and the card: the room's own
+            step = _step_meta(card, request)
         meta = {
             "card_id": card["id"] if card else "",
             "step_id": step["id"] if step else "",
@@ -413,6 +439,18 @@ def public_router(ctx: Ctx) -> APIRouter:
             "role": role,
             "turn": request.headers.get("x-turn", "0")[:3],
         }
+        if role == "desk":
+            # The front desk was guided to say this node's line in their own words: the clip is
+            # front-desk speech (kept out of the caller training set by default), not a caller answer.
+            node = ((card or {}).get("nodes") or {}).get(request.headers.get("x-step", ""))
+            meta |= {
+                "step_id": node["id"] if node else "",
+                "slot": "desk",
+                "question_bn": node["line_bn"] if node else "",
+                "expected_text": None,
+                "facts": {"guided_line": bool(node)}
+                | ({"auto_stopped": True} if request.headers.get("x-autostop") == "1" else {}),
+            }
         try:
             if store._one(
                 "SELECT 1 FROM clips WHERE sha256=? AND id!=? AND deleted_at IS NULL",
@@ -516,6 +554,9 @@ def public_router(ctx: Ctx) -> APIRouter:
             "state": room["state"],
             "role": role,
             "clips": store.room_clips(room["code"]),
+            "node": _room_node(
+                ctx.cards_by_id.get(room["card_id"]), store.room_clips(room["code"])
+            ),
             "partner_here": bool(room["desk_cid"]),
             "card": ctx.cards_by_id.get(room["card_id"]),
             "sheet": _sheet_for(ctx.cards_by_id.get(room["card_id"])) if role == "desk" else None,

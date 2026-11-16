@@ -1,6 +1,6 @@
 """Every clip gets a machine draft and a confidence; reviewers check it, least sure first."""
 
-# ruff: noqa: E501
+# ruff: noqa: E501, F811
 import time
 
 from shefa.collector import tools

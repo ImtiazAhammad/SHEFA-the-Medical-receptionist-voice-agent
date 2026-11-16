@@ -685,7 +685,7 @@ class CollectorStore:
 
     def room_clips(self, code: str) -> list[dict[str, Any]]:
         rows = self._q(
-            "SELECT id,role,turn,slot,duration_s,created_at FROM clips WHERE room=? "
+            "SELECT id,role,turn,slot,step_id,duration_s,created_at FROM clips WHERE room=? "
             "AND deleted_at IS NULL ORDER BY turn,created_at",
             (code,),
         )
