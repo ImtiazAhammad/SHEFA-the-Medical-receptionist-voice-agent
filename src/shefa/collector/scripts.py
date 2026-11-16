@@ -211,6 +211,10 @@ def roster() -> dict[str, dict[str, Any]]:
                     "short": f"ডাক্তার {surname}",
                     "days": list(days),
                     "days_bn": spoken_list([WEEKDAYS_BN[d] for d in days], "bn"),
+                    "days_short": "রবি থেকে বৃহস্পতিবার"
+                    if len(days) == 5
+                    else spoken_list([WEEKDAYS_BN[d] for d in days], "bn"),
+                    "part_bn": "বিকেলে" if evening else "সকালে",
                     "start": _clock(start),
                     "end": _clock(start + 180),
                     "hours_bn": f"{spoken_time(_clock(start), 'bn')} থেকে {spoken_time(_clock(start + 180), 'bn')}",
@@ -700,7 +704,10 @@ def booking_script(rng: random.Random, index: int) -> dict[str, Any]:
             nodes,
             "sched",
             "pick_doctor",
-            " ".join(f"{d['title']} বসেন {d['days_bn']}, {d['hours_bn']}।" for d in dept["doctors"])
+            # Short on purpose (days and part of the day): three full timetables took 25 s to say.
+            " ".join(
+                f"{d['title']} বসেন {d['days_short']} {d['part_bn']}।" for d in dept["doctors"]
+            )
             + " কার সিরিয়াল দেব?",
             picks,
             cap=20,
