@@ -129,3 +129,27 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 .stack.wide { width: 100%; }
 .center > .stack, .center .btn { width: 100%; }
+
+/* version 2: the call to the front desk */
+.bubble { background: var(--card); border: 2px solid var(--line); border-radius: 18px 18px 18px 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.bubble.speaking { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent); }
+.bubble-who { font-size: 0.85rem; font-weight: 700; color: var(--brand); margin: 0; }
+.bubble-text { font-size: 1.15rem; font-weight: 600; line-height: 1.55; margin: 0; }
+.btn.small { min-height: 40px; padding: 6px 12px; font-size: 0.95rem; }
+.turncue { margin: 0; padding: 10px 12px; border-radius: var(--radius); font-weight: 700; text-align: center; }
+.turncue.speaking { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); }
+.turncue.tap { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); }
+.turncue.turn { background: var(--good); color: #fff; animation: cue 1.4s ease-in-out infinite; }
+@keyframes cue { 50% { transform: scale(1.03); } }
+.history { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--line); padding-left: 10px; }
+.hist p { margin: 0; font-size: 0.9rem; }
+.hist-desk { color: var(--muted); }
+.hist-you { color: var(--good); font-weight: 600; }
+.fork .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.persona-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.persona-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 96px; padding: 12px 8px; text-align: center; white-space: normal; }
+.persona-btn strong { font-size: 1.2rem; }
+.sheet-dept summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; }
+.goals { margin: 0; padding-left: 20px; }
+.goals li { margin: 4px 0; }
+@media (prefers-reduced-motion: reduce) { .turncue.turn { animation: none; } }

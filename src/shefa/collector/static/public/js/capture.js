@@ -14,7 +14,7 @@ import { record, micErrorKey } from "./recorder.js";
  */
 export function createCapture(opts) {
   const limit = Math.max(2, opts.maxS - 0.5);
-  let phase = "idle", enabled = true, handle = null, tick = null, url = "", last = null;
+  let phase = "idle", enabled = true, handle = null, tick = null, url = "", last = null, cut = false;
 
   const bar = h("i");
   const meter = h("div", { class: "meter", "aria-hidden": "true" }, bar);
@@ -52,14 +52,16 @@ export function createCapture(opts) {
       showError(micErrorKey(e));
       return;
     }
-    phase = "rec"; paint();
+    phase = "rec"; cut = false; paint();
     const t0 = performance.now();
     const left = h("span", { class: "count", "aria-hidden": "true" });
     label.after(left);
     tick = setInterval(() => {
       const remain = limit - (performance.now() - t0) / 1000;
+      // A countdown only near the end: a clock running from the start makes people rush.
+      left.hidden = remain > 5;
       fill(left, T("rec_left", { s: Math.max(0, Math.ceil(remain)) }));
-      if (remain <= 0) stop();
+      if (remain <= 0) { cut = true; stop(); }
     }, 100);
     el._left = left;
   }
@@ -72,6 +74,7 @@ export function createCapture(opts) {
     phase = "sending"; paint();
     level(0);
     const res = await h0.stop();
+    res.cut = cut;
     if (res.dur < opts.minS + 0.1) { phase = "idle"; paint(); showError("rec_short"); return; }
     last = res;
     if (opts.review === false) { phase = "idle"; paint(); opts.onDone(res); return; }
@@ -91,9 +94,14 @@ export function createCapture(opts) {
     ok.onclick = accept;
     again.onclick = () => { reset(); };
     const quiet = res.peak < 0.02;
-    fill(review, audio, play, quiet && h("p", { class: "warn", role: "alert" }, T("rec_quiet")), h("div", { class: "row" }, ok, again));
+    // Cut off by the time limit: the end of what they said is missing, so ask for a shorter take.
+    // Keeping it is allowed (the server marks it), but "again" is the first choice offered.
+    if (res.cut) fill(ok, icon("check"), T("rec_keep_cut"));
+    fill(review, audio, play, quiet && h("p", { class: "warn", role: "alert" }, T("rec_quiet")),
+      res.cut && h("p", { class: "warn", role: "alert" }, T("rec_cut")),
+      h("div", { class: "row" }, res.cut ? again : ok, res.cut ? ok : again));
     paint();
-    ok.focus();
+    (res.cut ? again : ok).focus();
   }
 
   async function accept() {

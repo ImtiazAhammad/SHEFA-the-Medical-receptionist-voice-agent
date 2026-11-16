@@ -147,6 +147,9 @@ async function sendOne(rec) {
   const headers = { "X-Card": m.card || "", "X-Step": m.step || "", "X-Setting": m.setting || "" };
   if (rec.sha) headers["X-Sha256"] = rec.sha;
   if (m.slot) headers["X-Slot"] = m.slot;
+  if (m.choice) headers["X-Choice"] = m.choice;
+  if (m.persona) headers["X-Persona"] = m.persona;
+  if (m.autostop) headers["X-Autostop"] = "1";
   if (m.room) { headers["X-Room"] = m.room; headers["X-Role"] = m.role || ""; headers["X-Turn"] = String(m.turn || 0); }
   const res = await api("/api/c/clip/" + rec.id, { method: "PUT", body: new Blob([rec.buf], { type: rec.mime }), headers, speaker: rec.speaker, timeout: 60000 });
   const hold = (ms, why = "") => {

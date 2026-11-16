@@ -8,7 +8,7 @@ import { T, setT, t, n } from "./i18n.js";
 import { api } from "./api.js";
 import { S, me } from "./session.js";
 import { createCapture } from "./capture.js";
-import { settingBlock } from "./card.js";
+import { settingBlock, personaPicker, patientLine, resolve } from "./card.js";
 import * as Q from "./queue.js";
 import { copyText, pageLink, waLink } from "./share.js";
 import { toast } from "./ui.js";
@@ -16,6 +16,7 @@ import { rejectionText } from "./i18n.js";
 import { releaseMic } from "./recorder.js";
 
 const WAIT_FOR_PARTNER_MS = 60000;
+const MAX_TURNS = 30; // a long call is fine; this only stops a forgotten room from running forever
 
 export function runRoom(view, { code, onFinish, onSolo }) {
   let room = null; // {code, role, card, sheet, partner_here, clips}
@@ -98,14 +99,30 @@ export function runRoom(view, { code, onFinish, onSolo }) {
   }
 
   function sheetBox() {
+    // 24 doctors is too long to scroll past on a phone: one fold per department.
     const sh = room.sheet;
     if (!sh) return null;
+    const depts = [];
+    for (const d of sh.doctors) {
+      let g = depts.find((x) => x.name === d.dept_bn);
+      if (!g) depts.push((g = { name: d.dept_bn, doctors: [] }));
+      g.doctors.push(d);
+    }
     return h("section", { class: "box" }, h("h2", { class: "small" }, sh.title_bn),
-      h("ul", { class: "sheet" }, sh.doctors.map((d) => h("li", null,
-        h("strong", null, `${d.name_bn} (${d.dept_bn})`),
-        h("span", null, `${d.days_bn}, ${d.hours_bn}`),
-        h("span", { class: "muted" }, T("rm_fee"), ` ${n(d.fee)} · `, T("rm_room"), ` ${d.room}`)))),
-      h("p", { class: "muted" }, sh.tips_bn));
+      h("p", { class: "muted" }, sh.tips_bn),
+      sh.address_bn && h("p", null, icon("check"), " ", sh.address_bn),
+      depts.map((g) => h("details", { class: "sheet-dept" }, h("summary", null, g.name),
+        h("ul", { class: "sheet" }, g.doctors.map((d) => h("li", null,
+          h("strong", null, d.name_bn),
+          h("span", null, `${d.days_bn}, ${d.hours_bn}`),
+          h("span", { class: "muted" }, T("rm_fee"), ` ${n(d.fee)} · `, T("rm_room"), ` ${d.room}`)))))));
+  }
+
+  function goalsBox(card) {
+    const goals = (card.goals_bn || []).map((g) => resolve(g, room.persona)).filter(Boolean);
+    if (!goals.length) return null;
+    return h("section", { class: "box hint" }, h("h2", { class: "small" }, T("rm_goals")),
+      h("ol", { class: "goals" }, goals.map((g) => h("li", null, g))), h("p", { class: "nudge" }, T("nudge")));
   }
 
   function renderWaiting() {
@@ -131,13 +148,24 @@ export function runRoom(view, { code, onFinish, onSolo }) {
     if (dead || !room) return;
     if (room.role === "caller" && !room.partner_here) { if (cap) cap.destroy(); cap = null; return renderWaiting(); }
     const card = room.card;
-    const steps = card.steps;
     const max = turns();
     const next = max + 1;
-    const finished = max >= steps.length * 2;
+    const finished = max >= MAX_TURNS || room.ended;
     const mine = room.role === "desk" ? next % 2 === 1 : next % 2 === 0;
-    const k = Math.min(steps.length - 1, Math.ceil(next / 2) - 1);
-    const step = steps[k];
+    const people = card.personas || [];
+    if (room.role === "caller" && people.length > 1 && !room.persona && !finished) {
+      if (cap && cap.busy()) return;
+      // Polling calls render() every few seconds: draw the chooser once, or a tap can land on a
+      // button that was just replaced.
+      if (view._rk === "persona" && view.firstChild) return;
+      view._rk = "persona";
+      if (cap) { cap.destroy(); cap = null; }
+      fill(view, h("div", { class: "stack" },
+        h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn)),
+        personaPicker(people, (p) => { room.persona = p; view._rk = ""; render(); })));
+      return;
+    }
+    if (room.role === "caller" && !room.persona && people.length === 1) room.persona = people[0];
     const last = room.clips.filter((c) => c.role !== room.role).sort((a, b) => (+b.turn) - (+a.turn))[0];
     const stateKey = [finished, mine, next, last && last.id, partnerUrls.get(last && last.id), room.role].join("|");
     if (view._rk === stateKey && view.firstChild) return; // nothing changed: do not disturb a recording in progress
@@ -161,8 +189,8 @@ export function runRoom(view, { code, onFinish, onSolo }) {
       maxS: S.cfg.max_clip_s, minS: S.cfg.min_clip_s,
       onAccept: async (res) => {
         const person = me();
-        const meta = { card: card.id, slot: step.slot, setting: person.setting, room: room.code, role: room.role, turn: next };
-        if (room.role === "caller") meta.step = step.id;
+        const meta = { card: card.id, setting: person.setting, room: room.code, role: room.role, turn: next,
+          persona: room.persona ? room.persona.id : "", autostop: res.cut ? "1" : "" };
         const id = await Q.add({ blob: res.blob, speaker: S.session.speaker, dur: res.dur, meta });
         myLast = next;
         person.n++; person.sec += res.dur;
@@ -176,14 +204,13 @@ export function runRoom(view, { code, onFinish, onSolo }) {
         return undefined;
       },
     });
-    const what = t("rm_step_" + step.slot) !== "rm_step_" + step.slot ? T("rm_step_" + step.slot) : "";
     const body = room.role === "caller"
       ? [h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn),
-          card.persona && card.persona.patient ? h("p", { class: "persona" }, icon("user"), T("persona", { name: card.persona.patient })) : null),
-        h("section", { class: "box hint" }, h("h2", { class: "small" }, T("hint_title")), h("p", { class: "hint-text" }, step.hint_bn), h("p", { class: "nudge" }, T("nudge"))),
-        settingBlock()]
-      : [sheetBox(), h("p", { class: "q" }, T(next === 1 ? "rm_open" : "rm_ask"), " ", what), settingBlock()];
-    fill(view, h("div", { class: "stack" }, head, h("p", { class: "turn" }, T("rm_turn_you")), partnerBox(last), ...body, cap.el));
+          patientLine(room.persona)), goalsBox(card), settingBlock()]
+      : [h("p", { class: "q" }, T(next === 1 ? "rm_open" : "rm_ask")), sheetBox(), settingBlock()];
+    const end = h("button", { type: "button", class: "linkbtn", onclick: () => { room.ended = true; view._rk = ""; render(); } }, T("rm_end"));
+    fill(view, h("div", { class: "stack" }, head, h("p", { class: "turn" }, T("rm_turn_you"), " · ", T("turn_n", { n: next })),
+      partnerBox(last), ...body, cap.el, h("div", { class: "row links" }, end)));
     cap.enable(true);
   }
 
