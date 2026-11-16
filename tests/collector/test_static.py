@@ -85,5 +85,6 @@ def test_verify_mode_puts_the_expected_words_in_an_editable_box():
     assert (
         views["blind"] == views["seed"]
     )  # a reviewer must not be able to tell a seed from a real clip
-    assert views["blind"]["prefill"] == "" and views["adjudicate"]["prefill"] == ""
+    # every clip shows its draft now (founder's decision 2026-11-16); an adjudicator does not
+    assert views["blind"]["prefill"] == "secret draft" and views["adjudicate"]["prefill"] == ""
     assert views["draft"]["prefill"] == "machine text"

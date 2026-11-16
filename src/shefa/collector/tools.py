@@ -29,6 +29,7 @@ GO_SPEAKERS = 100  # the spec's go/no-go gate for fine-tuning
 GO_HOURS = 8.0
 GOOD_STATUSES = ("single", "agreed", "adjudicated")
 Transcribe = Callable[[Any, str], str]  # (16 kHz float samples, hotwords) -> raw text
+Drafter = Callable[[Any], tuple[str, float]]  # 16 kHz float samples -> (raw text, confidence 0..1)
 
 
 def run(command: str, config: CollectorConfig, args: Any) -> int:
@@ -47,11 +48,11 @@ def run(command: str, config: CollectorConfig, args: Any) -> int:
         )
         print(format_export(report))
         return 0
-    transcribe = load_transcriber()
     if command == "draft":
-        count = do_draft(store, transcribe, args.limit)
+        count = do_draft(store, load_drafter(), args.limit)
         print(f"drafted {count} clips")
         return 0
+    transcribe = load_transcriber()
     if command == "score":
         result = do_score(store, transcribe, args.split, hints=args.hints, limit=args.limit)
         print(format_score(result))
@@ -63,6 +64,43 @@ def run(command: str, config: CollectorConfig, args: Any) -> int:
 
 
 # ---------------------------------------------------------------------------------- speech
+def _bangla_stt(device: str | None = None, compute_type: str | None = None) -> Any:
+    from shefa.config.settings import settings
+    from shefa.models.stt.whisper_local import WhisperLocalSTT
+
+    adapter = settings.models.adapters.get("stt_whisper_local")
+    model = getattr(adapter, "model_size", None) or "models/stt/bangla-whisper-medium-ct2"
+    stt = WhisperLocalSTT(
+        model_size=model,
+        device=device or getattr(adapter, "device", None),
+        compute_type=compute_type or getattr(adapter, "compute_type", None),
+    )
+    stt._ensure_model()  # falls back to the CPU by itself when the GPU cannot load it
+    return stt
+
+
+def load_drafter(device: str | None = None) -> Drafter:
+    """The agent's own Bangla Whisper, returning a transcript and how sure it was.
+
+    Confidence is the weakest segment's (the repo's own rule in whisper_local): one garbled
+    stretch should mark the whole clip for a careful listen."""
+    from shefa.models.stt.whisper_local import _segment_confidence
+
+    stt = _bangla_stt(device, "int8_float16" if device != "cpu" else None)
+
+    def draft(samples: Any) -> tuple[str, float]:
+        segments, _info = stt._model.transcribe(
+            samples, language="bn", beam_size=5, vad_filter=True
+        )
+        segments = list(segments)
+        text = " ".join(seg.text for seg in segments).strip()
+        if not text:
+            return "", 0.0
+        return text, round(min(_segment_confidence(seg) for seg in segments), 3)
+
+    return draft
+
+
 def load_transcriber(device: str | None = None) -> Transcribe:
     """The same Bangla Whisper the agent uses, run here on whatever is free."""
     from shefa.config.settings import settings
@@ -116,17 +154,71 @@ def _decode(path: str) -> Any:
     return samples
 
 
-def do_draft(store: CollectorStore, transcribe: Transcribe, limit: int = 500) -> int:
+def do_draft(store: CollectorStore, draft: Drafter, limit: int = 500) -> int:
+    """Draft every clip that has none yet. A file that fails gets an empty draft with confidence 0,
+    so it is not retried forever and the reviewer is told to type it."""
     done = 0
     for row in store.undrafted(limit):
         try:
-            raw = transcribe(_decode(row["path"]), "")
+            raw, confidence = draft(_decode(row["path"]))
         except Exception:  # noqa: BLE001 - one bad file must not stop the batch
-            raw = ""
+            raw, confidence = "", 0.0
         cleaned, _notes = T.clean_transcript(raw)
-        store.set_draft(row["id"], cleaned)
+        store.set_draft(row["id"], cleaned, confidence if cleaned else 0.0)
         done += 1
     return done
+
+
+class AutoDrafter:
+    """Drafts new clips in the background while the server runs, so a clip usually has a draft
+    by the time a reviewer opens it. The speech model loads on first use; if it cannot load at
+    all, drafting stops and the review page simply shows clips without a draft."""
+
+    def __init__(
+        self,
+        store: CollectorStore,
+        device: str | None = None,
+        idle_s: float = 10.0,
+        loader: Callable[[str | None], Drafter] | None = None,
+    ):
+        import threading
+
+        self.store, self.device, self.idle_s = store, device, idle_s
+        self.loader = loader or load_drafter
+        self.stop_event = threading.Event()
+        self.thread = threading.Thread(target=self._run, name="auto-drafter", daemon=True)
+        self.error = ""
+        self.drafted = 0
+
+    def start(self) -> AutoDrafter:
+        self.thread.start()
+        return self
+
+    def stop(self) -> None:
+        self.stop_event.set()
+
+    def _run(self) -> None:
+        import logging
+
+        log = logging.getLogger("shefa.collector.drafter")
+        draft: Drafter | None = None
+        while not self.stop_event.is_set():
+            if not self.store.undrafted(1):
+                self.stop_event.wait(self.idle_s)
+                continue
+            if draft is None:
+                try:
+                    draft = self.loader(self.device)
+                except Exception as error:  # noqa: BLE001 - no model: the site still works
+                    self.error = f"{type(error).__name__}: {error}"
+                    log.warning("auto-draft disabled: %s", self.error)
+                    return
+            try:
+                self.drafted += do_draft(self.store, draft, limit=10)
+            except Exception as error:  # noqa: BLE001 - keep the server alive, try again later
+                self.error = f"{type(error).__name__}: {error}"
+                log.warning("auto-draft batch failed: %s", self.error)
+                self.stop_event.wait(self.idle_s)
 
 
 # ---------------------------------------------------------------------------------- score

@@ -51,6 +51,8 @@ class CollectorConfig(BaseModel):
     human_voice_share: float = (
         0.5  # share of calls that use a recorded human desk voice, when one exists
     )
+    auto_draft: bool = True  # `serve` drafts every new clip in the background
+    draft_device: str = ""  # "" = the speech model's own setting (GPU, CPU fallback); or "cpu"
     session_hours: int = 12  # a staff sign-in lasts this long
     password_iterations: int = 600_000  # PBKDF2 rounds; tests lower it
     test_fraction: float = 0.10

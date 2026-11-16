@@ -1,10 +1,9 @@
 // The reviewer page's rules, kept free of the DOM so they can be checked in Node.
 //
-// The most important rule: the screen is chosen from item.mode ONLY. We never look at whether a
-// field happens to be filled in, because the server can send a draft for a mode that must not show
-// one (an "adjudicate" clip from the training pool carries its machine draft). And "blind" and
-// "seed" must be indistinguishable, so both map to the same view and nothing downstream may ever
-// see the original mode name, the clip's split or the status in the submit reply.
+// Since 2026-11-16 every clip comes with the machine's draft (the founder's decision: a trained
+// reviewer checks it), so the reviewer listens, then confirms or corrects. Only an adjudicator,
+// who settles two reviewers' versions, works without it. "blind" and "seed" stay
+// indistinguishable: both map to the same view, and nothing downstream sees the mode name.
 
 export const REJECT_FLAGS = ["unusable", "other_language", "personal_details", "offensive"];
 export const KEPT_FLAGS = ["noisy", "unclear"];
@@ -13,6 +12,11 @@ export const MAX_TEXT = 600; // server limit on the typed text
 /** Which screen to draw, and what goes in the text box at first. */
 export function viewFor(item) {
   const mode = item && item.mode;
+  const confidence = item && typeof item.confidence === "number" ? item.confidence : null;
+  const draft = item && typeof item.draft === "string" ? item.draft : "";
+  if (mode !== "adjudicate" && draft) {
+    return { ui: "draft", prefill: draft, noDraft: false, expected: "", candidates: [], confidence };
+  }
   if (mode === "draft") {
     const draft = typeof item.draft === "string" ? item.draft : "";
     return { ui: "draft", prefill: draft, noDraft: draft === "", expected: "", candidates: [] };

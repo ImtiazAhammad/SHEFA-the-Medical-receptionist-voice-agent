@@ -52,6 +52,9 @@ COMMON_PASSWORDS = frozenset(
         "shefa123",
     }
 )
+# Clips that already have a draft come before those still waiting for one; among them the
+# machine's least sure transcript first, so the careful listening goes where it is needed.
+LEAST_SURE_FIRST = "(draft_text IS NULL), COALESCE(draft_conf, 1.0), created_at"
 CLIP_ID = re.compile(r"^[a-f0-9]{32}$")
 REJECT_FLAGS = frozenset({"unusable", "other_language", "personal_details", "offensive"})
 STAFF_ROLES = ("admin", "adjudicator", "reviewer")
@@ -198,6 +201,10 @@ class CollectorStore:
             "CREATE UNIQUE INDEX IF NOT EXISTS staff_username ON staff(username COLLATE NOCASE) "
             "WHERE username IS NOT NULL"
         )
+        clip_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(clips)")}
+        for column in ("draft_conf", "draft_at"):
+            if column not in clip_cols:
+                self.db.execute(f"ALTER TABLE clips ADD COLUMN {column} REAL")
         have = {r["name"] for r in self.db.execute("PRAGMA table_info(speakers)")}
         for column, ddl in (
             ("delete_hash", "TEXT NOT NULL DEFAULT ''"),
@@ -661,8 +668,12 @@ class CollectorStore:
         row = self._one("SELECT * FROM clips WHERE id=? AND deleted_at IS NULL", (clip_id,))
         return dict(row) if row else None
 
-    def set_draft(self, clip_id: str, text: str) -> None:
-        self._x("UPDATE clips SET draft_text=? WHERE id=?", (text, clip_id))
+    def set_draft(self, clip_id: str, text: str, confidence: float | None = None) -> None:
+        """The machine's first transcript and how sure it was (0..1), for the reviewer to check."""
+        self._x(
+            "UPDATE clips SET draft_text=?, draft_conf=?, draft_at=? WHERE id=?",
+            (text, confidence, time.time(), clip_id),
+        )
 
     def undrafted(self, limit: int = 200) -> list[dict[str, Any]]:
         rows = self._q(
@@ -766,14 +777,14 @@ class CollectorStore:
         row = self._one(
             f"SELECT c.* FROM clips c WHERE {base} AND c.split='test' AND c.status IN ('pending','single') "
             f"AND c.id NOT IN ({done}) AND (SELECT COUNT(*) FROM reviews r WHERE r.clip_id=c.id AND r.kind IN ('blind','verify'))<2 "
-            "ORDER BY c.created_at LIMIT 1",
+            f"ORDER BY {LEAST_SURE_FIRST} LIMIT 1",
             (sid,),
         )
         if row:
             return self._queue_item(dict(row), "blind")
         row = self._one(
             f"SELECT * FROM clips WHERE {base} AND split IN ('train','dev') AND status='pending' "
-            f"AND id NOT IN ({done}) ORDER BY created_at LIMIT 1",
+            f"AND id NOT IN ({done}) ORDER BY {LEAST_SURE_FIRST} LIMIT 1",
             (sid,),
         )
         if row:
@@ -782,9 +793,10 @@ class CollectorStore:
         return None
 
     def _queue_item(self, clip: dict[str, Any], mode: str) -> dict[str, Any]:
-        hide_draft = (
-            mode != "draft"
-        )  # a draft anchors reviewers, so only the one mode that wants it sees it
+        # Every clip shows the machine's draft (the founder's decision, 2026-11-16: a trained
+        # reviewer checks it; the least sure drafts come first and are marked). An adjudicator
+        # sees the two reviewers' versions instead.
+        hide_draft = mode == "adjudicate"
         item = {
             "clip_id": clip["id"],
             "mode": mode,
@@ -796,6 +808,7 @@ class CollectorStore:
             "setting": clip["setting"],
             "draft": None if hide_draft else clip["draft_text"],
             "expected": clip["expected_text"] if mode == "verify" else None,
+            "confidence": None if hide_draft else clip.get("draft_conf"),
         }
         if mode == "adjudicate":
             item["candidates"] = [
@@ -1111,17 +1124,18 @@ class CollectorStore:
         }
 
     def clip_rows(
-        self, status: str = "", limit: int = 100, offset: int = 0
+        self, status: str = "", limit: int = 100, offset: int = 0, sort: str = "new"
     ) -> list[dict[str, Any]]:
         sql = (
-            "SELECT id,speaker_id,card_id,kind,slot,split,duration_s,snr_db,speech_ratio,status,final_text,draft_text,"
+            "SELECT id,speaker_id,card_id,kind,slot,split,draft_conf,duration_s,snr_db,speech_ratio,status,final_text,draft_text,"
             "created_at FROM clips WHERE deleted_at IS NULL"
         )
         args: list[Any] = []
         if status:
             sql += " AND status=?"
             args.append(status)
-        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        order = LEAST_SURE_FIRST if sort == "confidence" else "created_at DESC"
+        sql += f" ORDER BY {order} LIMIT ? OFFSET ?"
         return [dict(r) for r in self._q(sql, (*args, limit, offset))]
 
     def close(self) -> None:

@@ -16,7 +16,7 @@ const ui = {
   loading: $("#loading"), error: $("#error"), errorText: $("#error-text"), empty: $("#empty"),
   emptyCount: $("#empty-count"), work: $("#work"), question: $("#question"), chips: $("#chips"),
   audioMsg: $("#audio-msg"), draftWarn: $("#draft-warn"), noDraft: $("#no-draft"),
-  verifyNote: $("#verify-note"), verifyBox: $("#verify-box"), expected: $("#expected"), adjBox: $("#adj-box"), candidates: $("#candidates"),
+  conf: $("#conf"), verifyNote: $("#verify-note"), verifyBox: $("#verify-box"), expected: $("#expected"), adjBox: $("#adj-box"), candidates: $("#candidates"),
   textBox: $("#text-box"), text: $("#text"), msg: $("#msg"), rejectNote: $("#reject-note"),
   submit: $("#submit"), yes: $("#yes"), fix: $("#fix"), done: $("#done"), doneText: $("#done-text"),
   doneNotes: $("#done-notes"), counter: $("#counter"), who: $("#who"), answer: $("#answer"),
@@ -112,6 +112,22 @@ function setFlags(flags) {
   for (const box of document.querySelectorAll('input[name="flag"]')) box.checked = flags.includes(box.value);
 }
 
+/** How sure the machine was, so the least sure drafts get the most careful listen. */
+function paintConfidence() {
+  const c = view.confidence;
+  ui.conf.hidden = view.ui !== "draft" || typeof c !== "number";
+  if (ui.conf.hidden) return;
+  const level = c < 0.5 ? "low" : c < 0.8 ? "mid" : "high";
+  ui.conf.className = "banner " + (level === "low" ? "error" : level === "mid" ? "warn" : "info");
+  ui.conf.textContent = t("rv_conf_" + level, { p: num(Math.round(c * 100)) });
+}
+
+/** An untouched draft is a confirmation: say so on the button ("correct, next"). */
+function paintSubmitLabel() {
+  const untouched = view.ui === "draft" && view.prefill && ui.text.value === view.prefill;
+  ui.submit.textContent = t(untouched ? "rv_confirm" : "rv_submit");
+}
+
 function paintChips() {
   clear(ui.chips);
   if (!item) return;
@@ -126,6 +142,8 @@ function paintChips() {
 function paintMode() {
   const rejecting = isRejecting(currentFlags());
   ui.draftWarn.hidden = view.ui !== "draft";
+  paintConfidence();
+  paintSubmitLabel();
   ui.noDraft.hidden = !(view.ui === "draft" && view.noDraft);
   ui.verifyNote.hidden = !view.verifyNote;
   ui.verifyBox.hidden = view.ui !== "verify" || fixing;
@@ -293,7 +311,7 @@ $("#error-retry").addEventListener("click", loadNext);
 $("#empty-refresh").addEventListener("click", loadNext);
 $("#signout").addEventListener("click", () => signOut());
 for (const box of document.querySelectorAll('input[name="flag"]')) box.addEventListener("change", paintMode);
-ui.text.addEventListener("input", () => { if (ui.msg.textContent) showMessage(""); });
+ui.text.addEventListener("input", () => { if (ui.msg.textContent) showMessage(""); paintSubmitLabel(); });
 
 function primaryAction() {
   if (!item || ui.work.hidden) return;

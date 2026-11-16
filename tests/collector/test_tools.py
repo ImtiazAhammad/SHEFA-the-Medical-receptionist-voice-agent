@@ -122,9 +122,9 @@ def test_draft_fills_only_clips_without_one_and_survives_a_bad_file(person, ctx)
     ctx.store.set_draft(a, "আগেই আছে")
     seen = []
 
-    def fake(samples, hotwords):
+    def fake(samples):
         seen.append(len(samples))
-        return "বুক করো।"
+        return "বুক করো।", 0.8
 
     assert tools.do_draft(ctx.store, fake, 10) == 1
     assert (
@@ -132,7 +132,7 @@ def test_draft_fills_only_clips_without_one_and_survives_a_bad_file(person, ctx)
         and ctx.store.get_clip(a)["draft_text"] == "আগেই আছে"
     )
 
-    def broken(samples, hotwords):
+    def broken(samples):
         raise RuntimeError("gpu fell over")
 
     c = reviewed(person, ctx, "z")

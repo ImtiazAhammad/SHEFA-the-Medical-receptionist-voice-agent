@@ -214,6 +214,15 @@ def _serve(config: CollectorConfig, args: argparse.Namespace) -> int:
         )
     )
     threading.Thread(target=private.run, daemon=True).start()
+    drafter = None
+    if config.auto_draft:
+        from shefa.collector.tools import AutoDrafter
+
+        drafter = AutoDrafter(ctx.store, config.draft_device or None).start()
+        ctx.drafter = drafter
+        print(
+            "Drafting: every clip gets a machine transcript in the background for reviewers to check."
+        )
     print(f"Contributor page (put the tunnel on this):  http://{config.host}:{config.port}/")
     print(f"Staff page (this computer only):            http://127.0.0.1:{config.private_port}/")
     if args.with_review:
@@ -222,6 +231,8 @@ def _serve(config: CollectorConfig, args: argparse.Namespace) -> int:
         create_public_app(config, ctx), host=config.host, port=config.port, log_level="info"
     )
     private.should_exit = True
+    if drafter:
+        drafter.stop()
     return 0
 
 

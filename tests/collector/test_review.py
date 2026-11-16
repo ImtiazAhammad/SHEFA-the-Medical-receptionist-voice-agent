@@ -58,7 +58,7 @@ def test_test_clips_are_blind_and_need_two_agreeing_reviewers(priv, person, ctx,
     clip = upload(person, ctx, "test")
     ctx.store.set_draft(clip, "ভুল খসড়া")
     first = priv.get("/api/review/next", headers=bearer(staff["reviewer"])).json()["item"]
-    assert first["mode"] == "blind" and first["draft"] is None
+    assert first["mode"] == "blind" and first["draft"] == "ভুল খসড়া"  # every clip shows its draft now
     priv.post(
         "/api/review/submit",
         headers=bearer(staff["reviewer"]),

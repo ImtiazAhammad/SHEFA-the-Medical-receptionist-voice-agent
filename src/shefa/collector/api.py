@@ -139,6 +139,7 @@ class Ctx:
         self.store = store or CollectorStore(config)
         self.limiter = RateLimiter()
         self.private_limiter = RateLimiter()  # a flood on the public address must not block staff
+        self.drafter: Any = None  # set by `serve` when background drafting is on
         # Version 2 scripts are what people get now. The first version's cards stay known by id,
         # so a clip that waited on a phone, or an old two-person room, still finds its card.
         self.cards = S.load_bank(config.prompts_dir / "cards2.json")
@@ -856,6 +857,14 @@ def admin_router(ctx: Ctx) -> APIRouter:
         return {
             **store.stats(),
             "impact_note": store.get_setting("impact_note"),
+            "drafts": {
+                "waiting": store._one(
+                    "SELECT COUNT(*) n FROM clips WHERE draft_text IS NULL AND deleted_at IS NULL AND status!='rejected'"
+                )["n"],
+                "running": bool(getattr(ctx, "drafter", None))
+                and not getattr(ctx.drafter, "error", ""),
+                "error": getattr(getattr(ctx, "drafter", None), "error", ""),
+            },
             "human_voice_share": float(
                 store.get_setting("human_voice_share", str(ctx.config.human_voice_share))
             ),
@@ -933,11 +942,13 @@ def admin_router(ctx: Ctx) -> APIRouter:
         return {"ok": True}
 
     @r.get("/api/admin/clips")
-    async def clips(request: Request, status: str = "", limit: int = 100, offset: int = 0):
+    async def clips(
+        request: Request, status: str = "", limit: int = 100, offset: int = 0, sort: str = "new"
+    ):
         s = gate(request)
         if isinstance(s, JSONResponse):
             return s
-        rows = store.clip_rows(status, min(limit, 500), offset)
+        rows = store.clip_rows(status, min(limit, 500), offset, sort)
         for row in rows:
             row["audio_url"] = f"/api/review/audio/{row['id']}?{ctx.sign(row['id'])}"
         return {"clips": rows}
