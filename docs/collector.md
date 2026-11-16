@@ -169,3 +169,17 @@ A live in-browser two-person call (needs a relay server for mobile networks; the
 "call a friend" covers it), a public reviewer sign-up, a contributors wall with personal details,
 automatic personal-detail detection, and any cloud storage adapter. The audio store has a small
 interface (`LocalAudioStore`) so a cloud one can be added later.
+
+## Version 2 switch-over (2026-11-16) and how to undo it
+
+Switched with uploads paused; the backup taken just before is `data/collector/backups/pre-v2-20261116-2025` (243 clips,
+database, audio and prompts). The new script bank is `data/collector/prompts/cards2.json` with its
+desk audio in `prompts/q2/`; the first-version `cards.json` and `q/` stay for old queued clips.
+
+To undo: pause uploads, `git checkout 206a402` (the last version-1 commit), restart only
+`uv run shefa collect serve` (leave cloudflared running so the public address stays). The old code
+ignores the new tables. It cannot sign anyone in with a password, so mint a version-1 token with that
+old code: `uv run shefa collect staff founder admin`. Restore the database from the backup only while
+uploads are still paused, or later withdrawals would come back.
+
+Find the current public address of a running quick tunnel: `curl -s localhost:20241/quicktunnel`.
