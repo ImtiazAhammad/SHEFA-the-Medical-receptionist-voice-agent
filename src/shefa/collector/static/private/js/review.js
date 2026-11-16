@@ -1,8 +1,8 @@
 // Reviewer page. One clip at a time: listen, write what was said, submit, next.
 // Quality matters more than speed here, because these transcripts become training data.
-import { api, ApiError, audioSrc, signOutTo } from "./api.js";
+import { api, ApiError, audioSrc, signOut } from "./api.js";
 import { $, clear, el, toast } from "./dom.js";
-import { applyI18n, initLangToggle, num, onLangChange, t } from "./i18n.js";
+import { applyI18n, initLangToggle, labelFor, num, onLangChange, t } from "./i18n.js";
 import { createPlayer } from "./player.js";
 import {
   buildSubmission, heardEnough, isRejecting, noteKey, secondsSpent,
@@ -116,8 +116,8 @@ function paintChips() {
   clear(ui.chips);
   if (!item) return;
   const parts = [];
-  if (item.slot) parts.push(t(`slot_${item.slot}`));
-  if (item.kind) parts.push(t(`kind_${item.kind}`));
+  if (item.slot) parts.push(labelFor("slot", item.slot)); // unknown values show as sent
+  if (item.kind) parts.push(labelFor("kind", item.kind));
   if (item.duration_s) parts.push(t("rv_seconds", { n: num(item.duration_s, 1) }));
   for (const part of parts) ui.chips.append(el("span", { class: "chip", text: part }));
 }
@@ -291,7 +291,7 @@ ui.fix.addEventListener("click", () => { fixing = true; paintMode(); ui.text.foc
 $("#next-now").addEventListener("click", () => { clearTimeout(nextTimer); loadNext(); });
 $("#error-retry").addEventListener("click", loadNext);
 $("#empty-refresh").addEventListener("click", loadNext);
-$("#signout").addEventListener("click", () => signOutTo(""));
+$("#signout").addEventListener("click", () => signOut());
 for (const box of document.querySelectorAll('input[name="flag"]')) box.addEventListener("change", paintMode);
 ui.text.addEventListener("input", () => { if (ui.msg.textContent) showMessage(""); });
 

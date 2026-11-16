@@ -275,7 +275,7 @@ def test_a_staff_voice_is_played_only_after_consent_recording_and_admin_approval
     assert len(packs) == 6 and all(v["names"] for v in packs)
     url = f"/hv/{packs[0]['pack']}/{packs[0]['names'][0]}.m4a"
     assert pub.get(url).status_code == 200 and pub.get(url).headers["cache-control"] == "no-store"
-    assert "rina" not in url and str(voices["rina_id"]) not in packs[0]["pack"][:2]
+    assert "rina" not in url and len(packs[0]["pack"]) == 32  # a random id, never who the person is
     # the person removes their voice: it stops at once
     assert priv.delete("/api/voice", headers=h).json()["deleted"] == len(openings)
     assert served() == [] and pub.get(url).status_code == 404

@@ -259,3 +259,45 @@ dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: fle
 @media print { .topbar, .tabs, button { display: none; } }
 
 textarea.plain { min-height: 5em; font-size: 1rem; line-height: 1.7; }
+
+/* ---- sign-in: password rules ticked off while typing (a sign as well as a colour) ---------- */
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: .92rem; }
+.rules li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
+.rules .mark { display: inline-block; width: 1.2em; text-align: center; font-weight: 700; flex: none; }
+.rules li[data-state="ok"] { color: var(--ok); }
+.rules li[data-state="ok"] .mark { color: var(--ok); }
+
+/* ---- one-time password box ---------------------------------------------------------------- */
+.secret-list { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; align-items: center; }
+.secret-list dt { font-weight: 600; }
+.secret-list dd { margin: 0; min-width: 0; }
+.secret-list code { display: inline-block; margin: 0; font-size: 1.15rem; letter-spacing: .04em; }
+@media (max-width: 420px) { .secret-list { grid-template-columns: 1fr; } }
+.plain-list { margin: 0; padding-inline-start: 1.2em; }
+.plain-list li + li { margin-top: .4em; }
+
+/* ---- voices (record page and admin tab) ---------------------------------------------------- */
+.page.narrow-wide { max-width: 760px; }
+.consent-text { font-size: 1.1rem; line-height: 1.85; background: var(--surface-2); border-radius: var(--radius); padding: 12px 16px; border-inline-start: 4px solid var(--warn); }
+.progress-line { margin-bottom: 6px; }
+.num-big { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.group-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-top: 8px; }
+.line-card { display: grid; gap: 8px; }
+.line-card.is-done { border-color: var(--ok); }
+.line-card.is-recording { border: 2px solid var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.line-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.line-text { font-size: 1.2rem; line-height: 1.8; margin: 0; }
+.line-actions button { flex: 1 1 120px; }
+.rec-live { display: grid; gap: 4px; }
+.meter.level { height: 14px; }
+.meter.level > i { transition: none; }
+.rec-time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rec-time.ending { color: var(--danger); font-weight: 700; }
+.line-msg { margin: 0; border-radius: 8px; padding: 6px 10px; background: var(--surface-2); }
+.line-msg.ok { background: var(--ok-soft); }
+.line-msg.warn { background: var(--warn-soft); }
+.line-msg.bad { background: var(--danger-soft); }
+.danger-zone { border-color: var(--danger); }
+.voice-lines { margin: 0; padding-inline-start: 1.4em; display: grid; gap: 10px; }
+.voice-lines li { min-width: 0; }
+.data-table tr.detail-row > td { background: var(--surface-2); }

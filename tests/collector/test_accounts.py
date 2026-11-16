@@ -178,3 +178,13 @@ def test_admin_can_undo_a_rejection(priv, person, ctx):
     assert ctx.store.get_clip(clip)["status"] == "rejected"
     assert priv.post(f"/api/admin/clips/{clip}/restore", headers=bearer(admin)).json()["ok"] is True
     assert ctx.store.get_clip(clip)["status"] == "pending"
+
+
+def test_an_old_token_account_with_a_spaced_name_can_be_reset(priv, ctx):
+    ctx.store._x(
+        "INSERT INTO staff(name,role,token_hash,created_at) VALUES ('Old Rina','reviewer',?,?)",
+        (_sha("q" * 43), time.time()),
+    )
+    staff_id = ctx.store._one("SELECT id FROM staff WHERE name='Old Rina'")["id"]
+    secret = ctx.store.set_password(staff_id)
+    assert login(priv, "old.rina", secret).json()["must_change"] is True

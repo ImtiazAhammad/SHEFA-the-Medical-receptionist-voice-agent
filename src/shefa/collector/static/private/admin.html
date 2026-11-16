@@ -16,7 +16,9 @@
     <span class="brand" data-i18n="app_name">SHEFA ভয়েস কমন্স</span>
     <span class="who" id="who"></span>
     <a class="btn small-btn" href="review.html" data-i18n="to_review">লেখা যাচাই</a>
+    <a class="btn small-btn" href="voice.html" data-i18n="to_voice">ডেস্কের কণ্ঠ দিন</a>
     <button type="button" class="small-btn" id="refresh" data-i18n="refresh">নতুন করে আনুন</button>
+    <a class="btn small-btn" href="index.html#password" data-i18n="change_password">পাসওয়ার্ড বদলান</a>
     <button type="button" class="small-btn" id="lang"></button>
     <button type="button" class="small-btn" id="signout" data-i18n="sign_out">বের হই</button>
   </header>
@@ -25,7 +27,8 @@
     <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" data-tab="overview" data-i18n="tab_overview">সারসংক্ষেপ</button>
     <button type="button" role="tab" id="tab-coverage" aria-controls="panel-coverage" aria-selected="false" tabindex="-1" data-tab="coverage" data-i18n="tab_coverage">কভারেজ</button>
     <button type="button" role="tab" id="tab-campaigns" aria-controls="panel-campaigns" aria-selected="false" tabindex="-1" data-tab="campaigns" data-i18n="tab_campaigns">ক্যাম্পেইন</button>
-    <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1" data-tab="team" data-i18n="tab_team">রিভিউয়ার</button>
+    <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1" data-tab="team" data-i18n="tab_team">স্টাফ</button>
+    <button type="button" role="tab" id="tab-voices" aria-controls="panel-voices" aria-selected="false" tabindex="-1" data-tab="voices" data-i18n="tab_voices">কণ্ঠ</button>
     <button type="button" role="tab" id="tab-clips" aria-controls="panel-clips" aria-selected="false" tabindex="-1" data-tab="clips" data-i18n="tab_clips">ক্লিপ</button>
     <button type="button" role="tab" id="tab-audit" aria-controls="panel-audit" aria-selected="false" tabindex="-1" data-tab="audit" data-i18n="tab_audit">লগ ও সাহায্য</button>
   </div>
@@ -119,12 +122,17 @@
       <div class="stack" id="camp-list"></div>
     </section>
 
-    <!-- ===== Team ===== -->
+    <!-- ===== Team: accounts with a username and a password ===== -->
     <section id="panel-team" role="tabpanel" aria-labelledby="tab-team" class="stack" hidden>
-      <div id="token-slot"></div>
-      <form class="card stack" id="staff-form">
+      <div id="secret-slot"></div>
+      <form class="card stack" id="staff-form" novalidate>
         <h2 data-i18n="staff_new">নতুন স্টাফ যোগ করুন</h2>
-        <div class="field"><label for="staff-name" data-i18n="staff_name">নাম</label><input type="text" id="staff-name" maxlength="60" lang="bn" required></div>
+        <div class="field"><label for="staff-name" data-i18n="staff_name">নাম</label><input type="text" id="staff-name" maxlength="60" lang="bn" autocomplete="off" required></div>
+        <div class="field">
+          <label for="staff-username" data-i18n="staff_username">ইউজারনেম</label>
+          <input type="text" id="staff-username" maxlength="30" lang="en" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required aria-describedby="staff-username-hint">
+          <p class="hint" id="staff-username-hint" data-i18n="staff_username_hint">ছোট হাতের ইংরেজি অক্ষর, অঙ্ক, ডট (.), ড্যাশ (-) বা আন্ডারস্কোর (_), ৩ থেকে ৩০ অক্ষর। নাম ইংরেজিতে লিখলে নিজে থেকে বসে যায়।</p>
+        </div>
         <div class="field">
           <label for="staff-role" data-i18n="staff_role">ভূমিকা</label>
           <select id="staff-role">
@@ -133,12 +141,43 @@
             <option value="admin" data-i18n="role_admin">অ্যাডমিন</option>
           </select>
         </div>
-        <div><button type="submit" class="primary" data-i18n="staff_add">যোগ করুন</button></div>
+        <p id="staff-msg" class="banner error" role="alert" hidden></p>
+        <div><button type="submit" class="primary" id="staff-go" data-i18n="staff_add">যোগ করুন</button></div>
+        <p class="hint" data-i18n="staff_add_hint">যোগ করলে একটি একবারের পাসওয়ার্ড দেখানো হবে। সেটা মানুষটিকে নিজে দিন (মুখে বা আলাদা বার্তায়)। প্রথমবার ঢুকে তিনি নিজের পাসওয়ার্ড ঠিক করবেন।</p>
       </form>
       <div class="card">
         <h2 data-i18n="team_title">স্টাফ</h2>
         <p class="hint" data-i18n="team_hint">সিড মিলের ত্রুটি (seed CER) যত কম তত ভালো। ০.২৫-এর বেশি হলে সাবধান।</p>
         <div class="table-wrap"><table class="data-table stackable" id="team-table"></table></div>
+      </div>
+    </section>
+
+    <!-- ===== Voices: staff voice packs played to contributors ===== -->
+    <section id="panel-voices" role="tabpanel" aria-labelledby="tab-voices" class="stack" hidden>
+      <div class="card stack">
+        <h2 data-i18n="vo_title">ডেস্কের কণ্ঠ</h2>
+        <p data-i18n="vo_intro">স্টাফরা নিজের কণ্ঠে ফ্রন্ট ডেস্কের কথাগুলো রেকর্ড করতে পারেন। আপনি চালু করলে কনট্রিবিউটররা কলের সময় যন্ত্রের কণ্ঠের বদলে সেই কণ্ঠ শোনেন।</p>
+        <ul class="plain-list">
+          <li data-i18n="vo_rule_opening">একটি কণ্ঠ শুধু সেই কলগুলোতে বাজে যেগুলোর শুরুর কথাটি ওই মানুষ রেকর্ড করেছেন। বাকি লাইন না থাকলে সেখানে যন্ত্রের কণ্ঠ বাজে।</li>
+          <li data-i18n="vo_rule_staff">কনট্রিবিউটরদের শুধু স্টাফের কণ্ঠ শোনানো হয়। কোনো কনট্রিবিউটরের রেকর্ডিং কখনো অন্যদের শোনানো হয় না।</li>
+        </ul>
+      </div>
+      <form class="card stack" id="share-form" novalidate>
+        <h2 data-i18n="vo_share_title">কত বার মানুষের কণ্ঠ বাজবে</h2>
+        <div class="row">
+          <div class="grow">
+            <label for="share-input" data-i18n="vo_share_label">কলের কত শতাংশে (০–১০০)</label>
+            <input type="number" id="share-input" min="0" max="100" step="1" inputmode="numeric" required aria-describedby="share-text">
+          </div>
+          <button type="submit" class="primary" data-i18n="save">সংরক্ষণ</button>
+        </div>
+        <p id="share-text" class="hint" role="status"></p>
+      </form>
+      <div class="card">
+        <h2 data-i18n="vo_packs_title">কার কণ্ঠ আছে</h2>
+        <p class="hint" data-i18n="vo_packs_hint">কেউ "ডেস্কের কণ্ঠ দিন" পাতা খুললে তবেই তাঁর নাম এখানে আসে।</p>
+        <div class="table-wrap"><table class="data-table stackable" id="voice-table"></table></div>
+        <audio id="voice-player" preload="none" hidden></audio>
       </div>
     </section>
 

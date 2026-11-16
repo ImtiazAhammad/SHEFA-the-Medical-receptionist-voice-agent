@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="bn" data-title-key="vr_page_title">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:,">
+  <title>ডেস্কের কণ্ঠ দিন</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+  <script type="module" src="js/voice.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">মূল অংশে যান</a>
+  <header class="topbar">
+    <span class="brand" data-i18n="app_name">SHEFA ভয়েস কমন্স</span>
+    <span class="who" id="who"></span>
+    <a class="btn small-btn" id="home-link" href="review.html" data-i18n="to_review">লেখা যাচাই</a>
+    <a class="btn small-btn" href="index.html#password" data-i18n="change_password">পাসওয়ার্ড বদলান</a>
+    <button type="button" class="small-btn" id="lang"></button>
+    <button type="button" class="small-btn" id="signout" data-i18n="sign_out">বের হই</button>
+  </header>
+
+  <main id="main" class="page narrow-wide stack">
+    <h1 data-i18n="vr_title">ডেস্কের কণ্ঠ দিন</h1>
+    <p data-i18n="vr_purpose">আপনার কণ্ঠে ফ্রন্ট ডেস্কের কথাগুলো রেকর্ড করলে কনট্রিবিউটররা অনুশীলনের কলে যন্ত্রের কণ্ঠের বদলে একজন মানুষের কণ্ঠ শুনবেন, তাতে উত্তর দেওয়া সহজ আর স্বাভাবিক লাগে।</p>
+    <p id="loading" class="muted" role="status" data-i18n="loading">লোড হচ্ছে…</p>
+
+    <section id="error" class="banner error" role="alert" hidden>
+      <p id="error-text"></p>
+      <button type="button" id="error-retry" data-i18n="retry">আবার চেষ্টা করুন</button>
+    </section>
+
+    <!-- ===== Consent: shown before the first recording ===== -->
+    <section id="consent" class="card stack" aria-labelledby="consent-h" hidden>
+      <h2 id="consent-h" data-i18n="vr_consent_title">রেকর্ড করার আগে পড়ুন</h2>
+      <p class="consent-text" data-i18n="vr_consent_text">এই রেকর্ডিংগুলো অংশগ্রহণকারীদের শোনানো হবে। লিংক যার কাছে আছে সে শুনতে ও কপি করতে পারবে, তাই কণ্ঠ চেনা বা নকল হওয়ার ঝুঁকি আছে। যেকোনো সময় মুছে দিলে আর শোনানো হবে না, তবে আগে যা শোনা হয়ে গেছে তা ফেরানো যায় না। এটা সম্পূর্ণ ঐচ্ছিক, শুধু প্রাপ্তবয়স্কদের জন্য।</p>
+      <label class="flagbox" for="consent-tick"><input type="checkbox" id="consent-tick"><span data-i18n="vr_consent_tick">আমি পড়েছি, আমার বয়স ১৮ বা তার বেশি, এবং আমি রাজি।</span></label>
+      <p id="consent-msg" class="banner error" role="alert" hidden></p>
+      <button type="button" class="primary big" id="consent-go" data-i18n="vr_consent_go">রাজি</button>
+    </section>
+
+    <!-- ===== Recording the lines ===== -->
+    <div id="work" class="stack" hidden>
+      <section class="card stack" aria-labelledby="state-h">
+        <h2 id="state-h" class="sr-only" data-i18n="vr_state_title">অবস্থা</h2>
+        <p id="pack-state" class="banner" role="status"></p>
+        <div>
+          <p class="progress-line"><span data-i18n="vr_progress">রেকর্ড হয়েছে</span> <strong id="progress-count" class="num-big"></strong></p>
+          <div class="meter" id="progress-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-i18n-aria-label="vr_progress"><i></i></div>
+          <p class="hint" id="progress-openings"></p>
+        </div>
+        <details class="guide">
+          <summary data-i18n="vr_tips_title">ভালো রেকর্ডিংয়ের জন্য</summary>
+          <div class="body">
+            <ul>
+              <li data-i18n="vr_tip_1">শান্ত ঘরে, ফ্যান বন্ধ করে রেকর্ড করুন।</li>
+              <li data-i18n="vr_tip_2">ফোন বা মাইক মুখ থেকে এক বিঘত দূরে রাখুন।</li>
+              <li data-i18n="vr_tip_3">ক্লিনিকের ফোনে যেমন বলেন তেমন স্বাভাবিকভাবে বলুন, পড়ার মতো নয়।</li>
+              <li data-i18n="vr_tip_4">"রেকর্ড" চাপুন, লাইনটা বলুন, তারপর "থামান"। প্রতিটি লাইন সর্বোচ্চ ৩০ সেকেন্ড।</li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <audio id="player" preload="none" hidden></audio>
+      <div id="groups" class="stack"></div>
+
+      <section class="card stack danger-zone" aria-labelledby="wipe-h">
+        <h2 id="wipe-h" data-i18n="vr_wipe_title">সব মুছে দিন</h2>
+        <p class="muted" data-i18n="vr_wipe_hint">আপনার সব রেকর্ডিং মুছে যাবে এবং আপনার কণ্ঠ আর কাউকে শোনানো হবে না।</p>
+        <div><button type="button" class="danger-outline" id="wipe" data-i18n="vr_wipe_btn">সব মুছে দিন</button></div>
+      </section>
+    </div>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

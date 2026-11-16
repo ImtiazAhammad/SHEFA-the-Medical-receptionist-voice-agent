@@ -53,6 +53,23 @@ async function removeClip(clip) {
   }
 }
 
+/** Undo a rejection: one reviewer's reject flag is enough to set a clip aside, so it can be wrong. */
+async function restoreClip(clip) {
+  const { ok } = await ask({
+    title: t("restore_title"),
+    body: [t("restore_body")],
+    confirmKey: "restore_btn",
+  });
+  if (!ok) return;
+  try {
+    const reply = await api(`/api/admin/clips/${encodeURIComponent(clip.id)}/restore`, { method: "POST" });
+    toast(t(reply && reply.ok ? "restore_done" : "restore_not_rejected"));
+  } catch (error) {
+    toast(t(error.code === "network" ? "err_network" : "err_generic"));
+  }
+  await loadClips();
+}
+
 export function renderClips() {
   const select = $("#clip-status");
   if (select.options.length !== STATUS_ORDER.length + 1) {
@@ -77,16 +94,24 @@ export function renderClips() {
     body.append(el("tr", {}, [
       el("td", { "data-label": t("col_when"), text: dateTime(clip.created_at) }),
       el("td", { "data-label": t("col_status") }, [el("span", { class: `chip ${clip.status === "rejected" ? "bad" : ""}`, text: labelFor("status", clip.status) })]),
-      el("td", { "data-label": t("col_slot"), text: clip.slot ? labelFor("slot", clip.slot) : "—" }),
+      el("td", { "data-label": t("col_slot") }, [
+        clip.slot ? labelFor("slot", clip.slot) : "—",
+        clip.kind ? el("div", { class: "muted small", text: labelFor("kind", clip.kind) }) : null,
+      ]),
       el("td", { "data-label": t("col_split"), text: labelFor("split", clip.split) }),
       el("td", { "data-label": t("col_len"), text: `${num(clip.duration_s, 1)} s` }),
       el("td", { "data-label": t("col_audio") }, [
         el("audio", { controls: true, preload: "none", src: audioSrc(clip.audio_url), "aria-label": t("col_audio") }),
       ]),
       textCell(clip),
-      el("td", { "data-label": t("col_action") }, [
-        el("button", { type: "button", class: "small-btn danger-outline", onclick: () => removeClip(clip) }, t("rm_btn")),
-      ]),
+      el("td", { "data-label": t("col_action") }, [el("div", { class: "row" }, [
+        clip.status === "rejected"
+          ? el("button", { type: "button", class: "small-btn", onclick: () => restoreClip(clip) }, t("restore_btn"))
+          : null,
+        clip.status === "removed" || clip.status === "withdrawn"
+          ? null
+          : el("button", { type: "button", class: "small-btn danger-outline", onclick: () => removeClip(clip) }, t("rm_btn")),
+      ])]),
     ]));
   }
   table.append(body);

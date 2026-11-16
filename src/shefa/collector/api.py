@@ -957,7 +957,11 @@ def admin_router(ctx: Ctx) -> APIRouter:
         share = store.get_setting("human_voice_share", str(ctx.config.human_voice_share))
         packs = [
             {k: p[k] for k in ("staff_id", "name", "lines", "active")}
-            | {"enabled": bool(p["enabled"]), "consented": bool(p["consent_at"])}
+            | {
+                "enabled": bool(p["enabled"]),
+                "consented": bool(p["consent_at"]),
+                "recorded": sorted(store.voice_names(p["staff_id"])),
+            }
             for p in store.voice_packs()
         ]
         return {

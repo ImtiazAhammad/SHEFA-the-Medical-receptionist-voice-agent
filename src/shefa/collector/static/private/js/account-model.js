@@ -61,3 +61,40 @@ export function passwordError(error) {
 export function homeFor(role) {
   return role === "admin" ? "admin.html" : "review.html";
 }
+
+// ---- usernames (store.py: USERNAME and create_staff) ----------------------------------------
+/** The server's rule: 3 to 30 characters, a-z 0-9 . _ -, starting with a letter or a digit. */
+export const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,29}$/;
+
+/**
+ * A username suggested from a name, the way the server makes one ("Rina Akter" -> "rina.akter").
+ * A name in Bangla letters gives "" (nothing to suggest): the admin types a username then.
+ */
+export function suggestUsername(name) {
+  const slug = String(name || "").trim().toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[._-]+/, "")
+    .replace(/\.+$/, "")
+    .slice(0, 30)
+    .replace(/[._-]+$/, "");
+  return USERNAME_RE.test(slug) ? slug : "";
+}
+
+export function usernameOk(username) {
+  return USERNAME_RE.test(String(username || "").trim().toLowerCase());
+}
+
+/** Which message to show when adding a person or resetting a password fails. */
+export function staffErrorKey(error) {
+  const code = error && error.code;
+  if (code === "taken" || (error && error.status === 409 && code !== "last_admin")) return "staff_err_taken";
+  if (code === "bad_username") return "staff_err_username";
+  if (code === "weak_password") return "staff_err_weak";
+  if (code === "bad_role") return "staff_err_role";
+  if (code === "last_admin") return "deact_last_admin";
+  if (code === "no_staff") return "staff_err_gone";
+  if (code === "invalid") return "staff_err_invalid";
+  if (code === "network") return "err_network";
+  return "err_generic";
+}

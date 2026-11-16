@@ -1,14 +1,15 @@
 // Admin page shell: tabs, loading the stats, and telling each part to draw itself.
 // Each tab loads its own data the first time it is opened. A language change redraws from the
 // data already in memory, so nothing is fetched again.
-import { ApiError, api, signOutTo } from "./api.js";
+import { ApiError, api, signOut } from "./api.js";
 import { $ } from "./dom.js";
 import { applyI18n, initLangToggle, onLangChange, t } from "./i18n.js";
 import { initOverview, renderCoverage, renderOverview } from "./admin-overview.js";
-import { initPeople, loadCampaigns, renderCampaigns, renderTeam } from "./admin-people.js";
+import { initPeople, loadCampaigns, loadStaff, renderCampaigns, renderTeam, setMe } from "./admin-people.js";
+import { initVoices, loadVoices, renderVoices, voicesLoaded } from "./admin-voices.js";
 import { clipsLoaded, initClipsTab, loadAudit, loadClips, renderAudit, renderClips } from "./admin-clips.js";
 
-const TABS = ["overview", "coverage", "campaigns", "team", "clips", "audit"];
+const TABS = ["overview", "coverage", "campaigns", "team", "voices", "clips", "audit"];
 let stats = null;
 let current = "overview";
 const opened = new Set();
@@ -30,6 +31,7 @@ function showTab(name, { focus = false } = {}) {
     if (name === "campaigns") loadCampaigns();
     if (name === "clips") loadClips();
     if (name === "audit") loadAudit();
+    if (name === "voices") loadVoices();
   }
 }
 
@@ -40,6 +42,7 @@ function renderAll() {
   renderTeam(stats);
   if (opened.has("campaigns")) renderCampaigns();
   if (clipsLoaded()) renderClips();
+  if (voicesLoaded()) renderVoices(stats);
   renderAudit();
 }
 
@@ -47,6 +50,7 @@ async function reload() {
   $("#error").hidden = true;
   try {
     stats = await api("/api/admin/stats");
+    loadStaff(); // the account list (usernames, password state) comes from its own call
     $("#loading").hidden = true;
     renderAll();
     showTab(current);
@@ -90,12 +94,13 @@ async function start() {
   initOverview(reload);
   initPeople(reload);
   initClipsTab();
-  $("#refresh").addEventListener("click", () => { reload(); if (opened.has("clips")) loadClips(); if (opened.has("audit")) loadAudit(); if (opened.has("campaigns")) loadCampaigns(); });
+  initVoices(() => stats);
+  $("#refresh").addEventListener("click", () => { reload(); if (opened.has("clips")) loadClips(); if (opened.has("audit")) loadAudit(); if (opened.has("campaigns")) loadCampaigns(); if (opened.has("voices")) loadVoices(); });
   $("#error-retry").addEventListener("click", reload);
-  $("#signout").addEventListener("click", () => signOutTo(""));
+  $("#signout").addEventListener("click", () => signOut());
   const wanted = location.hash.slice(1);
   if (TABS.includes(wanted)) current = wanted;
-  api("/api/review/me").then((me) => { $("#who").textContent = me.name; }).catch(() => {});
+  api("/api/review/me").then((me) => { $("#who").textContent = me.name; setMe(me); if (stats) renderTeam(stats); }).catch(() => {});
   await reload();
   // Numbers drift while uploads come in; refresh the overview now and then while it is on screen.
   setInterval(() => { if (!document.hidden && (current === "overview" || current === "coverage")) reload(); }, 60000);

@@ -327,8 +327,12 @@ class CollectorStore:
         generated = password is None
         secret = password or self.temp_password()
         name = row["username"]
-        if username or not name:
-            name = self._check_username(username or row["name"])
+        if (
+            username or not name
+        ):  # an old-token account gets a username from its name ("Old Rina" -> "old.rina")
+            name = self._check_username(
+                username or re.sub(r"[^a-z0-9._-]+", ".", row["name"].strip().lower()).strip(".")
+            )
             clash = self._one(
                 "SELECT 1 FROM staff WHERE username=? COLLATE NOCASE AND id!=?", (name, staff_id)
             )
@@ -949,8 +953,8 @@ class CollectorStore:
         return len(rows)
 
     def set_pack_enabled(self, staff_id: int, enabled: bool, actor: str) -> None:
-        pack = self.voice_pack(staff_id)
-        if enabled and not pack["consent_at"]:
+        row = self._one("SELECT consent_at FROM voice_packs WHERE staff_id=?", (staff_id,))
+        if enabled and not (row and row["consent_at"]):  # do not create an empty pack on a refusal
             raise StoreError("consent", "this person has not agreed to the voice notice", 409)
         self._x(
             "UPDATE voice_packs SET enabled=? WHERE staff_id=?", (1 if enabled else 0, staff_id)
@@ -1110,7 +1114,7 @@ class CollectorStore:
         self, status: str = "", limit: int = 100, offset: int = 0
     ) -> list[dict[str, Any]]:
         sql = (
-            "SELECT id,speaker_id,card_id,slot,split,duration_s,snr_db,speech_ratio,status,final_text,draft_text,"
+            "SELECT id,speaker_id,card_id,kind,slot,split,duration_s,snr_db,speech_ratio,status,final_text,draft_text,"
             "created_at FROM clips WHERE deleted_at IS NULL"
         )
         args: list[Any] = []
