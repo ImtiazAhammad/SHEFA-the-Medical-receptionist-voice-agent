@@ -35,3 +35,19 @@ def test_same_text_ignores_punctuation_and_case():
 @pytest.mark.parametrize("raw", ["", "   ", "!!!"])
 def test_empty_after_cleaning(raw):
     assert T.clean_transcript(raw)[0] == ""
+
+
+def test_a_phone_number_said_in_english_digits_becomes_digits():
+    draft = "নাম্বার জিরো ওয়ান এইট থ্রি নাইন ফোর থ্রি সিক্স নাইন নাইন ওয়ান"
+    assert T.clean_transcript(draft)[0] == "নাম্বার 01839436991"
+    assert T.phone_digits(draft) == "01839436991"
+
+
+def test_double_and_triple_and_mixed_languages():
+    assert T.clean_transcript("শূন্য এক সাত ডাবল নাইন ট্রিপল দুই চার পাঁচ")[0] == "0179922245"
+    assert T.phone_digits("জিরো ওয়ান সেভেন ডাবল ফাইভ ওয়ান টু থ্রি ফোর ফাইভ") == "01755123 45".replace(" ", "")
+
+
+def test_short_runs_of_number_words_stay_words():
+    assert T.clean_transcript("এক দিন পরে দুই জন আসবে")[0] == "এক দিন পরে দুই জন আসবে"
+    assert T.clean_transcript("সকাল নয় টায়")[0] == "সকাল নয় টায়"

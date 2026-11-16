@@ -69,6 +69,62 @@ def _convert_digit_runs(text: str, *, phone_as_digits: bool) -> str:
     return _DIGIT_RUN.sub(replace, text)
 
 
+# Phone numbers are said digit by digit, and in Bangladesh usually in ENGLISH ("জিরো ওয়ান সেভেন"),
+# which the speech model writes in Bangla script. Both kinds, plus "ডাবল"/"ট্রিপল", are read here.
+_SPOKEN_DIGIT = {
+    unicodedata.normalize("NFC", word): digit
+    for digit, words in enumerate((
+        ("শূন্য", "জিরো", "zero"),
+        ("এক", "ওয়ান", "ওয়ান", "one"),
+        ("দুই", "টু", "two"),
+        ("তিন", "থ্রি", "থ্রী", "three"),
+        ("চার", "ফোর", "four"),
+        ("পাঁচ", "ফাইভ", "five"),
+        ("ছয়", "ছয়", "সিক্স", "six"),
+        ("সাত", "সেভেন", "seven"),
+        ("আট", "এইট", "eight"),
+        ("নয়", "নয়", "নাইন", "nine"),
+    ))
+    for word in words
+}
+_REPEAT = {"ডাবল": 2, "ডবল": 2, "double": 2, "ট্রিপল": 3, "triple": 3}
+PHONE_WORDS_MIN = 8  # a run this long of single digits is a phone number, never ordinary speech
+
+
+def spoken_phone_numbers(text: str) -> str:
+    """Turn a long run of spoken single digits into a digit string:
+    "নাম্বার জিরো ওয়ান এইট ডাবল নাইন ..." -> "নাম্বার 01899 ...". Shorter runs are left alone, so
+    "এক দিন" or "দুই জন" stay words."""
+    words = text.split()
+    out: list[str] = []
+    i = 0
+    while i < len(words):
+        digits, j = "", i
+        while j < len(words):
+            w = unicodedata.normalize("NFC", words[j]).lower()
+            if w in _REPEAT and j + 1 < len(words):
+                nxt = unicodedata.normalize("NFC", words[j + 1]).lower()
+                if nxt in _SPOKEN_DIGIT:
+                    digits += str(_SPOKEN_DIGIT[nxt]) * _REPEAT[w]
+                    j += 2
+                    continue
+            if w in _SPOKEN_DIGIT:
+                digits += str(_SPOKEN_DIGIT[w])
+                j += 1
+            elif w.isdigit():
+                digits += w
+                j += 1
+            else:
+                break
+        if len(digits) >= PHONE_WORDS_MIN:
+            out.append(digits)
+            i = j
+        else:
+            out.append(words[i])
+            i += 1
+    return " ".join(out)
+
+
 def clean_transcript(text: str) -> tuple[str, list[str]]:
     """The stored form of a reviewer's transcript, and what was changed for them."""
     notes: list[str] = []
@@ -79,6 +135,10 @@ def clean_transcript(text: str) -> tuple[str, list[str]]:
         notes.append("digits were written as words (phone numbers stay as digits)")
     text = _PUNCT.sub(" ", text).strip().lower()
     text = re.sub(r"\s+", " ", text)
+    spoken = spoken_phone_numbers(text)
+    if spoken != text:
+        notes.append("a phone number said digit by digit was written as digits")
+        text = spoken
     return text, notes
 
 
@@ -129,7 +189,7 @@ def same_text(a: str, b: str) -> bool:
 
 def phone_digits(text: str) -> str | None:
     """The longest run of digits (Bangla words or numerals) that looks like a mobile number."""
-    spoken = _words_to_digits(normalise(text, phone_as_digits=True))
+    spoken = spoken_phone_numbers(_words_to_digits(normalise(text, phone_as_digits=True)))
     runs = re.findall(r"\d{8,13}", spoken)
     return max(runs, key=len) if runs else None
 
