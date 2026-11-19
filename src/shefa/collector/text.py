@@ -73,18 +73,20 @@ def _convert_digit_runs(text: str, *, phone_as_digits: bool) -> str:
 # which the speech model writes in Bangla script. Both kinds, plus "ডাবল"/"ট্রিপল", are read here.
 _SPOKEN_DIGIT = {
     unicodedata.normalize("NFC", word): digit
-    for digit, words in enumerate((
-        ("শূন্য", "জিরো", "zero"),
-        ("এক", "ওয়ান", "ওয়ান", "one"),
-        ("দুই", "টু", "two"),
-        ("তিন", "থ্রি", "থ্রী", "three"),
-        ("চার", "ফোর", "four"),
-        ("পাঁচ", "ফাইভ", "five"),
-        ("ছয়", "ছয়", "সিক্স", "six"),
-        ("সাত", "সেভেন", "seven"),
-        ("আট", "এইট", "eight"),
-        ("নয়", "নয়", "নাইন", "nine"),
-    ))
+    for digit, words in enumerate(
+        (
+            ("শূন্য", "জিরো", "zero"),
+            ("এক", "ওয়ান", "ওয়ান", "one"),
+            ("দুই", "টু", "two"),
+            ("তিন", "থ্রি", "থ্রী", "three"),
+            ("চার", "ফোর", "four"),
+            ("পাঁচ", "ফাইভ", "five"),
+            ("ছয়", "ছয়", "সিক্স", "six"),
+            ("সাত", "সেভেন", "seven"),
+            ("আট", "এইট", "eight"),
+            ("নয়", "নয়", "নাইন", "nine"),
+        )
+    )
     for word in words
 }
 _REPEAT = {"ডাবল": 2, "ডবল": 2, "double": 2, "ট্রিপল": 3, "triple": 3}

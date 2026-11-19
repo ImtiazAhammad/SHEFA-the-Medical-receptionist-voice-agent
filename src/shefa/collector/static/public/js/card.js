@@ -75,7 +75,17 @@ export function patientLine(p) {
   return p ? h("p", { class: "persona" }, icon("user"), T("patient_line", { rel: p.relation_bn, name: p.name, age: p.age_bn })) : null;
 }
 
-export function runCards(view, { first, onFinish }) {
+/** The facts a person needs when there is no hint (free-talk calls): the phone number to give. */
+function factsFor(card) {
+  for (const node of Object.values(card.nodes || {})) {
+    for (const c of node.choices || []) if (c.facts && c.facts.phone) return c.facts.phone;
+  }
+  return "";
+}
+
+const NOISY = new Set(["street", "fan", "vehicle"]);
+
+export function runCards(view, { first, onFinish, onPass }) {
   let buffer = first ? [first] : [];
   let card = null, nid = "", persona = null, choice = null, turns = 0, recorded = 0;
   let history = [], cap = null, audio = null, heard = false, unlock = null, awaiting = new Set(), dead = false;
@@ -228,7 +238,12 @@ export function runCards(view, { first, onFinish }) {
     sync = () => cap && cap.enable(heard && settingReady() && !!choice);
     const hintText = h("p", { class: "hint-text" });
     const hintBox = h("section", { class: "box hint" }, h("h2", { class: "small" }, T("hint_title2")), hintText, h("p", { class: "nudge" }, T("nudge")));
-    const paintHint = () => { hintBox.hidden = !choice; if (choice) fill(hintText, resolve(choice.hint_bn, persona)); };
+    // Free-talk calls: no wording per turn, only the facts. At a fork the chip label is enough.
+    const free = !!card.free;
+    const paintHint = () => {
+      hintBox.hidden = !choice;
+      if (choice) fill(hintText, free ? T(choices.length > 1 ? "free_fork" : "free_hint") : resolve(choice.hint_bn, persona));
+    };
     let fork = null;
     if (choices.length > 1) {
       const chips = choices.map((c) => h("button", { type: "button", class: "chip pick", "aria-pressed": "false", onclick: () => {
@@ -247,7 +262,7 @@ export function runCards(view, { first, onFinish }) {
         stopSound();
         const who = me();
         const meta = { card: card.id, step: nid, choice: choice.id, persona: persona ? persona.id : "", slot: node.slot,
-          setting: who.setting, autostop: res.cut ? "1" : "" };
+          setting: who.setting, autostop: res.cut ? "1" : "", free: card.free ? "1" : "" };
         const id = await Q.add({ blob: res.blob, speaker: S.session.speaker, dur: res.dur, meta });
         who.n++; who.sec += res.dur; save(); paintCounter();
         awaiting.add(id);
@@ -277,21 +292,42 @@ export function runCards(view, { first, onFinish }) {
     fill(view, h("div", { class: "stack" },
       h("div", { class: "row between" }, counter, h("span", { class: "muted" }, T("turn_n", { n: turns + 1 }))),
       settingBlock(sync), turns === 0 && h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn)),
-      patientLine(persona), historyBox(), bubble, cue, fork, hintBox, cap.el, skips));
+      patientLine(persona), card.free && freeBox(), historyBox(), bubble, cue, fork, hintBox, cap.el, skips));
     paintCounter();
     sync();
     play();
     window.scrollTo(0, 0);
   }
 
+  function freeBox() {
+    const phone = factsFor(card);
+    return h("section", { class: "box hint" }, h("h2", { class: "small" }, T("free_title")),
+      h("p", null, T("free_intro")),
+      phone && h("p", { class: "hint-text" }, T("free_phone", { phone: phone.replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[d]) })));
+  }
+
   function callDone() {
     stopSound();
     if (cap) cap.destroy();
+    const who = me();
+    // One voice should not dominate what the model learns: after many clips, suggest handing over.
+    const handOver = onPass && who.n >= (S.cfg.nudge_after_clips || 40);
+    // Real calls come from roads and bazaars: invite a noisier place when they have been quiet.
+    const quiet = who.setting && !NOISY.has(who.setting);
+    const noisyLine = h("p", { class: "muted" });
+    if (quiet) {
+      api("/api/c/progress").then((r) => {
+        if (r.ok && !dead && r.data.noisy_goal_minutes) fill(noisyLine, T("noisy_progress", { m: r.data.noisy_minutes, goal: r.data.noisy_goal_minutes }));
+      });
+    }
     fill(view, h("div", { class: "stack center" },
       h("h1", { tabindex: "-1" }, T("call_done")),
       h("p", null, T("call_done_n", { n: recorded })),
-      h("p", { class: "muted" }, T("card_more")),
-      h("button", { type: "button", class: "btn primary big", onclick: nextCard }, T("more_call")),
+      handOver && h("section", { class: "box hint" }, h("p", { class: "hint-text" }, T("nudge_pass", { n: who.n })),
+        h("button", { type: "button", class: "btn primary big", onclick: () => { destroy(); onPass(); } }, T("nudge_pass_btn"))),
+      quiet && h("section", { class: "box" }, h("p", null, T("noisy_ask")), noisyLine, settingBlock()),
+      !handOver && h("p", { class: "muted" }, T("card_more")),
+      h("button", { type: "button", class: handOver ? "btn alt" : "btn primary big", onclick: nextCard }, T("more_call")),
       h("button", { type: "button", class: "btn alt", onclick: finish }, T("finish"))));
     const hd = view.querySelector("h1"); hd && hd.focus();
   }

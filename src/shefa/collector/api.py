@@ -217,7 +217,19 @@ class Ctx:
             pick = rng.choice(choices)
             out.append(pick)
             pool.remove(pick)
-        return [self.with_voice(card, rng) for card in out]
+        # A share of calls are "free talk": the page shows only the facts (patient, phone...) and
+        # no hint per turn, so people answer in their own way instead of following a wording.
+        return [
+            self.with_voice(card, rng)
+            | (
+                {"free": True}
+                if card.get("v") == 2
+                and card.get("kind") != "digits"
+                and rng.random() < self.config.free_talk_share
+                else {}
+            )
+            for card in out
+        ]
 
     def with_voice(self, card: dict[str, Any], rng: random.Random | None = None) -> dict[str, Any]:
         """Sometimes the desk speaks in a recorded human voice: one voice for the whole call, used
@@ -314,6 +326,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "min_clip_s": cfg.min_clip_s,
             "max_clip_s": cfg.max_clip_s,
             "clinic_bn": S.CLINIC,
+            "nudge_after_clips": cfg.nudge_after_clips,
             "settings": P.settings_choices(),
             "from_name": (camp or {}).get("from_name", ""),
             "campaign": (camp or {}).get("code", ""),
@@ -433,7 +446,8 @@ def public_router(ctx: Ctx) -> APIRouter:
             "question_bn": step["question_bn"] if step else "",
             "expected_text": step["expected_text"] if step else None,
             "facts": (step["facts"] if step else {})
-            | ({"auto_stopped": True} if request.headers.get("x-autostop") == "1" else {}),
+            | ({"auto_stopped": True} if request.headers.get("x-autostop") == "1" else {})
+            | ({"free_talk": True} if request.headers.get("x-free") == "1" else {}),
             "setting": setting if setting in SETTING_IDS else "",
             "room": room_code,
             "role": role,

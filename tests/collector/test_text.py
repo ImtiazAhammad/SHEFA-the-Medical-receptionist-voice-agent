@@ -45,7 +45,9 @@ def test_a_phone_number_said_in_english_digits_becomes_digits():
 
 def test_double_and_triple_and_mixed_languages():
     assert T.clean_transcript("শূন্য এক সাত ডাবল নাইন ট্রিপল দুই চার পাঁচ")[0] == "0179922245"
-    assert T.phone_digits("জিরো ওয়ান সেভেন ডাবল ফাইভ ওয়ান টু থ্রি ফোর ফাইভ") == "01755123 45".replace(" ", "")
+    assert T.phone_digits("জিরো ওয়ান সেভেন ডাবল ফাইভ ওয়ান টু থ্রি ফোর ফাইভ") == "01755123 45".replace(
+        " ", ""
+    )
 
 
 def test_short_runs_of_number_words_stay_words():

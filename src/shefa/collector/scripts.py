@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -562,7 +563,96 @@ def _goals(card: dict[str, Any]) -> list[str]:
     return out
 
 
+# Hints worded several ways, so contributors do not all echo the same phrase (the first 71 minutes
+# showed the top 30 words covering 42% of everything said). Only the HINT changes: desk lines,
+# facts and expected answers stay the same, so no new audio is needed and old queued clips still
+# match their cards. Each card picks its wording with its own random sequence (seeded by its id),
+# so the doctors, days and times chosen by the main sequence are untouched.
+_HINT_VARIANTS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = tuple(
+    (re.compile(pattern), variants)
+    for pattern, variants in (
+        (r"^রাজি হন।$", ("রাজি হন।", "সম্মতি দিন।", "হ্যাঁ বলে রাজি হন।", "মেনে নিন, ঠিক আছে।")),
+        (
+            r"^সব ঠিক আছে, রাজি হন।$",
+            ("সব ঠিক আছে, রাজি হন।", "সব মিলেছে, সম্মতি দিন।", "যা বলেছে সব ঠিক: হ্যাঁ বলুন।"),
+        ),
+        (r"^এবার ঠিক আছে, রাজি হন।$", ("এবার ঠিক আছে, রাজি হন।", "এবার মিলেছে, সম্মতি দিন।")),
+        (
+            r"^রোগীর নাম: (.+)।$",
+            ("রোগীর নাম: {0}।", "নাম জানাতে হবে: {0}।", "রোগী {0}, নামটা জানান।", "নাম {0}।"),
+        ),
+        (r"^বয়স: (.+) বছর।$", ("বয়স: {0} বছর।", "রোগীর বয়স {0}।", "বয়স জানান: {0} বছর।")),
+        (r"^চান: (.+)।$", ("চান: {0}।", "আপনার সুবিধা: {0}।", "যেদিন পারবেন: {0}।", "পছন্দ: {0}।")),
+        (
+            r"^ধন্যবাদ দিয়ে ফোন রাখুন।$",
+            ("ধন্যবাদ দিয়ে ফোন রাখুন।", "বিদায় জানিয়ে কল শেষ করুন।", "ধন্যবাদ জানিয়ে শেষ করুন।"),
+        ),
+        (
+            r"^আর কিছু লাগবে না। ধন্যবাদ দিয়ে ফোন রাখুন।$",
+            (
+                "আর কিছু লাগবে না। ধন্যবাদ দিয়ে ফোন রাখুন।",
+                "আর কিছু জানার নেই, বিদায় নিন।",
+                "জানান যে আর কিছু লাগবে না, তারপর বিদায়।",
+            ),
+        ),
+        (
+            r"^জিজ্ঞেস করুন, কোন ডাক্তার দেখালে ভালো হবে।$",
+            (
+                "জিজ্ঞেস করুন, কোন ডাক্তার দেখালে ভালো হবে।",
+                "পরামর্শ চান: কাকে দেখানো ভালো?",
+                "জানতে চান তিনজনের মধ্যে কে সবচেয়ে ভালো।",
+            ),
+        ),
+        (
+            r"^জিজ্ঞেস করুন, কোন ডাক্তার কবে বসেন।$",
+            ("জিজ্ঞেস করুন, কোন ডাক্তার কবে বসেন।", "জানতে চান কে কোন দিন বসেন।"),
+        ),
+        (
+            r"^জিজ্ঞেস করুন, কার ফি কত।$",
+            ("জিজ্ঞেস করুন, কার ফি কত।", "ভিজিট ফি জানতে চান।", "খরচ কেমন জানতে চান।"),
+        ),
+        (
+            r"^জিজ্ঞেস করুন ক্লিনিকটা কোথায়।$",
+            ("জিজ্ঞেস করুন ক্লিনিকটা কোথায়।", "ঠিকানা জানতে চান।", "কোথায় যেতে হবে জেনে নিন।"),
+        ),
+        (
+            r"^জিজ্ঞেস করুন কতক্ষণ আগে পৌঁছাতে হবে।$",
+            ("জিজ্ঞেস করুন কতক্ষণ আগে পৌঁছাতে হবে।", "জানতে চান কখন গেলে ভালো হয়।"),
+        ),
+        (r"^জিজ্ঞেস করুন ডাক্তারের ফি কত।$", ("জিজ্ঞেস করুন ডাক্তারের ফি কত।", "ফি কত সেটা জেনে নিন।")),
+        (
+            r"^(.+) বিভাগের ডাক্তার দেখাতে চান। সমস্যা: (.+)।$",
+            (
+                "{0} বিভাগের ডাক্তার দেখাতে চান। সমস্যা: {1}।",
+                "সমস্যা {1}, {0} বিভাগে দেখাতে চান।",
+                "{0} বিভাগে সিরিয়াল চান, কারণ {1}।",
+            ),
+        ),
+        (
+            r"^কোন বিভাগ, জানেন না। শুধু সমস্যাটা বলুন: (.+)।$",
+            (
+                "কোন বিভাগ, জানেন না। শুধু সমস্যাটা বলুন: {0}।",
+                "বিভাগ জানেন না। সমস্যা খুলে বলুন: {0}।",
+                "শুধু কী হয়েছে বলুন: {0}।",
+            ),
+        ),
+    )
+)
+
+
+def _vary_hints(card: dict[str, Any]) -> None:
+    rng = random.Random(f"hints:{card['id']}")
+    for node in card["nodes"].values():
+        for choice in node["choices"]:
+            for pattern, variants in _HINT_VARIANTS:
+                found = pattern.match(choice["hint_bn"])
+                if found:
+                    choice["hint_bn"] = rng.choice(variants).format(*found.groups())
+                    break
+
+
 def _finish(card: dict[str, Any]) -> dict[str, Any]:
+    _vary_hints(card)
     for node in card["nodes"].values():
         node["audio_name"] = audio_name(node["line_bn"])
         node["audio"] = ""

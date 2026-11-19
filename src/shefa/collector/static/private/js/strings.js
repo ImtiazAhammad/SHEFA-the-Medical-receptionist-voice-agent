@@ -199,6 +199,7 @@ export const STRINGS = {
 
   st_contributors: S("কনট্রিবিউটর", "Contributors"),
   st_speakers: S("ক্লিপ-দেওয়া বক্তা", "Speakers with clips"),
+  st_top_speaker: S("একজনের সর্বোচ্চ ভাগ (৫%-এর নিচে ভালো)", "Busiest voice's share (below 5% is good)"),
   st_clips: S("ক্লিপ (বাদ বাদে)", "Clips (not rejected)"),
   st_minutes: S("মিনিট (বাদ বাদে, দেখা বাকি সহ)", "Minutes (not rejected, includes unreviewed)"),
   st_to_review: S("দেখার অপেক্ষায়", "Waiting for review"),

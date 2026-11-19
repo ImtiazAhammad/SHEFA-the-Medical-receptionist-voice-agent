@@ -150,6 +150,7 @@ async function sendOne(rec) {
   if (m.choice) headers["X-Choice"] = m.choice;
   if (m.persona) headers["X-Persona"] = m.persona;
   if (m.autostop) headers["X-Autostop"] = "1";
+  if (m.free) headers["X-Free"] = "1";
   if (m.room) { headers["X-Room"] = m.room; headers["X-Role"] = m.role || ""; headers["X-Turn"] = String(m.turn || 0); }
   const res = await api("/api/c/clip/" + rec.id, { method: "PUT", body: new Blob([rec.buf], { type: rec.mime }), headers, speaker: rec.speaker, timeout: 60000 });
   const hold = (ms, why = "") => {

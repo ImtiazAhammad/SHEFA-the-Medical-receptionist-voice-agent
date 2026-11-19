@@ -1058,7 +1058,13 @@ class CollectorStore:
             "FROM clips WHERE deleted_at IS NULL AND status NOT IN ('rejected','removed')"
         )
         goal = int(self.get_setting("goal_minutes", str(self.config.group_goal_minutes)))
+        noisy = self._one(
+            "SELECT COALESCE(SUM(duration_s),0) secs FROM clips WHERE deleted_at IS NULL "
+            "AND status NOT IN ('rejected','removed') AND setting IN ('street','fan','vehicle')"
+        )["secs"]
         return {
+            "noisy_minutes": round(noisy / 60, 1),
+            "noisy_goal_minutes": self.config.noisy_goal_minutes,
             "clips": row["clips"],
             "minutes": round(row["secs"] / 60, 1),
             "speakers": row["speakers"],
@@ -1108,6 +1114,18 @@ class CollectorStore:
         return {
             "progress": self.progress(),
             "speakers_with_clips": speakers,
+            # The busiest voice's share of all clips: above about 5% that voice dominates training
+            # (the export caps each speaker at 5% once there are 20 or more).
+            "top_speaker_share": round(
+                (
+                    self._one(
+                        "SELECT COUNT(*) n FROM clips WHERE deleted_at IS NULL GROUP BY speaker_id ORDER BY n DESC LIMIT 1"
+                    )
+                    or {"n": 0}
+                )["n"]
+                / max(1, self._one("SELECT COUNT(*) n FROM clips WHERE deleted_at IS NULL")["n"]),
+                3,
+            ),
             "contributors": self._one(
                 "SELECT COUNT(*) n FROM contributors WHERE deleted_at IS NULL"
             )["n"],

@@ -162,7 +162,7 @@ function micCheck(next) {
 // ---------------------------------------------------------------- cards, rooms
 function cards(first) {
   go((view) => {
-    const flow = runCards(view, { first, onFinish: thanks });
+    const flow = runCards(view, { first, onFinish: thanks, onPass: pass });
     return () => flow.destroy();
   });
 }
