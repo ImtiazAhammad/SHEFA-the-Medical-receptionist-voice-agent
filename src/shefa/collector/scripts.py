@@ -1093,7 +1093,14 @@ def generate(
     cards = [booking_script(rng, i) for i in range(booking)]
     cards += [info_script(rng, i) for i in range(info)]
     cards += [digits_script(rng, i) for i in range(digits)]
-    return cards
+    for card in cards:
+        card["domain"] = "hospital"
+        card.setdefault("who_bn", "রোগী")
+    # Other domains append after the hospital cards with their own random sequence, so the hospital
+    # cards (and the clips already recorded against them) never change.
+    from shefa.collector import scripts_isp
+
+    return cards + scripts_isp.generate()
 
 
 # Lines nearly every call uses. A person recording a "voice pack" starts with these.

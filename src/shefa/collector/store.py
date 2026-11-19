@@ -214,6 +214,9 @@ class CollectorStore:
             ("nickname", "TEXT NOT NULL DEFAULT ''"),
             ("credit_ok", "INTEGER NOT NULL DEFAULT 0"),
             ("deleted_at", "REAL"),
+            ("consent_version", "TEXT NOT NULL DEFAULT '2026-11-v1'"),
+            ("share_ok", "INTEGER NOT NULL DEFAULT 0"),
+            ("dialect", "TEXT NOT NULL DEFAULT ''"),
         ):
             if column not in have:
                 self.db.execute(f"ALTER TABLE speakers ADD COLUMN {column} {ddl}")
@@ -516,7 +519,7 @@ class CollectorStore:
 
     # ---- contributors --------------------------------------------------------------------
     def start_contributor(
-        self, *, campaign: str, from_name: str, ip: str, device: str
+        self, *, campaign: str, from_name: str, ip: str, device: str, share_ok: bool = False
     ) -> dict[str, str]:
         cid = uuid.uuid4().hex
         secret = secrets.token_urlsafe(24)
@@ -538,7 +541,7 @@ class CollectorStore:
                 time.time(),
             ),
         )
-        speaker = self.new_speaker(cid, delete_code=delete_code)["speaker_id"]
+        speaker = self.new_speaker(cid, delete_code=delete_code, share_ok=share_ok)["speaker_id"]
         return {
             "contributor_id": cid,
             "secret": secret,
@@ -552,13 +555,26 @@ class CollectorStore:
         )
         return bool(row) and hmac.compare_digest(row["secret_hash"], _sha(secret or ""))
 
+    def reconsent(self, cid: str, speaker_id: str, share_ok: bool) -> None:
+        """A person who agreed to the first consent agrees to the current one: same person, same
+        speaker id (a new id would let one voice land in two splits)."""
+        self._x(
+            "UPDATE contributors SET consent_version=?, consent_at=? WHERE id=?",
+            (self.config.consent_version, time.time(), cid),
+        )
+        self._x(
+            "UPDATE speakers SET consent_version=?, share_ok=? WHERE id=? AND contributor_id=?",
+            (self.config.consent_version, 1 if share_ok else 0, speaker_id, cid),
+        )
+        self.audit("contributor", "reconsent", f"share={int(share_ok)}")
+
     def set_profile(self, speaker_id: str, **fields: Any) -> None:
         """Optional details about ONE person (a shared phone has several)."""
-        allowed = {"age_band", "gender", "division", "nickname", "credit_ok"}
+        allowed = {"age_band", "gender", "division", "nickname", "credit_ok", "dialect"}
         values = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if "credit_ok" in values:
             values["credit_ok"] = 1 if values["credit_ok"] else 0
-        for key in ("age_band", "gender", "division", "nickname"):
+        for key in ("age_band", "gender", "division", "nickname", "dialect"):
             if key in values:
                 values[key] = str(values[key]).strip()[:40]
         if not values:
@@ -566,7 +582,9 @@ class CollectorStore:
         sets = ",".join(f"{k}=?" for k in values)
         self._x(f"UPDATE speakers SET {sets} WHERE id=?", (*values.values(), speaker_id))
 
-    def new_speaker(self, cid: str, label: str = "", delete_code: str = "") -> dict[str, str]:
+    def new_speaker(
+        self, cid: str, label: str = "", delete_code: str = "", share_ok: bool = False
+    ) -> dict[str, str]:
         """A person on a phone. Each person has their own delete code, so one family member cannot
         erase another's recordings."""
         sid = uuid.uuid4().hex
@@ -580,8 +598,18 @@ class CollectorStore:
             else "train"
         )
         self._x(
-            "INSERT INTO speakers(id,contributor_id,label,split,created_at,delete_hash) VALUES (?,?,?,?,?,?)",
-            (sid, cid, label.strip()[:30], split, time.time(), _sha(code)),
+            "INSERT INTO speakers(id,contributor_id,label,split,created_at,delete_hash,consent_version,share_ok) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (
+                sid,
+                cid,
+                label.strip()[:30],
+                split,
+                time.time(),
+                _sha(code),
+                self.config.consent_version,
+                1 if share_ok else 0,
+            ),
         )
         return {"speaker_id": sid, "delete_code": code}
 
@@ -1132,6 +1160,18 @@ class CollectorStore:
             "status": status,
             "split": split,
             "minutes_by_slot": clip_group("slot"),
+            "minutes_by_domain": {
+                r["k"]: r["m"]
+                for r in self._q(
+                    "SELECT CASE WHEN card_id LIKE 'v2-n%' THEN 'isp' ELSE 'hospital' END k, "
+                    "ROUND(SUM(duration_s)/60.0,1) m FROM clips WHERE deleted_at IS NULL "
+                    "AND status NOT IN ('rejected','removed') GROUP BY k"
+                )
+            },
+            "by_dialect": group("dialect"),
+            "shareable_speakers": self._one(
+                "SELECT COUNT(*) n FROM speakers WHERE deleted_at IS NULL AND share_ok=1"
+            )["n"],
             "minutes_by_setting": clip_group("setting"),
             "by_division": group("division"),
             "by_age": group("age_band"),

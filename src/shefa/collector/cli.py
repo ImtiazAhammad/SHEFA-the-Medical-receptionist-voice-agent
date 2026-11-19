@@ -67,6 +67,14 @@ def register(sub: argparse._SubParsersAction) -> None:
     export.add_argument(
         "--include-desk", action="store_true", help="include the front-desk side of calls"
     )
+    export.add_argument(
+        "--shareable-only",
+        action="store_true",
+        help="only people who ticked the optional sharing/licensing consent (use for anything leaving the project)",
+    )
+    export.add_argument(
+        "--domain", choices=["", "hospital", "isp"], default="", help="only one call topic"
+    )
 
     backup = c.add_parser(
         "backup", help="copy the database and audio to another disk and verify it"

@@ -45,6 +45,8 @@ def run(command: str, config: CollectorConfig, args: Any) -> int:
             numbers=args.numbers,
             phone_copies=args.phone_copies,
             include_desk=args.include_desk,
+            shareable_only=args.shareable_only,
+            domain=args.domain,
         )
         print(format_export(report))
         return 0
@@ -340,6 +342,10 @@ def format_score(result: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------------- export
+def _domain_of(card_id: str) -> str:
+    return "isp" if (card_id or "").startswith("v2-n") else "hospital"
+
+
 def do_export(
     store: CollectorStore,
     out: Path,
@@ -348,14 +354,23 @@ def do_export(
     phone_copies: bool = False,
     include_desk: bool = False,
     seed: int = 3,
+    shareable_only: bool = False,
+    domain: str = "",
 ) -> dict[str, Any]:
+    """`shareable_only` keeps only people who ticked the optional sharing/licensing consent:
+    use it for anything that leaves this project. `domain` keeps one topic ("hospital", "isp")."""
     rows = [
         dict(r)
         for r in store._q(
-            f"SELECT * FROM clips WHERE deleted_at IS NULL AND status IN {GOOD_STATUSES!r} AND final_text IS NOT NULL "
-            "AND final_text!='' ORDER BY created_at"
+            "SELECT c.*, s.share_ok AS share_ok, s.consent_version AS speaker_consent, s.dialect AS dialect "
+            f"FROM clips c JOIN speakers s ON s.id=c.speaker_id WHERE c.deleted_at IS NULL AND c.status IN {GOOD_STATUSES!r} "
+            "AND c.final_text IS NOT NULL AND c.final_text!='' ORDER BY c.created_at"
         )
     ]
+    if shareable_only:
+        rows = [r for r in rows if r["share_ok"]]
+    if domain:
+        rows = [r for r in rows if _domain_of(r["card_id"]) == domain]
     if not include_desk:
         rows = [r for r in rows if r["role"] != "desk"]
     rows = [r for r in rows if not store.tombstoned(r["id"], r["sha256"])]
@@ -396,6 +411,10 @@ def do_export(
             "setting": r["setting"],
             "card": r["card_id"],
             "role": r["role"] or "caller",
+            "domain": _domain_of(r["card_id"]),
+            "dialect": r.get("dialect") or "",
+            "consent": r.get("speaker_consent") or "",
+            "shareable": bool(r.get("share_ok")),
             "gold": r["status"] in ("agreed", "adjudicated"),
             "snr_db": round(r["snr_db"] or 0, 1),
         }

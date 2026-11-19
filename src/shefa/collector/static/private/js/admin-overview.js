@@ -91,6 +91,8 @@ export function renderOverview(stats) {
     statCard(num(stats.contributors), "st_contributors"),
     statCard(num(stats.speakers_with_clips), "st_speakers"),
     statCard(num(Math.round((Number(stats.top_speaker_share) || 0) * 100)) + "%", "st_top_speaker"),
+    statCard(num((stats.minutes_by_domain && stats.minutes_by_domain.isp) || 0, 1), "st_isp_minutes"),
+    statCard(num(stats.shareable_speakers || 0), "st_shareable"),
     statCard(num(progress.clips), "st_clips"),
     statCard(num(progress.minutes, 1), "st_minutes"),
     statCard(num(backlog.to_review), "st_to_review"),

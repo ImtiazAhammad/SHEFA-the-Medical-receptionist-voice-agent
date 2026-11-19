@@ -8,7 +8,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-CONSENT_VERSION = "2026-11-v1"
+CONSENT_VERSION = "2026-11-v2"
+CONSENT_V1 = "2026-11-v1"  # hospital calls only, for SHEFA only
 
 CONSENT_BN = (
     "আমি ১৮ বছরের বেশি বয়সী। আমি জানি আমার কণ্ঠ রেকর্ড করা হবে এবং SHEFA নামের একটি বাণিজ্যিক পণ্যের "
@@ -21,6 +22,34 @@ CONSENT_EN = (
     "SHEFA to understand Bangla. I will not say my real name, phone number or personal details. "
     "My recordings will not be published. I can delete my recordings at any time with my delete "
     "code, but a model that has already been trained cannot un-learn my voice."
+)
+
+
+# Version 2 (2026-11-19): broader purpose (several call topics, any Bangla voice assistant this
+# project builds) plus a SEPARATE optional tick for sharing or licensing. DRAFT wording: have a
+# lawyer read it before relying on it commercially.
+CONSENT_V2_BN = (
+    "আমি ১৮ বছরের বেশি বয়সী। আমি জানি আমার কণ্ঠ রেকর্ড করা হবে এবং এই প্রকল্পের বানানো বাংলা ভয়েস "
+    "সহকারীদের (যেমন হাসপাতালের SHEFA, এবং ইন্টারনেট বা অন্য সেবার কাস্টমার কেয়ার) বাংলা কথা বোঝার সক্ষমতা "
+    "শেখাতে ব্যবহার করা হবে। এগুলো বাণিজ্যিক পণ্য। আমি আসল নাম, ফোন নম্বর বা ব্যক্তিগত তথ্য বলব না। "
+    "আমার রেকর্ডিং জনসমক্ষে প্রকাশ করা হবে না। যেকোনো সময় ডিলিট কোড দিয়ে আমি রেকর্ডিং মুছে ফেলতে পারব, "
+    "তবে যে মডেল একবার শেখানো হয়ে গেছে তা থেকে আমার কণ্ঠ আলাদা করা যাবে না।"
+)
+CONSENT_V2_EN = (
+    "I am over 18. I know my voice will be recorded and used to teach this project's Bangla voice "
+    "assistants (such as SHEFA for hospitals, and customer care for internet or other services) to "
+    "understand Bangla. These are commercial products. I will not say my real name, phone number or "
+    "personal details. My recordings will not be published. I can delete my recordings at any time with "
+    "my delete code, but a model that has already been trained cannot un-learn my voice."
+)
+SHARE_BN = (
+    "ঐচ্ছিক: আমি রাজি যে আমার রেকর্ডিং ও তার লেখা অন্য প্রতিষ্ঠানের সাথে শেয়ার বা তাদের কাছে লাইসেন্স "
+    "(বিক্রি) করা যাবে, তাদের নিজেদের বাংলা ভয়েস প্রযুক্তি বানাতে। আমার নাম বা যোগাযোগের তথ্য দেওয়া হবে না।"
+)
+SHARE_EN = (
+    "Optional: I agree that my recordings and their transcripts may be shared with or licensed (sold) "
+    "to other organisations to build their own Bangla voice technology. My name or contact details "
+    "will not be given."
 )
 
 

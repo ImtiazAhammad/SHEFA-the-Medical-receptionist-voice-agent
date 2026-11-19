@@ -39,6 +39,17 @@ function landing() {
   go((view) => {
     const cfg = S.cfg;
     const have = !!(S.session && S.session.consent === cfg.consent_version);
+    // Someone who agreed to an earlier consent agrees again WITHOUT becoming a new person: a new id
+    // for the same voice could put it in both the training and the test set.
+    const again = !have && !!(S.session && S.session.cid);
+    const share = h("input", { type: "checkbox", id: "share" });
+    let topic = (S.session && S.session.topic) || "";
+    const topicChips = h("div", { class: "chips", role: "group", "aria-label": t("topic_title") },
+      [["", "topic_any"], ["hospital", "topic_hospital"], ["isp", "topic_isp"]].map(([v, k]) =>
+        h("button", { type: "button", class: "chip pick", "aria-pressed": String(topic === v), onclick: (e) => {
+          topic = v;
+          topicChips.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === e.currentTarget)));
+        } }, T(k))));
     const from = cfg.from_name || FROM;
     const tick = h("input", { type: "checkbox", id: "tick" });
     const warn = h("p", { class: "warn", role: "alert", hidden: true }, T("err_consent"));
@@ -51,11 +62,16 @@ function landing() {
       if (!have && !tick.checked) { warn.hidden = false; tick.focus(); return; }
       const btns = view.querySelectorAll(".btn");
       btns.forEach((b) => (b.disabled = true));
-      if (!have) {
+      if (again) {
+        const r = await api("/api/c/consent", { method: "POST", body: { consent_version: cfg.consent_version, share_ok: share.checked } });
+        if (!r.ok) { btns.forEach((b) => (b.disabled = false)); warn.hidden = false; fill(warn, T(r.status === 0 ? "server_down" : "err_generic")); return; }
+        S.session.consent = cfg.consent_version;
+        save();
+      } else if (!have) {
         let token = state.token();
         if (cfg.turnstile_site_key && !token) for (let k = 0; k < 40 && !token; k++) { await new Promise((r) => setTimeout(r, 250)); token = state.token(); }
         const r = await api("/api/c/start", { method: "POST", auth: false, body: {
-          consent: true, consent_version: cfg.consent_version, campaign: cfg.campaign || params.get("c") || "",
+          consent: true, consent_version: cfg.consent_version, share_ok: share.checked, campaign: cfg.campaign || params.get("c") || "",
           from_name: from, device: navigator.userAgent.slice(0, 120), turnstile: token || "" } });
         btns.forEach((b) => (b.disabled = false));
         if (!r.ok) {
@@ -66,6 +82,8 @@ function landing() {
         if (r.data.maintenance) cfg.maintenance = r.data.maintenance;
       }
       btns.forEach((b) => (b.disabled = false));
+      S.session.topic = topic;
+      save();
       afterStart(kind);
     };
 
@@ -78,12 +96,17 @@ function landing() {
       from ? h("p", { class: "from" }, T("sent_by", { name: from })) : null,
       ROOM_CODE ? h("p", { class: "from" }, T("invited", { code: ROOM_CODE })) : null,
       h("h1", null, T("hero_title")), h("p", { class: "lead-text" }, T("hero_sub")),
+      again ? h("p", { class: "banner", role: "status" }, h("strong", null, T("reconsent_title")), " ", T("reconsent_sub")) : null,
       cfg.voice_note ? h("div", { class: "box" }, h("p", { class: "q" }, icon("sound"), T(from ? "voice_note_from" : "voice_note", { name: from })), note) : null,
       h("ul", { class: "consent" }, consentLines),
       h("details", { class: "more" }, h("summary", null, T("more")),
-        h("p", { lang: "bn", class: "bn-only" }, cfg.consent_bn), h("p", { lang: "en", class: "en-only" }, cfg.consent_en)),
+        h("p", { lang: "bn", class: "bn-only" }, cfg.consent_bn), h("p", { lang: "en", class: "en-only" }, cfg.consent_en),
+        cfg.share_bn ? h("p", { lang: "bn", class: "bn-only" }, cfg.share_bn) : null,
+        cfg.share_en ? h("p", { lang: "en", class: "en-only" }, cfg.share_en) : null),
       have ? h("p", { class: "muted" }, icon("check"), T("tick_back"))
         : h("label", { class: "tick", for: "tick" }, tick, T("tick")),
+      !have && cfg.share_bn ? h("label", { class: "tick small", for: "share" }, share, T("share_tick")) : null,
+      h("div", { class: "field" }, h("p", { class: "q" }, T("topic_title")), topicChips),
       warn, tsBox,
       h("button", { type: "button", class: "btn primary big", onclick: () => go2(ROOM_CODE ? "room" : "cards") }, T("start")),
       ROOM_CODE ? null : h("button", { type: "button", class: "btn alt", onclick: () => go2("room") }, icon("phone"), T("friend")),
@@ -178,11 +201,12 @@ function roomScreen(code) {
 function pass() {
   go((view) => {
     const tick = h("input", { type: "checkbox", id: "ptick" });
+    const shareP = h("input", { type: "checkbox", id: "pshare" });
     const warn = h("p", { class: "warn", role: "alert", hidden: true }, T("err_consent"));
     const btn = h("button", { type: "button", class: "btn primary big", onclick: async () => {
       if (!tick.checked) { warn.hidden = false; tick.focus(); return; }
       btn.disabled = true;
-      const r = await api("/api/c/speaker", { method: "POST" });
+      const r = await api("/api/c/speaker", { method: "POST", body: { share_ok: shareP.checked } });
       btn.disabled = false;
       if (!r.ok) { warn.hidden = false; fill(warn, T(r.status === 0 ? "server_down" : "err_signed_out")); return; }
       addPerson(r.data.speaker_id, r.data.delete_code);
@@ -191,12 +215,14 @@ function pass() {
     } }, T("start"));
     fill(view, h("div", { class: "stack" }, h("h1", null, T("pass_title")), h("p", null, T("pass_sub")),
       h("ul", { class: "consent" }, [["shield", "c1"], ["user", "c2"], ["trash", "c3"]].map(([ic, k]) => h("li", null, icon(ic, "lead"), T(k)))),
-      h("label", { class: "tick", for: "ptick" }, tick, T("tick")), warn, btn));
+      h("label", { class: "tick", for: "ptick" }, tick, T("tick")),
+      S.cfg.share_bn ? h("label", { class: "tick small", for: "pshare" }, shareP, T("share_tick")) : null, warn, btn));
   });
 }
 
 // ---------------------------------------------------------------- thank you
 const GENDERS = ["female", "male", "other", "skip"];
+const DIALECTS = ["standard", "dhaka", "chattogram", "sylhet", "noakhali", "cumilla", "barishal", "khulna", "rajshahi", "rangpur", "mymensingh", "other", "skip"];
 // Our own order (big divisions first, "prefer not to say" last) instead of the server's alphabetical one.
 const DIVISIONS = ["dhaka", "chattogram", "rajshahi", "khulna", "barishal", "sylhet", "rangpur", "mymensingh", "abroad", "skip"];
 function thanks() {
@@ -275,7 +301,7 @@ function fillBar(pct) {
 
 // Optional taps, asked only after the clips. Division only, never district.
 function profileForm(person) {
-  const pick = { age_band: "", gender: "", division: "" };
+  const pick = { age_band: "", gender: "", division: "", dialect: "" };
   const group = (field, title, values, label) => {
     const wrap = h("div", { class: "chips", role: "group", "aria-label": t(title) });
     values.forEach((v) => {
@@ -298,6 +324,7 @@ function profileForm(person) {
     group("age_band", "opt_age", S.cfg.age_bands || [], (v) => n(v)),
     group("gender", "opt_gender", GENDERS, (v) => T("g_" + v)),
     group("division", "opt_div", DIVISIONS.filter((d) => (S.cfg.divisions || DIVISIONS).includes(d)), (v) => T("d_" + v)),
+    group("dialect", "opt_dialect", DIALECTS.filter((d) => (S.cfg.dialects || DIALECTS).includes(d)), (v) => T("dl_" + v)),
     h("div", { class: "field" }, h("label", { class: "q", for: "nick" }, T("opt_nick")), nick,
       h("label", { class: "tick", for: "credit" }, credit, T("opt_credit"))),
     save1, done);

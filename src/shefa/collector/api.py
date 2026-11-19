@@ -30,7 +30,14 @@ from shefa.booking import RateLimiter
 from shefa.collector import audio as A
 from shefa.collector import prompts as P
 from shefa.collector import scripts as S
-from shefa.collector.config import CONSENT_BN, CONSENT_EN, CollectorConfig
+from shefa.collector.config import (
+    CONSENT_V1,
+    CONSENT_V2_BN,
+    CONSENT_V2_EN,
+    SHARE_BN,
+    SHARE_EN,
+    CollectorConfig,
+)
 from shefa.collector.store import CLIP_ID, CollectorStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
@@ -50,7 +57,23 @@ DIVISIONS = {
     "skip",
 }
 AUDIO_TYPES = {".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg", ".mp4": "audio/mp4"}
-KIND_WEIGHTS = {"booking": 0.65, "info": 0.25, "digits": 0.10}
+KIND_WEIGHTS = {"booking": 0.65, "info": 0.25, "digits": 0.10, "support": 1.0}
+DOMAIN_WEIGHTS = {"hospital": 0.6, "isp": 0.4}  # when a person has not picked a topic
+DIALECTS = {
+    "standard",
+    "dhaka",
+    "chattogram",
+    "sylhet",
+    "noakhali",
+    "cumilla",
+    "barishal",
+    "khulna",
+    "rajshahi",
+    "rangpur",
+    "mymensingh",
+    "other",
+    "skip",
+}
 NAME16 = re.compile(r"^[a-f0-9]{16}$")
 
 REJECTION_BN = {
@@ -122,6 +145,10 @@ def _room_node(card: dict[str, Any] | None, clips: list[dict[str, Any]]) -> str:
 
 
 def _sheet_for(card: dict[str, Any] | None) -> dict[str, Any]:
+    if (card or {}).get("domain") == "isp":
+        from shefa.collector import scripts_isp
+
+        return scripts_isp.sheet()
     return S.clinic_sheet() if (card or {}).get("v") == 2 else P.CLINIC_SHEET
 
 
@@ -204,16 +231,28 @@ class Ctx:
         return ""
 
     def cards_for(
-        self, seen: set[str], n: int, kinds: list[str] | None = None
+        self,
+        seen: set[str],
+        n: int,
+        kinds: list[str] | None = None,
+        domains: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         rng = random.Random()
-        pool = [c for c in self.cards if c["id"] not in seen and (not kinds or c["kind"] in kinds)]
+        domains = domains or ["hospital"]
+
+        def fits(c: dict[str, Any]) -> bool:
+            return (not kinds or c["kind"] in kinds) and c.get("domain", "hospital") in domains
+
+        pool = [c for c in self.cards if c["id"] not in seen and fits(c)]
         if not pool:
-            pool = [c for c in self.cards if not kinds or c["kind"] in kinds]
+            pool = [c for c in self.cards if fits(c)]
         out: list[dict[str, Any]] = []
         while pool and len(out) < n:
+            present = sorted({c.get("domain", "hospital") for c in pool})
+            domain = rng.choices(present, weights=[DOMAIN_WEIGHTS.get(d, 0.3) for d in present])[0]
+            in_domain = [c for c in pool if c.get("domain", "hospital") == domain]
             kind = rng.choices(list(KIND_WEIGHTS), weights=list(KIND_WEIGHTS.values()))[0]
-            choices = [c for c in pool if c["kind"] == kind] or pool
+            choices = [c for c in in_domain if c["kind"] == kind] or in_domain
             pick = rng.choice(choices)
             out.append(pick)
             pool.remove(pick)
@@ -256,13 +295,24 @@ class Ctx:
 class StartBody(BaseModel):
     consent: bool
     consent_version: str
+    share_ok: bool = False
     campaign: str = Field(default="", max_length=20)
     from_name: str = Field(default="", max_length=40)
     device: str = Field(default="", max_length=120)
     turnstile: str = Field(default="", max_length=2000)
 
 
+class ConsentBody(BaseModel):
+    consent_version: str
+    share_ok: bool = False
+
+
+class SpeakerBody(BaseModel):
+    share_ok: bool = False
+
+
 class ProfileBody(BaseModel):
+    dialect: str = ""
     age_band: str = ""
     gender: str = ""
     division: str = ""
@@ -320,8 +370,12 @@ def public_router(ctx: Ctx) -> APIRouter:
         camp = store.campaign(c)
         return {
             "consent_version": cfg.consent_version,
-            "consent_bn": CONSENT_BN,
-            "consent_en": CONSENT_EN,
+            "consent_bn": CONSENT_V2_BN,
+            "consent_en": CONSENT_V2_EN,
+            "share_bn": SHARE_BN,
+            "share_en": SHARE_EN,
+            "dialects": sorted(DIALECTS),
+            "topics": ["hospital", "isp"],
             "turnstile_site_key": cfg.turnstile_site_key,
             "min_clip_s": cfg.min_clip_s,
             "max_clip_s": cfg.max_clip_s,
@@ -348,26 +402,48 @@ def public_router(ctx: Ctx) -> APIRouter:
         if not await _verify_turnstile(ctx, body.turnstile, ip):
             return err("challenge", "the human check failed, reload and retry", 403)
         made = store.start_contributor(
-            campaign=body.campaign, from_name=body.from_name, ip=ip, device=body.device
+            campaign=body.campaign,
+            from_name=body.from_name,
+            ip=ip,
+            device=body.device,
+            share_ok=body.share_ok,
         )
         return {**made, "maintenance": ctx.maintenance()}
 
     @r.post("/api/c/speaker")
-    async def speaker(request: Request):
+    async def speaker(request: Request, body: SpeakerBody | None = None):
         got = who(request)
         if isinstance(got, JSONResponse):
             return got
-        return store.new_speaker(got[0])
+        return store.new_speaker(got[0], share_ok=bool(body and body.share_ok))
+
+    @r.post("/api/c/consent")
+    async def consent(body: ConsentBody, request: Request):
+        """Agree to the current consent without becoming a new person."""
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        if body.consent_version != cfg.consent_version:
+            return err("consent", "please read and accept the consent", 400)
+        store.reconsent(got[0], got[1]["id"], body.share_ok)
+        return {"ok": True, "consent_version": cfg.consent_version}
 
     @r.get("/api/c/cards")
-    async def cards(request: Request, n: int = 3, seen: str = "", kinds: str = ""):
+    async def cards(request: Request, n: int = 3, seen: str = "", kinds: str = "", topic: str = ""):
         got = who(request)
         if isinstance(got, JSONResponse):
             return got
+        # Someone who agreed only to the first consent (hospital calls for SHEFA) gets hospital
+        # calls until they agree to the current one.
+        allowed = (
+            ["hospital"] if got[1].get("consent_version") == CONSENT_V1 else ["hospital", "isp"]
+        )
+        domains = [topic] if topic in allowed else allowed
         picked = ctx.cards_for(
             {s for s in seen.split(",") if s},
             max(1, min(n, 8)),
             [k for k in kinds.split(",") if k] or None,
+            domains,
         )
         return {"cards": picked}
 
@@ -426,6 +502,10 @@ def public_router(ctx: Ctx) -> APIRouter:
         if reason:
             return err("rejected", REJECTION_BN[reason], 422, reason=reason)
         card = ctx.cards_by_id.get(request.headers.get("x-card", ""))
+        if (card or {}).get("domain", "hospital") != "hospital" and speaker_row.get(
+            "consent_version"
+        ) == CONSENT_V1:
+            return err("consent", "please agree to the new consent first", 403)
         step = _step_meta(card, request)
         setting = request.headers.get("x-setting", "")
         room_code, role = request.headers.get("x-room", "")[:8].upper(), ""
@@ -502,6 +582,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             age_band=body.age_band if body.age_band in AGE_BANDS else "",
             gender=body.gender if body.gender in GENDERS else "",
             division=body.division if body.division in DIVISIONS else "",
+            dialect=body.dialect if body.dialect in DIALECTS else "",
             nickname=re.sub(r"[^\w\u0980-\u09ff .\-]", "", body.nickname),
             credit_ok=body.credit_ok,
         )

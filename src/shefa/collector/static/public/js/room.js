@@ -157,7 +157,7 @@ export function runRoom(view, { code, onFinish, onSolo }) {
       if (cap) { cap.destroy(); cap = null; }
       fill(view, h("div", { class: "stack" },
         h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn)),
-        personaPicker(people, (p) => { room.persona = p; view._rk = ""; render(); })));
+        personaPicker(people, (p) => { room.persona = p; view._rk = ""; render(); }, card.who_bn)));
       return;
     }
     if (room.role === "caller" && !room.persona && people.length === 1) room.persona = people[0];
@@ -236,7 +236,7 @@ export function runRoom(view, { code, onFinish, onSolo }) {
       paintHint();
       body = [
         h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn),
-          patientLine(room.persona)),
+          patientLine(room.persona, card.who_bn)),
         h("section", { class: "bubble" }, h("p", { class: "bubble-who" }, T("rm_desk_said")), h("p", { class: "bubble-text", lang: "bn" }, node.line_bn)),
         fork, hintBox, settingBlock()];
     }

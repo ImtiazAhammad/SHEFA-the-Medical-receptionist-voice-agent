@@ -60,9 +60,9 @@ export function lineSources(card, node) {
 }
 
 /** The patient chooser: two big buttons (ছেলে / মেয়ে, স্বামী / স্ত্রী...). */
-export function personaPicker(personas, onPick) {
+export function personaPicker(personas, onPick, who = "রোগী") {
   return h("section", { class: "box persona-pick" },
-    h("h2", null, T("pick_patient")),
+    h("h2", null, T("pick_patient", { who })),
     h("p", { class: "muted" }, T("pick_patient_sub")),
     h("div", { class: "persona-btns" }, personas.map((p) =>
       h("button", { type: "button", class: "btn alt persona-btn", onclick: () => onPick(p) },
@@ -71,8 +71,8 @@ export function personaPicker(personas, onPick) {
         h("span", { class: "muted" }, T("age_years", { age: p.age_bn }))))));
 }
 
-export function patientLine(p) {
-  return p ? h("p", { class: "persona" }, icon("user"), T("patient_line", { rel: p.relation_bn, name: p.name, age: p.age_bn })) : null;
+export function patientLine(p, who = "রোগী") {
+  return p ? h("p", { class: "persona" }, icon("user"), T("patient_line", { who, rel: p.relation_bn, name: p.name, age: p.age_bn })) : null;
 }
 
 /** The facts a person needs when there is no hint (free-talk calls): the phone number to give. */
@@ -110,7 +110,8 @@ export function runCards(view, { first, onFinish, onPass }) {
 
   async function fetchCards() {
     const seen = (S.session.seen || []).slice(-60).join(",");
-    return api(`/api/c/cards?n=3&seen=${encodeURIComponent(seen)}`);
+    const topic = (S.session && S.session.topic) || "";
+    return api(`/api/c/cards?n=3&seen=${encodeURIComponent(seen)}&topic=${encodeURIComponent(topic)}`);
   }
 
   async function nextCard() {
@@ -138,7 +139,7 @@ export function runCards(view, { first, onFinish, onPass }) {
       fill(view, h("div", { class: "stack" },
         h("div", { class: "row between" }, counter),
         h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn)),
-        personaPicker(people, (p) => { persona = p; showNode(card.start); })));
+        personaPicker(people, (p) => { persona = p; showNode(card.start); }, card.who_bn)));
       paintCounter();
       window.scrollTo(0, 0);
       return;
@@ -227,7 +228,7 @@ export function runCards(view, { first, onFinish, onPass }) {
 
     if (final) {
       fill(view, h("div", { class: "stack" }, h("div", { class: "row between" }, counter, h("span", { class: "muted" }, T("turn_n", { n: turns }))),
-        patientLine(persona), historyBox(), bubble, cue));
+        patientLine(persona, card.who_bn), historyBox(), bubble, cue));
       paintCounter();
       play();
       return;
@@ -292,7 +293,7 @@ export function runCards(view, { first, onFinish, onPass }) {
     fill(view, h("div", { class: "stack" },
       h("div", { class: "row between" }, counter, h("span", { class: "muted" }, T("turn_n", { n: turns + 1 }))),
       settingBlock(sync), turns === 0 && h("section", { class: "box" }, h("h2", { class: "small" }, T("sit_title")), h("p", { class: "situation" }, card.situation_bn)),
-      patientLine(persona), card.free && freeBox(), historyBox(), bubble, cue, fork, hintBox, cap.el, skips));
+      patientLine(persona, card.who_bn), card.free && freeBox(), historyBox(), bubble, cue, fork, hintBox, cap.el, skips));
     paintCounter();
     sync();
     play();
