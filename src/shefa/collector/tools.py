@@ -165,10 +165,23 @@ def do_draft(store: CollectorStore, draft: Drafter, limit: int = 500) -> int:
             raw, confidence = draft(_decode(row["path"]))
         except Exception:  # noqa: BLE001 - one bad file must not stop the batch
             raw, confidence = "", 0.0
-        cleaned, _notes = T.clean_transcript(raw)
+        cleaned, confidence = polish_draft(raw, confidence, row.get("expected_text"))
         store.set_draft(row["id"], cleaned, confidence if cleaned else 0.0)
         done += 1
     return done
+
+
+def polish_draft(raw: str, confidence: float, expected: str | None = None) -> tuple[str, float]:
+    """Clean a machine draft for the reviewer. A number that cannot be a Bangladeshi mobile number
+    marks the draft as unsure so it comes first in the queue. (Replacing a half-heard number with
+    the number the person was shown was tried and made drafts WORSE on 68 reviewed clips: people
+    often say a different number, so it is not done.)"""
+    cleaned, _notes = T.clean_transcript(raw)
+    # Asked for a mobile number but no number was heard: the model probably lost it.
+    asked = bool(expected and T.BD_MOBILE.match(expected))
+    if T.phone_is_suspicious(cleaned) or (asked and not T.phone_digits(cleaned)):
+        confidence = min(confidence, 0.4)
+    return cleaned, confidence
 
 
 class AutoDrafter:

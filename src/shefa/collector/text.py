@@ -89,42 +89,107 @@ _SPOKEN_DIGIT = {
     )
     for word in words
 }
+# Run-together forms the speech model writes ("জিরোয়ান" = zero one) and cut-off ones ("ফাই").
+_SPOKEN_DIGITS_MULTI = {
+    unicodedata.normalize("NFC", word): digits
+    for word, digits in (
+        ("জিরোয়ান", "01"),
+        ("জিরোয়ান", "01"),
+        ("জিরোওয়ান", "01"),
+        ("ফাই", "5"),
+        ("জিরোজিরো", "00"),
+        # mishearings seen in real drafts
+        ("জিলো", "0"),
+        ("জিলোন", "01"),
+        ("জিলোয়ান", "01"),
+        ("জিলোয়ান", "01"),
+        ("সেক্স", "6"),
+    )
+}
+# Ambiguous words that are digits only in the MIDDLE of a number ("এই" = this / eight cut short,
+# "এন" after zero = one). They never start a run, so ordinary speech is untouched.
+_MID_RUN_DIGITS = {
+    unicodedata.normalize("NFC", w): d
+    for w, d in (("এই", "8"), ("এ", "8"), ("এন", "1"), ("অন", "1"))
+}
+# Phone numbers are also said in pairs: "একাশি সেভেন সেভেন" = 8177. Inside a long run only.
+_PAIR_WORDS = {
+    word: f"{value:02d}"
+    for word, value in _WORD_NUMBERS.items()
+    if isinstance(value, int) and 10 <= value <= 99 and re.fullmatch(r"[\u0980-\u09ff]+", word)
+}
 _REPEAT = {"ডাবল": 2, "ডবল": 2, "double": 2, "ট্রিপল": 3, "triple": 3}
 PHONE_WORDS_MIN = 8  # a run this long of single digits is a phone number, never ordinary speech
+BD_MOBILE = re.compile(r"^01[3-9]\d{8}$")
+
+
+def _digits_for(word: str) -> str | None:
+    if word in _SPOKEN_DIGIT:
+        return str(_SPOKEN_DIGIT[word])
+    if word in _SPOKEN_DIGITS_MULTI:
+        return _SPOKEN_DIGITS_MULTI[word]
+    if word.isdigit() and word.isascii():
+        return word
+    return None
+
+
+def _repair_mobile(digits: str) -> str:
+    """Common slips in a Bangladeshi mobile number (11 digits, 01[3-9]...): a dropped leading 0
+    ("1712...") or a dropped 1 after it ("0712..."). Anything else is left for the reviewer."""
+    if len(digits) == 10 and re.match(r"^1[3-9]", digits):
+        return "0" + digits
+    if len(digits) == 10 and re.match(r"^0[3-9]", digits):
+        return "01" + digits[1:]
+    return digits
 
 
 def spoken_phone_numbers(text: str) -> str:
-    """Turn a long run of spoken single digits into a digit string:
+    """Turn a long run of spoken digits into a digit string:
     "নাম্বার জিরো ওয়ান এইট ডাবল নাইন ..." -> "নাম্বার 01899 ...". Shorter runs are left alone, so
-    "এক দিন" or "দুই জন" stay words."""
+    "এক দিন" or "দুই জন" stay words. Pairs ("একাশি") count only inside a run that already has
+    single digits, so an age or a price is never turned into digits."""
     words = text.split()
     out: list[str] = []
     i = 0
     while i < len(words):
-        digits, j = "", i
+        digits, singles, j = "", 0, i
         while j < len(words):
             w = unicodedata.normalize("NFC", words[j]).lower()
             if w in _REPEAT and j + 1 < len(words):
-                nxt = unicodedata.normalize("NFC", words[j + 1]).lower()
-                if nxt in _SPOKEN_DIGIT:
-                    digits += str(_SPOKEN_DIGIT[nxt]) * _REPEAT[w]
+                nxt = _digits_for(unicodedata.normalize("NFC", words[j + 1]).lower())
+                if nxt is not None and len(nxt) == 1:
+                    digits += nxt * _REPEAT[w]
+                    singles += _REPEAT[w]
                     j += 2
                     continue
-            if w in _SPOKEN_DIGIT:
-                digits += str(_SPOKEN_DIGIT[w])
+            single = _digits_for(w)
+            if single is None and digits and w in _MID_RUN_DIGITS:
+                single = _MID_RUN_DIGITS[w]
+            if single is not None:
+                digits += single
+                singles += len(single)
                 j += 1
-            elif w.isdigit():
-                digits += w
+            elif w in _PAIR_WORDS:
+                digits += _PAIR_WORDS[w]
                 j += 1
             else:
                 break
-        if len(digits) >= PHONE_WORDS_MIN:
-            out.append(digits)
+        if len(digits) >= PHONE_WORDS_MIN and singles >= 4:
+            out.append(_repair_mobile(digits))
             i = j
         else:
             out.append(words[i])
             i += 1
     return " ".join(out)
+
+
+def phone_is_suspicious(text: str) -> bool:
+    """A digit run that cannot be a Bangladeshi mobile number (wrong length, a long run of one
+    digit): the draft is probably garbled, so the reviewer should listen with care."""
+    for run in re.findall(r"\d{6,}", text):
+        if not BD_MOBILE.match(run) or re.search(r"(\d)\1{4,}", run):
+            return True
+    return False
 
 
 def clean_transcript(text: str) -> tuple[str, list[str]]:

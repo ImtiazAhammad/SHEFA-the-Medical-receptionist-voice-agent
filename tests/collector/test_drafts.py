@@ -121,3 +121,12 @@ def test_the_background_drafter_drafts_new_clips_and_survives_a_missing_model(pe
     dead = tools.AutoDrafter(ctx.store, idle_s=0.05, loader=broken).start()
     dead.thread.join(timeout=3)
     assert not dead.thread.is_alive() and "no model files" in dead.error
+
+
+def test_drafts_never_swap_in_the_number_the_person_was_shown():
+    text, conf = tools.polish_draft(
+        "নাম্বার জিরো ওয়ান সেভেন থ্রি ওয়ান নাইন টু এইট থ্রি নাইন ফাইভ", 0.95, "01731928305"
+    )
+    assert text == "নাম্বার 01731928395" and conf == 0.95
+    _garbled, conf2 = tools.polish_draft("0006000000000400000000", 0.9, "01960607104")
+    assert conf2 == 0.4

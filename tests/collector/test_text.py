@@ -53,3 +53,37 @@ def test_double_and_triple_and_mixed_languages():
 def test_short_runs_of_number_words_stay_words():
     assert T.clean_transcript("এক দিন পরে দুই জন আসবে")[0] == "এক দিন পরে দুই জন আসবে"
     assert T.clean_transcript("সকাল নয় টায়")[0] == "সকাল নয় টায়"
+
+
+def test_run_together_and_paired_phone_digits():
+    assert (
+        T.clean_transcript("মোবাইল নাম্বার হচ্ছে জিরোয়ান 380008838")[0] == "মোবাইল নাম্বার হচ্ছে 01380008838"
+    )
+    assert T.clean_transcript("জিরো ওয়ান সেভেন একাশি সেভেন সেভেন আট দুই তিন")[0] == "0178177823"
+
+
+def test_common_slips_in_a_mobile_number_are_repaired():
+    assert T.clean_transcript("আমার নাম্বার 0432752368")[0] == "আমার নাম্বার 01432752368"
+    assert T.clean_transcript("ওয়ান সেভেন ওয়ান টু থ্রি ফোর ফাইভ সিক্স সেভেন এইট")[0] == "01712345678"
+
+
+def test_pairs_alone_never_become_digits():
+    assert T.clean_transcript("বয়স পঁয়তাল্লিশ আর ওজন সত্তর")[0] == "বয়স পঁয়তাল্লিশ আর ওজন সত্তর"
+
+
+def test_mishearings_inside_a_number():
+    assert (
+        T.clean_transcript("আমার নাম্বারটি হচ্ছে জিলোন সেভেন জিলো সিক্স ফোর সিক্স এ থ্রি সেভেন ওয়ান")[0]
+        == "আমার নাম্বারটি হচ্ছে 01706468371"
+    )
+    assert (
+        T.clean_transcript("মোবাইল নাম্বারটি হচ্ছে জিরো এন 753537503")[0]
+        == "মোবাইল নাম্বারটি হচ্ছে 01753537503"
+    )
+    assert T.clean_transcript("এই দিন আমি এ কথা বলেছি")[0] == "এই দিন আমি এ কথা বলেছি"
+
+
+def test_garbled_numbers_are_flagged():
+    assert T.phone_is_suspicious("0006000000000400000000000000")
+    assert T.phone_is_suspicious("নাম্বার 1880000000000")
+    assert not T.phone_is_suspicious("নাম্বার 01731928305")

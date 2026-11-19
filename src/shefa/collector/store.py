@@ -705,7 +705,7 @@ class CollectorStore:
 
     def undrafted(self, limit: int = 200) -> list[dict[str, Any]]:
         rows = self._q(
-            "SELECT id,path FROM clips WHERE draft_text IS NULL AND deleted_at IS NULL "
+            "SELECT id,path,slot,expected_text FROM clips WHERE draft_text IS NULL AND deleted_at IS NULL "
             "AND status!='rejected' ORDER BY created_at LIMIT ?",
             (limit,),
         )
