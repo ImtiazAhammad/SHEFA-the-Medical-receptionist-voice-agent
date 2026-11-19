@@ -12,6 +12,7 @@ from tests.collector.conftest import Person
 from tests.collector.test_review import bearer, staff  # noqa: F401 (staff is a fixture)
 
 ISP = [c for c in S.generate() if c["domain"] == "isp"]
+SHOP = [c for c in S.generate() if c["domain"] == "shop"]
 
 
 def test_isp_scripts_are_closed_graphs_with_customer_care_wording():
@@ -69,7 +70,7 @@ def test_new_people_get_both_topics_and_can_pick_one(pub, config):
         for _ in range(6)
         for c in pub.get("/api/c/cards?n=8", headers=h).json()["cards"]
     }
-    assert got == {"hospital", "isp"}
+    assert got == {"hospital", "isp", "shop"}
     only = {c["domain"] for c in pub.get("/api/c/cards?n=6&topic=isp", headers=h).json()["cards"]}
     assert only == {"isp"}
 
@@ -157,6 +158,51 @@ def test_isp_rooms_show_the_customer_care_sheet(pub, config):
         room = pub.post("/api/c/room", json={"card_id": ISP[3]["id"]}, headers=caller.h).json()
         break
     joined = pub.post("/api/c/room/join", json={"code": room["code"]}, headers=desk.h).json()
-    assert "সবুজনেট" in joined["sheet"]["title_bn"] and any(
+    assert "সাফওয়া" in joined["sheet"]["title_bn"] and any(
         "প্যাকেজ" in d["name_bn"] for d in joined["sheet"]["doctors"]
+    )
+
+
+def test_shop_scripts_are_closed_graphs_under_the_sadaf_name():
+    from shefa.collector import scripts_shop
+
+    assert len(SHOP) == 120 and {c["department"] for c in SHOP} == {
+        "track",
+        "late",
+        "return",
+        "order",
+        "cancel",
+    }
+    for card in SHOP:
+        seen, stack = set(), [card["start"]]
+        while stack:
+            nid = stack.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            for c in card["nodes"][nid]["choices"]:
+                assert c["next"] in card["nodes"], (card["id"], nid, c["next"])
+                stack.append(c["next"])
+        assert seen == set(card["nodes"]), card["id"]
+        assert scripts_shop.COMPANY in card["nodes"]["open"]["line_bn"]
+        assert card["who_bn"] == "গ্রাহক" and card["id"].startswith("v2-s")
+    assert "সাদাফ" in scripts_shop.sheet()["title_bn"]
+
+
+def test_isp_calls_use_the_safwa_name():
+    assert all("সাফওয়া" in c["nodes"]["open"]["line_bn"] for c in ISP)
+    assert not any("সবুজনেট" in n["line_bn"] for c in ISP for n in c["nodes"].values())
+
+
+def test_shop_topic_and_export_domain(pub, config):
+    h, _ = start(pub, config)
+    assert {
+        c["domain"] for c in pub.get("/api/c/cards?n=6&topic=shop", headers=h).json()["cards"]
+    } == {"shop"}
+    from shefa.collector.tools import _domain_of
+
+    assert (_domain_of("v2-s004"), _domain_of("v2-n004"), _domain_of("v2-b004")) == (
+        "shop",
+        "isp",
+        "hospital",
     )

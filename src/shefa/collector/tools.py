@@ -356,7 +356,14 @@ def format_score(result: dict[str, Any]) -> str:
 
 # ---------------------------------------------------------------------------------- export
 def _domain_of(card_id: str) -> str:
-    return "isp" if (card_id or "").startswith("v2-n") else "hospital"
+    card_id = card_id or ""
+    return (
+        "isp"
+        if card_id.startswith("v2-n")
+        else "shop"
+        if card_id.startswith("v2-s")
+        else "hospital"
+    )
 
 
 def do_export(

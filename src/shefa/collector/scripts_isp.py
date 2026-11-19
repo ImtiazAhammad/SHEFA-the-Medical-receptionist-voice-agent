@@ -1,4 +1,4 @@
-"""Domain pack: calls to an internet provider's customer care (a made-up company, সবুজনেট).
+"""Domain pack: calls to an internet provider's customer care (a made-up company, SAFWA / সাফওয়া).
 
 Same rules as the hospital scripts (`scripts.py`): every node is ONE customer-care line and ONE
 kind of answer; the caller's choices move the call on; hints state intent and facts, never a
@@ -22,13 +22,13 @@ from shefa.collector.prompts import phone_number
 from shefa.collector.scripts import NAMES, _choice, _finish, _node
 from shefa.collector.text import digits_to_words
 
-COMPANY = "সবুজনেট ব্রডব্যান্ড"
+COMPANY = "সাফওয়া ব্রডব্যান্ড"  # SAFWA: the founder's S-brand for internet
 OPENINGS = (
     f"আসসালামু আলাইকুম, {COMPANY} কাস্টমার কেয়ার থেকে বলছি। কীভাবে সাহায্য করতে পারি?",
     f"{COMPANY}, আসসালামু আলাইকুম। জি, বলুন।",
-    "আসসালামু আলাইকুম, সবুজনেট ব্রডব্যান্ডে ফোন করার জন্য ধন্যবাদ। বলুন, কী সমস্যা?",
+    f"আসসালামু আলাইকুম, {COMPANY}ে ফোন করার জন্য ধন্যবাদ। বলুন, কী সমস্যা?",
 )
-BYE = "সবুজনেট ব্রডব্যান্ডের সাথে থাকার জন্য ধন্যবাদ। ভালো থাকবেন, আল্লাহ হাফেজ।"
+BYE = f"{COMPANY}ের সাথে থাকার জন্য ধন্যবাদ। ভালো থাকবেন, আল্লাহ হাফেজ।"
 PACKAGES = (("বেসিক", 10, 500), ("ফ্যামিলি", 20, 800), ("প্রো", 40, 1200))
 AREAS = (
     "মিরপুর দশ",
@@ -61,7 +61,7 @@ def sheet() -> dict[str, Any]:
     """What the "customer care" person sees in a two-person call."""
     return {
         "title_bn": f"{COMPANY} (কাল্পনিক)",
-        "address_bn": "অফিস: মিরপুর দশ, সবুজ টাওয়ারের দ্বিতীয় তলা। শুক্রবার বাদে সকাল নয়টা থেকে রাত নয়টা।",
+        "address_bn": "অফিস: মিরপুর দশ, নূর টাওয়ারের দ্বিতীয় তলা। শুক্রবার বাদে সকাল নয়টা থেকে রাত নয়টা।",
         "doctors": [
             {
                 "name_bn": f"{p[0]} প্যাকেজ",
@@ -173,7 +173,7 @@ def _identify(nodes: dict[str, Any], rng: random.Random, after: str) -> str:
 def _extras(nodes: dict[str, Any], prefix: str, ticket: str) -> None:
     """Closing: anything else? Answers only what the caller asks, then goodbye."""
     answers = {
-        "office": "আমাদের অফিস মিরপুর দশে, সবুজ টাওয়ারের দ্বিতীয় তলায়। শুক্রবার বাদে সকাল নয়টা থেকে রাত নয়টা খোলা।",
+        "office": "আমাদের অফিস মিরপুর দশে, নূর টাওয়ারের দ্বিতীয় তলায়। শুক্রবার বাদে সকাল নয়টা থেকে রাত নয়টা খোলা।",
         "speedtest": "ব্রাউজারে স্পিড টেস্ট লিখে সার্চ দিয়ে যেকোনো একটা সাইটে টেস্ট করতে পারেন। রাউটারের কাছে থেকে করবেন।",
         "ticket": f"আপনার রেফারেন্স নম্বর {ticket}। পরে ফোন করলে এই নম্বরটা বলবেন।",
     }

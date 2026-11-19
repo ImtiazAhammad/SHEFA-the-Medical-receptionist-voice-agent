@@ -1098,9 +1098,9 @@ def generate(
         card.setdefault("who_bn", "রোগী")
     # Other domains append after the hospital cards with their own random sequence, so the hospital
     # cards (and the clips already recorded against them) never change.
-    from shefa.collector import scripts_isp
+    from shefa.collector import scripts_isp, scripts_shop
 
-    return cards + scripts_isp.generate()
+    return cards + scripts_isp.generate() + scripts_shop.generate()
 
 
 # Lines nearly every call uses. A person recording a "voice pack" starts with these.

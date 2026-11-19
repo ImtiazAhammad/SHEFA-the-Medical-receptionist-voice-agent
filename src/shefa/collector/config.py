@@ -30,14 +30,14 @@ CONSENT_EN = (
 # lawyer read it before relying on it commercially.
 CONSENT_V2_BN = (
     "আমি ১৮ বছরের বেশি বয়সী। আমি জানি আমার কণ্ঠ রেকর্ড করা হবে এবং এই প্রকল্পের বানানো বাংলা ভয়েস "
-    "সহকারীদের (যেমন হাসপাতালের SHEFA, এবং ইন্টারনেট বা অন্য সেবার কাস্টমার কেয়ার) বাংলা কথা বোঝার সক্ষমতা "
+    "সহকারীদের (যেমন হাসপাতালের SHEFA, এবং ইন্টারনেট, অনলাইন কেনাকাটা বা অন্য সেবার কাস্টমার কেয়ার) বাংলা কথা বোঝার সক্ষমতা "
     "শেখাতে ব্যবহার করা হবে। এগুলো বাণিজ্যিক পণ্য। আমি আসল নাম, ফোন নম্বর বা ব্যক্তিগত তথ্য বলব না। "
     "আমার রেকর্ডিং জনসমক্ষে প্রকাশ করা হবে না। যেকোনো সময় ডিলিট কোড দিয়ে আমি রেকর্ডিং মুছে ফেলতে পারব, "
     "তবে যে মডেল একবার শেখানো হয়ে গেছে তা থেকে আমার কণ্ঠ আলাদা করা যাবে না।"
 )
 CONSENT_V2_EN = (
     "I am over 18. I know my voice will be recorded and used to teach this project's Bangla voice "
-    "assistants (such as SHEFA for hospitals, and customer care for internet or other services) to "
+    "assistants (such as SHEFA for hospitals, and customer care for internet, online shopping or other services) to "
     "understand Bangla. These are commercial products. I will not say my real name, phone number or "
     "personal details. My recordings will not be published. I can delete my recordings at any time with "
     "my delete code, but a model that has already been trained cannot un-learn my voice."

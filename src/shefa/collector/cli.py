@@ -73,7 +73,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="only people who ticked the optional sharing/licensing consent (use for anything leaving the project)",
     )
     export.add_argument(
-        "--domain", choices=["", "hospital", "isp"], default="", help="only one call topic"
+        "--domain", choices=["", "hospital", "isp", "shop"], default="", help="only one call topic"
     )
 
     backup = c.add_parser(

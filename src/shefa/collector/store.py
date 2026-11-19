@@ -1163,7 +1163,8 @@ class CollectorStore:
             "minutes_by_domain": {
                 r["k"]: r["m"]
                 for r in self._q(
-                    "SELECT CASE WHEN card_id LIKE 'v2-n%' THEN 'isp' ELSE 'hospital' END k, "
+                    "SELECT CASE WHEN card_id LIKE 'v2-n%' THEN 'isp' WHEN card_id LIKE 'v2-s%' THEN 'shop' "
+                    "ELSE 'hospital' END k, "
                     "ROUND(SUM(duration_s)/60.0,1) m FROM clips WHERE deleted_at IS NULL "
                     "AND status NOT IN ('rejected','removed') GROUP BY k"
                 )

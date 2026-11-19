@@ -58,7 +58,11 @@ DIVISIONS = {
 }
 AUDIO_TYPES = {".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg", ".mp4": "audio/mp4"}
 KIND_WEIGHTS = {"booking": 0.65, "info": 0.25, "digits": 0.10, "support": 1.0}
-DOMAIN_WEIGHTS = {"hospital": 0.6, "isp": 0.4}  # when a person has not picked a topic
+DOMAIN_WEIGHTS = {
+    "hospital": 0.5,
+    "isp": 0.25,
+    "shop": 0.25,
+}  # when a person has not picked a topic
 DIALECTS = {
     "standard",
     "dhaka",
@@ -149,6 +153,10 @@ def _sheet_for(card: dict[str, Any] | None) -> dict[str, Any]:
         from shefa.collector import scripts_isp
 
         return scripts_isp.sheet()
+    if (card or {}).get("domain") == "shop":
+        from shefa.collector import scripts_shop
+
+        return scripts_shop.sheet()
     return S.clinic_sheet() if (card or {}).get("v") == 2 else P.CLINIC_SHEET
 
 
@@ -375,7 +383,7 @@ def public_router(ctx: Ctx) -> APIRouter:
             "share_bn": SHARE_BN,
             "share_en": SHARE_EN,
             "dialects": sorted(DIALECTS),
-            "topics": ["hospital", "isp"],
+            "topics": ["hospital", "isp", "shop"],
             "turnstile_site_key": cfg.turnstile_site_key,
             "min_clip_s": cfg.min_clip_s,
             "max_clip_s": cfg.max_clip_s,
@@ -436,7 +444,9 @@ def public_router(ctx: Ctx) -> APIRouter:
         # Someone who agreed only to the first consent (hospital calls for SHEFA) gets hospital
         # calls until they agree to the current one.
         allowed = (
-            ["hospital"] if got[1].get("consent_version") == CONSENT_V1 else ["hospital", "isp"]
+            ["hospital"]
+            if got[1].get("consent_version") == CONSENT_V1
+            else ["hospital", "isp", "shop"]
         )
         domains = [topic] if topic in allowed else allowed
         picked = ctx.cards_for(

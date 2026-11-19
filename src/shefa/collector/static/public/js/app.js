@@ -45,7 +45,7 @@ function landing() {
     const share = h("input", { type: "checkbox", id: "share" });
     let topic = (S.session && S.session.topic) || "";
     const topicChips = h("div", { class: "chips", role: "group", "aria-label": t("topic_title") },
-      [["", "topic_any"], ["hospital", "topic_hospital"], ["isp", "topic_isp"]].map(([v, k]) =>
+      [["", "topic_any"], ["hospital", "topic_hospital"], ["isp", "topic_isp"], ["shop", "topic_shop"]].map(([v, k]) =>
         h("button", { type: "button", class: "chip pick", "aria-pressed": String(topic === v), onclick: (e) => {
           topic = v;
           topicChips.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === e.currentTarget)));
