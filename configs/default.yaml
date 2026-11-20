@@ -203,6 +203,15 @@ compliance:
 storage:
   db_path: "data/shefa.db"
 
+# What the clinic has, in its own words. The agent answers these questions ONLY from here; a topic
+# left out gets "I don't have confirmed information, ask reception" (never a guess by the model).
+# Topics: parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment,
+# prayer, atm, report.
+facilities: {}
+#  parking:
+#    bn: "হাসপাতালের বেসমেন্টে পার্কিং আছে, প্রথম দুই ঘণ্টা ফ্রি।"
+#    en: "There is parking in the basement; the first two hours are free."
+
 monitoring:
   prometheus:
     enabled: true

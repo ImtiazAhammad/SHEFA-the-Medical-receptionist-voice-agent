@@ -984,6 +984,14 @@ class VoicePipeline:
             guided.finish(session)  # the read-back was dropped; a new request starts fresh
             state = None
         if state:
+            from shefa.pipeline import facilities
+
+            fact = facilities.answer(said, language, settings.facilities, during_booking=True)
+            if fact is not None:
+                # "পার্কিং আছে?" in the middle of a booking: answer it, then ask our question again
+                text = f"{fact} {guided.reprompt(session)}".strip()
+                await self._emit(tts, text, language, put_playback)
+                return text
             if wants_other_doctor(said) and state.get("step") not in {"who", "pick_doctor"}:
                 guided.finish(session)  # "someone else?" is handled below, then a new booking
                 state = None
@@ -1007,6 +1015,12 @@ class VoicePipeline:
             )
             if handled is not None:
                 return handled
+        from shefa.pipeline import facilities
+
+        if (fact := facilities.answer(said, language, settings.facilities)) is not None:
+            # parking, pharmacy, lift...: the clinic's own words, or "I don't know", never a guess
+            await self._emit(tts, fact, language, put_playback)
+            return fact
         if settings.pipeline.guided_booking and (gap := guided.unknown_specialty(said, language)):
             await self._emit(tts, gap, language, put_playback)
             return gap

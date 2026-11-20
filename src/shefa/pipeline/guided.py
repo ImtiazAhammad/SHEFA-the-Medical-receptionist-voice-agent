@@ -43,6 +43,8 @@ SEARCH_DAYS = 30
 START = re.compile(
     r"সিরিয়াল|অ্যাপয়েন্ট|এ্যাপয়েন্ট|অ্যাপয়েন্টমেন্ট|এপয়েন্ট|অ্যাপোয়েন্ট|বুকিং|বুক |বুক$"
     r"|দেখাতে চাই|দেখাতে চাচ্ছি|দেখাবো|দেখাব|দেখা করতে|দেখাতে হবে|ডাক্তার দেখা|ডাক্তার দেখাই"
+    # how the speech model mishears "দেখাতে": ডাকাতে, ডেকাটে, দেখাইতে
+    r"|ডাকাতে চাই|ডেকাটে|দেখাইতে|দেখানোর জন্য"
     r"|\bappointment\b|\bbook(?:ing)?\b|\bsee (?:an? |the )?(?:\w+ ){0,2}(?:doctor|dr|specialist|\w+ologist|\w+iatrician|physician)\b"
     r"|\bserial\b|\bvisit\b",
     re.IGNORECASE,
@@ -414,12 +416,19 @@ def _soonest_doctor(doctors: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def wants_to_book(said: str) -> bool:
-    """A request to book, not a question about booking."""
-    return (
-        bool(START.search(said))
-        and not INFO_QUESTION.search(said)
-        and not CHANGE_EXISTING.search(said)
+    """A request to book, not a question about booking.
+
+    A department said plainly ("নিউরোলজি বিভাগে একজন ডাক্তার...") counts as a request even when
+    the booking verb is lost: the speech model wrote "দেখাতে চাই" as "ডাকাতে চাই", and the call
+    fell to the language model, which forgot the department."""
+    from shefa.clinic import department_names
+
+    # Only a department this clinic HAS: one it lacks gets the plain "we don't have that" answer.
+    asks = bool(START.search(said)) or (
+        bool(department_names.mentioned(said))
+        and default_clinic_store().find_department(said) is not None
     )
+    return asks and not INFO_QUESTION.search(said) and not CHANGE_EXISTING.search(said)
 
 
 def is_how_to_book(said: str) -> bool:

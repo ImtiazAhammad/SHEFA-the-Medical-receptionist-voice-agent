@@ -1,4 +1,4 @@
-﻿"""Application settings loaded from YAML config and environment variables.
+"""Application settings loaded from YAML config and environment variables.
 
 Every model inherits `StrictModel`, so a key that no model declares is a
 validation error rather than a silent drop. Config drift is only detectable if
@@ -153,9 +153,7 @@ class PipelineConfig(StrictModel):
     tts: TTSConfig = Field(default_factory=TTSConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     media: MediaQueueConfig = Field(default_factory=MediaQueueConfig)
-    language_detection: LanguageDetectionConfig = Field(
-        default_factory=LanguageDetectionConfig
-    )
+    language_detection: LanguageDetectionConfig = Field(default_factory=LanguageDetectionConfig)
     # Load the models at startup and keep the LLM resident (see shefa.warmup).
     warm_up: bool = True
     # A booking request is run by code, one short closed question at a time (pipeline.guided),
@@ -540,6 +538,8 @@ class PiperAdapterConfig(StrictModel):
 class VITSAdapterConfig(StrictModel):
     type: Literal["vits_tts"]
     model_path: str = ""
+
+
 AdapterConfig = Annotated[
     OpenAIAdapterConfig
     | AnthropicAdapterConfig
@@ -551,6 +551,7 @@ AdapterConfig = Annotated[
     | VITSAdapterConfig,
     Field(discriminator="type"),
 ]
+
 
 class RoutingConfig(StrictModel):
     strategy: str = "config"
@@ -579,9 +580,7 @@ class ModelsConfig(StrictModel):
         """
         adapter_type = self.LLM_PROVIDER_ADAPTER_TYPE.get(provider)
         if adapter_type is None:
-            raise ValueError(
-                f"No models.adapters type registered for LLM provider {provider!r}"
-            )
+            raise ValueError(f"No models.adapters type registered for LLM provider {provider!r}")
         matches = {
             key: adapter
             for key, adapter in self.adapters.items()
@@ -668,6 +667,11 @@ class AppConfig(StrictModel):
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
+    # What the clinic has, in its own words, per language: {"parking": {"bn": "...", "en": "..."}}.
+    # Keys: parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment,
+    # prayer, atm, report (see shefa.pipeline.facilities). A topic left out is answered with
+    # "I don't know, ask reception", never guessed by the language model.
+    facilities: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 def _strip_wrapping_quotes(value: str) -> str:

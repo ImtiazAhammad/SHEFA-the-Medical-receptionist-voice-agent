@@ -68,11 +68,10 @@ def test_a_chat_has_a_message_budget_and_an_address_has_a_rate(monkeypatch):
 
 def test_a_call_from_another_site_is_refused(monkeypatch):
     with make_client(monkeypatch) as client:
-        with pytest.raises(WebSocketDisconnect) as refused:
-            with client.websocket_connect(
-                "/ws/demo-call", headers={"origin": "https://evil.example", "host": "testserver"}
-            ):
-                pass
+        with pytest.raises(WebSocketDisconnect) as refused, client.websocket_connect(
+            "/ws/demo-call", headers={"origin": "https://evil.example", "host": "testserver"}
+        ):
+            pass
         assert refused.value.code == demo_api.CLOSE_FORBIDDEN
 
 
