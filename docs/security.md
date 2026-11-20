@@ -88,3 +88,22 @@ log server if the hospital requires tamper-evidence.
 - The audit trail is not tamper-proof (section 5).
 - Dependency and model licences have not been legally reviewed.
 - Emergency detection by phrase list can miss unusual wording; it is a safety net, not a diagnosis.
+
+## Appointment lookup by phone (2026-11-20)
+
+"When is my appointment?" is answered in code (`src/shefa/pipeline/lookup.py`); the language model
+never reads anyone's bookings.
+
+- A caller recognised by caller ID hears their own upcoming bookings at once (the same proof the
+  agent uses to cancel or move a booking).
+- Anyone else must say the number the booking was made with **and** the patient's name (matched
+  by spelling or by sound, so "করিম" matches "Karim"; a relative's name written on the booking
+  also counts). A wrong name and an unknown number get the same reply, so the lookup never
+  reveals whether a number has bookings or whose name is on it.
+- Two failed checks in a call end the lookup with an offer of reception; four failed checks on
+  one number within an hour lock that number out of lookups (name guessing). The lock is in
+  memory: a server restart clears it.
+- A lookup does not identify the caller: cancelling or moving a booking still needs caller ID or
+  reception.
+- Not done: SMS one-time codes (no SMS provider is set up). Number + name is what a front desk
+  asks today, and it is weaker than a code sent to the phone.

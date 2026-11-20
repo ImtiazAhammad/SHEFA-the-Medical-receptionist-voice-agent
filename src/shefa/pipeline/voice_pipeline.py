@@ -1003,8 +1003,24 @@ class VoicePipeline:
         if state and state.get("step") == "confirm":
             guided.finish(session)  # the read-back was dropped; a new request starts fresh
             state = None
-        from shefa.pipeline import clinic_questions
+        from shefa.clinic.store import clinic_today
+        from shefa.pipeline import clinic_questions, lookup
 
+        # "When is my appointment?": found by caller ID, or by the booking's number plus the
+        # patient's name; the model never reads anyone's bookings (pipeline/lookup.py).
+        today_iso = clinic_today().isoformat()
+        if lookup.active(session):
+            text = lookup.advance(session, said, today=today_iso)
+            if text is not None:
+                await self._emit(tts, text, language, put_playback)
+                return text
+        elif lookup.wants_lookup(said):
+            if state:
+                guided.finish(session)
+                state = None
+            text = lookup.start(session, said, today=today_iso)
+            await self._emit(tts, text, language, put_playback)
+            return text
         # Everyday off-script questions (who is best, a woman doctor, opening hours, parking, MRI,
         # admission, "রোগ সারবে?") are answered from the directory and the clinic's own facts,
         # never by the model, which invented "yes" answers. Mid-booking, the booking question

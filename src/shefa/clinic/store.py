@@ -486,6 +486,16 @@ class ClinicStore:
             ).fetchone()[0]
         )
 
+    def patient_by_phone(self, phone: str) -> dict[str, Any] | None:
+        """The patient booked under this number (any spelling of it), or None."""
+        digits = normalize_phone(phone)
+        if not digits:
+            return None
+        row = self.connection.execute(
+            "SELECT * FROM patients WHERE phone = ?", (digits,)
+        ).fetchone()
+        return dict(row) if row else None
+
     def get_patient(self, patient_id: int) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM patients WHERE id = ?", (patient_id,)

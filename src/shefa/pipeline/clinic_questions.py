@@ -55,11 +55,6 @@ CAN_YOU = re.compile(
     r"|do you (?:treat|do|offer|give|see)",
     _I,
 )
-PAST_APPOINTMENT = re.compile(
-    r"আগের (?:সিরিয়াল|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট)|আমার সিরিয়াল(?:টা)? (?:কবে|কখন) (?:ছিল|আছে)|সিরিয়াল (?:দেওয়া|নেওয়া) আছে কি"
-    r"|when (?:is|was) my (?:appointment|serial)|my (?:last|previous) appointment",
-    _I,
-)
 WHO_ARE_YOU = re.compile(
     r"আপনার নাম (?:কী|কি)|তোমার নাম (?:কী|কি)|আপনি কে(?![\u0980-\u09ff])|what(?:'s| is) your name|who are you",
     _I,
@@ -154,13 +149,6 @@ def answer(
         parts.append(_experience(ctx(), lang))
     if LANGUAGES.search(said):
         parts.append(_languages(ctx(), lang))
-    if PAST_APPOINTMENT.search(said):
-        parts.append(
-            "আগের সিরিয়ালের তথ্য আমি এখান থেকে দেখতে পারি না; রিসেপশন দেখে দিতে পারবে, চাইলে 'মানুষ' বলুন। নতুন সিরিয়াল নিতে চাইলে সেটাও পারি।"
-            if lang == "bn"
-            else "I can't look up past appointments from here; reception can, say 'person'. I can book a new one if you like."
-        )
-        return " ".join(parts)
     if not parts and CAN_YOU.search(said) and (served := _served_by(said, lang)):
         return served
     if not parts:

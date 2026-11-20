@@ -171,8 +171,3 @@ def test_a_service_question_names_the_department_that_sees_it(clinic):
     reply = ask("মাথা ব্যথার চিকিৎসা করেন?")
     assert reply.startswith("জি, এ জন্য নিউরোলজি বিভাগে") and "কবির" in reply
     assert ask("হার্টের অপারেশন করা যায়?") is None or "নিশ্চিত তথ্য নেই" in ask("হার্টের অপারেশন করা যায়?")
-
-
-def test_a_past_appointment_is_not_a_new_booking(clinic):
-    reply = ask("আগের সিরিয়ালটা কবে ছিল মনে নেই")
-    assert "রিসেপশন" in reply and "নতুন সিরিয়াল" in reply
