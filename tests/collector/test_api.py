@@ -6,7 +6,7 @@ from tests.collector.conftest import Person, make_wav
 def test_config_reports_consent_and_state(pub, config):
     reply = pub.get("/api/c/config").json()
     assert reply["consent_version"] == config.consent_version
-    assert "SHEFA" in reply["consent_bn"] and reply["maintenance"] == ""
+    assert "বাংলা ভয়েস" in reply["consent_bn"] and reply["maintenance"] == ""
 
 
 def test_start_needs_consent_of_the_current_version(pub, config):

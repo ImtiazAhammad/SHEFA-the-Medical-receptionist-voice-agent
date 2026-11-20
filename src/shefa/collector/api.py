@@ -31,11 +31,10 @@ from shefa.collector import audio as A
 from shefa.collector import prompts as P
 from shefa.collector import scripts as S
 from shefa.collector.config import (
+    CONSENT_STILL_VALID,
     CONSENT_V1,
-    CONSENT_V2_BN,
-    CONSENT_V2_EN,
-    SHARE_BN,
-    SHARE_EN,
+    CONSENT_V3_BN,
+    CONSENT_V3_EN,
     CollectorConfig,
 )
 from shefa.collector.store import CLIP_ID, CollectorStore, StoreError
@@ -378,10 +377,9 @@ def public_router(ctx: Ctx) -> APIRouter:
         camp = store.campaign(c)
         return {
             "consent_version": cfg.consent_version,
-            "consent_bn": CONSENT_V2_BN,
-            "consent_en": CONSENT_V2_EN,
-            "share_bn": SHARE_BN,
-            "share_en": SHARE_EN,
+            "consent_bn": CONSENT_V3_BN,
+            "consent_en": CONSENT_V3_EN,
+            "consent_still_valid": list(CONSENT_STILL_VALID),
             "dialects": sorted(DIALECTS),
             "topics": ["hospital", "isp", "shop"],
             "turnstile_site_key": cfg.turnstile_site_key,

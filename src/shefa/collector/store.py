@@ -555,6 +555,12 @@ class CollectorStore:
         )
         return bool(row) and hmac.compare_digest(row["secret_hash"], _sha(secret or ""))
 
+    def _shares(self, share_ok: bool) -> bool:
+        """The current consent (v3) includes sharing and licensing; v2 asked separately."""
+        from shefa.collector.config import CONSENT_V1, CONSENT_V2
+
+        return share_ok or self.config.consent_version not in (CONSENT_V1, CONSENT_V2)
+
     def reconsent(self, cid: str, speaker_id: str, share_ok: bool) -> None:
         """A person who agreed to the first consent agrees to the current one: same person, same
         speaker id (a new id would let one voice land in two splits)."""
@@ -564,7 +570,7 @@ class CollectorStore:
         )
         self._x(
             "UPDATE speakers SET consent_version=?, share_ok=? WHERE id=? AND contributor_id=?",
-            (self.config.consent_version, 1 if share_ok else 0, speaker_id, cid),
+            (self.config.consent_version, 1 if self._shares(share_ok) else 0, speaker_id, cid),
         )
         self.audit("contributor", "reconsent", f"share={int(share_ok)}")
 
@@ -608,7 +614,7 @@ class CollectorStore:
                 time.time(),
                 _sha(code),
                 self.config.consent_version,
-                1 if share_ok else 0,
+                1 if self._shares(share_ok) else 0,
             ),
         )
         return {"speaker_id": sid, "delete_code": code}

@@ -316,9 +316,7 @@ def _problem(rng: random.Random, nodes: dict[str, Any], kind: str) -> tuple[str,
             "pick",
             "দুঃখিত। হাতে পাওয়ার সাত দিনের মধ্যে হলে বদলে দিতে পারব, অথবা টাকা ফেরত দেব। কোনটা চান?",
             [
-                _choice(
-                    "swap", "বলুন, বদলে নিতে চান।", "pick", label="বদলে দিন"
-                ),
+                _choice("swap", "বলুন, বদলে নিতে চান।", "pick", label="বদলে দিন"),
                 _choice("money", "বলুন, টাকা ফেরত চান।", "pick", label="টাকা ফেরত", wants="refund"),
             ],
             cap=20,

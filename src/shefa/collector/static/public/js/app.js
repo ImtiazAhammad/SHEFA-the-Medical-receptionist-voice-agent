@@ -38,7 +38,7 @@ function go(build) {
 function landing() {
   go((view) => {
     const cfg = S.cfg;
-    const have = !!(S.session && S.session.consent === cfg.consent_version);
+    const have = !!(S.session && (S.session.consent === cfg.consent_version || (cfg.consent_still_valid || []).includes(S.session.consent)));
     // Someone who agreed to an earlier consent agrees again WITHOUT becoming a new person: a new id
     // for the same voice could put it in both the training and the test set.
     const again = !have && !!(S.session && S.session.cid);

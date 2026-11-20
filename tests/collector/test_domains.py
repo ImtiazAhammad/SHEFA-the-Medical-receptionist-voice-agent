@@ -101,10 +101,16 @@ def test_first_consent_people_get_hospital_only_until_they_agree_again(pub, conf
     )
 
 
-def test_sharing_is_a_separate_optional_tick_and_the_export_respects_it(pub, config, ctx, tmp_path):
-    shared_h, _ = start(pub, config, share=True)
-    private_h, _ = start(pub, config, share=False)
-    for h in (shared_h, private_h):
+def test_short_consent_includes_sharing_but_old_optional_ticks_are_kept(pub, config, ctx, tmp_path):
+    from shefa.collector.config import CONSENT_V2
+
+    new_h, _ = start(pub, config)  # current consent: sharing is part of it
+    old_h, old = start(pub, config)
+    ctx.store._x(
+        "UPDATE speakers SET consent_version=?, share_ok=0 WHERE id=?",
+        (CONSENT_V2, old["speaker_id"]),
+    )
+    for h in (new_h, old_h):
         r = pub.put(
             "/api/c/clip/" + __import__("uuid").uuid4().hex,
             content=__import__("tests.collector.conftest", fromlist=["make_wav"]).make_wav(
@@ -118,21 +124,30 @@ def test_sharing_is_a_separate_optional_tick_and_the_export_respects_it(pub, con
         )
     everything = do_export(ctx.store, tmp_path / "all")
     shareable = do_export(ctx.store, tmp_path / "share", shareable_only=True)
-    assert everything["clips"]["train"] == 2 and shareable["clips"]["train"] == 1
-    row = json.loads((tmp_path / "share" / "train.jsonl").read_text().splitlines()[0])
-    assert row["shareable"] is True and row["domain"] == "hospital" and row["consent"]
-    cfg = pub.get("/api/c/config").json()
     assert (
-        "লাইসেন্স" in cfg["share_bn"] and "ঐচ্ছিক" in cfg["share_bn"] and "SHEFA" in cfg["consent_bn"]
+        everything["clips"]["train"] == 2 and shareable["clips"]["train"] == 1
+    )  # the v2 person said no
+    row = json.loads((tmp_path / "share" / "train.jsonl").read_text().splitlines()[0])
+    assert row["shareable"] is True and row["consent"] == config.consent_version
+    cfg = pub.get("/api/c/config").json()
+    assert "লাইসেন্স" in cfg["consent_bn"] and len(cfg["consent_bn"]) < 200 and "share_bn" not in cfg
+    assert CONSENT_V2 in cfg["consent_still_valid"]  # v2 people are not asked again
+    assert {
+        c["domain"]
+        for _ in range(4)
+        for c in pub.get("/api/c/cards?n=8", headers=old_h).json()["cards"]
+    } == {"hospital", "isp", "shop"}
+
+
+def test_every_new_person_on_a_shared_phone_is_covered(pub, config, ctx):
+    h, _ = start(pub, config)
+    second = pub.post("/api/c/speaker", json={}, headers=h).json()
+    assert (
+        ctx.store._one("SELECT share_ok FROM speakers WHERE id=?", (second["speaker_id"],))[
+            "share_ok"
+        ]
+        == 1
     )
-
-
-def test_pass_the_phone_asks_each_person_about_sharing(pub, config, ctx):
-    h, _ = start(pub, config, share=True)
-    second = pub.post("/api/c/speaker", json={"share_ok": False}, headers=h).json()
-    third = pub.post("/api/c/speaker", json={"share_ok": True}, headers=h).json()
-    shares = {r["id"]: r["share_ok"] for r in ctx.store._q("SELECT id, share_ok FROM speakers")}
-    assert shares[second["speaker_id"]] == 0 and shares[third["speaker_id"]] == 1
 
 
 def test_dialect_is_saved_per_person_and_counted(pub, priv, config, ctx, staff):

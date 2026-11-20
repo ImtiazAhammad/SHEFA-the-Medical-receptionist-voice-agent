@@ -8,8 +8,21 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-CONSENT_VERSION = "2026-11-v2"
+CONSENT_VERSION = "2026-11-v3"
 CONSENT_V1 = "2026-11-v1"  # hospital calls only, for SHEFA only
+CONSENT_V2 = "2026-11-v2"  # this project's assistants; sharing was a separate optional tick
+# Versions that still cover every current call topic (v1 people are asked again).
+CONSENT_STILL_VALID = (CONSENT_V2, CONSENT_VERSION)
+# v3 is one short, general sentence that already includes sharing and licensing: contributors are
+# the founder's own circle and are briefed in person before they record.
+CONSENT_V3_BN = (
+    "আমি ১৮+। আমার কণ্ঠ রেকর্ড হবে, আর বাংলা ভয়েস প্রযুক্তি বানাতে তা ব্যবহার, শেয়ার বা লাইসেন্স করা যাবে। "
+    "আমি আসল ব্যক্তিগত তথ্য বলব না। ডিলিট কোড দিয়ে যেকোনো সময় মুছে ফেলতে পারব।"
+)
+CONSENT_V3_EN = (
+    "I am 18+. My voice will be recorded and may be used, shared or licensed to build Bangla voice "
+    "technology. I will not say real personal details. I can delete it any time with my delete code."
+)
 
 CONSENT_BN = (
     "আমি ১৮ বছরের বেশি বয়সী। আমি জানি আমার কণ্ঠ রেকর্ড করা হবে এবং SHEFA নামের একটি বাণিজ্যিক পণ্যের "
