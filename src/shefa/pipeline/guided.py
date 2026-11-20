@@ -238,7 +238,9 @@ def schedule_answer(session: Any, said: str) -> str | None:
                 else f"{who} অ্যাপয়েন্টমেন্টে বসেন।"
             )
             if date_:
-                text += f" পরের খালি সময় {spoken_date(date_, 'bn')} {spoken_time(time_, 'bn', at=True)}।"
+                text += (
+                    f" পরের খালি সময় {spoken_date(date_, 'bn')} {spoken_time(time_, 'bn', at=True)}।"
+                )
         else:
             text = (
                 f"{who} {'both ' if len(names) == 2 else 'all ' if many else ''}sit "
@@ -338,8 +340,24 @@ def _doctors_named(said: str) -> list[dict[str, Any]]:
 
 def _find_who(said: str) -> tuple[str, list[dict[str, Any]]]:
     """('doctor' | 'department' | 'symptom' | 'none', the doctors that fit)."""
+    from shefa.clinic import department_names
+
     store = default_clinic_store()
     matches = _doctors_named(said)
+    if matches and department_names.mentioned(said):
+        # A department said plainly ("Neurology Department") beats a loose name match on another
+        # word; a named doctor in THAT department still wins.
+        named_department = store.find_department(said)
+        if named_department is not None:
+            inside = [d for d in matches if d.get("department_id") == named_department["id"]]
+            return (
+                ("doctor", inside)
+                if inside
+                else (
+                    "department",
+                    store.doctors(department_id=named_department["id"]),
+                )
+            )
     if matches:
         return "doctor", matches
     department = store.find_department(said)

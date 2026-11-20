@@ -395,8 +395,14 @@ class VoicePipeline:
                 await speak_to(tts, ack, asked_for.value, put_playback)
                 session.add_turn("user", stt_result.text, asked_for)
                 session.add_turn("assistant", ack, asked_for)
-                log_turn(call_sid, "user", stt_result.text, language=asked_for.value,
-                         confidence=stt_result.confidence, note="asked for a language")
+                log_turn(
+                    call_sid,
+                    "user",
+                    stt_result.text,
+                    language=asked_for.value,
+                    confidence=stt_result.confidence,
+                    note="asked for a language",
+                )
                 log_turn(call_sid, "assistant", ack, language=asked_for.value)
                 await self._session_manager.save(session)
                 self._audio_buffers.setdefault(call_sid, [])
@@ -970,9 +976,7 @@ class VoicePipeline:
                     "name": pending["name"],
                     "arguments": pending["arguments"],
                 }
-        if settings.pipeline.guided_booking and (
-            text := guided.schedule_answer(session, said)
-        ):
+        if settings.pipeline.guided_booking and (text := guided.schedule_answer(session, said)):
             await self._emit(tts, text, language, put_playback)
             return text
         state = session.metadata.get("guided") if settings.pipeline.guided_booking else None

@@ -231,7 +231,7 @@ _WIDENING = re.compile(
 
 
 def widen_listing(name: str, arguments: dict[str, Any], said: str) -> dict[str, Any]:
-    """"Who else is there?" asks about everyone: the department carried over from the
+    """ "Who else is there?" asks about everyone: the department carried over from the
     earlier question is dropped."""
     if name == "list_doctors" and arguments.get("department") and _WIDENING.search(said):
         return {k: v for k, v in arguments.items() if k != "department"}

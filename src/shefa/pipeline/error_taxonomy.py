@@ -32,9 +32,7 @@ class MalformedLLMOutputError(ValueError):
     """
 
 
-def backoff_delay(
-    consecutive_failures: int, *, base: float = 0.25, cap: float = 2.0
-) -> float:
+def backoff_delay(consecutive_failures: int, *, base: float = 0.25, cap: float = 2.0) -> float:
     """Exponential backoff in seconds: ``base * 2 ** (n - 1)``, capped.
 
     The cap matters twice: a stuck adapter must not sleep the conversation

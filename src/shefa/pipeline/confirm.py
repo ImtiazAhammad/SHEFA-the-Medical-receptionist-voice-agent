@@ -61,9 +61,7 @@ def leading_yes(text: str) -> bool:
         return False
     head = " ".join(words[:4])
     # "আচ্ছা" alone is a yes, but at the start of a long sentence it only means "well..."
-    return (words[0] in _YES and words[0] != "আচ্ছা") or any(
-        head.startswith(p) for p in _YES_PHRASES
-    )
+    return (words[0] in _YES and words[0] != "আচ্ছা") or any(head.startswith(p) for p in _YES_PHRASES)
 
 
 def _when(date: str, time: str, language: str, *, at: bool) -> str:

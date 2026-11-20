@@ -66,3 +66,30 @@ def test_bangla_emergencies_escalate(said):
 def test_ordinary_calls_do_not_escalate(said):
     language = Language.BANGLA if any("ঀ" <= c <= "৿" for c in said) else Language.ENGLISH
     assert not is_emergency(said, language), said
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "আমার বাবার হঠাৎ বুকে প্রচণ্ড ব্যথা, কী করব?",
+        "বুকে খুব ব্যথা",
+        "মায়ের বুকে অনেক চাপ লাগছে",
+        "দম একদম নিতে পারছে না",
+        "my dad's chest is really hurting",
+    ],
+)
+def test_words_between_body_part_and_danger_still_escalate(said):
+    assert is_emergency(said, Language.BANGLA) or is_emergency(said, Language.ENGLISH)
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "বুকের ডাক্তার দেখাতে চাই",
+        "শ্বাসকষ্টের ডাক্তার কবে বসেন",
+        "আমার বুকে কোনো ব্যথা নেই",
+        "শ্বাস নিতে পারছি, শুধু কাশি",
+    ],
+)
+def test_booking_for_a_chest_doctor_is_not_an_emergency(said):
+    assert not is_emergency(said, Language.BANGLA)

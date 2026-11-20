@@ -1,4 +1,4 @@
-""""Is there another doctor?" answered from the directory, in code, like a person would.
+""" "Is there another doctor?" answered from the directory, in code, like a person would.
 
 A caller who has just been pointed to one doctor and says "I saw her before, it wasn't great, is
 there anyone else?" is asking about the SAME department. The generic doctor list (every doctor in
@@ -151,9 +151,11 @@ def other_doctor_reply(focus: dict[str, Any], language: str) -> tuple[str, dict[
             if current is None
             else f"{spoken_doctor(current['name_bn'], 'bn')} ছাড়া আর কেউ নেই।"
         )
-        lead_en = f"I'm sorry, right now {dept_name} has no other doctor" + (
-            "" if current is None else f" besides {spoken_doctor(current['name_en'], 'en')}"
-        ) + "."
+        lead_en = (
+            f"I'm sorry, right now {dept_name} has no other doctor"
+            + ("" if current is None else f" besides {spoken_doctor(current['name_en'], 'en')}")
+            + "."
+        )
 
     if current is None:
         return (lead_bn if bn else lead_en), None

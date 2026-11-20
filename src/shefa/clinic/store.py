@@ -337,6 +337,19 @@ class ClinicStore:
 
     def find_department(self, query: str) -> dict[str, Any] | None:
         """The department a spoken name refers to ("পিশু বিভাগ", "pediatrician"), or None."""
+        from shefa.clinic import department_names
+
+        # A department named the way people say it ("নিউরোলজি বিভাগ", "Neurology Department",
+        # "হাড়ের ডাক্তার") decides it outright. If the clinic has no such department the answer
+        # is None: a fuzzy look-alike ("ইউরোলজি" for "নিউরোলজি") must never be booked instead.
+        said = department_names.mentioned(query)
+        if said:
+            fits = [
+                d
+                for d in self.departments()
+                if department_names.key_for(d.get("name_en", ""), d.get("name_bn", "")) in said
+            ]
+            return fits[0] if fits else None
         words = names.tokens(query)
         scored = sorted(
             ((names.department_score(words, d), d) for d in self.departments()),
@@ -720,8 +733,10 @@ class ClinicStore:
                     continue
             else:
                 age = now - end
-                if not timedelta(hours=followup_after_hours) <= age <= timedelta(
-                    hours=followup_window_hours
+                if (
+                    not timedelta(hours=followup_after_hours)
+                    <= age
+                    <= timedelta(hours=followup_window_hours)
                 ):
                     continue
             due.append(

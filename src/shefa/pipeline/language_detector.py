@@ -1,4 +1,4 @@
-﻿"""Language detection for bilingual English/Bangla input.
+"""Language detection for bilingual English/Bangla input.
 
 Anything that is neither English nor Bangla (Hindi/Urdu/Punjabi in Devanagari
 or Arabic script) is returned as ``Language.OTHER`` so the pipeline can route
@@ -37,9 +37,27 @@ _END_ANCHORED_KEYWORDS = frozenset({"emergency", "unconscious", "জরুরি
 _WHOLE_UTTERANCE_ONLY = frozenset({"person", "human", "operator", "মানুষ", "অপারেটর"})
 _POLITE = frozenset({"please", "plz", "প্লিজ", "দয়া", "করে"})
 _BANGLA_KEYWORDS = {
-    "আসসালামু আলাইকুম", "ধন্যবাদ", "হ্যাঁ", "না", "কি", "কেমন", "আছেন", "বোঝা",
-    "সাহায্য", "ডাক্তার", "অ্যাপয়েন্টমেন্ট", "কখন", "দরকার", "আমি",
-    "আপনি", "তোমার", "আমার", "কোথায়", "কত", "গুছানো", "বাতিল",
+    "আসসালামু আলাইকুম",
+    "ধন্যবাদ",
+    "হ্যাঁ",
+    "না",
+    "কি",
+    "কেমন",
+    "আছেন",
+    "বোঝা",
+    "সাহায্য",
+    "ডাক্তার",
+    "অ্যাপয়েন্টমেন্ট",
+    "কখন",
+    "দরকার",
+    "আমি",
+    "আপনি",
+    "তোমার",
+    "আমার",
+    "কোথায়",
+    "কত",
+    "গুছানো",
+    "বাতিল",
 }
 
 
@@ -98,7 +116,53 @@ def is_emergency(text: str, language: Language) -> bool:
     """
     from shefa.config.settings import settings
 
-    return _mentions(text, settings.escalation.emergency_keywords.get(language.value, []))
+    keywords = settings.escalation.emergency_keywords.get(language.value, [])
+    if _mentions(text, keywords):
+        return True
+    # Only for languages the clinic configured emergency words for.
+    return bool(keywords) and _near_pair(text)
+
+
+# A body part and a danger word with up to three words between them: "বুকে প্রচণ্ড ব্যথা",
+# "বুকে খুব চাপ লাগছে", "chest is really hurting". Exact phrases miss these; real callers add
+# words like খুব, প্রচণ্ড, হঠাৎ. Checked in both languages because callers mix them.
+_NEAR_PAIRS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        ("বুক", "বুকে", "বুকের", "বুকটা", "chest"),
+        ("ব্যথা", "ব্যাথা", "বেথা", "চাপ", "pain", "hurting", "hurts", "pressure", "tight"),
+    ),
+    (
+        ("শ্বাস", "দম", "নিঃশ্বাস", "breathe", "breathing"),
+        ("বন্ধ", "কষ্ট", "can't", "cannot", "difficulty"),
+    ),
+)
+_NEAR_GAP = 3
+_NEGATIONS = {"নেই", "নাই", "না", "কোনো", "কোন", "no", "not", "never"}
+_CANNOT = re.compile(r"^পার(ছে|ছেন|ছি|ছ|ছিস)$")
+
+
+def _near_pair(text: str) -> bool:
+    words = re.sub(rf"[^{_WORD}'\s]", " ", text.lower()).split()
+    for parts, dangers in _NEAR_PAIRS:
+        for i, w in enumerate(words):
+            if w not in parts and not any(w.startswith(p) for p in parts if not p.isascii()):
+                continue
+            window = words[i + 1 : i + 2 + _NEAR_GAP]
+            hits = [k for k, x in enumerate(window) if x in dangers]
+            if hits:
+                # "বুকে কোনো ব্যথা নেই", "no chest pain": a negation near the pair cancels it
+                k = hits[0]
+                near = window[: k + 1] + words[i + 2 + k : i + 4 + k] + words[max(0, i - 1) : i]
+                if not any(x in _NEGATIONS for x in near):
+                    return True
+            # breathing: only the NEGATED "পারছে না" is danger; "শ্বাস নিতে পারছি" is not
+            after = words[i + 1 : i + 3 + _NEAR_GAP]
+            if parts[0] == "শ্বাস" and any(
+                _CANNOT.match(x) and k + 1 < len(after) and after[k + 1] == "না"
+                for k, x in enumerate(after)
+            ):
+                return True
+    return False
 
 
 def is_human_request(text: str, language: Language) -> bool:
@@ -166,9 +230,7 @@ class TranscriptDecision:
     wants_person: bool = False
 
 
-def evaluate_transcript(
-    text: str, language: Language, confidence: float
-) -> TranscriptDecision:
+def evaluate_transcript(text: str, language: Language, confidence: float) -> TranscriptDecision:
     """Decide emergency, repeat, and escalation for one transcript."""
     from shefa.config.settings import settings
 
