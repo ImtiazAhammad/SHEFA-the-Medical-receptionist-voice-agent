@@ -78,3 +78,22 @@ def test_admin_sees_the_busiest_voices_share(priv, pub, person, config, ctx, sta
         priv.get("/api/admin/stats", headers=bearer(staff["admin"])).json()["top_speaker_share"]
         == 0.75
     )
+
+
+def test_older_and_outside_dhaka_voices_and_loudspeaker_are_counted(pub, config, ctx):
+    from tests.collector.conftest import Person
+
+    p = Person(pub, config)
+    pub.post("/api/c/profile", json={"age_band": "65+", "division": "rangpur"}, headers=p.h)
+    assert p.clip(headers={"x-setting": "speaker"}).status_code == 200
+    got = pub.get("/api/c/progress").json()
+    assert (
+        got["older_speakers"] == 1 and got["outside_dhaka_speakers"] == 1 and got["older_goal"] > 0
+    )
+    assert (
+        ctx.store._one("SELECT setting FROM clips WHERE speaker_id=?", (p.info["speaker_id"],))[
+            "setting"
+        ]
+        == "speaker"
+    )
+    assert config.free_talk_share == 0.5

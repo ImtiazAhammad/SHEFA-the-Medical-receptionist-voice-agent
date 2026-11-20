@@ -52,8 +52,8 @@ def test_every_department_has_a_professor_an_associate_and_an_assistant():
     for dept in S.ROSTER.values():
         assert [d["rank_bn"] for d in dept["doctors"]] == ["অধ্যাপক", "সহযোগী অধ্যাপক", "সহকারী অধ্যাপক"]
         assert len({d["surname"] for d in dept["doctors"]}) == 3
-    assert len({d["surname"] for dept in S.ROSTER.values() for d in dept["doctors"]}) == 24
-    assert len(S.clinic_sheet()["doctors"]) == 24
+    assert len({d["surname"] for dept in S.ROSTER.values() for d in dept["doctors"]}) == 69
+    assert len(S.clinic_sheet()["doctors"]) == 69
 
 
 def test_the_desk_lists_the_three_doctors_and_recommends_the_most_senior_when_asked():
@@ -81,13 +81,13 @@ def test_the_patient_is_a_pair_and_names_match_gender_and_age():
             assert p["name"] in (male if p["gender"] == "m" else female), (card["id"], p)
             if p["label_bn"] in ("বাবা", "মা", "শ্বশুর", "শাশুড়ি"):
                 assert p["age"] >= 50
-        if card["department"] == "শিশু":
+        if card["department"] == "শিশুরোগ":
             assert {p["label_bn"] for p in people} == {"ছেলে", "মেয়ে"} and all(
                 p["age"] <= 12 for p in people
             )
-        if card["department"] == "স্ত্রীরোগ":
+        if card["department"] == "গাইনি":
             assert all(p["gender"] == "f" for p in people)
-        if card["department"] != "স্ত্রীরোগ":
+        if card["department"] != "গাইনি":
             assert {p["gender"] for p in people} == {"m", "f"}
 
 
@@ -205,7 +205,7 @@ def test_rooms_use_the_same_clinic_as_the_scripts(person, pub, config):
     )
     joined = pub.post("/api/c/room/join", json={"code": room["code"]}, headers=other.h).json()
     assert (
-        len(joined["sheet"]["doctors"]) == 24
+        len(joined["sheet"]["doctors"]) == 69
         and "অধ্যাপক" in joined["sheet"]["doctors"][0]["name_bn"]
     )
 

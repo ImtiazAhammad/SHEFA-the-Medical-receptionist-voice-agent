@@ -202,7 +202,13 @@ class Ctx:
         # so a clip that waited on a phone, or an old two-person room, still finds its card.
         self.cards = S.load_bank(config.prompts_dir / "cards2.json")
         legacy = P.load_bank(config.prompts_dir / "cards.json")
-        self.cards_by_id = {c["id"]: c for c in legacy} | {c["id"]: c for c in self.cards}
+        retired_path = config.prompts_dir / "cards2-retired.json"
+        retired = S.load_bank(retired_path) if retired_path.exists() else []
+        self.cards_by_id = (
+            {c["id"]: c for c in legacy}
+            | {c["id"]: c for c in retired}
+            | {c["id"]: c for c in self.cards}
+        )
         self.pack_lines = S.pack_lines(self.cards)
         self.line_text = S.all_lines(self.cards)
         key = self.store.get_setting("audio_key")

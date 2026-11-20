@@ -32,7 +32,7 @@ def test_isp_scripts_are_closed_graphs_with_customer_care_wording():
 
 def test_hospital_cards_did_not_change_when_the_new_topic_was_added():
     hospital = [c for c in S.generate() if c["domain"] == "hospital"]
-    assert len(hospital) == 220 and hospital[0]["id"] == "v2-b000"
+    assert len(hospital) == 220 and hospital[0]["id"] == "v3-b000"
 
 
 def test_customer_care_tries_the_router_before_sending_a_technician():
@@ -221,3 +221,27 @@ def test_shop_topic_and_export_domain(pub, config):
         "isp",
         "hospital",
     )
+
+
+def test_departments_are_said_the_mixed_way_real_callers_say_them():
+    import re as _re
+
+    hints = [
+        c["hint_bn"]
+        for card in S.generate()
+        if card["domain"] == "hospital"
+        for n in card["nodes"].values()
+        for c in n["choices"]
+        if c["hint_bn"].startswith(("দেখাতে চান:", "সমস্যা ", "সিরিয়াল চান ("))
+    ]
+    assert any("Department" in h for h in hints) and any("বিভাগ" in h for h in hints)
+    assert any(_re.search(r"লজিস্ট|ডাক্তার", h) for h in hints)
+    assert len(S.ROSTER) == 23
+
+
+def test_retired_cards_stay_loadable(tmp_path):
+    bank = tmp_path / "cards2.json"
+    S.write_bank(bank, [{"id": "old-1", "nodes": {}}])
+    S.write_bank(bank, [{"id": "new-1", "nodes": {}}])
+    retired = json.loads((tmp_path / "cards2-retired.json").read_text(encoding="utf-8"))["cards"]
+    assert [c["id"] for c in retired] == ["old-1"]

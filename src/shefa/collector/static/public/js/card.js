@@ -83,7 +83,7 @@ function factsFor(card) {
   return "";
 }
 
-const NOISY = new Set(["street", "fan", "vehicle"]);
+const NOISY = new Set(["street", "fan", "vehicle", "speaker"]);
 
 export function runCards(view, { first, onFinish, onPass }) {
   let buffer = first ? [first] : [];
@@ -316,16 +316,24 @@ export function runCards(view, { first, onFinish, onPass }) {
     // Real calls come from roads and bazaars: invite a noisier place when they have been quiet.
     const quiet = who.setting && !NOISY.has(who.setting);
     const noisyLine = h("p", { class: "muted" });
-    if (quiet) {
+    // Real hospital callers are often older and from outside Dhaka: after a few calls, invite them.
+    const widen = who.n >= 10 && !handOver;
+    const widenLine = h("p", { class: "muted" });
+    if (quiet || widen || handOver) {
       api("/api/c/progress").then((r) => {
-        if (r.ok && !dead && r.data.noisy_goal_minutes) fill(noisyLine, T("noisy_progress", { m: r.data.noisy_minutes, goal: r.data.noisy_goal_minutes }));
+        if (!r.ok || dead) return;
+        if (quiet && r.data.noisy_goal_minutes) fill(noisyLine, T("noisy_progress", { m: r.data.noisy_minutes, goal: r.data.noisy_goal_minutes }));
+        if (r.data.older_goal) fill(widenLine, T("widen_progress", { o: r.data.older_speakers, og: r.data.older_goal, d: r.data.outside_dhaka_speakers, dg: r.data.outside_dhaka_goal }));
       });
     }
     fill(view, h("div", { class: "stack center" },
       h("h1", { tabindex: "-1" }, T("call_done")),
       h("p", null, T("call_done_n", { n: recorded })),
       handOver && h("section", { class: "box hint" }, h("p", { class: "hint-text" }, T("nudge_pass", { n: who.n })),
+        h("p", null, T("widen_ask")), widenLine,
         h("button", { type: "button", class: "btn primary big", onclick: () => { destroy(); onPass(); } }, T("nudge_pass_btn"))),
+      widen && onPass && h("section", { class: "box" }, h("p", null, T("widen_ask")), widenLine,
+        h("button", { type: "button", class: "btn alt", onclick: () => { destroy(); onPass(); } }, T("nudge_pass_btn"))),
       quiet && h("section", { class: "box" }, h("p", null, T("noisy_ask")), noisyLine, settingBlock()),
       !handOver && h("p", { class: "muted" }, T("card_more")),
       h("button", { type: "button", class: handOver ? "btn alt" : "btn primary big", onclick: nextCard }, T("more_call")),

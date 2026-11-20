@@ -40,19 +40,22 @@ RANKS = (("prof", "অধ্যাপক", 1200), ("assoc", "সহযোগী 
 OPENINGS = (
     f"আসসালামু আলাইকুম, {CLINIC} থেকে বলছি। বলুন, কীভাবে সাহায্য করতে পারি?",
     f"{CLINIC}, আসসালামু আলাইকুম। জি, বলুন।",
-    f"আসসালামু আলাইকুম, {CLINIC}-এর রিসেপশন। কী সাহায্য করতে পারি?",
+    f"আসসালামু আলাইকুম, {CLINIC}ের রিসেপশন। কী সাহায্য করতে পারি?",
     f"আসসালামু আলাইকুম, {CLINIC}। বলুন, আপনার জন্য কী করতে পারি?",
 )
 BYE = "ধন্যবাদ, ভালো থাকবেন। আল্লাহ হাফেজ।"
 ASK_WHO = "জি, অবশ্যই। কোন ডাক্তার বা কোন বিভাগে দেখাতে চান? সমস্যাটাও বলতে পারেন।"
 
 # (key, name, symptoms, who the patient can be, three doctors: surname and gender, by rank)
+# Departments of a big Dhaka hospital, keyed like `shefa.clinic.department_names` (which holds how
+# people SAY each one). `name` is what the front desk says ("নিউরোলজি"); the caller's hint uses a
+# mix of forms (see `said_as`). (key, desk name, problems, who the patient is, three doctors)
 DEPTS: tuple[
     tuple[str, str, tuple[str, ...], tuple[str, ...], tuple[tuple[str, str], ...]], ...
 ] = (
     (
-        "child",
-        "শিশু",
+        "pediatrics",
+        "শিশুরোগ",
         ("বাচ্চার জ্বর", "বাচ্চার কাশি", "বাচ্চার টিকা", "বাচ্চা ঠিকমতো খাচ্ছে না"),
         ("child",),
         (("সুলতানা", "f"), ("আহমেদ", "m"), ("খাতুন", "f")),
@@ -65,48 +68,180 @@ DEPTS: tuple[
         (("হোসেন", "m"), ("সিদ্দিকী", "m"), ("আক্তার", "f")),
     ),
     (
-        "heart",
-        "হৃদরোগ",
+        "cardiology",
+        "কার্ডিওলজি",
         ("বুক ধড়ফড় করে", "রক্তচাপ বেশি থাকে", "অল্প হাঁটলেই হাঁপিয়ে যান"),
         ("self", "parent", "spouse", "inlaw"),
         (("রহমান", "m"), ("মজুমদার", "m"), ("ইসলাম", "m")),
     ),
     (
-        "skin",
-        "চর্ম",
+        "dermatology",
+        "ডার্মাটোলজি",
         ("চুলকানি", "ত্বকে র‍্যাশ", "ব্রণ", "চুল পড়া"),
         ("self", "grown", "spouse", "sibling"),
         (("করিম", "m"), ("বেগম", "f"), ("সরকার", "m")),
     ),
     (
         "eye",
-        "চোখ",
+        "চক্ষু",
         ("চোখ লাল হয়ে আছে", "চোখে ঝাপসা দেখা", "চশমার পাওয়ার পরীক্ষা"),
         ("self", "parent", "grown", "sibling"),
         (("তালুকদার", "m"), ("দাস", "m"), ("পারভীন", "f")),
     ),
     (
         "ent",
-        "নাক কান গলা",
+        "ই এন টি",
         ("গলা ব্যথা", "কানে ব্যথা", "সাইনাসের সমস্যা"),
         ("self", "grown", "spouse", "sibling"),
         (("ভূঁইয়া", "m"), ("মল্লিক", "m"), ("জাহান", "f")),
     ),
     (
-        "ortho",
-        "হাড়",
+        "orthopedics",
+        "অর্থোপেডিক্স",
         ("হাঁটুতে ব্যথা", "কোমরে ব্যথা", "পড়ে গিয়ে হাতে ব্যথা"),
         ("self", "parent", "spouse", "inlaw"),
         (("চৌধুরী", "m"), ("হক", "m"), ("মিয়া", "m")),
     ),
     (
-        "gyn",
-        "স্ত্রীরোগ",
+        "gynecology",
+        "গাইনি",
         ("অনিয়মিত মাসিক", "তলপেটে ব্যথা", "গর্ভকালীন চেকআপ"),
         ("gyn",),
         (("ফেরদৌসী", "f"), ("নাহার", "f"), ("রায়", "f")),
     ),
+    (
+        "neurology",
+        "নিউরোলজি",
+        ("মাথা ব্যথা যাচ্ছে না", "হাত-পা ঝিনঝিন করে", "মাইগ্রেনের সমস্যা"),
+        ("self", "parent", "spouse", "inlaw"),
+        (("কবির", "m"), ("নাসরিন", "f"), ("আলম", "m")),
+    ),
+    (
+        "neurosurgery",
+        "নিউরোসার্জারি",
+        ("কোমরের ডিস্কের সমস্যা", "ঘাড় থেকে হাতে ব্যথা নামে", "মাথার এমআরআই রিপোর্ট দেখাতে"),
+        ("self", "parent"),
+        (("মাহমুদ", "m"), ("শিকদার", "m"), ("ইয়াসমিন", "f")),
+    ),
+    (
+        "nephrology",
+        "নেফ্রোলজি",
+        ("ক্রিয়েটিনিন বেশি এসেছে", "পা ফুলে যায়", "কিডনির রিপোর্ট দেখাতে"),
+        ("self", "parent", "spouse"),
+        (("রশিদ", "m"), ("জামান", "m"), ("শারমিন", "f")),
+    ),
+    (
+        "urology",
+        "ইউরোলজি",
+        ("প্রস্রাবে জ্বালাপোড়া", "কিডনিতে পাথর", "প্রোস্টেটের সমস্যা"),
+        ("self", "parent", "spouse"),
+        (("মোল্লা", "m"), ("সাহা", "m"), ("বাশার", "m")),
+    ),
+    (
+        "gastro",
+        "গ্যাস্ট্রোএন্টারোলজি",
+        ("পেটে গ্যাস আর অ্যাসিডিটি", "লিভারে চর্বি", "প্রায়ই পাতলা পায়খানা"),
+        ("self", "spouse", "sibling", "parent"),
+        (("খান", "m"), ("পাটোয়ারী", "m"), ("রুমানা", "f")),
+    ),
+    (
+        "cardiac_surgery",
+        "কার্ডিয়াক সার্জারি",
+        ("বাইপাস অপারেশনের পরামর্শ", "হার্টের ভাল্বের সমস্যা", "এনজিওগ্রাম রিপোর্ট দেখাতে"),
+        ("parent", "self", "inlaw"),
+        (("হাওলাদার", "m"), ("মুন্সী", "m"), ("সেলিনা", "f")),
+    ),
+    (
+        "psychiatry",
+        "সাইকিয়াট্রি",
+        ("রাতে ঘুম হয় না", "খুব দুশ্চিন্তা হয়", "অনেক দিন মন খারাপ থাকে"),
+        ("self", "grown", "sibling", "spouse"),
+        (("নন্দী", "m"), ("ফারহানা", "f"), ("আজাদ", "m")),
+    ),
+    (
+        "endocrinology",
+        "এন্ডোক্রাইনোলজি",
+        ("ডায়াবেটিস নিয়ন্ত্রণে নেই", "থাইরয়েডের সমস্যা", "ওজন হঠাৎ বেড়ে গেছে"),
+        ("self", "spouse", "parent"),
+        (("তাসনিম", "f"), ("কাদের", "m"), ("বিশ্বাস", "m")),
+    ),
+    (
+        "pulmonology",
+        "রেসপিরেটরি মেডিসিন",
+        ("অনেক দিনের কাশি", "হাঁপানি", "ধুলায় হাঁচি-কাশি"),
+        ("self", "parent", "inlaw"),
+        (("শেখ", "m"), ("গাজী", "m"), ("মৌসুমী", "f")),
+    ),
+    (
+        "oncology",
+        "অনকোলজি",
+        ("বায়োপসি রিপোর্ট দেখাতে", "কেমোথেরাপির ফলো-আপ", "গলায় একটা চাকা"),
+        ("parent", "spouse", "self"),
+        (("মুস্তাফা", "m"), ("লাইলা", "f"), ("দেওয়ান", "m")),
+    ),
+    (
+        "rheumatology",
+        "রিউমাটোলজি",
+        ("হাত-পায়ের গিঁটে ব্যথা", "সকালে জয়েন্ট শক্ত হয়ে থাকে", "বাতের ব্যথা"),
+        ("self", "parent", "inlaw"),
+        (("আফরোজা", "f"), ("ফকির", "m"), ("মিত্র", "m")),
+    ),
+    (
+        "surgery",
+        "জেনারেল সার্জারি",
+        ("পিত্তথলিতে পাথর", "হার্নিয়া", "অ্যাপেন্ডিক্সের ফলো-আপ"),
+        ("self", "spouse", "sibling"),
+        (("প্রামানিক", "m"), ("তরফদার", "m"), ("সাবরিনা", "f")),
+    ),
+    (
+        "dental",
+        "ডেন্টাল",
+        ("দাঁতে ব্যথা", "দাঁত তোলাতে", "মাড়ি থেকে রক্ত পড়ে"),
+        ("self", "grown", "spouse"),
+        (("রিয়াজ", "m"), ("নুসরাত", "f"), ("ঘোষ", "m")),
+    ),
+    (
+        "physical_medicine",
+        "ফিজিক্যাল মেডিসিন",
+        ("ঘাড়ে ব্যথা", "স্ট্রোকের পর ব্যায়াম", "কাঁধ নাড়াতে কষ্ট"),
+        ("self", "parent"),
+        (("বাকী", "m"), ("শাহনাজ", "f"), ("আকন্দ", "m")),
+    ),
+    (
+        "hematology",
+        "হেমাটোলজি",
+        ("রক্তশূন্যতা", "প্লাটিলেট কম", "থ্যালাসেমিয়ার ফলো-আপ"),
+        ("self", "grown", "child"),
+        (("মোর্শেদ", "m"), ("তানজিলা", "f"), ("জোয়ার্দার", "m")),
+    ),
 )
+
+
+_VOWEL_END = set("ািীুূৃেৈোৌঅআইঈউঊএঐওঔ")
+
+
+def _of(name: str) -> str:
+    """Bangla possessive: "চৌধুরী" -> "চৌধুরীর", "হোসেন" -> "হোসেনের" (never "চৌধুরী-এর")."""
+    return name + ("র" if name[-1:] in _VOWEL_END else "ের")
+
+
+def said_as(rng: random.Random, key: str, desk_name: str) -> str:
+    """How THIS caller names the department: the mix real callers use ("নিউরোলজি বিভাগ",
+    "Neurology Department", "স্নায়ুরোগ বিভাগ", "নিউরোলজিস্ট", "হাড়ের ডাক্তার")."""
+    from shefa.clinic.department_names import BY_KEY
+
+    entry = BY_KEY[key]
+    latin = [f for f in entry["forms"] if f.isascii() and f[:1].isupper()]
+    other = [f for f in entry["forms"] if not f.isascii() and f not in (desk_name, entry["formal"])]
+    roll = rng.random()
+    if roll < 0.35 or not (latin or other):
+        return f"{desk_name} বিভাগ"
+    if roll < 0.55 and latin:
+        return f"{rng.choice(latin)} Department"
+    if roll < 0.7:
+        return f"{entry['formal']} বিভাগ"
+    return rng.choice(other) if other else f"{desk_name} বিভাগ"
+
 
 # Who the patient is: always a PAIR, so a man and a woman contributor both find one that fits.
 # (label, how the card addresses it, gender, name pool, age range)
@@ -332,7 +467,7 @@ def _pick_choices(dept: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _confirm(doc: dict[str, Any], day: str, clock: str) -> str:
-    return f"নিশ্চিত করছি: {doc['title']}-এর সাথে {day} {spoken_time(clock, 'bn', at=True)} সিরিয়াল। বুক করব?"
+    return f"নিশ্চিত করছি: {_of(doc['title'])} সাথে {day} {spoken_time(clock, 'bn', at=True)} সিরিয়াল। বুক করব?"
 
 
 def _shown(clock: str) -> str:
@@ -417,7 +552,7 @@ def _chain(
             nodes,
             p + "time",
             "time",
-            f"{day} {doc['short']}-এর খালি সময় আছে {offer}। কোনটা নেবেন?",
+            f"{day} {_of(doc['short'])} খালি সময় আছে {offer}। কোনটা নেবেন?",
             [_choice("x", "বলুন, আরও একটু পরে হলে ভালো হয়।", p + "time2", wants_later=True)],
         )
         offer2 = spoken_list([spoken_time(t, "bn", at=True) for t in later], "bn")
@@ -434,7 +569,7 @@ def _chain(
             nodes,
             p + "time",
             "time",
-            f"{day} {doc['short']}-এর খালি সময় আছে {offer}। কোনটা নেবেন?",
+            f"{day} {_of(doc['short'])} খালি সময় আছে {offer}। কোনটা নেবেন?",
             [_choice("x", _time_hint(rng, clocks, pick), p + "name", options=clocks, pick=pick)],
         )
     chosen = clocks[pick]
@@ -500,7 +635,7 @@ def _chain(
             nodes,
             p + "confirm2",
             "confirm",
-            f"দুঃখিত, ভুল হয়েছে। {doc['short']}-এর সাথে {day} {spoken_time(chosen, 'bn', at=True)}। এবার ঠিক আছে?",
+            f"দুঃখিত, ভুল হয়েছে। {_of(doc['short'])} সাথে {day} {spoken_time(chosen, 'bn', at=True)}। এবার ঠিক আছে?",
             [_choice("x", "এবার ঠিক আছে, রাজি হন।", p + "else", agree=True)],
         )
     else:
@@ -515,7 +650,7 @@ def _chain(
     answers = {
         "addr": f"আমরা আছি {ADDRESS}।",
         "arrive": "আপনার সময়ের পনেরো মিনিট আগে এসে কাউন্টারে রোগীর নাম বললেই হবে।",
-        "fee": f"{doc['title']}-এর ফি {bn_number(doc['fee'])} টাকা।",
+        "fee": f"{_of(doc['title'])} ফি {bn_number(doc['fee'])} টাকা।",
     }
     no = _choice(
         "no", "আর কিছু লাগবে না। ধন্যবাদ দিয়ে ফোন রাখুন।", p + "bye", label="না, ধন্যবাদ", closing=True
@@ -621,11 +756,11 @@ _HINT_VARIANTS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = tuple(
         ),
         (r"^জিজ্ঞেস করুন ডাক্তারের ফি কত।$", ("জিজ্ঞেস করুন ডাক্তারের ফি কত।", "ফি কত সেটা জেনে নিন।")),
         (
-            r"^(.+) বিভাগের ডাক্তার দেখাতে চান। সমস্যা: (.+)।$",
+            r"^দেখাতে চান: (.+)। সমস্যা: (.+)।$",
             (
-                "{0} বিভাগের ডাক্তার দেখাতে চান। সমস্যা: {1}।",
-                "সমস্যা {1}, {0} বিভাগে দেখাতে চান।",
-                "{0} বিভাগে সিরিয়াল চান, কারণ {1}।",
+                "দেখাতে চান: {0}। সমস্যা: {1}।",
+                "সমস্যা {1}; দেখাবেন: {0}।",
+                "সিরিয়াল চান ({0}), কারণ {1}।",
             ),
         ),
         (
@@ -700,7 +835,7 @@ def booking_script(rng: random.Random, index: int) -> dict[str, Any]:
             [
                 _choice(
                     "x",
-                    f"{dept['name']} বিভাগের ডাক্তার দেখাতে চান। সমস্যা: {symptom}।",
+                    f"দেখাতে চান: {said_as(rng, dept['key'], dept['name'])}। সমস্যা: {symptom}।",
                     "list",
                     department=dept["name"],
                     symptom=symptom,
@@ -736,7 +871,7 @@ def booking_script(rng: random.Random, index: int) -> dict[str, Any]:
             [
                 _choice(
                     "x",
-                    f"{dept['name']} বিভাগে দেখাতে চান। সমস্যা: {symptom}।",
+                    f"দেখাতে চান: {said_as(rng, dept['key'], dept['name'])}। সমস্যা: {symptom}।",
                     "list",
                     department=dept["name"],
                     symptom=symptom,
@@ -762,7 +897,7 @@ def booking_script(rng: random.Random, index: int) -> dict[str, Any]:
             [
                 _choice(
                     "x",
-                    f"{doc['short']}-এর সিরিয়াল চান ({dept['name']} বিভাগ)। সমস্যা: {symptom}।",
+                    f"{_of(doc['short'])} সিরিয়াল চান ({said_as(rng, dept['key'], dept['name'])})। সমস্যা: {symptom}।",
                     f"d{named}.day",
                     doctor=doc["surname"],
                     symptom=symptom,
@@ -812,7 +947,7 @@ def booking_script(rng: random.Random, index: int) -> dict[str, Any]:
         )
     return _finish(
         {
-            "id": f"v2-b{index:03d}",
+            "id": f"v3-b{index:03d}",
             "kind": "booking",
             "start": "open",
             "nodes": nodes,
@@ -871,7 +1006,7 @@ def info_script(rng: random.Random, index: int) -> dict[str, Any]:
             nodes,
             "b",
             "extra",
-            f"{doc['title']}-এর ফি {bn_number(doc['fee'])} টাকা। আর কিছু?",
+            f"{_of(doc['title'])} ফি {bn_number(doc['fee'])} টাকা। আর কিছু?",
             no_thanks,
         )
     elif kind == "fee":
@@ -880,7 +1015,14 @@ def info_script(rng: random.Random, index: int) -> dict[str, Any]:
             "open",
             "open",
             opening,
-            [_choice("x", f"জানতে চান, {dept['name']} বিভাগের ডাক্তার দেখাতে ফি কত।", "a", asks="fee")],
+            [
+                _choice(
+                    "x",
+                    f"জানতে চান ফি কত: {said_as(rng, dept['key'], dept['name'])}।",
+                    "a",
+                    asks="fee",
+                )
+            ],
             cap=20,
         )
         _node(
@@ -930,7 +1072,7 @@ def info_script(rng: random.Random, index: int) -> dict[str, Any]:
                 nodes,
                 "b",
                 "confirm",
-                f"{doc['short']}-এর কাছে {day} একটা সিরিয়াল পাচ্ছি। বাতিল করে দেব?",
+                f"{_of(doc['short'])} কাছে {day} একটা সিরিয়াল পাচ্ছি। বাতিল করে দেব?",
                 [_choice("x", "রাজি হন।", "c", agree=True)],
             )
             _node(nodes, "c", "extra", "বাতিল করে দিলাম। আর কিছু জানতে চান?", no_thanks)
@@ -940,7 +1082,7 @@ def info_script(rng: random.Random, index: int) -> dict[str, Any]:
                 nodes,
                 "b",
                 "day",
-                f"{doc['short']}-এর কাছে {day} একটা সিরিয়াল পাচ্ছি। কোন দিনে নিতে চান?",
+                f"{_of(doc['short'])} কাছে {day} একটা সিরিয়াল পাচ্ছি। কোন দিনে নিতে চান?",
                 [_choice("x", f"চান: {new_day}।", "c", day_asked=new_day)],
             )
             _node(
@@ -1035,7 +1177,7 @@ def info_script(rng: random.Random, index: int) -> dict[str, Any]:
         _node(nodes, "bye", "bye", BYE, [])
     return _finish(
         {
-            "id": f"v2-i{index:03d}",
+            "id": f"v3-i{index:03d}",
             "kind": "info",
             "start": "open",
             "nodes": nodes,
@@ -1075,7 +1217,7 @@ def digits_script(rng: random.Random, index: int) -> dict[str, Any]:
     )
     return _finish(
         {
-            "id": f"v2-d{index:03d}",
+            "id": f"v3-d{index:03d}",
             "kind": "digits",
             "start": "phone",
             "nodes": nodes,
@@ -1150,6 +1292,23 @@ def write_bank(path: Path, cards: list[dict[str, Any]], audio: set[str] | None =
         for node in card["nodes"].values():
             node["audio"] = (
                 f"q2/{node['audio_name']}.m4a" if audio and node["audio_name"] in audio else ""
+            )
+    if path.exists():  # cards that leave the bank stay loadable for the clips recorded on them
+        new_ids = {c["id"] for c in cards}
+        gone = [
+            c
+            for c in json.loads(path.read_text(encoding="utf-8"))["cards"]
+            if c["id"] not in new_ids
+        ]
+        if gone:
+            retired = path.with_name("cards2-retired.json")
+            kept = (
+                json.loads(retired.read_text(encoding="utf-8"))["cards"] if retired.exists() else []
+            )
+            have = {c["id"] for c in kept}
+            kept += [c for c in gone if c["id"] not in have]
+            retired.write_text(
+                json.dumps({"v": 2, "cards": kept}, ensure_ascii=False), encoding="utf-8"
             )
     path.write_text(json.dumps({"v": 2, "cards": cards}, ensure_ascii=False), encoding="utf-8")
 

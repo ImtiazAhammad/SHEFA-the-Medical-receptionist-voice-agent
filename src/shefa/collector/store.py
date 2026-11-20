@@ -1094,9 +1094,21 @@ class CollectorStore:
         goal = int(self.get_setting("goal_minutes", str(self.config.group_goal_minutes)))
         noisy = self._one(
             "SELECT COALESCE(SUM(duration_s),0) secs FROM clips WHERE deleted_at IS NULL "
-            "AND status NOT IN ('rejected','removed') AND setting IN ('street','fan','vehicle')"
+            "AND status NOT IN ('rejected','removed') AND setting IN ('street','fan','vehicle','speaker')"
         )["secs"]
+        def speakers(where: str) -> int:
+            return self._one(
+                "SELECT COUNT(DISTINCT s.id) n FROM speakers s JOIN clips c ON c.speaker_id=s.id "
+                f"WHERE s.deleted_at IS NULL AND c.deleted_at IS NULL AND {where}"
+            )["n"]
+
         return {
+            "older_speakers": speakers("s.age_band IN ('50-64','65+')"),
+            "older_goal": self.config.older_goal_speakers,
+            "outside_dhaka_speakers": speakers(
+                "s.division NOT IN ('', 'dhaka', 'skip', 'abroad') AND s.division IS NOT NULL"
+            ),
+            "outside_dhaka_goal": self.config.outside_dhaka_goal_speakers,
             "noisy_minutes": round(noisy / 60, 1),
             "noisy_goal_minutes": self.config.noisy_goal_minutes,
             "clips": row["clips"],

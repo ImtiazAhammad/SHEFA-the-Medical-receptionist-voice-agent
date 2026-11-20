@@ -94,8 +94,10 @@ class CollectorConfig(BaseModel):
         0.5  # share of calls that use a recorded human desk voice, when one exists
     )
     nudge_after_clips: int = 40  # suggest passing the phone on after this many clips by one person
-    free_talk_share: float = 0.25  # share of calls with no hint per turn (people talk freely)
+    free_talk_share: float = 0.5  # share of calls with no hint per turn (people talk freely)
     noisy_goal_minutes: int = 120  # group goal for recordings made with background noise
+    older_goal_speakers: int = 25  # group goal: people aged 50+ (real hospital callers skew older)
+    outside_dhaka_goal_speakers: int = 25  # group goal: people living outside Dhaka division
     auto_draft: bool = True  # `serve` drafts every new clip in the background
     draft_device: str = ""  # "" = the speech model's own setting (GPU, CPU fallback); or "cpu"
     session_hours: int = 12  # a staff sign-in lasts this long

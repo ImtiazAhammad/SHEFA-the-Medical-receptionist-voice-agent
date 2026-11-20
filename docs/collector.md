@@ -115,6 +115,17 @@ line with the local voice (about 760 small files).
   number heard, marks the draft as unsure (confidence 0.4) so it comes first. On 68 reviewed numbers:
   29 -> 41 exact; 25 of the 27 still wrong are marked unsure. Swapping in the number the person was
   shown was tried and made it worse (people say other numbers), so it is not done.
+* **Departments said the real way (since 2026-11-20).** The clinic now has 23 departments (big Dhaka
+  hospital list), 69 made-up doctors. The desk says the common form ("নিউরোলজি বিভাগে"); the caller's
+  hint mixes forms: "নিউরোলজি বিভাগ", "Neurology Department", "স্নায়ুরোগ বিভাগ", "নিউরোলজিস্ট",
+  "হাড়ের ডাক্তার". One table, `src/shefa/clinic/department_names.py`, serves the agent and the
+  collection. Hospital card ids are now `v3-*`; cards that leave the bank are kept in
+  `prompts/cards2-retired.json`, so clips recorded on them still resolve.
+* **Wider voices (since 2026-11-20).** Free talk on half the calls; a "loudspeaker" place that
+  counts toward the noisy goal; group goals for people aged 50+ and from outside Dhaka (25 each),
+  shown after 10 clips and in the hand-over nudge.
+* **Consent version 3** is one short general sentence that includes sharing/licensing; version 2
+  people are not asked again.
 * **Consent version 2** says recordings teach this project's Bangla voice assistants (SHEFA and
   customer care for internet or other services). People who agreed to version 1 see a short
   "সম্মতির কথা একটু বদলেছে" note and tick again; they stay the same person (same speaker id). Until
