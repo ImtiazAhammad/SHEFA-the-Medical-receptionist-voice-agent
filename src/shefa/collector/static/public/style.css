@@ -153,3 +153,12 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .goals { margin: 0; padding-left: 20px; }
 .goals li { margin: 4px 0; }
 @media (prefers-reduced-motion: reduce) { .turncue.turn { animation: none; } }
+
+/* live call with SHEFA */
+.live-log { display: flex; flex-direction: column; gap: 10px; max-height: 46vh; overflow-y: auto; }
+.live-turn { border-radius: 18px; padding: 10px 14px; border: 2px solid var(--line); background: var(--card); max-width: 92%; }
+.live-turn.shefa { align-self: flex-start; border-radius: 18px 18px 18px 4px; }
+.live-turn.you { align-self: flex-end; border-radius: 18px 18px 4px 18px; background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
+.live-turn .bubble-text { font-size: 1.05rem; }
+.live-turn .small { font-size: 0.8rem; margin: 2px 0 0; }
+.cue { font-weight: 700; margin: 0; }

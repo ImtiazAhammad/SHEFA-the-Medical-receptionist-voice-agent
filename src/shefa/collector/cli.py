@@ -8,6 +8,7 @@ import asyncio
 import sys
 import threading
 from pathlib import Path
+from typing import Any
 
 from shefa.collector import scripts as S
 from shefa.collector.config import CollectorConfig, load_config
@@ -222,11 +223,20 @@ def _serve(config: CollectorConfig, args: argparse.Namespace) -> int:
         )
     )
     threading.Thread(target=private.run, daemon=True).start()
+    from shefa.collector.live import SharedSpeech
+
+    speech = SharedSpeech(config.draft_device or None)  # one Whisper for drafts and live turns
+    if config.live_enabled:
+        live = _start_live(config, ctx, speech)
+        if live:
+            ctx.live = live
     drafter = None
     if config.auto_draft:
         from shefa.collector.tools import AutoDrafter
 
-        drafter = AutoDrafter(ctx.store, config.draft_device or None).start()
+        drafter = AutoDrafter(
+            ctx.store, config.draft_device or None, loader=speech.drafter_loader
+        ).start()
         ctx.drafter = drafter
         print(
             "Drafting: every clip gets a machine transcript in the background for reviewers to check."
@@ -304,3 +314,30 @@ def _doctor(config: CollectorConfig) -> int:
     print(f"spoken questions: {spoken}")
     print("audio decoder: PyAV ok")
     return 0 if ok else 1
+
+
+def _start_live(config: Any, ctx: Any, speech: Any) -> Any:
+    """Live calls with the real agent: sandbox clinic, the product's pipeline, voice and LLM."""
+    try:
+        from shefa.collector import live as L
+
+        sandbox = L.prepare_product(config.data_dir)  # BEFORE any product store is opened
+        from shefa.config.settings import settings
+
+        engine = L.LiveEngine(
+            ctx.store,
+            config,
+            hear=speech.live,
+            agent=L.product_agent(),
+            voice=L.product_voice(),
+            ready=L.llm_ready_check(),
+            greeting=settings.languages.default_greeting.get("bn", ""),
+        )
+    except Exception as error:  # noqa: BLE001 - the rest of the site works without it
+        print(f"Live calls OFF: {type(error).__name__}: {error}", file=sys.stderr)
+        return None
+    # Load the speech model now, not on the first volunteer's first sentence (~10 s).
+    threading.Thread(target=speech.drafter_loader, name="live-ear", daemon=True).start()
+    state = "ready" if engine.ready() else "waiting for the language model (vLLM on :8001)"
+    print(f"Live calls with SHEFA: on ({state}); the agent books only in {sandbox}")
+    return engine

@@ -108,6 +108,10 @@ CREATE TABLE IF NOT EXISTS tombstones (
 CREATE TABLE IF NOT EXISTS rooms (
   code TEXT PRIMARY KEY, card_id TEXT NOT NULL, caller_cid TEXT NOT NULL, desk_cid TEXT NOT NULL DEFAULT '',
   state TEXT NOT NULL DEFAULT 'open', created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS live_calls (
+  id TEXT PRIMARY KEY, contributor_id TEXT NOT NULL, speaker_id TEXT NOT NULL, situation TEXT NOT NULL DEFAULT '{}',
+  started_at REAL NOT NULL, ended_at REAL, end_reason TEXT NOT NULL DEFAULT '', turns INTEGER NOT NULL DEFAULT 0,
+  errors INTEGER NOT NULL DEFAULT 0, verdict TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY, at REAL NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '');
 """
@@ -709,11 +713,77 @@ class CollectorStore:
             (text, confidence, time.time(), clip_id),
         )
 
+    def merge_clip_facts(self, clip_id: str, extra: dict[str, Any]) -> None:
+        row = self._one("SELECT facts FROM clips WHERE id=?", (clip_id,))
+        if row is None:
+            return
+        facts = json.loads(row["facts"] or "{}") | extra
+        self._x(
+            "UPDATE clips SET facts=? WHERE id=?", (json.dumps(facts, ensure_ascii=False), clip_id)
+        )
+
+    # -- live calls with the real agent (collector/live.py) ----------------------------------
+    def live_start(self, call_id: str, cid: str, speaker: str, situation: dict[str, Any]) -> None:
+        self._x(
+            "INSERT INTO live_calls(id,contributor_id,speaker_id,situation,started_at) VALUES (?,?,?,?,?)",
+            (call_id, cid, speaker, json.dumps(situation, ensure_ascii=False), time.time()),
+        )
+
+    def live_progress(self, call_id: str, turns: int, errors: int) -> None:
+        self._x("UPDATE live_calls SET turns=?, errors=? WHERE id=?", (turns, errors, call_id))
+
+    def live_end(self, call_id: str, reason: str, turns: int, errors: int) -> None:
+        self._x(
+            "UPDATE live_calls SET ended_at=?, end_reason=?, turns=?, errors=? WHERE id=? AND ended_at IS NULL",
+            (time.time(), reason, turns, errors, call_id),
+        )
+
+    def live_feedback(self, call_id: str, verdict: str, note: str) -> None:
+        self._x("UPDATE live_calls SET verdict=?, note=? WHERE id=?", (verdict, note, call_id))
+
+    def live_calls(self, limit: int = 100, problems_only: bool = False) -> list[dict[str, Any]]:
+        """Recent live calls with their turns (what was said, heard and answered), newest first."""
+        where = (
+            "WHERE verdict NOT IN ('', 'ok') OR errors>0 OR end_reason IN ('agent_error','not_heard')"
+            if problems_only
+            else ""
+        )
+        calls = [
+            dict(r)
+            for r in self._q(
+                f"SELECT * FROM live_calls {where} ORDER BY started_at DESC LIMIT ?", (limit,)
+            )
+        ]
+        for call in calls:
+            call["situation"] = json.loads(call["situation"] or "{}")
+            turns = []
+            for r in self._q(
+                "SELECT id, duration_s, final_text, facts FROM clips WHERE slot='live' AND deleted_at IS NULL "
+                "AND json_extract(facts,'$.live_call')=? ORDER BY json_extract(facts,'$.live_turn')",
+                (call["id"],),
+            ):
+                f = json.loads(r["facts"] or "{}")
+                turns.append(
+                    {
+                        "clip_id": r["id"],
+                        "said": r["final_text"] or "",
+                        "heard": f.get("heard", ""),
+                        "reply": f.get("reply", ""),
+                        "language": f.get("reply_language", ""),
+                        "state": f.get("state", ""),
+                        "ms": {k: f[k] for k in ("stt_ms", "agent_ms", "voice_ms") if k in f},
+                        "error": f.get("error", ""),
+                    }
+                )
+            call["turns_detail"] = turns
+        return calls
+
     def undrafted(self, limit: int = 200) -> list[dict[str, Any]]:
         rows = self._q(
             "SELECT id,path,slot,expected_text FROM clips WHERE draft_text IS NULL AND deleted_at IS NULL "
-            "AND status!='rejected' ORDER BY created_at LIMIT ?",
-            (limit,),
+            # a live turn drafts its own clip within seconds; only pick it up if that never came
+            "AND status!='rejected' AND NOT (slot='live' AND created_at > ?) ORDER BY created_at LIMIT ?",
+            (time.time() - 120, limit),
         )
         return [dict(r) for r in rows]
 
@@ -1096,6 +1166,7 @@ class CollectorStore:
             "SELECT COALESCE(SUM(duration_s),0) secs FROM clips WHERE deleted_at IS NULL "
             "AND status NOT IN ('rejected','removed') AND setting IN ('street','fan','vehicle','speaker')"
         )["secs"]
+
         def speakers(where: str) -> int:
             return self._one(
                 "SELECT COUNT(DISTINCT s.id) n FROM speakers s JOIN clips c ON c.speaker_id=s.id "

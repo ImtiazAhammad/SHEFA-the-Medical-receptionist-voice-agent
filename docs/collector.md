@@ -115,6 +115,20 @@ line with the local voice (about 760 small files).
   number heard, marks the draft as unsure (confidence 0.4) so it comes first. On 68 reviewed numbers:
   29 -> 41 exact; 25 of the 27 still wrong are marked unsure. Swapping in the number the person was
   shown was tried and made it worse (people say other numbers), so it is not done.
+* **Live calls with the real agent (since 2026-11-20).** "SHEFA-র সাথে কথা বলুন" lets a volunteer
+  talk to the product's own booking agent (`collector/live.py`): each push-to-talk turn is an
+  ordinary clip (slot `live`, no expected answer), transcribed with the shared Bangla Whisper,
+  answered by `VoicePipeline.handle_text` with the LLM on **vLLM** (`localhost:8001`, start it with
+  `uv run python -c "from shefa.cli import _ensure_vllm; _ensure_vllm()"`; it runs on its own and
+  survives collector restarts), spoken with the product voice. The agent books only in a sandbox
+  (`data/collector/live/agent-sandbox.db`, the collection's own made-up clinic, wiped at start);
+  `data/shefa.db` is never opened. Edge cases handled: nothing heard or a low-confidence guess
+  (below 0.6: Whisper invents sentences from noise) -> "আবার বলবেন?", three times -> end; agent
+  slow or down -> polite end; agent ends the call (booked, emergency, hand-over) -> end; 2 calls at
+  a time, one per phone, idle 3 min -> ended; 16 turns / 7 minutes max; retried turns get the same
+  answer; turns never overlap; voice failure -> text only; offline -> never queued. Staff page tab
+  "SHEFA কল" lists calls turn by turn (said / heard / answered / timings) with the volunteer's
+  verdict. If vLLM is not running the button says SHEFA is off and scripted calls still work.
 * **Departments said the real way (since 2026-11-20).** The clinic now has 23 departments (big Dhaka
   hospital list), 69 made-up doctors. The desk says the common form ("নিউরোলজি বিভাগে"); the caller's
   hint mixes forms: "নিউরোলজি বিভাগ", "Neurology Department", "স্নায়ুরোগ বিভাগ", "নিউরোলজিস্ট",

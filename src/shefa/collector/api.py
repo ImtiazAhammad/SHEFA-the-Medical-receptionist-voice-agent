@@ -9,6 +9,7 @@ for a review session, never the admin ones.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import os
@@ -198,6 +199,7 @@ class Ctx:
         self.limiter = RateLimiter()
         self.private_limiter = RateLimiter()  # a flood on the public address must not block staff
         self.drafter: Any = None  # set by `serve` when background drafting is on
+        self.live: Any = None  # a LiveEngine, set by `serve` when live calls with the agent are on
         # Version 2 scripts are what people get now. The first version's cards stay known by id,
         # so a clip that waited on a phone, or an old two-person room, still finds its card.
         self.cards = S.load_bank(config.prompts_dir / "cards2.json")
@@ -313,6 +315,15 @@ class StartBody(BaseModel):
     from_name: str = Field(default="", max_length=40)
     device: str = Field(default="", max_length=120)
     turnstile: str = Field(default="", max_length=2000)
+
+
+class LiveTurnBody(BaseModel):
+    clip_id: str = Field(max_length=64)
+
+
+class LiveFeedbackBody(BaseModel):
+    verdict: str = Field(default="", max_length=20)
+    note: str = Field(default="", max_length=400)
 
 
 class ConsentBody(BaseModel):
@@ -547,6 +558,22 @@ def public_router(ctx: Ctx) -> APIRouter:
             "role": role,
             "turn": request.headers.get("x-turn", "0")[:3],
         }
+        live_call = request.headers.get("x-live", "")[:40]
+        if live_call:
+            # A turn of a live call with the agent: free speech, no script, no expected answer.
+            if not ctx.live or not ctx.live.owns(live_call, cid):
+                return err("no_live", "this live call has ended, start a new one", 410)
+            meta |= {
+                "card_id": "live",
+                "step_id": f"live#{ctx.live.calls[live_call].turns + 1}",
+                "slot": "live",
+                "kind": "live",
+                "question_bn": "",
+                "expected_text": None,
+                "facts": {"live_call": live_call},
+                "room": "",
+                "role": "caller",
+            }
         if role == "desk":
             # The front desk was guided to say this node's line in their own words: the clip is
             # front-desk speech (kept out of the caller training set by default), not a caller answer.
@@ -612,6 +639,73 @@ def public_router(ctx: Ctx) -> APIRouter:
         except StoreError as e:
             return err(e.code, e.message, e.status)
         return {"ok": True, "deleted": count}
+
+    # ---- live calls with the real booking agent (collector/live.py) ------------------------
+    def live_error(e: Any) -> JSONResponse:
+        return err(e.code, e.message, e.status)
+
+    @r.get("/api/c/live")
+    async def live_status():
+        if not ctx.live:
+            return {"enabled": False, "ready": False, "busy": False}
+        status = ctx.live.status()
+        if status["ready"] and not ctx.live.warmed:
+            # The first page view warms the model up, so the first caller does not wait ~20 s.
+            ctx.live.warmed = True
+            asyncio.get_running_loop().create_task(ctx.live.warm())
+        return status
+
+    @r.post("/api/c/live/start")
+    async def live_start(request: Request):
+        from shefa.collector.live import LiveError
+
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        if not ctx.live:
+            return err("live_off", "এই সুবিধা এখন বন্ধ আছে।", 404)
+        if reason := ctx.maintenance():
+            return err("paused", "the collection is paused right now", 503, reason=reason)
+        if not ctx.limiter.allow(f"live:{got[0]}", cfg.live_calls_per_hour, 3600):
+            return err("slow_down", "অনেকবার শুরু করা হয়েছে, একটু পরে চেষ্টা করুন।", 429)
+        try:
+            return await ctx.live.start(got[0], got[1]["id"])
+        except LiveError as e:
+            return live_error(e)
+
+    @r.post("/api/c/live/{call_id}/turn")
+    async def live_turn(call_id: str, body: LiveTurnBody, request: Request):
+        from shefa.collector.live import LiveError
+
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        if not ctx.live:
+            return err("live_off", "এই সুবিধা এখন বন্ধ আছে।", 404)
+        if not CLIP_ID.match(body.clip_id):
+            return err("bad_id", "bad clip id")
+        try:
+            return await ctx.live.turn(call_id, got[0], body.clip_id)
+        except LiveError as e:
+            return live_error(e)
+
+    @r.post("/api/c/live/{call_id}/end")
+    async def live_end(call_id: str, body: LiveFeedbackBody, request: Request):
+        from shefa.collector.live import LiveError
+
+        got = who(request)
+        if isinstance(got, JSONResponse):
+            return got
+        if not ctx.live:
+            return {"ok": True}
+        try:
+            if body.verdict:
+                ctx.live.feedback(call_id, got[0], body.verdict, body.note)
+            else:
+                ctx.live.end(call_id, got[0])
+        except LiveError as e:
+            return live_error(e)
+        return {"ok": True}
 
     @r.get("/api/c/progress")
     async def progress() -> dict[str, Any]:
@@ -998,6 +1092,19 @@ def admin_router(ctx: Ctx) -> APIRouter:
 
     def gate(request: Request):
         return _staff(ctx, request, {"admin"})
+
+    @r.get("/api/admin/live")
+    async def live_calls(request: Request, problems: int = 0, limit: int = 50):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        status = (
+            ctx.live.status() if ctx.live else {"enabled": False, "ready": False, "busy": False}
+        )
+        return {
+            "status": status,
+            "calls": store.live_calls(max(1, min(limit, 200)), problems_only=bool(problems)),
+        }
 
     @r.get("/api/admin/stats")
     async def stats(request: Request):

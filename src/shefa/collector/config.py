@@ -96,6 +96,22 @@ class CollectorConfig(BaseModel):
     nudge_after_clips: int = 40  # suggest passing the phone on after this many clips by one person
     free_talk_share: float = 0.5  # share of calls with no hint per turn (people talk freely)
     noisy_goal_minutes: int = 120  # group goal for recordings made with background noise
+    # Live calls with the real booking agent (collector/live.py). The language model is the
+    # product's (vLLM on this computer); the agent books only in a sandbox copy of the clinic.
+    live_enabled: bool = True
+    live_max_calls: int = 2  # at once; one GPU serves speech recognition, the LLM and drafts
+    live_max_turns: int = 16
+    live_max_seconds: int = 420
+    live_idle_s: int = 180  # a call nobody touched for this long is ended (closed tab, no signal)
+    live_max_misses: int = 3
+    # Below this the speech model is guessing: on a tone or noise it invents whole Bangla
+    # sentences (seen at 0.44-0.55), so SHEFA asks again instead of acting on a guess. On 815
+    # real clips 2.8% fall below 0.6.
+    live_min_confidence: float = 0.6  # "আবার বলবেন?" this many times in a row ends the call
+    live_stt_timeout_s: float = 20.0
+    live_agent_timeout_s: float = 25.0
+    live_voice_timeout_s: float = 15.0
+    live_calls_per_hour: int = 12  # per phone
     older_goal_speakers: int = 25  # group goal: people aged 50+ (real hospital callers skew older)
     outside_dhaka_goal_speakers: int = 25  # group goal: people living outside Dhaka division
     auto_draft: bool = True  # `serve` drafts every new clip in the background

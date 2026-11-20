@@ -29,6 +29,7 @@
     <button type="button" role="tab" id="tab-campaigns" aria-controls="panel-campaigns" aria-selected="false" tabindex="-1" data-tab="campaigns" data-i18n="tab_campaigns">ক্যাম্পেইন</button>
     <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1" data-tab="team" data-i18n="tab_team">স্টাফ</button>
     <button type="button" role="tab" id="tab-voices" aria-controls="panel-voices" aria-selected="false" tabindex="-1" data-tab="voices" data-i18n="tab_voices">কণ্ঠ</button>
+    <button type="button" role="tab" id="tab-live" aria-controls="panel-live" aria-selected="false" tabindex="-1" data-tab="live" data-i18n="tab_live">SHEFA কল</button>
     <button type="button" role="tab" id="tab-clips" aria-controls="panel-clips" aria-selected="false" tabindex="-1" data-tab="clips" data-i18n="tab_clips">ক্লিপ</button>
     <button type="button" role="tab" id="tab-audit" aria-controls="panel-audit" aria-selected="false" tabindex="-1" data-tab="audit" data-i18n="tab_audit">লগ ও সাহায্য</button>
   </div>
@@ -150,6 +151,18 @@
         <p class="hint" data-i18n="team_hint">সিড মিলের ত্রুটি (seed CER) যত কম তত ভালো। ০.২৫-এর বেশি হলে সাবধান।</p>
         <div class="table-wrap"><table class="data-table stackable" id="team-table"></table></div>
       </div>
+    </section>
+
+    <!-- ===== SHEFA calls: live calls with the real booking agent ===== -->
+    <section id="panel-live" role="tabpanel" aria-labelledby="tab-live" class="stack" hidden>
+      <div class="card stack">
+        <h2 data-i18n="lv_admin_title">SHEFA-র সাথে লাইভ কল</h2>
+        <p data-i18n="lv_admin_intro">স্বেচ্ছাসেবকরা আসল বুকিং এজেন্টের সাথে কথা বলেছেন। প্রতিটা কলে দেখুন কী বলা হয়েছে, SHEFA কী শুনেছে, কী উত্তর দিয়েছে আর কত সময় লেগেছে। বুকিং শুধু পরীক্ষার ডেটাবেসে হয়।</p>
+        <p id="live-status" class="hint"></p>
+        <label class="tick"><input type="checkbox" id="live-problems" checked> <span data-i18n="lv_problems_only">শুধু যেগুলোতে সমস্যা হয়েছে</span></label>
+        <button type="button" class="btn" id="live-refresh" data-i18n="lv_refresh">আবার দেখি</button>
+      </div>
+      <div id="live-calls" class="stack"></div>
     </section>
 
     <!-- ===== Voices: staff voice packs played to contributors ===== -->

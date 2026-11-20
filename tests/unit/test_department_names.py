@@ -22,6 +22,7 @@ from shefa.clinic import department_names as D
         ("হাড়ের ডাক্তার কবে বসেন", "orthopedics"),
         ("ই এন টি তে দেখাব", "ent"),
         ("চোখের ডাক্তার", "eye"),
+        ("নেরোলজি ডিপার্টমেন্ট", "neurology"),  # how the speech model wrote an accented "Neurology"
     ],
 )
 def test_spoken_department_forms(said, key):

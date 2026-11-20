@@ -8,8 +8,9 @@ import { initOverview, renderCoverage, renderOverview } from "./admin-overview.j
 import { initPeople, loadCampaigns, loadStaff, renderCampaigns, renderTeam, setMe } from "./admin-people.js";
 import { initVoices, loadVoices, renderVoices, voicesLoaded } from "./admin-voices.js";
 import { clipsLoaded, initClipsTab, loadAudit, loadClips, renderAudit, renderClips } from "./admin-clips.js";
+import { initLive, liveLoaded, loadLive, renderLive } from "./admin-live.js";
 
-const TABS = ["overview", "coverage", "campaigns", "team", "voices", "clips", "audit"];
+const TABS = ["overview", "coverage", "campaigns", "team", "voices", "live", "clips", "audit"];
 let stats = null;
 let current = "overview";
 const opened = new Set();
@@ -32,6 +33,7 @@ function showTab(name, { focus = false } = {}) {
     if (name === "clips") loadClips();
     if (name === "audit") loadAudit();
     if (name === "voices") loadVoices();
+    if (name === "live") loadLive();
   }
 }
 
@@ -43,6 +45,7 @@ function renderAll() {
   if (opened.has("campaigns")) renderCampaigns();
   if (clipsLoaded()) renderClips();
   if (voicesLoaded()) renderVoices(stats);
+  if (liveLoaded()) renderLive();
   renderAudit();
 }
 
@@ -95,6 +98,7 @@ async function start() {
   initPeople(reload);
   initClipsTab();
   initVoices(() => stats);
+  initLive();
   $("#refresh").addEventListener("click", () => { reload(); if (opened.has("clips")) loadClips(); if (opened.has("audit")) loadAudit(); if (opened.has("campaigns")) loadCampaigns(); if (opened.has("voices")) loadVoices(); });
   $("#error-retry").addEventListener("click", reload);
   $("#signout").addEventListener("click", () => signOut());

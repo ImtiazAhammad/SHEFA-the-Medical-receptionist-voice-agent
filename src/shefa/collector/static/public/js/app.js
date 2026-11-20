@@ -9,6 +9,7 @@ import * as Q from "./queue.js";
 import { createCapture } from "./capture.js";
 import { runCards } from "./card.js";
 import { runRoom } from "./room.js";
+import { runLive, liveStatus } from "./live.js";
 import { releaseMic, micErrorKey } from "./recorder.js";
 import { copyText, makeCard, pageLink, sharePicture, waLink } from "./share.js";
 import { toast } from "./ui.js";
@@ -110,6 +111,7 @@ function landing() {
       warn, tsBox,
       h("button", { type: "button", class: "btn primary big", onclick: () => go2(ROOM_CODE ? "room" : "cards") }, T("start")),
       ROOM_CODE ? null : h("button", { type: "button", class: "btn alt", onclick: () => go2("room") }, icon("phone"), T("friend")),
+      ROOM_CODE ? null : liveButton(() => go2("live")),
       h("button", { type: "button", class: "linkbtn", onclick: () => { location.hash = "#delete"; } }, T("delete_link"))));
   });
 }
@@ -140,7 +142,22 @@ function afterStart(kind) {
 
 function enter(kind) {
   if (kind === "room") return roomScreen(ROOM_CODE);
+  if (kind === "live") return liveScreen();
   cards();
+}
+
+function liveScreen() {
+  go((view) => {
+    const live = runLive(view, { onFinish: thanks, onScripted: () => cards() });
+    return () => live.destroy();
+  });
+}
+
+// The live-call button appears only when the server has the agent switched on.
+function liveButton(onclick) {
+  const b = h("button", { type: "button", class: "btn alt", hidden: true, onclick }, icon("phone"), T("lv_entry"));
+  liveStatus().then((s) => { b.hidden = !s.enabled; });
+  return b;
 }
 
 // ---------------------------------------------------------------- in-app browser wall
@@ -288,6 +305,7 @@ function thanks() {
       h("div", { class: "row wrap" },
         h("button", { type: "button", class: "btn alt", onclick: pass }, icon("user"), T("next_person")),
         h("button", { type: "button", class: "btn alt", onclick: () => roomScreen("") }, icon("phone"), T("friend"))),
+      liveButton(() => liveScreen()),
       h("button", { type: "button", class: "linkbtn", onclick: () => { location.hash = "#delete"; } }, T("delete_link"))));
     return () => { off(); window.removeEventListener("online", loadGroup); };
   });
