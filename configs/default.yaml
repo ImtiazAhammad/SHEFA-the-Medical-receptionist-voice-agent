@@ -205,8 +205,9 @@ storage:
 
 # What the clinic has, in its own words. The agent answers these questions ONLY from here; a topic
 # left out gets "I don't have confirmed information, ask reception" (never a guess by the model).
-# Topics: parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment,
-# prayer, atm, report.
+# Topics: address, hours, ownership, phone, emergency_dept, imaging, lab, admission, icu, video,
+# parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment, prayer, atm,
+# report. Doctor questions (who is best, a woman doctor, languages) come from the directory.
 facilities: {}
 #  parking:
 #    bn: "হাসপাতালের বেসমেন্টে পার্কিং আছে, প্রথম দুই ঘণ্টা ফ্রি।"

@@ -668,8 +668,9 @@ class AppConfig(StrictModel):
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
     # What the clinic has, in its own words, per language: {"parking": {"bn": "...", "en": "..."}}.
-    # Keys: parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment,
-    # prayer, atm, report (see shefa.pipeline.facilities). A topic left out is answered with
+    # Keys: address, hours, ownership, phone, emergency_dept, imaging, lab, admission, icu, video,
+    # parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment, prayer,
+    # atm, report (see shefa.pipeline.facilities). A topic left out is answered with
     # "I don't know, ask reception", never guessed by the language model.
     facilities: dict[str, dict[str, str]] = Field(default_factory=dict)
 

@@ -647,10 +647,24 @@ class VoicePipeline:
         by the first sentence, not the last. Tool calls are surfaced by the
         adapter after the text; the returned text is what enters history.
         """
+        from shefa.pipeline.replycheck import parrots, unsupported_claim
+
         text_parts: list[str] = []
         spoken: list[str] = []
         stopped = False
         advised = False  # the model tried to give a dose or a diagnosis
+        claimed = False  # the model asserted a fact it has no grounds for, or parroted the caller
+        question = next(
+            (str(m.get("content", "")) for m in reversed(messages) if m.get("role") == "user"), ""
+        )
+
+        def fit(sentence: str) -> bool:
+            nonlocal claimed
+            if unsupported_claim(sentence) or parrots(sentence, question):
+                claimed = True
+                return False
+            return speakable(sentence, language)
+
         pending = ""
         tool_calls: list[dict[str, Any]] = []
         async for event in llm.generate_events(messages, tools=tools):
@@ -662,7 +676,7 @@ class VoicePipeline:
             pending += event.text
             sentences, pending = split_complete_sentences(pending)
             for sentence in sentences:
-                if not stopped and speakable(sentence, language):
+                if not stopped and fit(sentence):
                     await self._emit(tts, tidy(sentence), language, put_playback)
                     spoken.append(tidy(sentence))
                 elif not stopped:
@@ -672,7 +686,7 @@ class VoicePipeline:
 
         remainder = pending.strip()
         if remainder and not stopped:
-            if speakable(remainder, language):
+            if fit(remainder):
                 await self._emit(tts, tidy(remainder), language, put_playback)
                 spoken.append(tidy(remainder))
             else:
@@ -684,6 +698,12 @@ class VoicePipeline:
             refusal = prompts.get(language, prompts.get("en", "I cannot give medical advice."))
             await self._emit(tts, refusal, language, put_playback)
             spoken.append(refusal)
+        elif claimed and not spoken:  # never a made-up "yes": say plainly what we can do
+            from shefa.pipeline.clinic_questions import unsure
+
+            honest = unsure(language)
+            await self._emit(tts, honest, language, put_playback)
+            spoken.append(honest)
         elif stopped and not spoken:  # nothing usable came back: ask, rather than say nothing
             prompts = settings.escalation.repeat_prompt
             again = prompts.get(language, prompts.get("en", "Sorry, could you say that again?"))
@@ -983,15 +1003,20 @@ class VoicePipeline:
         if state and state.get("step") == "confirm":
             guided.finish(session)  # the read-back was dropped; a new request starts fresh
             state = None
-        if state:
-            from shefa.pipeline import facilities
+        from shefa.pipeline import clinic_questions
 
-            fact = facilities.answer(said, language, settings.facilities, during_booking=True)
-            if fact is not None:
-                # "পার্কিং আছে?" in the middle of a booking: answer it, then ask our question again
-                text = f"{fact} {guided.reprompt(session)}".strip()
-                await self._emit(tts, text, language, put_playback)
-                return text
+        # Everyday off-script questions (who is best, a woman doctor, opening hours, parking, MRI,
+        # admission, "রোগ সারবে?") are answered from the directory and the clinic's own facts,
+        # never by the model, which invented "yes" answers. Mid-booking, the booking question
+        # follows the answer.
+        qa = clinic_questions.answer(
+            said, language, session, settings.facilities, during_booking=bool(state)
+        )
+        if qa is not None:
+            text = f"{qa} {guided.reprompt(session)}".strip() if state else qa
+            await self._emit(tts, text, language, put_playback)
+            return text
+        if state:
             if wants_other_doctor(said) and state.get("step") not in {"who", "pick_doctor"}:
                 guided.finish(session)  # "someone else?" is handled below, then a new booking
                 state = None
@@ -1015,12 +1040,6 @@ class VoicePipeline:
             )
             if handled is not None:
                 return handled
-        from shefa.pipeline import facilities
-
-        if (fact := facilities.answer(said, language, settings.facilities)) is not None:
-            # parking, pharmacy, lift...: the clinic's own words, or "I don't know", never a guess
-            await self._emit(tts, fact, language, put_playback)
-            return fact
         if settings.pipeline.guided_booking and (gap := guided.unknown_specialty(said, language)):
             await self._emit(tts, gap, language, put_playback)
             return gap

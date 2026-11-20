@@ -58,6 +58,61 @@ TOPICS: dict[str, tuple[re.Pattern[str], str, str]] = {
             "রিপোর্ট পাওয়ার সময়",
             "when reports are ready",
         ),
+        (
+            "address",
+            r"(?:ক্লিনিক|হাসপাতাল)(?:টা|টি)? কোথায়|আপনাদের (?:ক্লিনিক|হাসপাতাল|অফিস)?\s*কোথায়|ঠিকানা(?:টা|টি)?|লোকেশন|কীভাবে আসব|কিভাবে আসব|কীভাবে যাব|কিভাবে যাব|\baddress\b|where is the (?:clinic|hospital)|where are you",
+            "ঠিকানা",
+            "the address",
+        ),
+        (
+            "hours",
+            r"কয়টা পর্যন্ত খোলা|কখন খোলে|কখন বন্ধ|কয়টায় খোলে|কয়টায় বন্ধ|খোলা থাকে|বন্ধ থাকে|(?:আজ|আজকে|কাল|শনিবার|রবিবার|সোমবার|মঙ্গলবার|বুধবার|বৃহস্পতিবার|শুক্রবার)(?: কি)? (?:খোলা|বন্ধ)|ছুটির দিন|opening hours|what time do you (?:open|close)|are you open",
+            "খোলার সময়",
+            "opening hours",
+        ),
+        (
+            "ownership",
+            r"সরকারি না বেসরকারি|বেসরকারি না সরকারি|সরকারি হাসপাতাল|প্রাইভেট না|government or private|is it (?:a )?(?:government|private)",
+            "ক্লিনিকটা সরকারি না বেসরকারি",
+            "whether the clinic is public or private",
+        ),
+        (
+            "phone",
+            r"(?:আপনাদের|ক্লিনিকের|হাসপাতালের|রিসেপশনের) (?:ফোন|মোবাইল|যোগাযোগের) নম্বর|হটলাইন|your (?:phone|contact) number|hotline",
+            "ক্লিনিকের ফোন নম্বর",
+            "the clinic's phone number",
+        ),
+        (
+            "emergency_dept",
+            r"ইমার্জেন্সি বিভাগ|ইমারজেন্সি বিভাগ|জরুরি বিভাগ|ইমার্জেন্সি (?:আছে|খোলা)|২৪ ঘণ্টা|চব্বিশ ঘণ্টা|24 ?hours?|emergency (?:department|room|ward)",
+            "জরুরি বিভাগ",
+            "an emergency department",
+        ),
+        (
+            "imaging",
+            r"এমআরআই|এম আর আই|সিটি স্ক্যান|সিটিস্ক্যান|এক্স-?রে|এক্সরে|আলট্রাসনো|আল্ট্রাসনো|ইসিজি|\bmri\b|\bct scan\b|x-?ray|ultrasound|\becg\b",
+            "এমআরআই, এক্স-রে বা অন্য স্ক্যান",
+            "scans and imaging",
+        ),
+        (
+            "lab",
+            r"রক্ত পরীক্ষা|ব্লাড টেস্ট|টেস্ট করা|টেস্ট করান|ল্যাব|প্যাথলজি|blood test|lab test|\blab\b|pathology",
+            "পরীক্ষা-নিরীক্ষা (ল্যাব)",
+            "lab tests",
+        ),
+        ("icu", r"আইসিইউ|আই সি ইউ|সিসিইউ|এনআইসিইউ|\bicu\b|\bccu\b|\bnicu\b", "আইসিইউ", "an ICU"),
+        (
+            "admission",
+            r"ভর্তি|বেড খালি|সিট খালি|কেবিন|ওয়ার্ড|\badmission\b|\badmit\b|\bbed\b|\bcabin\b",
+            "ভর্তি আর বেড",
+            "admission and beds",
+        ),
+        (
+            "video",
+            r"ভিডিও কল|অনলাইনে (?:দেখা|দেখানো|পরামর্শ|ডাক্তার)|টেলিমেডিসিন|video call|online consult|telemedicine",
+            "ভিডিও কলে ডাক্তার দেখানো",
+            "video consultations",
+        ),
     )
 }
 

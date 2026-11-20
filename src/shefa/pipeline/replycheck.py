@@ -90,3 +90,37 @@ def whole_reply_ok(text: str, language: str, *, already_greeted: bool = True) ->
     return bool(parts) and all(
         speakable(p, language, already_greeted=already_greeted) for p in parts
     )
+
+
+# --- claims the model has no grounds for ---------------------------------------------------
+# A free reply (no tool ran, no directory note) has nothing behind a "yes, we have / we are open"
+# answer: the model said "হ্যাঁ, আমরা শুক্রবার খোলা" and "হ্যাঁ, অনেক মহিলা ডাক্তার আছে" from nothing.
+_YES_OPENING = re.compile(
+    r"^\s*(?:জি\s*,?\s*|জ্বি\s*,?\s*)?(?:হ্যাঁ|হ্যা|yes)(?:[,।!.\s]|$)", re.IGNORECASE
+)
+_FACT_WORD = re.compile(
+    r"আছে|আছেন|খোলা|পাওয়া যায়|করা যায়|দেওয়া যায়|করানো যায়|যাবে|আমরা|আমাদের|"
+    r"\bwe\b|\bhave\b|\bopen\b|\bavailable\b|\bcan\b",
+    re.IGNORECASE,
+)
+_WE_ARE = re.compile(
+    r"আমরা (?:একটি|একটা|সরকারি|বেসরকারি)|আমাদের (?:ক্লিনিকে|হাসপাতালে|এখানে).{0,30}(?:আছে|পাওয়া যায়)"
+    r"|\bwe are a\b|\bour (?:clinic|hospital) (?:has|is)\b",
+    re.IGNORECASE,
+)
+
+
+def unsupported_claim(sentence: str) -> bool:
+    """A "yes, we have it / we are open / we are a private clinic" sentence in a free reply."""
+    return bool(
+        (_YES_OPENING.search(sentence) and _FACT_WORD.search(sentence)) or _WE_ARE.search(sentence)
+    )
+
+
+def parrots(sentence: str, question: str) -> bool:
+    """The reply only repeats the caller's own question ("আপনার নাম কী?" -> "আপনার নাম কী?")."""
+    from difflib import SequenceMatcher
+
+    a = re.sub(r"[^\w\s]", "", sentence).strip().lower()
+    b = re.sub(r"[^\w\s]", "", question).strip().lower()
+    return len(a) >= 4 and bool(b) and SequenceMatcher(None, a, b).ratio() >= 0.85

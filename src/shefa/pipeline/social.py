@@ -20,6 +20,10 @@ _FILLER = frozenset(
     {
         "আপনাকে", "অনেক", "খুব", "আল্লাহ", "খোদা", "আছে", "জি", "হ্যাঁ", "ও", "আবার", "ভালো",
         "থাকবেন", "you", "so", "much", "very", "a", "lot", "again", "yes", "right", "then",
+        # a compliment with the thanks ("ধন্যবাদ, আপনি অনেক ভালো"): the model answered it with
+        # mixed-script garbage ("আসসalamu alaikum!")
+        "আপনি", "আপনারা", "ভাল", "সুন্দর", "চমৎকার", "দারুণ", "উপকার", "করলেন", "হলো",
+        "good", "great", "nice", "are", "were", "helpful", "kind",
     }
 )  # fmt: skip
 _DONE = re.compile(r"(আর কিছু (লাগবে )?না|that'?s all|nothing else|that is all)", re.IGNORECASE)
