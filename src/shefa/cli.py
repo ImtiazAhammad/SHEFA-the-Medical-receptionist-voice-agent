@@ -264,6 +264,9 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--name", default="", help="how the name is shown, e.g. Dr. Rahman")
     add.add_argument("--doctor", default="", help="for role doctor: which doctor, e.g. Rahman")
     add.add_argument(
+        "--clinic", default="", help="on a machine with several clinics: the account's clinic id"
+    )
+    add.add_argument(
         "--password-env", default="", help="read the password from this environment variable"
     )
     staff_sub.add_parser("list", help="show the accounts")
@@ -300,6 +303,7 @@ def run_staff(args: argparse.Namespace) -> int:
         if args.staff_command == "list":
             for u in store.users():
                 scope = f" (doctor #{u['doctor_id']})" if u["doctor_id"] else ""
+                scope += f" [clinic {u['clinic_id']}]" if u.get("clinic_id") else ""
                 state = "" if u["active"] else "  [off]"
                 print(f"{u['username']:<16} {u['role']:<7} {u['display_name']}{scope}{state}")
             return 0
@@ -315,18 +319,30 @@ def run_staff(args: argparse.Namespace) -> int:
             store.set_password(args.username, password)
             print(f"{args.username}: password changed; every sign-in of theirs ended")
             return 0
+        from shefa.clinic.registry import in_clinic, is_known
+
+        if not is_known(args.clinic):
+            print(f"Unknown clinic {args.clinic!r} (see clinics: in the config)", file=sys.stderr)
+            return 1
         doctor_id = None
         if args.role == "doctor":
-            doctor, others = default_clinic_store().resolve_doctor(args.doctor)
+            with in_clinic(args.clinic):
+                doctor, others = default_clinic_store().resolve_doctor(args.doctor)
             if doctor is None:
                 names = ", ".join(d["name_en"] for d in others) or "none"
                 print(f"Which doctor? {args.doctor!r} matched: {names}", file=sys.stderr)
                 return 1
             doctor_id = doctor["id"]
         store.add_user(
-            args.username, password, args.role, display_name=args.name, doctor_id=doctor_id
+            args.username,
+            password,
+            args.role,
+            display_name=args.name,
+            doctor_id=doctor_id,
+            clinic_id=args.clinic,
         )
-        print(f"Created {args.role} account {args.username}.")
+        where = f" for clinic {args.clinic}" if args.clinic else ""
+        print(f"Created {args.role} account {args.username}{where}.")
         return 0
     except (StaffError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

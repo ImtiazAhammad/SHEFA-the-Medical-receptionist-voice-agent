@@ -47,6 +47,7 @@ class Principal:
     permissions: frozenset[str] = field(default_factory=frozenset)
     doctor_id: int | None = None  # a doctor's account is tied to one doctor
     display_name: str = ""
+    clinic_id: str = ""  # '' = default clinic (or, for an owner/admin, any clinic on the box)
 
     def has(self, permission: str) -> bool:
         return permission in self.permissions
@@ -189,6 +190,7 @@ class AuthStore:
                     permissions=self.permissions_for(user["role"]),
                     doctor_id=user["doctor_id"],
                     display_name=user["display_name"],
+                    clinic_id=user.get("clinic_id") or "",
                 )
 
         cache_key = hashlib.sha256(token.encode()).digest()

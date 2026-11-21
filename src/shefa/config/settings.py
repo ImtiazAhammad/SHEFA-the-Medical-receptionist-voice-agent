@@ -637,6 +637,16 @@ class EmailChannelConfig(StrictModel):
     from_address: str = ""
 
 
+class ClinicEntry(StrictModel):
+    """One clinic on a machine that serves several (clinic/registry.py)."""
+
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")
+    name_bn: str = ""
+    name_en: str = ""
+    db_path: str = ""  # default data/clinics/<id>.db
+    numbers: list[str] = Field(default_factory=list)  # the numbers callers dial for this clinic
+
+
 class MissedCallsConfig(StrictModel):
     """SHEFA calls back calls nobody answered (shefa/missed.py). Off: it places real calls."""
 
@@ -698,6 +708,7 @@ class AppConfig(StrictModel):
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     missed_calls: MissedCallsConfig = Field(default_factory=MissedCallsConfig)
+    clinics: list[ClinicEntry] = Field(default_factory=list)  # empty: one clinic (storage.db_path)
     # What the clinic has, in its own words, per language: {"parking": {"bn": "...", "en": "..."}}.
     # Keys: address, hours, ownership, phone, emergency_dept, imaging, lab, admission, icu, video,
     # parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment, prayer,

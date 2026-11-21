@@ -58,6 +58,13 @@ class StaffStore:
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.executescript(_SCHEMA)
+        columns = {r[1] for r in self.connection.execute("PRAGMA table_info(staff_users)")}
+        if "clinic_id" not in columns:
+            # '' = the default clinic, or (owner) every clinic on the machine; otherwise the one
+            # clinic this account may see (clinic/registry.py).
+            self.connection.execute(
+                "ALTER TABLE staff_users ADD COLUMN clinic_id TEXT NOT NULL DEFAULT ''"
+            )
         self.connection.commit()
         self._failures: dict[str, list[float]] = {}
         self._lock = threading.Lock()
@@ -75,6 +82,7 @@ class StaffStore:
         *,
         display_name: str = "",
         doctor_id: int | None = None,
+        clinic_id: str = "",
     ) -> int:
         username = username.strip()
         if not username:
@@ -93,8 +101,16 @@ class StaffStore:
             with self.connection:
                 cur = self.connection.execute(
                     "INSERT INTO staff_users (username, display_name, role, doctor_id,"
-                    " password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (username, display_name or username, role, doctor_id, record, time.time()),
+                    " password_hash, created_at, clinic_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        username,
+                        display_name or username,
+                        role,
+                        doctor_id,
+                        record,
+                        time.time(),
+                        clinic_id,
+                    ),
                 )
         except sqlite3.IntegrityError as exc:
             raise StaffError(f"The username {username!r} is already taken.") from exc
@@ -130,7 +146,10 @@ class StaffStore:
 
     def users(self) -> list[dict[str, Any]]:
         return [
-            {k: row[k] for k in ("username", "display_name", "role", "doctor_id", "active")}
+            {
+                k: row[k]
+                for k in ("username", "display_name", "role", "doctor_id", "active", "clinic_id")
+            }
             for row in self.connection.execute("SELECT * FROM staff_users ORDER BY username")
         ]
 

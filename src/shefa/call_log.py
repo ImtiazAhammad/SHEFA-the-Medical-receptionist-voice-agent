@@ -14,9 +14,22 @@ _lock = threading.Lock()
 _store: CallsStore | None = None
 
 
+_by_clinic: dict[str, CallsStore] = {}
+
+
 def default_calls_store() -> CallsStore:
+    """The call log of the current clinic (its own file on a many-clinic machine)."""
     global _store
+    from shefa.clinic.registry import current, db_path_for
+
+    clinic_id = current()
     with _lock:
+        if clinic_id:
+            store = _by_clinic.get(clinic_id)
+            if store is None:
+                store = CallsStore(db_path_for(clinic_id))
+                _by_clinic[clinic_id] = store
+            return store
         if _store is None:
             from shefa.config.settings import settings
 

@@ -9,13 +9,30 @@ export class ApiError extends Error {
   }
 }
 
+/** On a machine serving several clinics, the page is opened as one of them (`/book?clinic=nur`).
+ * The choice is kept for this tab and sent with every request; the server refuses an unknown one
+ * and ignores it for a staff account tied to its own clinic. */
+function clinicChoice(): string {
+  try {
+    const fromUrl = new URLSearchParams(location.search).get('clinic')
+    if (fromUrl) sessionStorage.setItem('shefa.clinic', fromUrl)
+    return fromUrl || sessionStorage.getItem('shefa.clinic') || ''
+  } catch {
+    return new URLSearchParams(location.search).get('clinic') || ''
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
+  const headers: Record<string, string> = {}
+  if (init?.body) headers['Content-Type'] = 'application/json'
+  const clinic = clinicChoice()
+  if (clinic) headers['X-Clinic'] = clinic
   try {
     response = await fetch(path, {
       credentials: 'same-origin',
-      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
       ...init,
+      headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) },
     })
   } catch {
     throw new ApiError(0, 'network')

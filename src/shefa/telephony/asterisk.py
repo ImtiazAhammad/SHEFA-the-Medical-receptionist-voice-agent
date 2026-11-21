@@ -90,12 +90,18 @@ class AsteriskCallLeg(CallLeg):
 
     async def caller_number(self) -> str:
         """The caller's number as Asterisk saw it (set by the dialplan), or "" if unknown."""
+        return await self.variable("SHEFA_CALLER")
+
+    async def dialed_number(self) -> str:
+        """The number the caller dialled (SHEFA_DIALED, set by the dialplan): on a machine that
+        answers for several clinics, it says which clinic was called."""
+        return await self.variable("SHEFA_DIALED")
+
+    async def variable(self, name: str) -> str:
         try:
             async with client_factory() as client:
                 channel = await self._channel(client)
-                reply = await client.get(
-                    f"/channels/{channel}/variable", params={"variable": "SHEFA_CALLER"}
-                )
+                reply = await client.get(f"/channels/{channel}/variable", params={"variable": name})
                 reply.raise_for_status()
                 return str(reply.json().get("value") or "")
         except (httpx.HTTPError, LookupError, ValueError):
@@ -208,6 +214,23 @@ async def _identify_caller(call_sid: str, leg: AsteriskCallLeg) -> None:
     )
 
 
+async def _enter_clinic(leg: AsteriskCallLeg) -> None:
+    """Make this call (this task and the tasks it starts) belong to the clinic that was dialled.
+    One clinic on the machine, or an unknown number: the default clinic, as before."""
+    from shefa.clinic.registry import CURRENT, clinic_for_number, clinics
+
+    if not clinics():
+        return
+    try:
+        dialed = await asyncio.wait_for(leg.dialed_number(), timeout=2.0)
+    except Exception:  # noqa: BLE001 - the default clinic still answers
+        dialed = ""
+    clinic = clinic_for_number(dialed)
+    if not clinic:
+        logger.warning("No clinic for dialled number %r; answering as the default clinic", dialed)
+    CURRENT.set(clinic)
+
+
 async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     """One call: identify it, run the pipeline, tear everything down on hang-up."""
     first = await read_frame(reader)
@@ -219,6 +242,7 @@ async def handle_audiosocket(reader: asyncio.StreamReader, writer: asyncio.Strea
     logger.info("AudioSocket call connected: %s", call_sid)
 
     leg = AsteriskCallLeg(call_sid)
+    await _enter_clinic(leg)  # every store this call touches is the dialled clinic's
     if not has_context(call_sid):
         await _identify_caller(call_sid, leg)
     call_started(call_sid, "outbound" if has_context(call_sid) else "inbound")

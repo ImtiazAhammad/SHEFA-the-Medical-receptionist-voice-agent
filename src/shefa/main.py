@@ -340,6 +340,53 @@ def _bearer_token(header: str | None, cookies: dict[str, str] | None = None) -> 
     return cookie or None
 
 
+def _per_clinic(make) -> list:  # type: ignore[no-untyped-def]
+    """One background loop per clinic on the machine (or one for the single clinic). Each task
+    is created inside its clinic, so everything it opens is that clinic's."""
+    import asyncio
+
+    from shefa.clinic.registry import clinics, in_clinic
+
+    tasks = []
+    for clinic_id in list(clinics()) or [""]:
+        with in_clinic(clinic_id):
+            tasks.append(asyncio.create_task(make()))
+    return tasks
+
+
+def _install_clinic_context(app: FastAPI) -> None:
+    """Run each request as one clinic (clinic/registry.py). Registered BEFORE the auth middleware,
+    so it runs inside it and sees the signed-in account.
+
+    A staff account tied to a clinic always works in that clinic. An untied owner/admin account
+    may pick one with the X-Clinic header. The public booking page names it with ?clinic=<id>.
+    An unknown clinic is refused, never silently swapped for the default one."""
+    from shefa.clinic.registry import CURRENT, clinics
+
+    @app.middleware("http")
+    async def clinic_context(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not clinics():
+            return await call_next(request)
+        principal = getattr(request.state, "principal", None)
+        tied = getattr(principal, "clinic_id", "") if principal is not None else ""
+        if tied:
+            wanted = tied
+        elif principal is not None and principal.role in ("owner", "admin"):
+            wanted = request.headers.get("X-Clinic", "")
+        else:
+            wanted = request.query_params.get("clinic", "") or request.headers.get("X-Clinic", "")
+        if wanted and wanted not in clinics():
+            return JSONResponse(
+                status_code=404,
+                content={"error": {"code": "unknown_clinic", "message": "Unknown clinic"}},
+            )
+        token = CURRENT.set(wanted)
+        try:
+            return await call_next(request)
+        finally:
+            CURRENT.reset(token)
+
+
 def _install_auth(app: FastAPI, store: AuthStore) -> None:
     """Require a valid token and a sufficient role on every request.
 
@@ -520,7 +567,7 @@ async def _lifespan(_app: FastAPI):
         from shefa.clinic import default_clinic_store
         from shefa.reminders import run_forever
 
-        reminder_task = asyncio.create_task(run_forever(default_clinic_store(), place_call))
+        reminder_task = _per_clinic(lambda: run_forever(default_clinic_store(), place_call))
     missed_task = None
     if settings.missed_calls.enabled:
         import asyncio
@@ -528,14 +575,13 @@ async def _lifespan(_app: FastAPI):
         from shefa.clinic import default_clinic_store
         from shefa.missed import run_forever as call_back_missed
 
-        missed_task = asyncio.create_task(call_back_missed(default_clinic_store(), place_call))
+        missed_task = _per_clinic(lambda: call_back_missed(default_clinic_store(), place_call))
     try:
         yield
     finally:
-        if missed_task is not None:
-            missed_task.cancel()
-        if reminder_task is not None:
-            reminder_task.cancel()
+        for group in (missed_task, reminder_task):
+            for task in group or []:
+                task.cancel()
         if warm_task is not None:
             warm_task.cancel()
         if server is not None:
@@ -563,6 +609,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     app.add_exception_handler(HTTPException, _http_error_handler)
     app.add_exception_handler(RequestValidationError, _validation_error_handler)
 
+    _install_clinic_context(app)  # first: the auth middleware wraps it and runs before it
     _install_auth(app, store)
 
     if _telephony_router_allowed():
@@ -1186,10 +1233,23 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         )
         return {"appointment_id": updated["appointment_id"], "status": updated["status"]}
 
+    def _clinic_staff() -> list[dict]:
+        """Accounts of the clinic this request works in: an owner never sees, resets or
+        disables another clinic's people on a machine that serves several."""
+        from shefa.clinic.registry import current
+
+        here = current()
+        return [u for u in staff.users() if (u.get("clinic_id") or "") == here]
+
+    def _not_here(username: str) -> JSONResponse | None:
+        if any(u["username"].lower() == username.lower() for u in _clinic_staff()):
+            return None
+        return error_response("validation", f"No account {username!r}.")
+
     @app.get("/api/v1/staff")
     async def list_staff() -> list[dict]:
         """The clinic's staff accounts (never their passwords or sessions)."""
-        return staff.users()
+        return _clinic_staff()
 
     @app.get("/api/v1/staff/doctors")
     async def staff_doctor_choices() -> list[dict]:
@@ -1203,6 +1263,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
     @app.post("/api/v1/staff", response_model=None)
     async def add_staff(body: StaffBody, request: Request) -> dict | JSONResponse:
+        from shefa.clinic.registry import current
         from shefa.store.staff import StaffError
 
         try:
@@ -1212,6 +1273,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 body.role,
                 display_name=body.display_name,
                 doctor_id=body.doctor_id,
+                clinic_id=current(),  # the new account belongs to the creator's clinic
             )
         except StaffError as exc:
             return error_response("validation", str(exc))
@@ -1225,6 +1287,8 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
         from shefa.auth import TokenError
         from shefa.store.staff import StaffError
 
+        if (refused := _not_here(username)) is not None:
+            return refused
         try:
             staff.set_password(username, body.password)
         except (StaffError, TokenError) as exc:
@@ -1238,16 +1302,18 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     ) -> dict | JSONResponse:
         from shefa.store.staff import StaffError
 
+        if (refused := _not_here(username)) is not None:
+            return refused
         who = getattr(request.state, "principal", None)
         if not body.active:
             if who is not None and who.name == username:
                 return error_response("validation", "You cannot disable your own account.")
             others = [
                 u
-                for u in staff.users()
+                for u in _clinic_staff()
                 if u["role"] == "owner" and u["active"] and u["username"] != username
             ]
-            target = next((u for u in staff.users() if u["username"] == username), None)
+            target = next((u for u in _clinic_staff() if u["username"] == username), None)
             if target and target["role"] == "owner" and not others:
                 return error_response("validation", "Keep at least one active owner account.")
         try:
