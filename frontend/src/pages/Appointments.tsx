@@ -20,6 +20,8 @@ export function Appointments() {
   const [day, setDay] = useState(TODAY)
   const [saving, setSaving] = useState<string | null>(null)
   const [saveFailed, setSaveFailed] = useState(false)
+  // What happened to the confirmation SMS of the booking just confirmed: shown, never assumed.
+  const [smsNote, setSmsNote] = useState<{ sent: boolean; reason: string } | null>(null)
   const list = useLoad(() => api<Appointment[]>(`/api/v1/appointments?date=${day}&status=all`), [day], 15000)
 
   async function mark(id: string, status: string) {
@@ -43,7 +45,11 @@ export function Appointments() {
     setSaving(id)
     setSaveFailed(false)
     try {
-      await api(`/api/v1/appointments/${encodeURIComponent(id)}/confirm`, { method: 'POST' })
+      const done = await api<{ sms: { sent: boolean; reason: string } | null }>(
+        `/api/v1/appointments/${encodeURIComponent(id)}/confirm`,
+        { method: 'POST' },
+      )
+      setSmsNote(done.sms)
       list.reload()
     } catch (e) {
       if (!(e instanceof ApiError)) throw e
@@ -75,6 +81,11 @@ export function Appointments() {
       </PageHeader>
       <p className="muted meta">{date(day, { dateStyle: 'full', timeZone: 'Asia/Dhaka' })}</p>
       {list.error ? <ErrorNote error={list.error} onRetry={list.reload} /> : null}
+      {smsNote ? (
+        <div className={smsNote.sent ? 'note' : 'note note-warn'} role="status">
+          {smsNote.sent ? t('smsSent') : `${t('smsNotSent')} ${smsNote.reason}`}
+        </div>
+      ) : null}
       {saveFailed ? (
         <div className="note note-error" role="alert">
           {t('couldNotSave')}

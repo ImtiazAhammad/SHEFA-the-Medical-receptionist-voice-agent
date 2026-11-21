@@ -86,6 +86,35 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE UNIQUE INDEX IF NOT EXISTS one_booking_per_slot
     ON appointments (doctor_id, date, start_time) WHERE status = 'booked';
 CREATE INDEX IF NOT EXISTS appointments_by_date ON appointments (date, status);
+-- What this clinic calls itself and its own switches (name, phone, booking defaults). One clinic
+-- per database file: a machine serving many clinics opens one file each (clinic/registry.py).
+CREATE TABLE IF NOT EXISTS clinic_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+-- Every SMS SHEFA tried to send, and what happened: never claim a message that did not go out.
+CREATE TABLE IF NOT EXISTS messages (
+    id             INTEGER PRIMARY KEY,
+    appointment_id INTEGER REFERENCES appointments(id),
+    to_phone       TEXT NOT NULL,
+    kind           TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'not_configured')),
+    detail         TEXT NOT NULL DEFAULT '',
+    created_at     REAL NOT NULL
+);
+-- Calls nobody answered (the desk was busy or closed), for SHEFA to call back.
+CREATE TABLE IF NOT EXISTS missed_calls (
+    id          INTEGER PRIMARY KEY,
+    phone       TEXT NOT NULL,
+    missed_at   REAL NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'calling', 'reached', 'booked', 'gave_up', 'skipped')),
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    last_try    REAL,
+    note        TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS missed_by_status ON missed_calls (status, missed_at);
 CREATE TABLE IF NOT EXISTS reminders (
     appointment_id INTEGER NOT NULL REFERENCES appointments(id),
     kind           TEXT NOT NULL CHECK (kind IN ('reminder', 'followup')),
@@ -194,14 +223,76 @@ class ClinicStore:
             self.connection.execute(
                 "ALTER TABLE doctors ADD COLUMN profile TEXT NOT NULL DEFAULT '{}'"
             )
+        if "booking_mode" not in columns:
+            # 'slot': the caller picks a clock time. 'serial': the caller gets the next serial
+            # number of a chamber session, with an estimated time (how most chambers work).
+            self.connection.execute(
+                "ALTER TABLE doctors ADD COLUMN booking_mode TEXT NOT NULL DEFAULT 'slot'"
+            )
         booked = {r[1] for r in self.connection.execute("PRAGMA table_info(appointments)")}
         if "confirmed" not in booked:
             self.connection.execute(
                 "ALTER TABLE appointments ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1"
             )
+        if "serial_no" not in booked:
+            self.connection.execute("ALTER TABLE appointments ADD COLUMN serial_no INTEGER")
 
     def close(self) -> None:
         self.connection.close()
+
+    # -- this clinic's own settings ---------------------------------------
+
+    def setting(self, key: str, default: str = "") -> str:
+        row = self.connection.execute(
+            "SELECT value FROM clinic_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO clinic_settings (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def clinic_name(self, language: str = "bn") -> str:
+        """The name callers and SMS see; falls back to the other language, then 'SHEFA'."""
+        bn, en = self.setting("name_bn"), self.setting("name_en")
+        first = bn if language == "bn" else en
+        return first or en or bn or ("শেফা" if language == "bn" else "SHEFA")
+
+    # -- messages (SMS) -----------------------------------------------------
+
+    def log_message(
+        self,
+        *,
+        to_phone: str,
+        kind: str,
+        body: str,
+        status: str,
+        detail: str = "",
+        appointment_id: int | None = None,
+    ) -> int:
+        with self.connection:
+            cur = self.connection.execute(
+                "INSERT INTO messages (appointment_id, to_phone, kind, body, status, detail,"
+                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (appointment_id, to_phone, kind, body, status, detail[:300], _time.time()),
+            )
+        return int(cur.lastrowid)
+
+    def messages(self, appointment_id: int | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        if appointment_id is None:
+            rows = self.connection.execute(
+                "SELECT * FROM messages ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                "SELECT * FROM messages WHERE appointment_id = ? ORDER BY id DESC LIMIT ?",
+                (appointment_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def __enter__(self) -> ClinicStore:
         return self
@@ -358,6 +449,15 @@ class ClinicStore:
         if scored and scored[0][0] >= names.DEPARTMENT_THRESHOLD:
             return scored[0][1]
         return None
+
+    def doctor(self, doctor_id: int) -> dict[str, Any] | None:
+        """One doctor by id, active or not (an old booking may name a doctor who has left)."""
+        row = self.connection.execute(
+            "SELECT d.*, p.name_en AS department_en, p.name_bn AS department_bn"
+            " FROM doctors d JOIN departments p ON p.id = d.department_id WHERE d.id = ?",
+            (doctor_id,),
+        ).fetchone()
+        return _doctor(row) if row else None
 
     def doctors(self, department_id: int | None = None) -> list[dict[str, Any]]:
         sql = (

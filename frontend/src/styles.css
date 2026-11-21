@@ -147,6 +147,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .empty-hint { color: var(--ink-2); }
 .note { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
 .note-error { background: var(--bad-wash); color: var(--bad); }
+.note-warn { background: var(--warn-wash); color: var(--ink); }
 .skeleton { display: flex; flex-direction: column; gap: 0.6rem; }
 .skeleton-row { height: 56px; border-radius: var(--radius); background: linear-gradient(90deg, var(--side), var(--line), var(--side)); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }

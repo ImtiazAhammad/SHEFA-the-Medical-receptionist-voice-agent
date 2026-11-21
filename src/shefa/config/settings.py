@@ -616,7 +616,18 @@ class EHRConfig(StrictModel):
 
 
 class SMSChannelConfig(StrictModel):
-    provider: str = "twilio"
+    """A Bangladeshi bulk-SMS gateway reached over HTTP (see integrations/sms.py).
+    `provider: none` sends nothing and records every message as not sent."""
+
+    provider: str = "none"
+    url: str = ""
+    method: str = "GET"
+    form: dict[str, str] = Field(default_factory=dict)
+    api_key_env: str = "SHEFA_SMS_API_KEY"
+    sender_id: str = ""
+    number_format: str = "880"
+    success_contains: str = ""
+    send_on_confirm: bool = True  # text the patient when the desk confirms a booking
 
 
 class EmailChannelConfig(StrictModel):

@@ -181,7 +181,16 @@ integrations:
       api_key: "${EHR_API_KEY}"
   notifications:
     sms:
-      provider: "twilio"
+      # none = no SMS is sent, and screens say "not sent". To send, use your Bangladeshi
+      # bulk-SMS gateway's HTTP address with {api_key} {sender_id} {to} {text}; the key goes in
+      # the environment variable named by api_key_env, never in this file.
+      provider: "none"
+      # url: "https://your-gateway.example/send?api_key={api_key}&senderid={sender_id}&number={to}&message={text}"
+      # method: "GET"
+      # sender_id: ""
+      # number_format: "880"
+      # success_contains: ""
+      send_on_confirm: true
     email:
       provider: "smtp"
       smtp_host: "smtp.gmail.com"

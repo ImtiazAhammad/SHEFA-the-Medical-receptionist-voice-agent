@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import structlog
 import uvicorn
@@ -1205,7 +1207,14 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 status_code=404, detail={"code": "validation", "message": str(exc)}
             ) from exc
         _audit(request, "appointment_confirmed", appointment_id=updated["appointment_id"])
-        return {"appointment_id": updated["appointment_id"], "confirmed": True}
+        sms: dict[str, Any] | None = None
+        if settings.integrations.notifications.sms.send_on_confirm:
+            # The patient hears from the clinic once a person has checked the booking. A
+            # sending problem never undoes the confirmation; the desk sees what happened.
+            from shefa.integrations.notifications import send_booking_sms
+
+            sms = await asyncio.to_thread(send_booking_sms, updated["appointment_id"])
+        return {"appointment_id": updated["appointment_id"], "confirmed": True, "sms": sms}
 
     @app.post("/api/v1/reminders/run")
     async def run_reminders_now() -> dict:
