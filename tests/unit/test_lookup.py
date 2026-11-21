@@ -168,3 +168,10 @@ def test_a_name_heard_in_bangla_matches_its_english_spelling(bangla, english):
 
 def test_different_names_do_not_match():
     assert not lookup._name_matches("জামাল", ["Karim"]) and not lookup._name_matches("সুমাইয়া", ["করিম"])
+
+
+def test_a_misheard_serial_still_asks_for_a_lookup():
+    from shefa.pipeline.lookup import WANTS
+
+    assert WANTS.search("আমার সিডিল আছে কিনা দেখতে চাই")  # Whisper on a live call
+    assert WANTS.search("আমার সিরিয়েল কবে")

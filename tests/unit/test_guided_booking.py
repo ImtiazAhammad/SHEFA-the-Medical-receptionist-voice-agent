@@ -301,3 +301,41 @@ async def test_english_ways_of_asking_start_a_booking(monkeypatch, said):
     call = start(monkeypatch, language=Language.ENGLISH)
     await call.say(said)
     assert "guided" in call.session.metadata
+
+
+async def test_a_day_instead_of_a_doctor_takes_the_doctor_free_that_day(monkeypatch):
+    # Seen on a live call: asked "which doctor?", the caller said "কাল সকালে হবে?"
+    call = start(monkeypatch)
+    await call.say("মেডিসিনে সিরিয়াল চাই")
+
+    reply = await call.say("কাল সকালে হবে?")
+
+    g = call.session.metadata["guided"]
+    assert g["step"] in {"time", "accept"} and g["date"] == tomorrow()
+    assert "খালি সময়" in reply and "কার কাছে" not in reply
+
+
+async def test_a_department_and_a_day_in_one_breath_skip_the_doctor_question(monkeypatch):
+    call = start(monkeypatch)
+
+    reply = await call.say("মেডিসিনে কাল সিরিয়াল চাই")
+
+    assert "কার কাছে" not in reply and "খালি সময়" in reply
+
+
+async def test_a_name_said_early_is_kept_and_not_asked_again(monkeypatch):
+    # Seen on a live call: the caller gave the name while asked for a doctor, and was handed over.
+    call = start(monkeypatch, named=False)
+    await call.say("মেডিসিনে সিরিয়াল চাই")
+
+    thanks = await call.say("আমার নাম রহিম উদ্দিন")
+    assert "ধন্যবাদ, রহিম উদ্দিন" in thanks and "কার কাছে" in thanks
+    assert call.session.metadata["guided"]["misses"] == 0
+
+    await call.say("যে কেউ")
+    await call.say("কাল")
+    read = await call.say("১ নম্বর")
+    assert "নিশ্চিত করছি" in read  # no name question
+    await call.say("হ্যাঁ")
+    [appointment] = call.store.appointments_for_patient(call.patient)
+    assert "রহিম উদ্দিন" in appointment["reason"]

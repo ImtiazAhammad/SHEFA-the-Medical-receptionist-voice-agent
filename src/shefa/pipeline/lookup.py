@@ -24,13 +24,16 @@ import time
 from difflib import SequenceMatcher
 from typing import Any
 
+# "সিরিয়াল" as the speech model often writes it.
+_SERIAL = "(?:সিরিয়াল|সিরিয়েল|সিরিয়ল|সিডিয়াল|সিডিল|সিরিল)"
+
 WANTS = re.compile(
-    r"আমার (?:সিরিয়াল|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট|বুকিং)(?:টা|টি)? (?:কবে|কখন|কয়টায়|আছে|ছিল|কার কাছে|কোন)"
-    r"|(?:সিরিয়াল|অ্যাপয়েন্টমেন্ট|বুকিং)(?:টা|টি)? (?:কবে|কখন|কয়টায়) (?:ছিল|আছে|দেওয়া|নেওয়া|পড়েছে)"
-    r"|আগের (?:সিরিয়াল|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট)|(?:সিরিয়াল|বুকিং|অ্যাপয়েন্টমেন্ট) (?:দেওয়া|নেওয়া|করা) আছে (?:কি|কিনা|কি না)"
-    r"|সিরিয়াল (?:নিয়েছিলাম|দিয়েছিলাম|নিয়েছি)|(?:কবে|কখন) (?:আমার )?সিরিয়াল"
-    r"|when (?:is|was) my (?:appointment|booking|serial)|my (?:last|previous|next|upcoming) appointment"
-    r"|do i have an appointment|check my (?:appointment|booking)",
+    rf"আমার (?:{_SERIAL}|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট|বুকিং)(?:টা|টি)? (?:কবে|কখন|কয়টায়|আছে|ছিল|কার কাছে|কোন)"
+    rf"|(?:{_SERIAL}|অ্যাপয়েন্টমেন্ট|বুকিং)(?:টা|টি)? (?:কবে|কখন|কয়টায়) (?:ছিল|আছে|দেওয়া|নেওয়া|পড়েছে)"
+    rf"|আগের (?:{_SERIAL}|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট)|(?:{_SERIAL}|বুকিং|অ্যাপয়েন্টমেন্ট) (?:দেওয়া|নেওয়া|করা) আছে (?:কি|কিনা|কি না)"
+    rf"|{_SERIAL} (?:নিয়েছিলাম|দিয়েছিলাম|নিয়েছি)|(?:কবে|কখন) (?:আমার )?{_SERIAL}"
+    rf"|when (?:is|was) my (?:appointment|booking|serial)|my (?:last|previous|next|upcoming) appointment"
+    rf"|do i have an appointment|check my (?:appointment|booking)",
     re.IGNORECASE,
 )
 PAST = re.compile(r"আগের|ছিল|নিয়েছিলাম|দিয়েছিলাম|গতবার|last|previous|was", re.IGNORECASE)

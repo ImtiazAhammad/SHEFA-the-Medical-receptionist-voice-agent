@@ -412,6 +412,26 @@ def _soonest_doctor(doctors: list[dict[str, Any]]) -> dict[str, Any] | None:
     return min(ranked)[2] if ranked else None
 
 
+def _free_first_on(doctors: list[dict[str, Any]], said: str, today: date) -> dict[str, Any] | None:
+    """Asked "which doctor?", the caller answered with a day ("কাল সকালে হবে?"): the doctor free
+    first from that day. None when the sentence names no day."""
+    wanted = parse_date(said, today)
+    if wanted is None and EARLIEST.search(said):
+        wanted = today.isoformat()
+    if wanted is None or wanted < today.isoformat():
+        return None
+    period = parse_period(said)
+    ranked = []
+    for doctor in doctors:
+        found = _slots_after(doctor["id"], wanted)
+        if found is None:
+            continue
+        day, slots = found
+        inside = [x for x in slots if period is None or in_period(x["time"], period)]
+        ranked.append((day, not inside, (inside or slots)[0]["time"], doctor["id"], doctor))
+    return min(ranked)[-1] if ranked else None
+
+
 # --- the state machine -----------------------------------------------------------------------
 
 
@@ -491,9 +511,39 @@ def advance(session: Any, said: str, *, today: date | None = None) -> Reply:
         session.metadata.pop("guided", None)
         return Reply(text=aborted(lang), done=True)
 
+    early = _early_name(said, today) if g["step"] in _EARLY_NAME_STEPS else None
+    if early is not None:
+        name, rest = early
+        g["patient_name"] = name
+        session.metadata["patient_name"] = name
+        if not re.search(r"[\u0980-\u09ffA-Za-z0-9]", rest):
+            # only the name: thank them and ask the question they skipped, without a miss
+            thanks = _t(lang, f"ধন্যবাদ, {name}।", f"Thank you, {name}.")
+            return Reply(text=f"{thanks} {reprompt(session)}")
+        said = rest
+
     handler = _STEPS[g["step"]]
     reply = handler(session, g, said, lang, today)
     return reply
+
+
+# A caller often gives the name before it is asked ("আমার নাম রহিম উদ্দিন"). It is kept for later,
+# so the call neither counts it as not understood nor asks for it again.
+_EARLY_NAME = re.compile(
+    r"(?:আমার নাম|রোগীর নাম|my name is|the patient is)\s+([^,।.?!]+)", re.IGNORECASE
+)
+_EARLY_NAME_STEPS = {"who", "pick_doctor", "day", "accept", "time"}
+
+
+def _early_name(said: str, today: date) -> tuple[str, str] | None:
+    """(name, the rest of the sentence) when the caller said their name, else None."""
+    m = _EARLY_NAME.search(said)
+    if m is None or parse_date(m.group(1), today) is not None or EARLIEST.search(m.group(1)):
+        return None
+    name = _clean_name(m.group(0))
+    if name is None:
+        return None
+    return name, (said[: m.start()] + " " + said[m.end() :]).strip()
 
 
 def _miss(session: Any, g: dict[str, Any], lang: str, retry_text: str, said: str) -> Reply:
@@ -563,6 +613,8 @@ def _step_who(session: Any, g: dict[str, Any], said: str, lang: str, today: date
         return _choose_doctor(session, g, doctors[0], lang, said, today)
     if kind == "doctor":  # the name fits several people: ask which
         ordered = doctors[:MAX_CHOICES]
+    elif free := _free_first_on(doctors, said, today):
+        return _choose_doctor(session, g, free, lang, said, today)
     elif ANY_DOCTOR.search(said):
         chosen = _soonest_doctor(doctors)
         if chosen is None:
@@ -599,6 +651,9 @@ def _step_pick_doctor(session: Any, g: dict[str, Any], said: str, lang: str, tod
         fits = [d for d in _doctors_named(said) if d["id"] in ids]
         if len(fits) == 1:
             chosen_id = fits[0]["id"]
+    if chosen_id is None:
+        free = _free_first_on([d for d in store.doctors() if d["id"] in ids], said, today)
+        chosen_id = free["id"] if free else None
     if chosen_id is None:
         return _miss(session, g, lang, _doctor_question(g, lang), said)
     doctor = next(d for d in store.doctors() if d["id"] == chosen_id)
