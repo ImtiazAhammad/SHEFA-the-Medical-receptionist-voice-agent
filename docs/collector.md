@@ -261,3 +261,19 @@ old code: `uv run shefa collect staff founder admin`. Restore the database from 
 uploads are still paused, or later withdrawals would come back.
 
 Find the current public address of a running quick tunnel: `curl -s localhost:20241/quicktunnel`.
+
+## Fixed link and start at power-on
+
+The public link is Tailscale Funnel: `https://<machine>.<tailnet>.ts.net`, which stays the same
+across reboots (the trycloudflare link changes every time). One-time setup:
+
+1. Approve Funnel for the tailnet (the link `tailscale funnel 8100` prints), then
+   `tailscale funnel --bg 8100`. tailscaled remembers it; nothing to rerun after a reboot.
+   Only port 8100 is published; the staff site (8101) stays on this PC.
+2. `bash deploy/autostart/install.sh` installs two user services: `shefa-vllm` (starts first and
+   counts as up only when the model answers, so it gets its GPU share before Whisper loads) and
+   `shefa-collector`. Both restart themselves after a crash.
+3. `sudo loginctl enable-linger $USER` once, so they start at power-on, not only after login.
+
+Day to day: `systemctl --user status shefa-collector`, `systemctl --user restart shefa-collector`
+(pause the site first, as always). Logs stay in `data/collector/logs/serve.log` and `data/vllm.log`.
