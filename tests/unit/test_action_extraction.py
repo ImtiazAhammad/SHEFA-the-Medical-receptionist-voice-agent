@@ -286,7 +286,7 @@ class TestConfirmationText:
         # Spoken the way a receptionist says it: Bangla weekday, date and time words,
         # and the reference as a number the caller can repeat (APT-9 -> নয়).
         assert text == (
-            "আপনার অ্যাপয়েন্টমেন্ট মঙ্গলবার, এক ডিসেম্বর সকাল দশটায় ডাক্তার করিম-এর সাথে "
+            "আপনার অ্যাপয়েন্টমেন্ট মঙ্গলবার, এক ডিসেম্বর সকাল দশটায় ডাক্তার করিমের সাথে "
             "বুক হয়েছে। আপনার রেফারেন্স নম্বর নয়।"
         )
 
@@ -643,7 +643,7 @@ class TestSlotAnswers:
         )
         one = {"date": "d", "doctors": [{"doctor": "Rahman", "doctor_bn": "রহমান"}]}
         assert "Dr. Rahman has free time" in confirmation_text("check_appointment_slots", one, "en")
-        assert "ডাক্তার রহমান-এর" in confirmation_text("check_appointment_slots", one, "bn")
+        assert "ডাক্তার রহমানের" in confirmation_text("check_appointment_slots", one, "bn")
         empty = confirmation_text("check_appointment_slots", {"date": "d", "doctors": []}, "en")
         assert "No doctor has free time" in empty
         assert "খালি সময় নেই" in confirmation_text(

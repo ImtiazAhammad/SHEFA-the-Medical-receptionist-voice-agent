@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from shefa.spoken import spoken_date, spoken_doctor, spoken_time
+from shefa.spoken import of, spoken_date, spoken_doctor, spoken_serial, spoken_time
 
 NEEDS_CONFIRMATION = frozenset({"book_appointment", "cancel_appointment", "reschedule_appointment"})
 
@@ -77,21 +77,29 @@ def read_back(name: str, preview: dict[str, Any], language: str) -> str:
         preview.get("doctor_bn") or preview["doctor"] if bn else preview["doctor"], language
     )
     now = _when(preview["date"], preview["time"], language, at=bn)
+    if name == "book_appointment" and preview.get("serial_no"):
+        serial = spoken_serial(preview["serial_no"], preview["time"], language)
+        day = spoken_date(preview["date"], language)
+        return (
+            f"নিশ্চিত করছি: {day} {of(doctor)} চেম্বারে {serial}। বুক করব?"
+            if bn
+            else f"To confirm: {doctor} on {day}, {serial}. Shall I book it?"
+        )
     if name == "book_appointment":
         return (
-            f"নিশ্চিত করছি: {doctor}-এর সাথে {now} অ্যাপয়েন্টমেন্ট। বুক করব?"
+            f"নিশ্চিত করছি: {of(doctor)} সাথে {now} অ্যাপয়েন্টমেন্ট। বুক করব?"
             if bn
             else f"To confirm: an appointment with {doctor} on {now}. Shall I book it?"
         )
     if name == "cancel_appointment":
         return (
-            f"নিশ্চিত করছি: {now} {doctor}-এর সাথে আপনার অ্যাপয়েন্টমেন্টটি বাতিল করব?"
+            f"নিশ্চিত করছি: {now} {of(doctor)} সাথে আপনার অ্যাপয়েন্টমেন্টটি বাতিল করব?"
             if bn
             else f"To confirm: cancel your appointment with {doctor} on {now}. Shall I cancel it?"
         )
     new = _when(preview["new_date"], preview["new_time"], language, at=bn)
     return (
-        f"নিশ্চিত করছি: {doctor}-এর সাথে আপনার অ্যাপয়েন্টমেন্ট {now} থেকে {new} সরাব?"
+        f"নিশ্চিত করছি: {of(doctor)} সাথে আপনার অ্যাপয়েন্টমেন্ট {now} থেকে {new} সরাব?"
         if bn
         else f"To confirm: move your appointment with {doctor} from {now} to {new}. "
         "Shall I move it?"

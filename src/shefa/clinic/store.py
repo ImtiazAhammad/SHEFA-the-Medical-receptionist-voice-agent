@@ -450,6 +450,30 @@ class ClinicStore:
             return scored[0][1]
         return None
 
+    def is_serial(self, doctor_id: int) -> bool:
+        """True when this doctor books by serial number (most chambers), not by clock time."""
+        row = self.connection.execute(
+            "SELECT booking_mode FROM doctors WHERE id = ?", (doctor_id,)
+        ).fetchone()
+        return bool(row) and row["booking_mode"] == "serial"
+
+    def serial_for(self, doctor_id: int, day: str, start_time: str) -> int | None:
+        """The serial number an open place would get (None for a clock-time doctor or no place)."""
+        if not self.is_serial(doctor_id):
+            return None
+        slot = next(
+            (s for s in self.available_slots(doctor_id, day) if s["time"] == start_time), None
+        )
+        return slot["serial"] if slot else None
+
+    def set_booking_mode(self, doctor_id: int, mode: str) -> None:
+        if mode not in ("slot", "serial"):
+            raise ClinicError("Booking mode must be 'slot' or 'serial'")
+        with self.connection:
+            self.connection.execute(
+                "UPDATE doctors SET booking_mode = ? WHERE id = ?", (mode, doctor_id)
+            )
+
     def doctor(self, doctor_id: int) -> dict[str, Any] | None:
         """One doctor by id, active or not (an old booking may name a doctor who has left)."""
         row = self.connection.execute(
@@ -542,7 +566,7 @@ class ClinicStore:
         ):
             step = window["slot_minutes"]
             start, end = _to_minutes(window["start_time"]), _to_minutes(window["end_time"])
-            for begin in range(start, end - step + 1, step):
+            for position, begin in enumerate(range(start, end - step + 1, step), start=1):
                 label = _from_minutes(begin)
                 if label in booked or begin <= cutoff:
                     continue
@@ -551,6 +575,10 @@ class ClinicStore:
                         "time": label,
                         "end_time": _from_minutes(begin + step),
                         "duration_minutes": step,
+                        # The place in this chamber session: a serial-mode doctor's serial
+                        # number, with `time` as the estimated time it comes up.
+                        "serial": position,
+                        "session_start": window["start_time"],
                     }
                 )
         return slots
@@ -638,12 +666,13 @@ class ClinicStore:
         if slot is None:
             raise SlotUnavailableError(f"{start_time} on {day} is not an open slot")
         stamp = _time.time()
+        serial = slot["serial"] if self.is_serial(doctor_id) else None
         try:
             with self.connection:
                 cur = self.connection.execute(
                     "INSERT INTO appointments (patient_id, doctor_id, date, start_time, end_time,"
-                    " reason, source, confirmed, created_at, updated_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " reason, source, confirmed, serial_no, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         patient_id,
                         doctor_id,
@@ -653,6 +682,7 @@ class ClinicStore:
                         reason,
                         source,
                         int(confirmed) if confirmed is not None else (0 if source == "web" else 1),
+                        serial,
                         stamp,
                         stamp,
                     ),

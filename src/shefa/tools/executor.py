@@ -111,6 +111,7 @@ async def preview_action(
                     "doctor_bn": doctor.get("name_bn") or "",
                     "date": day,
                     "time": time,
+                    "serial_no": store.serial_for(doctor["id"], day, time),
                 }
             }
         appointment_id, problem = _target_appointment(args, session)

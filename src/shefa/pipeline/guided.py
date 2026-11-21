@@ -29,10 +29,12 @@ from shefa.pipeline.choice import MAX_CHOICES, pick
 from shefa.pipeline.confirm import yes_no
 from shefa.pipeline.grounding import in_period, parse_date, parse_period, parse_time
 from shefa.spoken import (
+    of,
     spoken_date,
     spoken_doctor,
     spoken_list,
     spoken_schedule,
+    spoken_serial,
     spoken_time,
 )
 
@@ -487,7 +489,7 @@ def _already_booked(session: Any) -> str:
     when = _when(visit["date"], visit["time"], lang)
     return _t(
         lang,
-        f"আপনার {doctor}-এর সাথে {when} একটি অ্যাপয়েন্টমেন্ট আছে। ",
+        f"আপনার {of(doctor)} সাথে {when} একটি অ্যাপয়েন্টমেন্ট আছে। ",
         f"You already have an appointment with {doctor} on {when}. ",
     )
 
@@ -681,13 +683,26 @@ def _handle_day(
         return Reply(
             text=_t(
                 lang,
-                f"{doctor}-এর সামনের এক মাসে কোনো খালি সময় নেই। অন্য কোন ডাক্তার বা বিভাগ দেখব?",
+                f"{of(doctor)} সামনের এক মাসে কোনো খালি সময় নেই। অন্য কোন ডাক্তার বা বিভাগ দেখব?",
                 f"{doctor} has no free time in the next month. Shall I look at another doctor or department?",
             )
         )
     day, slots = found
     g["date"] = day
     g["misses"] = 0
+    if default_clinic_store().is_serial(g["doctor_id"]):
+        # A chamber gives the next serial; the caller does not pick a clock time.
+        slots, lead = _narrow_to_period(said, slots, lang, lead, doctor, day)
+        missed = (
+            _t(
+                lang,
+                f"{spoken_date(wanted, 'bn')} {of(doctor)} সিরিয়াল খালি নেই। ",
+                f"{doctor} has no serials left on {spoken_date(wanted, 'en')}. ",
+            )
+            if day != wanted
+            else ""
+        )
+        return _offer_serial(g, slots[0], lang, lead + missed, doctor, day)
     if day != wanted:
         # Nothing on the day asked for: say so and offer the next free time, never silently.
         first = slots[0]
@@ -695,7 +710,7 @@ def _handle_day(
         when = _when(day, first["time"], lang)
         g["question"] = _t(
             lang,
-            f"{spoken_date(wanted, 'bn')} {doctor}-এর খালি সময় নেই। পরের খালি সময় {when}। এটা নেবেন?",
+            f"{spoken_date(wanted, 'bn')} {of(doctor)} খালি সময় নেই। পরের খালি সময় {when}। এটা নেবেন?",
             f"{doctor} has no free time on {spoken_date(wanted, 'en')}. The next free time is {when}. Shall I take it?",
         )
         return Reply(text=lead + g["question"])
@@ -719,10 +734,24 @@ def _narrow_to_period(
         return inside, lead
     note = _t(
         lang,
-        f"{spoken_date(day, 'bn')} ওই সময়ে {doctor}-এর খালি নেই, অন্য সময় আছে। ",
+        f"{spoken_date(day, 'bn')} ওই সময়ে {of(doctor)} খালি নেই, অন্য সময় আছে। ",
         f"{doctor} has nothing free then on {spoken_date(day, 'en')}, but there are other times. ",
     )
     return slots, lead + note
+
+
+def _offer_serial(
+    g: dict[str, Any], slot: dict[str, Any], lang: str, lead: str, doctor: str, day: str
+) -> Reply:
+    """'রবিবার ডাক্তার কবিরের চেম্বারে আপনার সিরিয়াল পাঁচ, আনুমানিক সন্ধ্যা ছয়টায়। নেবেন?'"""
+    g.update(step="accept", offer={"date": day, "time": slot["time"]})
+    serial = spoken_serial(slot["serial"], slot["time"], lang)
+    g["question"] = _t(
+        lang,
+        f"{spoken_date(day, 'bn')} {of(doctor)} চেম্বারে আপনার {serial}। নেবেন?",
+        f"With {doctor} on {spoken_date(day, 'en')}, you would get {serial}. Shall I take it?",
+    )
+    return Reply(text=lead + g["question"])
 
 
 def _when(day: str, clock: str, lang: str) -> str:
@@ -749,13 +778,13 @@ def _offer_times(
         g.update(step="accept", offer={"date": day, "time": shown[0]})
         g["question"] = _t(
             lang,
-            f"{spoken_date(day, 'bn')} {doctor}-এর শুধু {spoken} খালি আছে। নেবেন?",
+            f"{spoken_date(day, 'bn')} {of(doctor)} শুধু {spoken} খালি আছে। নেবেন?",
             f"{doctor} has only {spoken} free on {spoken_date(day, 'en')}. Shall I take it?",
         )
     else:
         g["question"] = _t(
             lang,
-            f"{spoken_date(day, 'bn')} {doctor}-এর খালি সময়: {spoken}। কোনটা নেবেন?",
+            f"{spoken_date(day, 'bn')} {of(doctor)} খালি সময়: {spoken}। কোনটা নেবেন?",
             f"On {spoken_date(day, 'en')}, {doctor} is free at {spoken}. Which one would you like?",
         )
     return Reply(text=lead + g["question"])

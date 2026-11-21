@@ -150,6 +150,7 @@ async def book_appointment(
         "doctor_bn": booked["doctor_bn"],
         "patient_id": patient_id,
         "confirmed": bool(booked.get("confirmed", 1)),
+        "serial_no": booked.get("serial_no"),
     }
 
 

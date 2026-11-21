@@ -154,6 +154,29 @@ def spoken_doctor(name: str, language: str) -> str:
     return f"ডাক্তার {bare}" if language == "bn" else f"Dr. {bare}"
 
 
+_VOWEL_END = set("ািীুূৃেৈোৌঅআইঈউঊএঐওঔ")
+
+
+def of(name: str) -> str:
+    """Bangla possessive: "ডাক্তার নাসরিন" -> "ডাক্তার নাসরিনের", "ডাক্তার রাজু" -> "ডাক্তার রাজুর".
+    A name written in Latin letters keeps "-এর" ("Dr. Smith-এর"): no Bangla ending fits it."""
+    text = str(name).rstrip()
+    if not text:
+        return text
+    last = text[-1]
+    if not "\u0980" <= last <= "\u09ff":
+        return f"{text}-এর"
+    return text + ("র" if last in _VOWEL_END else "ের")
+
+
+def spoken_serial(serial: object, time: str, language: str) -> str:
+    """Serial 5 at about 17:30 -> 'সিরিয়াল পাঁচ, আনুমানিক বিকেল সাড়ে পাঁচটায়' / 'serial number 5,
+    at about 5:30 pm'. The time is only an estimate: chambers run late."""
+    if language == "bn":
+        return f"সিরিয়াল {spoken_number(serial, 'bn')}, আনুমানিক {spoken_time(time, 'bn', at=True)}"
+    return f"serial number {serial}, at about {spoken_time(time, 'en')}"
+
+
 def spoken_reference(value: str, language: str) -> str:
     """'APT-00001' -> '1' / '১': the number a caller can remember and say back."""
     digits = re.sub(r"\D", "", str(value)).lstrip("0")

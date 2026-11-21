@@ -90,7 +90,7 @@ async def test_a_caller_with_a_visit_is_told_before_booking_another(monkeypatch)
     second.session.patient_id = str(call.patient)
     reply = await second.say("আরেকটা অ্যাপয়েন্টমেন্ট চাই")
 
-    assert "আপনার ডাক্তার সুলতানা-এর সাথে" in reply and "একটি অ্যাপয়েন্টমেন্ট আছে" in reply
+    assert "আপনার ডাক্তার সুলতানার সাথে" in reply and "একটি অ্যাপয়েন্টমেন্ট আছে" in reply
     assert "কোন ডাক্তার" in reply
     again = await second.say("মেডিসিনে")
     assert "একটি অ্যাপয়েন্টমেন্ট আছে" not in again  # said once, not every turn

@@ -251,7 +251,14 @@ def test_patient_and_day_listings_for_reminders(clinic):
 
 def test_next_available_skips_empty_days(clinic):
     full = clinic.next_available(clinic.doctor_id, now=SUNDAY_NIGHT)
-    assert full == {"date": MONDAY, "time": "09:00", "end_time": "09:30", "duration_minutes": 30}
+    assert full == {
+        "date": MONDAY,
+        "time": "09:00",
+        "end_time": "09:30",
+        "duration_minutes": 30,
+        "serial": 1,
+        "session_start": "09:00",
+    }
     clinic.add_leave(clinic.doctor_id, MONDAY, MONDAY)
     assert clinic.next_available(clinic.doctor_id, now=SUNDAY_NIGHT)["date"] == NEXT_MONDAY
     assert clinic.next_available(clinic.doctor_id, now=SUNDAY_NIGHT, horizon_days=3) is None

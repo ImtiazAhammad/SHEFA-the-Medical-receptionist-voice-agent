@@ -314,7 +314,7 @@ def _read_out(patient_id: int, lang: str, today: str, past: bool) -> str:
     about an earlier visit or have nothing coming up."""
     from shefa.clinic import default_clinic_store
     from shefa.pipeline.guided import _when
-    from shefa.spoken import spoken_doctor
+    from shefa.spoken import spoken_date, spoken_doctor, spoken_serial
 
     store = default_clinic_store()
     every = store.appointments_for_patient(patient_id)
@@ -332,11 +332,12 @@ def _read_out(patient_id: int, lang: str, today: str, past: bool) -> str:
             if not a.get("confirmed", 1)
             else ""
         )
-        return _t(
-            lang,
-            f"{_when(a['date'], a['start_time'], lang)}, {doctor}{pending}",
-            f"{doctor}, {_when(a['date'], a['start_time'], lang)}{pending}",
-        )
+        if a.get("serial_no"):
+            serial = spoken_serial(a["serial_no"], a["start_time"], lang)
+            when = f"{spoken_date(a['date'], lang)}, {serial}"
+        else:
+            when = _when(a["date"], a["start_time"], lang)
+        return _t(lang, f"{when}, {doctor}{pending}", f"{doctor}, {when}{pending}")
 
     parts: list[str] = []
     if past and earlier:

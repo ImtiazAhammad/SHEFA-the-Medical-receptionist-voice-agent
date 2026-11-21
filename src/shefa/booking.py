@@ -233,6 +233,7 @@ class PublicBooking:
             "date": appointment["date"],
             "time": appointment["start_time"],
             "end_time": appointment["end_time"],
+            "serial_no": appointment.get("serial_no"),
         }
 
     def _owned(self, reference: str, phone: str) -> tuple[dict[str, Any], int]:

@@ -27,12 +27,14 @@ from shefa.clinic.store import clinic_today
 from shefa.pipeline.grounding import ground_arguments
 from shefa.session.messages import build_messages, clinic_directory
 from shefa.spoken import (
+    of,
     spoken_date,
     spoken_doctor,
     spoken_list,
     spoken_number,
     spoken_reference,
     spoken_schedule,
+    spoken_serial,
     spoken_time,
 )
 
@@ -365,7 +367,7 @@ def _confirm_my_appointments(result: dict[str, Any]) -> dict[str, str] | None:
             f"{spoken_reference(item['appointment_id'], 'en')}"
         )
         bn_parts.append(
-            f"{spoken_doctor(doctor_bn, 'bn')}-এর সাথে {spoken_date(item['date'], 'bn')} "
+            f"{of(spoken_doctor(doctor_bn, 'bn'))} সাথে {spoken_date(item['date'], 'bn')} "
             f"{spoken_time(item['time'], 'bn', at=True)}, রেফারেন্স "
             f"{spoken_reference(item['appointment_id'], 'bn')}"
         )
@@ -440,9 +442,18 @@ def _confirm_book(result: dict[str, Any]) -> dict[str, str] | None:
         return None
     en, bn = _say(result, "en"), _say(result, "bn")
     with_en = f" with {en['doctor']}" if en["doctor"] else ""
-    with_bn = f" {bn['doctor']}-এর সাথে" if bn["doctor"] else ""
+    with_bn = f" {of(bn['doctor'])} সাথে" if bn["doctor"] else ""
     desk_en = " The front desk will confirm it shortly." if result.get("confirmed") is False else ""
     desk_bn = " আমাদের ডেস্ক শীঘ্রই এটি নিশ্চিত করবে।" if result.get("confirmed") is False else ""
+    if result.get("serial_no"):
+        s_en = spoken_serial(result["serial_no"], result.get("time", ""), "en")
+        s_bn = spoken_serial(result["serial_no"], result.get("time", ""), "bn")
+        return {
+            "en": f"Booked{with_en} on {en['date']}: {s_en}. Doctors often run late, so please "
+            f"come a little early.{desk_en} Your reference number is {en['ref']}.",
+            "bn": f"{bn['date']}{with_bn} আপনার {s_bn} বুক হয়েছে। চেম্বারে দেরি হতে পারে, একটু আগে "
+            f"আসবেন।{desk_bn} আপনার রেফারেন্স নম্বর {bn['ref']}।",
+        }
     return {
         "en": f"Your appointment{with_en} is booked for {en['date']} at {en['at']}."
         f"{desk_en} Your reference number is {en['ref']}.",
@@ -471,7 +482,7 @@ def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
         return {
             "en": f"On {date_en}, {names_en} {'has' if len(doctors) == 1 else 'have'} free "
             "time. Which doctor would you like?",
-            "bn": f"{date_bn} {names_bn}-এর খালি সময় আছে। কোন ডাক্তারকে দেখাতে চান?",
+            "bn": f"{date_bn} {of(names_bn)} খালি সময় আছে। কোন ডাক্তারকে দেখাতে চান?",
         }
     times = [
         slot.get("time", "") for slot in (result.get("available_slots") or []) if slot.get("time")
@@ -487,13 +498,13 @@ def _confirm_slots(result: dict[str, Any]) -> dict[str, str] | None:
                 "en": f"{who_en} has no free time on {date_en}. The next free time is "
                 f"{spoken_date(nxt['date'], 'en')} at {spoken_time(nxt['time'], 'en')}. "
                 "Shall I book that?",
-                "bn": f"{date_bn} {who_bn}-এর খালি সময় নেই। পরের খালি সময় "
+                "bn": f"{date_bn} {of(who_bn)} খালি সময় নেই। পরের খালি সময় "
                 f"{spoken_date(nxt['date'], 'bn')} {spoken_time(nxt['time'], 'bn', at=True)}। "
                 "সেটা বুক করব?",
             }
         return {
             "en": f"{who_en} has no free time on {date_en} or in the coming weeks.",
-            "bn": f"{date_bn} বা সামনের কয়েক সপ্তাহে {who_bn}-এর কোনো খালি সময় নেই।",
+            "bn": f"{date_bn} বা সামনের কয়েক সপ্তাহে {of(who_bn)} কোনো খালি সময় নেই।",
         }
     if len(times) > 4:  # reading sixteen times aloud is not a conversation
         return {
@@ -770,7 +781,7 @@ def _lookup_text(result: dict[str, Any], language: str) -> str | None:
         )
     if result.get("closest"):
         who = spoken_doctor(result["closest"][0], language)
-        return f"আপনি কি {who}-এর কথা বলছেন?" if bn else f"Did you mean {who}?"
+        return f"আপনি কি {of(who)} কথা বলছেন?" if bn else f"Did you mean {who}?"
     if result.get("doctors") and "doctor" in str(result.get("error", "")).lower():
         who = _doctor_names(result["doctors"][:4], language)
         return (

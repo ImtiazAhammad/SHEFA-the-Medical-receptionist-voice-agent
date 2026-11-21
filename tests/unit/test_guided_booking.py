@@ -364,3 +364,60 @@ async def test_an_early_name_with_a_fee_sound_is_still_a_name(monkeypatch):
 
     assert reply.startswith("ধন্যবাদ, রফিমুদ্দিন") and reply.count("কোনটা নেবেন") == 1
     assert call.llm.calls == 0
+
+
+def _serial(call, name="Sultana"):
+    doctor = next(d for d in call.store.doctors() if d["name_en"] == name)
+    call.store.set_booking_mode(doctor["id"], "serial")
+    return doctor
+
+
+async def test_a_serial_doctor_gives_the_next_serial_not_a_list_of_times(monkeypatch):
+    call = start(monkeypatch)
+    doctor = _serial(call)
+    await call.say("অ্যাপয়েন্টমেন্ট চাই")
+    await call.say("সুলতানা")
+
+    offer = await call.say("কাল")
+
+    assert "সিরিয়াল এক" in offer and "আনুমানিক" in offer and "নেবেন" in offer
+    assert "কোনটা নেবেন" not in offer  # no list of clock times
+    read = await call.say("হ্যাঁ")
+    assert "সিরিয়াল এক" in read and "চেম্বারে" in read and "বুক করব" in read
+    booked = await call.say("হ্যাঁ")
+    assert "সিরিয়াল এক" in booked and "একটু আগে আসবেন" in booked
+    [appointment] = call.store.appointments_for_patient(call.patient)
+    assert appointment["serial_no"] == 1 and appointment["doctor_id"] == doctor["id"]
+
+
+async def test_serials_count_up_and_a_full_day_moves_to_the_next(monkeypatch):
+    call = start(monkeypatch)
+    doctor = _serial(call)
+    day = tomorrow()
+    others = [call.store.upsert_patient(f"0171100{i:04d}", "x") for i in range(3)]
+    for p, clock in zip(others, ("09:00", "09:30", "10:00"), strict=True):
+        call.store.book(p, doctor["id"], day, clock)  # the whole session: 3 serials
+    await call.say("অ্যাপয়েন্টমেন্ট চাই")
+    await call.say("সুলতানা")
+
+    offer = await call.say("কাল")
+
+    assert "সিরিয়াল খালি নেই" in offer and "সিরিয়াল এক" in offer  # first serial the day after
+    assert call.store.appointments_for_patient(others[2])[0]["serial_no"] == 3
+
+
+async def test_a_clock_time_doctor_is_unchanged(monkeypatch):
+    call = start(monkeypatch)
+    await call.say("অ্যাপয়েন্টমেন্ট চাই")
+    await call.say("সুলতানা")
+    times = await call.say("কাল")
+    assert "কোনটা নেবেন" in times and "সিরিয়াল" not in times
+
+
+def test_possessive_reads_as_bangla():
+    from shefa.spoken import of
+
+    assert of("ডাক্তার নাসরিন") == "ডাক্তার নাসরিনের"
+    assert of("ডাক্তার রাজু") == "ডাক্তার রাজুর"
+    assert of("ডাক্তার চৌধুরী") == "ডাক্তার চৌধুরীর"
+    assert of("Dr. Smith") == "Dr. Smith-এর"
