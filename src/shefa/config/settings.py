@@ -637,6 +637,16 @@ class EmailChannelConfig(StrictModel):
     from_address: str = ""
 
 
+class MissedCallsConfig(StrictModel):
+    """SHEFA calls back calls nobody answered (shefa/missed.py). Off: it places real calls."""
+
+    enabled: bool = False
+    interval_minutes: int = Field(default=2, ge=1)
+    delay_minutes: int = Field(default=3, ge=0)  # the desk or the caller may redial first
+    retry_minutes: int = Field(default=30, ge=1)
+    max_attempts: int = Field(default=2, ge=1, le=5)
+
+
 class AlertsConfig(StrictModel):
     """Where `shefa selftest` reports a problem (shefa/selftest.py)."""
 
@@ -687,6 +697,7 @@ class AppConfig(StrictModel):
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
+    missed_calls: MissedCallsConfig = Field(default_factory=MissedCallsConfig)
     # What the clinic has, in its own words, per language: {"parking": {"bn": "...", "en": "..."}}.
     # Keys: address, hours, ownership, phone, emergency_dept, imaging, lab, admission, icu, video,
     # parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment, prayer,

@@ -285,6 +285,9 @@ async def _turn_away(call_sid: str, leg: AsteriskCallLeg, writer: asyncio.Stream
         default_calls_store().add_callback(call_sid, phone, language, "all lines were busy")
     except Exception:
         logger.exception("Could not queue a call-back for %s", call_sid)
+    from shefa.missed import record as record_missed
+
+    record_missed(phone)  # SHEFA calls back itself once a line is free (if switched on)
     prompts = settings.escalation.busy_message
     message = prompts.get(language, prompts.get("en", "All our lines are busy. We will call you."))
     queues = make_media_queues()

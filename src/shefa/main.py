@@ -219,6 +219,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/callbacks/{callback_id}/resolve"): "records:write",
     ("GET", "/api/v1/overview"): "overview:read",
     ("GET", "/api/v1/report"): "overview:read",
+    ("POST", "/api/v1/missed-calls"): "calls:place",
+    ("GET", "/api/v1/missed-calls"): "records:read",
     ("GET", "/api/v1/me/day"): "doctor:self",
     ("GET", "/api/v1/me/doctor"): "doctor:self",
     ("POST", "/api/v1/me/appointments/{appointment_id}/status"): "doctor:self",
@@ -458,6 +460,10 @@ class StatusBody(BaseModel):
     status: str
 
 
+class MissedCallBody(BaseModel):
+    phone: str = Field(min_length=3, max_length=20)
+
+
 class WalkInBody(BaseModel):
     doctor_id: int
     name: str = Field(min_length=1, max_length=80)
@@ -515,9 +521,19 @@ async def _lifespan(_app: FastAPI):
         from shefa.reminders import run_forever
 
         reminder_task = asyncio.create_task(run_forever(default_clinic_store(), place_call))
+    missed_task = None
+    if settings.missed_calls.enabled:
+        import asyncio
+
+        from shefa.clinic import default_clinic_store
+        from shefa.missed import run_forever as call_back_missed
+
+        missed_task = asyncio.create_task(call_back_missed(default_clinic_store(), place_call))
     try:
         yield
     finally:
+        if missed_task is not None:
+            missed_task.cancel()
         if reminder_task is not None:
             reminder_task.cancel()
         if warm_task is not None:
@@ -870,6 +886,28 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             "open_callbacks": len(default_calls_store().list_callbacks()),
             "reminders": {"attempted": reminders[0], "completed": int(reminders[1])},
         }
+
+    @app.post("/api/v1/missed-calls")
+    async def report_missed_call(body: MissedCallBody, request: Request) -> dict:
+        """The phone system reports a call nobody answered (docs/missed-calls.md)."""
+        from shefa.config.settings import settings as _settings
+        from shefa.missed import record
+
+        if not _settings.missed_calls.enabled:
+            return {"queued": False, "reason": "missed-call call-backs are switched off"}
+        missed_id = record(body.phone)
+        _audit(request, "missed_call_reported", queued=missed_id is not None)
+        return {"queued": missed_id is not None}
+
+    @app.get("/api/v1/missed-calls")
+    async def list_missed_calls() -> list[dict]:
+        from shefa.call_log import mask_phone
+        from shefa.clinic import default_clinic_store
+
+        return [
+            {**m, "phone": mask_phone(m["phone"])}
+            for m in default_clinic_store().missed_calls(limit=100)
+        ]
 
     @app.get("/api/v1/report")
     async def owner_report(days: int = 7, end: str = "") -> dict:

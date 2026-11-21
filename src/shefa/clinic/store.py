@@ -262,6 +262,57 @@ class ClinicStore:
         first = bn if language == "bn" else en
         return first or en or bn or ("শেফা" if language == "bn" else "SHEFA")
 
+    # -- missed calls (SHEFA calls them back) ------------------------------
+
+    def add_missed_call(self, phone: str, *, at: float | None = None) -> int | None:
+        """Record a call nobody answered. The same number again within two hours is the same
+        missed call (people redial), so it is not queued twice. None when skipped."""
+        when = at if at is not None else _time.time()
+        local = normalize_phone(phone)
+        if not local:
+            return None
+        same = self.connection.execute(
+            "SELECT id FROM missed_calls WHERE phone = ? AND missed_at >= ?"
+            " AND status IN ('pending', 'calling')",
+            (local, when - 2 * 3600),
+        ).fetchone()
+        if same:
+            return None
+        with self.connection:
+            cur = self.connection.execute(
+                "INSERT INTO missed_calls (phone, missed_at) VALUES (?, ?)", (local, when)
+            )
+        return int(cur.lastrowid)
+
+    def missed_calls(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.connection.execute(
+                "SELECT * FROM missed_calls ORDER BY missed_at DESC LIMIT ?", (limit,)
+            )
+        ]
+
+    def update_missed_call(self, missed_id: int, **fields: Any) -> None:
+        keys = {"status", "attempts", "last_try", "note"}
+        allowed = {k: v for k, v in fields.items() if k in keys}
+        if not allowed:
+            return
+        sql = ", ".join(f"{k} = ?" for k in allowed)
+        with self.connection:
+            self.connection.execute(
+                f"UPDATE missed_calls SET {sql} WHERE id = ?",  # noqa: S608 - allow-listed keys
+                (*allowed.values(), missed_id),
+            )
+
+    def booked_since(self, phone: str, since: float) -> bool:
+        """Has this number booked anything (any way) since `since`?"""
+        row = self.connection.execute(
+            "SELECT 1 FROM appointments a JOIN patients p ON p.id = a.patient_id"
+            " WHERE p.phone = ? AND a.created_at >= ? AND a.source != 'test' LIMIT 1",
+            (normalize_phone(phone), since),
+        ).fetchone()
+        return row is not None
+
     # -- messages (SMS) -----------------------------------------------------
 
     def log_message(

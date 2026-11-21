@@ -352,3 +352,12 @@ alerts:
   telegram_chat_id: ""        # your chat with the bot (message the bot, then read getUpdates)
   telegram_token_env: "SHEFA_TELEGRAM_TOKEN"   # the bot token lives in this environment variable
   heartbeat_url: ""           # e.g. a free healthchecks.io ping URL: it alerts when SHEFA goes quiet
+
+# SHEFA calls back calls nobody answered (src/shefa/missed.py, docs/missed-calls.md).
+# Off by default: it places real calls. Quiet hours are the reminders' window.
+missed_calls:
+  enabled: false
+  interval_minutes: 2
+  delay_minutes: 3
+  retry_minutes: 30
+  max_attempts: 2
