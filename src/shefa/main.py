@@ -373,8 +373,13 @@ def _install_clinic_context(app: FastAPI) -> None:
             wanted = tied
         elif principal is not None and principal.role in ("owner", "admin"):
             wanted = request.headers.get("X-Clinic", "")
-        else:
+        elif principal is None:  # the public booking page: it names its clinic
             wanted = request.query_params.get("clinic", "") or request.headers.get("X-Clinic", "")
+        else:
+            # A desk or doctor account tied to no clinic works in the default clinic, whatever it
+            # asks for: it must never reach another clinic's patients (a doctor's id would even
+            # point at another clinic's doctor there).
+            wanted = ""
         if wanted and wanted not in clinics():
             return JSONResponse(
                 status_code=404,
@@ -509,6 +514,7 @@ class StatusBody(BaseModel):
 
 class MissedCallBody(BaseModel):
     phone: str = Field(min_length=3, max_length=20)
+    dialed: str = Field(default="", max_length=20)  # the clinic's number the patient called
 
 
 class WalkInBody(BaseModel):
@@ -942,7 +948,13 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
         if not _settings.missed_calls.enabled:
             return {"queued": False, "reason": "missed-call call-backs are switched off"}
-        missed_id = record(body.phone)
+        from shefa.clinic.registry import clinic_for_number, clinics, current, in_clinic
+
+        # On a machine serving several clinics, the number the patient dialled says whose
+        # missed call this is (and whose name SHEFA calls back with).
+        clinic = clinic_for_number(body.dialed) if (clinics() and body.dialed) else current()
+        with in_clinic(clinic):
+            missed_id = record(body.phone)
         _audit(request, "missed_call_reported", queued=missed_id is not None)
         return {"queued": missed_id is not None}
 
@@ -982,7 +994,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
 
         from shefa.call_log import mask_phone
         from shefa.clinic import default_clinic_store
-        from shefa.clinic.store import CLINIC_TZ
+        from shefa.clinic.store import CLINIC_TZ, is_no_phone
 
         day = date or datetime.now(CLINIC_TZ).date().isoformat()
         rows = default_clinic_store().appointments_on(
@@ -999,7 +1011,7 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "doctor_id": a["doctor_id"],
                 "serial_no": a.get("serial_no"),
                 "patient_name": a["patient_name"],
-                "phone": mask_phone(a["phone"]) if not a["phone"].startswith("W") else "",
+                "phone": "" if is_no_phone(a["phone"]) else mask_phone(a["phone"]),
                 "status": a["status"],
                 "source": a.get("source", "phone"),
                 "confirmed": bool(a.get("confirmed", 1)),
@@ -1033,7 +1045,10 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             )
         phone = normalize_phone(body.phone) if body.phone.strip() else ""
         # Someone without a phone still needs a patient row: a walk-in marker, never texted.
-        patient = clinic.upsert_patient(phone or f"W{int(_clock.time() * 1000)}", body.name.strip())
+        from shefa.clinic.store import NO_PHONE_PREFIX
+
+        stand_in = f"{NO_PHONE_PREFIX}{int(_clock.time() * 1000)}"
+        patient = clinic.upsert_patient(phone or stand_in, body.name.strip())
         try:
             booked = clinic.book(
                 patient, body.doctor_id, day, slots[0]["time"], source="walkin", confirmed=True,

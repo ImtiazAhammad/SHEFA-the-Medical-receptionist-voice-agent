@@ -83,12 +83,13 @@ def send_booking_sms(
     patient = store.get_patient(int(appointment["patient_id"])) or {}
     doctor = store.doctor(int(appointment["doctor_id"])) or {}
     phone = patient.get("phone", "")
-    if phone.startswith("W"):  # a walk-in who gave no phone (main.add_walk_in)
-        phone = ""
     body = confirmation_text(appointment, doctor, store.clinic_name(language), language)
-    result = sender.send(phone, body) if phone else None
+    from shefa.phone_words import is_bd_mobile
+
+    # Only a Bangladeshi mobile can get an SMS (a walk-in's stand-in, a landline: no)
+    result = sender.send(phone, body) if is_bd_mobile(phone) else None
     status = result.status if result else "failed"
-    detail = result.detail if result else "the booking has no phone number"
+    detail = result.detail if result else "no mobile number to text"
     store.log_message(
         to_phone=phone,
         kind=kind,

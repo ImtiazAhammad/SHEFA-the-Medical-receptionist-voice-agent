@@ -58,7 +58,10 @@ def weekly_report(
         " started_at < ? AND deleted_at IS NULL AND COALESCE(direction, '') != 'test'",
         (t0, t1),
     ).fetchall()
-    inbound = [r for r in call_rows if r["direction"] == "inbound"]
+    # Answered = SHEFA held the conversation; a caller told "all lines busy" was not answered.
+    inbound = [
+        r for r in call_rows if r["direction"] == "inbound" and r["disposition"] != "turned_away"
+    ]
     handed = sum(1 for r in call_rows if r["disposition"] == "handed_over")
     turned_away = sum(1 for r in call_rows if r["disposition"] == "turned_away")
 

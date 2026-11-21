@@ -62,6 +62,7 @@ def test_the_week_in_numbers(stores):
     call(calls, "b", at(END, "11:00"), disposition="handed_over")
     call(calls, "t", at(END, "03:00"), direction="test")  # the nightly self-test
     call(calls, "old", at(END - timedelta(days=9), "11:00"))  # before the week
+    call(calls, "busy", at(END, "12:00"), disposition="turned_away")  # not answered
     book(clinic, doctor, at(night, "23:12"), END.isoformat(), "10:00", "phone")
     book(clinic, doctor, at(END, "10:00"), END.isoformat(), "10:15", "web")
     book(clinic, doctor, at(END, "10:00"), END.isoformat(), "10:30", "walkin", status="no_show")
@@ -80,7 +81,7 @@ def test_the_week_in_numbers(stores):
 
     assert r["from"] == (END - timedelta(days=6)).isoformat() and r["to"] == END.isoformat()
     assert r["calls"]["answered_by_shefa"] == 2 and r["calls"]["after_hours"] == 1
-    assert r["calls"]["handed_to_a_person"] == 1
+    assert r["calls"]["handed_to_a_person"] == 1 and r["calls"]["turned_away_busy"] == 1
     assert r["bookings"] == {
         "by_shefa_phone": 2,
         "by_web_page": 1,

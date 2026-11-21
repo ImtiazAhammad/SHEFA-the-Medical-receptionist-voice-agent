@@ -189,3 +189,31 @@ def test_the_public_booking_page_names_its_clinic(app):
     assert clinic.status_code == 200
     assert "Nasrin" in clinic.text and "Kabir" not in clinic.text
     assert app.get("/api/v1/public/clinic?clinic=ghost").status_code == 404
+
+
+def test_an_untied_desk_account_cannot_pick_a_clinic(app):
+    seed("", "Default", "01711000009")
+    day = seed("nur", "Nasrin", "01811000002")
+    default_staff_store().add_user("old-desk", PW, "desk")  # made before clinics existed
+    c = sign_in(app, "old-desk")
+    for ask in ({"X-Clinic": "nur"}, {}):
+        rows = c.get(f"/api/v1/appointments?date={day}&clinic=nur", headers=ask).json()
+        assert all(r["doctor"] != "Nasrin" for r in rows)
+
+
+def test_a_missed_desk_call_lands_in_the_dialled_clinic(two_clinics, monkeypatch):
+    from shefa.auth import hash_token
+
+    monkeypatch.setattr(settings.missed_calls, "enabled", True)
+    token = "p" * 32
+    pbx = TestClient(
+        create_app(AuthStore([("pbx", "admin", hash_token(token))], {"admin": ["calls:place"]})),
+        base_url="https://testserver",
+    )
+    pbx.headers["Authorization"] = "Bearer " + token
+    got = pbx.post("/api/v1/missed-calls", json={"phone": "01711000123", "dialed": "01811000002"})
+    assert got.json()["queued"] is True
+    with in_clinic("nur"):
+        assert len(default_clinic_store().missed_calls()) == 1
+    with in_clinic("alo"):
+        assert default_clinic_store().missed_calls() == []

@@ -319,3 +319,22 @@ def test_phone_numbers_are_normalised_so_one_person_is_one_patient(tmp_path):
     first = store.upsert_patient("+8801711000123", "Karim")
     assert store.upsert_patient("01711000123") == first
     store.close()
+
+
+def test_a_walk_in_without_a_phone_is_never_called(clinic):
+    from datetime import datetime, timedelta
+
+    from shefa.clinic.store import CLINIC_TZ, NO_PHONE_PREFIX
+
+    patient = clinic.upsert_patient(f"{NO_PHONE_PREFIX}1795290000123", "রহিম")
+    now = datetime.now(CLINIC_TZ)
+    soon = now + timedelta(hours=3)
+    for weekday in range(7):
+        clinic.add_schedule(clinic.doctor_id, weekday, "00:00", "23:30", 30)
+    slots = clinic.available_slots(clinic.doctor_id, soon.date().isoformat(), now=now)
+    clinic.book(patient, clinic.doctor_id, soon.date().isoformat(), slots[-1]["time"], now=now)
+    real = clinic.upsert_patient("01711000999", "করিম")
+    clinic.book(real, clinic.doctor_id, soon.date().isoformat(), slots[-2]["time"], now=now)
+    phones = [r["phone"] for r in clinic.due_reminders(now, lead_hours=48)]
+    assert "01711000999" in phones  # the control: real numbers are still called
+    assert not any(p.startswith(NO_PHONE_PREFIX) for p in phones)

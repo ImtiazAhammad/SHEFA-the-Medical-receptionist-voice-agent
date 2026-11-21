@@ -28,6 +28,13 @@ from shefa.clinic import names
 CLINIC_TZ = ZoneInfo("Asia/Dhaka")
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _ID_PREFIX = "APT-"
+# A walk-in who gives no phone still needs a patient row. Their stand-in "number" starts with
+# 000, which survives normalize_phone and is never a real number: nobody texts or dials it.
+NO_PHONE_PREFIX = "000"
+
+
+def is_no_phone(phone: str) -> bool:
+    return str(phone or "").startswith(NO_PHONE_PREFIX)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS departments (
@@ -571,9 +578,18 @@ class ClinicStore:
         for r in rows:
             weekday = _parse_date(r["date"]).weekday()
             minute = _to_minutes(r["start_time"])
+            # It fits when a session holds it AND it sits on that session's grid: after the
+            # minutes per patient change (30 patients become 40), a booking between two new
+            # places would otherwise share a serial with the next caller.
             fits = any(
                 w["weekday"] == weekday
                 and _to_minutes(w["start_time"]) <= minute < _to_minutes(w["end_time"])
+                and (minute - _to_minutes(w["start_time"])) % w["slot_minutes"] == 0
+                and (
+                    r["serial_no"] is None
+                    or r["serial_no"]
+                    == (minute - _to_minutes(w["start_time"])) // w["slot_minutes"] + 1
+                )
                 for w in windows
             )
             if not fits or self.doctor_on_leave(doctor_id, r["date"]):
@@ -905,9 +921,17 @@ class ClinicStore:
         try:
             with self.connection:
                 self.connection.execute(
-                    "UPDATE appointments SET date = ?, start_time = ?, end_time = ?, updated_at = ?"
-                    " WHERE id = ?",
-                    (new_day, new_time, slot["end_time"], _time.time(), appointment["id"]),
+                    "UPDATE appointments SET date = ?, start_time = ?, end_time = ?,"
+                    " serial_no = ?, updated_at = ? WHERE id = ?",
+                    (
+                        new_day,
+                        new_time,
+                        slot["end_time"],
+                        # a moved booking takes the serial of its new place, never its old one
+                        slot["serial"] if self.is_serial(appointment["doctor_id"]) else None,
+                        _time.time(),
+                        appointment["id"],
+                    ),
                 )
         except sqlite3.IntegrityError as exc:
             raise SlotUnavailableError(f"{new_time} on {new_day} was just taken") from exc
@@ -1018,6 +1042,8 @@ class ClinicStore:
         ).fetchall()
         due: list[dict[str, Any]] = []
         for row in rows:
+            if is_no_phone(row["phone"]):  # a walk-in who gave no number: nobody to call
+                continue
             last = row["last_attempt"]
             if last is not None and now.timestamp() - last < retry_after_minutes * 60:
                 continue

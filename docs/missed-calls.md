@@ -17,12 +17,15 @@ one number (your own) before switching it on for a clinic.
    ```
    exten => s,n,Dial(PJSIP/desk,25)
    exten => s,n,GotoIf($["${DIALSTATUS}" = "ANSWER"]?done)
-   exten => s,n,System(curl -s -m 5 -X POST http://127.0.0.1:8000/api/v1/missed-calls -H "Authorization: Bearer ${SHEFA_PBX_TOKEN}" -H "Content-Type: application/json" -d '{"phone":"${CALLERID(num)}"}')
+   exten => s,n,System(curl -s -m 5 -X POST http://127.0.0.1:8000/api/v1/missed-calls -H "Authorization: Bearer ${SHEFA_PBX_TOKEN}" -H "Content-Type: application/json" -d '{"phone":"${CALLERID(num)}","dialed":"${EXTEN}"}')
    exten => s,n(done),Hangup()
    ```
 
    The token is one you mint for the phone system (`shefa token --name pbx --role admin`), kept
    in Asterisk's environment, never in the dialplan file. It needs the `calls:place` permission.
+
+`dialed` is the clinic number the patient called. On a machine serving several clinics
+(docs/many-clinics.md) it decides whose missed call it is, and whose name SHEFA calls back with.
 
 The same number again within two hours counts as one missed call: people redial.
 

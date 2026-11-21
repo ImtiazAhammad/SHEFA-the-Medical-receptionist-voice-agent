@@ -197,11 +197,51 @@ def test_a_walk_in_takes_the_next_serial_and_is_never_texted(app):
         "/api/v1/appointments/walk-in", json={"doctor_id": doctor["id"], "name": "রহিম"}
     )
     assert got.status_code == 200 and got.json()["serial_no"]
-    sms = send_booking_sms(got.json()["appointment_id"])
-    assert sms["sent"] is False  # no phone given: nothing to text
+    from shefa.integrations.sms import SmsSender
+    from tests.unit.test_sms import FakeGateway, gateway
+
+    working = FakeGateway()
+    sms = send_booking_sms(got.json()["appointment_id"], sender=SmsSender(gateway(), working))
+    assert sms["sent"] is False and working.calls == []  # a gateway that works is never asked
+    stored = default_clinic_store().get_patient(
+        default_clinic_store().get_appointment(got.json()["appointment_id"])["patient_id"]
+    )
+    assert stored["phone"].startswith("000")  # the stand-in survives normalising
     listed = desk.get("/api/v1/appointments").json()
     assert listed[0]["source"] == "walkin" and listed[0]["serial_no"] == got.json()["serial_no"]
+    assert listed[0]["phone"] == ""  # no stand-in digits shown to the desk
     assert (
         desk.post("/api/v1/appointments/walk-in", json={"doctor_id": 999, "name": "x"}).status_code
         == 404
     )
+
+
+def test_changing_patients_per_chamber_flags_bookings_off_the_new_grid(app):
+    c = as_(app, OWNER)
+    doctor = make_doctor(c)
+    sat = {"weekday": 5, "start_time": "17:00", "end_time": "21:00", "patients": 30}  # 8 min
+    c.put(f"/api/v1/admin/doctors/{doctor['id']}/schedule", json={"sessions": [sat]})
+    clinic = default_clinic_store()
+    day = next_weekday(5)
+    on_both = clinic.book(clinic.upsert_patient("01711000001", "ক"), doctor["id"], day, "17:00")
+    off_new = clinic.book(clinic.upsert_patient("01711000002", "খ"), doctor["id"], day, "17:08")
+    sat40 = {**sat, "patients": 40}  # 6 minutes each: 17:08 is no longer a place
+    stranded = c.put(
+        f"/api/v1/admin/doctors/{doctor['id']}/schedule", json={"sessions": [sat40]}
+    ).json()["stranded"]
+    ids = {s["appointment_id"] for s in stranded}
+    assert off_new["appointment_id"] in ids and on_both["appointment_id"] not in ids
+
+
+def test_a_moved_serial_booking_takes_its_new_serial(app):
+    c = as_(app, OWNER)
+    doctor = make_doctor(c)
+    sat = {"weekday": 5, "start_time": "17:00", "end_time": "21:00", "slot_minutes": 10}
+    c.put(f"/api/v1/admin/doctors/{doctor['id']}/schedule", json={"sessions": [sat]})
+    clinic = default_clinic_store()
+    patient = clinic.upsert_patient("01711000001", "ক")
+    day = next_weekday(5)
+    booked = clinic.book(patient, doctor["id"], day, "17:00")
+    assert booked["serial_no"] == 1
+    clinic.reschedule(booked["appointment_id"], patient, day, "17:30")
+    assert clinic.get_appointment(booked["appointment_id"])["serial_no"] == 4
