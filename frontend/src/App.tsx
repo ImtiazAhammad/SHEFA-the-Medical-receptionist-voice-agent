@@ -11,6 +11,7 @@ import { Overview } from './pages/Overview'
 import { MyDay } from './pages/MyDay'
 import { Staff } from './pages/Staff'
 import { Setup } from './pages/Setup'
+import { Report } from './pages/Report'
 import { Skeleton } from './components'
 
 /** A page the signed-in role may not open sends them to their own home instead. */
@@ -47,6 +48,7 @@ function Gate() {
         </Route>
         <Route element={<Need permission="overview:read" home={home} />}>
           <Route path="overview" element={<Overview />} />
+          <Route path="report" element={<Report />} />
         </Route>
         <Route element={<Need permission="staff:manage" home={home} />}>
           <Route path="staff" element={<Staff />} />

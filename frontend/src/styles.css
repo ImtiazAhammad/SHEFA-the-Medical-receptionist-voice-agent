@@ -249,3 +249,10 @@ summary { cursor: pointer; min-height: 32px; font-weight: 550; }
   .print-doctor th, .print-doctor td { border: 1px solid #000; padding: 4pt 6pt; text-align: start; }
   .tick-box { width: 4rem; }
 }
+
+/* Weekly report */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; background: var(--surface); }
+.tile-num { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.tile-label { margin-top: 0.25rem; }
+.share-text { white-space: pre-wrap; font-family: inherit; margin: 0; padding: 0.75rem; background: var(--surface-2, var(--surface)); border-radius: var(--radius); }

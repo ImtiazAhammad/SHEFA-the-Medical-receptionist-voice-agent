@@ -218,6 +218,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/callbacks"): "records:read",
     ("POST", "/api/v1/callbacks/{callback_id}/resolve"): "records:write",
     ("GET", "/api/v1/overview"): "overview:read",
+    ("GET", "/api/v1/report"): "overview:read",
     ("GET", "/api/v1/me/day"): "doctor:self",
     ("GET", "/api/v1/me/doctor"): "doctor:self",
     ("POST", "/api/v1/me/appointments/{appointment_id}/status"): "doctor:self",
@@ -869,6 +870,23 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
             "open_callbacks": len(default_calls_store().list_callbacks()),
             "reminders": {"attempted": reminders[0], "completed": int(reminders[1])},
         }
+
+    @app.get("/api/v1/report")
+    async def owner_report(days: int = 7, end: str = "") -> dict:
+        """The weekly 'what SHEFA did for you' report (shefa/report.py)."""
+        from datetime import date as _date
+
+        from shefa.call_log import default_calls_store
+        from shefa.clinic import default_clinic_store
+        from shefa.report import weekly_report
+
+        try:
+            last = _date.fromisoformat(end) if end else None
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "validation", "message": "end must be YYYY-MM-DD"}
+            ) from exc
+        return weekly_report(default_clinic_store(), default_calls_store(), end=last, days=days)
 
     @app.get("/api/v1/appointments")
     async def list_appointments(
