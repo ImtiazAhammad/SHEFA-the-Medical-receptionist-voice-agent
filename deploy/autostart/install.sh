@@ -44,12 +44,53 @@ TimeoutStopSec=30
 WantedBy=default.target
 UNIT
 systemctl --user daemon-reload
-if [ "${1:-}" = "--autostart" ]; then
+if [ "${1:-}" = "--autostart" ] || [ "${2:-}" = "--autostart" ]; then
   systemctl --user enable shefa-vllm.service shefa-collector.service
   echo "SHEFA starts at power-on. $(loginctl show-user "$USER" -p Linger) (yes = even before login)"
 else
   systemctl --user disable shefa-vllm.service shefa-collector.service 2>/dev/null || true
   echo "SHEFA starts only when you press Start SHEFA."
+fi
+
+# Self-test (shefa/selftest.py): quick every 15 minutes, a full booking walk-through nightly.
+# Installed always, switched on with --selftest (it alerts on Telegram once that is set up).
+for kind in quick full; do
+  arg=selftest; [ "$kind" = quick ] && arg=selftest-quick
+  cat > "$units/shefa-selftest-$kind.service" <<UNIT
+[Unit]
+Description=SHEFA self-test ($kind)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash "$here/run.sh" $arg
+UNIT
+done
+cat > "$units/shefa-selftest-quick.timer" <<UNIT
+[Unit]
+Description=SHEFA quick self-test every 15 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
+UNIT
+cat > "$units/shefa-selftest-full.timer" <<UNIT
+[Unit]
+Description=SHEFA full self-test every night
+
+[Timer]
+OnCalendar=*-*-* 03:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl --user daemon-reload
+if [ "${1:-}" = "--selftest" ] || [ "${2:-}" = "--selftest" ]; then
+  systemctl --user enable --now shefa-selftest-quick.timer shefa-selftest-full.timer
+  echo "Self-test on: quick every 15 minutes, full at 03:30 (log: data/collector/logs/selftest.log)"
 fi
 
 # The icons: in the app list (search "SHEFA") and on the desktop.

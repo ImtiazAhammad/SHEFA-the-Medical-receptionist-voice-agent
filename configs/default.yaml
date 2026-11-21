@@ -346,3 +346,9 @@ auth:
       - "chat:use"
       - "config:read"
   principals: []             # minted via `shefa token --name <name> --role <role>`; e.g. [{name: front-desk, role: clinician, token_hash: "pbkdf2_sha256$..."}]
+
+# `shefa selftest` reports problems here (see src/shefa/selftest.py).
+alerts:
+  telegram_chat_id: ""        # your chat with the bot (message the bot, then read getUpdates)
+  telegram_token_env: "SHEFA_TELEGRAM_TOKEN"   # the bot token lives in this environment variable
+  heartbeat_url: ""           # e.g. a free healthchecks.io ping URL: it alerts when SHEFA goes quiet

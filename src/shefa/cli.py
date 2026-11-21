@@ -150,6 +150,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check that the configured adapters actually load")
 
+    selftest = sub.add_parser(
+        "selftest", help="check SHEFA works (model, database, disk, a booking on a copy) and alert"
+    )
+    selftest.add_argument(
+        "--quick", action="store_true", help="skip the booking walk-through (for frequent runs)"
+    )
+
     fetch = sub.add_parser(
         "fetch-models", help="download the voice, build the speech model, pull the LLM"
     )
@@ -1009,6 +1016,14 @@ def main(argv: list[str] | None = None) -> int:
         text, passed = run_bench(iterations=args.iterations, vram=not args.no_vram)
         print(text)
         return 0 if passed else 1
+
+    if args.command == "selftest":
+        from shefa.selftest import run as run_selftest
+
+        checks = run_selftest(full=not args.quick)
+        for c in checks:
+            print(f"{'ok  ' if c.ok else 'FAIL'} {c.name:<9} {c.detail}")
+        return 0 if all(c.ok for c in checks) else 1
 
     if args.command == "doctor":
         text, ok = doctor_report()

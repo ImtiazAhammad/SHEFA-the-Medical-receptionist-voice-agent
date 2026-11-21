@@ -25,5 +25,14 @@ os.execvpe(cmd[0], cmd, vllm_environment())
   collector)
     mkdir -p data/collector/logs
     exec "$UV" run --no-sync shefa collect serve >> data/collector/logs/serve.log 2>&1 ;;
-  *) echo "usage: run.sh vllm|vllm-ready|collector" >&2; exit 2 ;;
+  selftest|selftest-quick)
+    # Stopped on purpose (Stop SHEFA) is not a fault: stay quiet. A crashed service is.
+    state=$(systemctl --user is-active shefa-vllm 2>/dev/null || true)
+    if [ "$state" != "active" ] && ! systemctl --user is-failed --quiet shefa-vllm; then
+      exit 0
+    fi
+    flag=""; [ "$1" = "selftest-quick" ] && flag="--quick"
+    mkdir -p data/collector/logs
+    exec "$UV" run --no-sync shefa selftest $flag >> data/collector/logs/selftest.log 2>&1 ;;
+  *) echo "usage: run.sh vllm|vllm-ready|collector|selftest|selftest-quick" >&2; exit 2 ;;
 esac

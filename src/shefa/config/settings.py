@@ -637,6 +637,14 @@ class EmailChannelConfig(StrictModel):
     from_address: str = ""
 
 
+class AlertsConfig(StrictModel):
+    """Where `shefa selftest` reports a problem (shefa/selftest.py)."""
+
+    telegram_chat_id: str = ""
+    telegram_token_env: str = "SHEFA_TELEGRAM_TOKEN"  # the bot token, from the environment
+    heartbeat_url: str = ""  # pinged after every passing run; alerts you when pings stop
+
+
 class NotificationsConfig(StrictModel):
     sms: SMSChannelConfig = Field(default_factory=SMSChannelConfig)
     email: EmailChannelConfig = Field(default_factory=EmailChannelConfig)
@@ -678,6 +686,7 @@ class AppConfig(StrictModel):
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
+    alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     # What the clinic has, in its own words, per language: {"parking": {"bn": "...", "en": "..."}}.
     # Keys: address, hours, ownership, phone, emergency_dept, imaging, lab, admission, icu, video,
     # parking, pharmacy, ambulance, canteen, wifi, lift, wheelchair, insurance, payment, prayer,
