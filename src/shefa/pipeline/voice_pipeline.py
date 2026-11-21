@@ -751,7 +751,7 @@ class VoicePipeline:
         reply = await self._reply(llm, tts, session, put_playback)
         if session.metadata.pop("guided_resume", False) and session.metadata.get("guided"):
             again = guided.reprompt(session)
-            if again:
+            if again and again not in reply:  # the model may already have asked it
                 await self._emit(tts, again, session.language.value, put_playback)
                 reply = f"{reply} {again}".strip()
         return reply

@@ -49,8 +49,11 @@ START = re.compile(
     r"|\bserial\b|\bvisit\b",
     re.IGNORECASE,
 )
+# Bangla words only at the start of a word: inside a name they are not a question (রফিক, শফিক,
+# শওকত, রুমানা were refused as names, "ফি" and "কত" read as a question about the fee).
 INFO_QUESTION = re.compile(
-    r"কত|কি কি|কী কী|কিকি|লাগবে|লাগে|কোথায়|কখন|কয়টা|কয়টায়|ফি\b|ভিজিট|রুম|ঠিকানা|ফোন নম্বর"
+    r"(?<![\u0980-\u09ff])(?:কত|কি কি|কী কী|কিকি|লাগবে|লাগে|কোথায়|কখন|কয়টা|কয়টায়|ভিজিট|ঠিকানা"
+    r"|ফোন নম্বর|ফি(?:টা|টি|র|স)?(?![\u0980-\u09ff])|রুম(?:টা|টি|ে|ের)?(?![\u0980-\u09ff]))"
     r"|how much|what do i need|what (?:do|should) i|where|\bwhen\b|\bfee\b|\bcost\b|\baddress\b",
     re.IGNORECASE,
 )

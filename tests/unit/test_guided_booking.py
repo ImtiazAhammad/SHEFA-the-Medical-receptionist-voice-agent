@@ -339,3 +339,28 @@ async def test_a_name_said_early_is_kept_and_not_asked_again(monkeypatch):
     await call.say("হ্যাঁ")
     [appointment] = call.store.appointments_for_patient(call.patient)
     assert "রহিম উদ্দিন" in appointment["reason"]
+
+
+@pytest.mark.parametrize("name", ["রফিক", "শফিকুল ইসলাম", "শওকত আলী", "রুমানা আক্তার", "রফিমুদ্দিন"])
+async def test_names_containing_question_words_are_names(monkeypatch, name):
+    # "ফি" (fee), "কত", "রুম" inside a name made it a question; seen live with রফিমুদ্দিন.
+    call = start(monkeypatch, named=False)
+    await call.say("অ্যাপয়েন্টমেন্ট চাই")
+    await call.say("সুলতানা")
+    await call.say("কাল")
+    await call.say("১ নম্বর")
+
+    read = await call.say(name)
+
+    assert "নিশ্চিত করছি" in read and call.llm.calls == 0
+
+
+async def test_an_early_name_with_a_fee_sound_is_still_a_name(monkeypatch):
+    call = start(monkeypatch, named=False)
+    await call.say("মেডিসিনে সিরিয়াল চাই")
+    await call.say("কাল সকালে হবে")
+
+    reply = await call.say("আমার নাম রফিমুদ্দিন")
+
+    assert reply.startswith("ধন্যবাদ, রফিমুদ্দিন") and reply.count("কোনটা নেবেন") == 1
+    assert call.llm.calls == 0
