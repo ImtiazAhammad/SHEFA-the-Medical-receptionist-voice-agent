@@ -196,6 +196,21 @@ const en = {
   strandedTitle: 'These patients have bookings that no longer fit. Please call them.',
   strandedDone: 'Done',
   navSetup: 'Setup',
+  needsPerson: 'SHEFA needs a person:',
+  openCallbacks: 'Open call-backs',
+  dismiss: 'Dismiss',
+  alertSound: 'Sound when SHEFA needs a person',
+  addWalkIn: 'Add walk-in',
+  printList: "Print today's list",
+  patientName: "Patient's name",
+  phone: 'Phone',
+  phoneOptional: 'Phone (if any)',
+  giveSerial: 'Give a serial',
+  walkIn: 'Walk-in',
+  walkInSerial: 'Serial {serial}, about {time}.',
+  walkInTime: 'Booked for {time}.',
+  serialCol: 'Serial',
+  arrived: 'Arrived',
 }
 
 export type Key = keyof typeof en
@@ -394,6 +409,21 @@ const bn: Record<Key, string> = {
   strandedTitle: 'এই রোগীদের বুকিং আর সময়সূচির সাথে মিলছে না। দয়া করে তাঁদের ফোন করুন।',
   strandedDone: 'ঠিক আছে',
   navSetup: 'সেটআপ',
+  needsPerson: 'শেফার একজন মানুষ দরকার:',
+  openCallbacks: 'কল-ব্যাক দেখুন',
+  dismiss: 'ঠিক আছে',
+  alertSound: 'শেফার মানুষ দরকার হলে শব্দ',
+  addWalkIn: 'সরাসরি আসা রোগী',
+  printList: 'আজকের তালিকা প্রিন্ট',
+  patientName: 'রোগীর নাম',
+  phone: 'ফোন',
+  phoneOptional: 'ফোন (থাকলে)',
+  giveSerial: 'সিরিয়াল দিন',
+  walkIn: 'সরাসরি এসেছেন',
+  walkInSerial: 'সিরিয়াল {serial}, আনুমানিক {time}।',
+  walkInTime: '{time}-এ বুক হয়েছে।',
+  serialCol: 'সিরিয়াল',
+  arrived: 'এসেছেন',
 }
 
 const dictionaries: Record<Lang, Record<Key, string>> = { en, bn }

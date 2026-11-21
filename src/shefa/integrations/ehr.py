@@ -54,6 +54,7 @@ def _profile_facts(profile: dict[str, Any]) -> dict[str, Any]:
 def _doctor_card(doctor: dict[str, Any]) -> dict[str, Any]:
     store = default_clinic_store()
     return {
+        "id": doctor["id"],
         "name": doctor["name_en"],
         "name_bn": doctor["name_bn"],
         "department": doctor["department_en"],

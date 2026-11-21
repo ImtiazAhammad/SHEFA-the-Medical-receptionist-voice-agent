@@ -234,3 +234,18 @@ summary { cursor: pointer; min-height: 32px; font-weight: 550; }
 .choice { border: 0; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
 .choice legend { font-weight: 600; margin-bottom: 0.3rem; }
 .editor { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+
+/* Desk alert and the printed day list */
+.desk-alert { position: sticky; top: 0; z-index: 5; }
+.sound-toggle { gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
+.print-only { display: none; }
+@media print {
+  .side, .skip, .no-print, .desk-alert, .page-head, .meta { display: none !important; }
+  .print-only { display: block; }
+  .main { padding: 0; }
+  .print-doctor { break-after: page; }
+  .print-doctor h2 { font-size: 14pt; margin: 0 0 8pt; }
+  .print-doctor table { width: 100%; border-collapse: collapse; font-size: 12pt; }
+  .print-doctor th, .print-doctor td { border: 1px solid #000; padding: 4pt 6pt; text-align: start; }
+  .tick-box { width: 4rem; }
+}

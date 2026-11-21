@@ -87,6 +87,10 @@ export interface Appointment {
   date: string
   start_time: string
   doctor: string
+  doctor_bn?: string
+  doctor_id?: number
+  /** The chamber serial for a serial-mode doctor; null for a clock-time booking. */
+  serial_no?: number | null
   patient_name: string | null
   phone: string
   status: string
@@ -96,6 +100,7 @@ export interface Appointment {
 }
 
 export interface Doctor {
+  id?: number
   name: string
   name_bn: string
   department: string

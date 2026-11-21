@@ -179,3 +179,29 @@ def test_bad_input_is_refused(app):
         ).status_code
         == 422
     )
+
+
+def test_a_walk_in_takes_the_next_serial_and_is_never_texted(app):
+    from datetime import datetime
+
+    from shefa.clinic.store import CLINIC_TZ
+    from shefa.integrations.notifications import send_booking_sms
+
+    c = as_(app, OWNER)
+    doctor = make_doctor(c)
+    today = datetime.now(CLINIC_TZ).weekday()
+    whole_day = {"weekday": today, "start_time": "00:00", "end_time": "23:50", "slot_minutes": 10}
+    c.put(f"/api/v1/admin/doctors/{doctor['id']}/schedule", json={"sessions": [whole_day]})
+    desk = as_(app, DESK)
+    got = desk.post(
+        "/api/v1/appointments/walk-in", json={"doctor_id": doctor["id"], "name": "রহিম"}
+    )
+    assert got.status_code == 200 and got.json()["serial_no"]
+    sms = send_booking_sms(got.json()["appointment_id"])
+    assert sms["sent"] is False  # no phone given: nothing to text
+    listed = desk.get("/api/v1/appointments").json()
+    assert listed[0]["source"] == "walkin" and listed[0]["serial_no"] == got.json()["serial_no"]
+    assert (
+        desk.post("/api/v1/appointments/walk-in", json={"doctor_id": 999, "name": "x"}).status_code
+        == 404
+    )

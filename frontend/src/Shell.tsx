@@ -1,6 +1,8 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CalendarDays, ChartNoAxesColumn, ClipboardList, LogOut, Mic, PhoneCall, Radio, Settings2, Stethoscope, Users } from 'lucide-react'
 import { useAuth } from './lib/auth'
+import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
 
 export function Logo() {
@@ -40,6 +42,8 @@ export function LangSwitch() {
 export function Shell() {
   const { t } = useI18n()
   const { me, can, signOut } = useAuth()
+  const alert = useDeskAlert(can('records:read'))
+  const [sound, setSoundState] = useState(soundOn)
   const items = [
     { to: '/live', label: t('navLive'), icon: Radio, show: can('records:read') },
     { to: '/overview', label: t('navOverview'), icon: ChartNoAxesColumn, show: can('overview:read') },
@@ -76,6 +80,12 @@ export function Shell() {
               <span>{t('consoleLink')}</span>
             </a>
           ) : null}
+          {can('records:read') ? (
+            <label className="nav-item sound-toggle">
+              <input type="checkbox" checked={sound} onChange={(e) => { setSound(e.target.checked); setSoundState(e.target.checked) }} />
+              <span>{t('alertSound')}</span>
+            </label>
+          ) : null}
           <LangSwitch />
           <div className="who">
             <span className="who-name">{me?.name}</span>
@@ -86,6 +96,18 @@ export function Shell() {
         </div>
       </aside>
       <main id="main" className="main" tabIndex={-1}>
+        {alert.fresh.length ? (
+          <div className="note note-warn desk-alert" role="alert">
+            <strong>{t('needsPerson')}</strong>
+            <span>{alert.fresh.map((c) => c.reason || c.phone || '').filter(Boolean).join(' · ')}</span>
+            <Link className="btn btn-small btn-primary" to="/live" onClick={alert.dismiss}>
+              {t('openCallbacks')}
+            </Link>
+            <button type="button" className="btn btn-small" onClick={alert.dismiss}>
+              {t('dismiss')}
+            </button>
+          </div>
+        ) : null}
         <Outlet />
       </main>
     </div>

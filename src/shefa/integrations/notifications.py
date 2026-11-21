@@ -83,6 +83,8 @@ def send_booking_sms(
     patient = store.get_patient(int(appointment["patient_id"])) or {}
     doctor = store.doctor(int(appointment["doctor_id"])) or {}
     phone = patient.get("phone", "")
+    if phone.startswith("W"):  # a walk-in who gave no phone (main.add_walk_in)
+        phone = ""
     body = confirmation_text(appointment, doctor, store.clinic_name(language), language)
     result = sender.send(phone, body) if phone else None
     status = result.status if result else "failed"

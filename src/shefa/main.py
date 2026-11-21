@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shefa.auth import AuthStore, Principal, TokenError
 from shefa.config.settings import TelephonyProvider, settings
@@ -204,6 +204,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/directory"): "records:read",
     ("POST", "/api/v1/appointments/{appointment_id}/status"): "records:write",
     ("POST", "/api/v1/appointments/{appointment_id}/confirm"): "records:write",
+    ("POST", "/api/v1/appointments/walk-in"): "records:write",
     ("GET", "/api/v1/export/appointments"): "records:export",
     ("GET", "/api/v1/staff"): "staff:manage",
     ("GET", "/api/v1/staff/doctors"): "staff:manage",
@@ -454,6 +455,12 @@ class RingBody(BaseModel):
 
 class StatusBody(BaseModel):
     status: str
+
+
+class WalkInBody(BaseModel):
+    doctor_id: int
+    name: str = Field(min_length=1, max_length=80)
+    phone: str = Field(default="", max_length=20)
 
 
 class StaffBody(BaseModel):
@@ -885,14 +892,61 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 "date": a["date"],
                 "start_time": a["start_time"],
                 "doctor": a["doctor_en"],
+                "doctor_bn": a.get("doctor_bn") or "",
+                "doctor_id": a["doctor_id"],
+                "serial_no": a.get("serial_no"),
                 "patient_name": a["patient_name"],
-                "phone": mask_phone(a["phone"]),
+                "phone": mask_phone(a["phone"]) if not a["phone"].startswith("W") else "",
                 "status": a["status"],
                 "source": a.get("source", "phone"),
                 "confirmed": bool(a.get("confirmed", 1)),
             }
             for a in rows
         ]
+
+    @app.post("/api/v1/appointments/walk-in")
+    async def add_walk_in(body: WalkInBody, request: Request) -> dict:
+        """Someone at the desk: the next free serial (or time) from now, through the same
+        booking path as phone and web, so SHEFA never offers that place again."""
+        import time as _clock
+        from datetime import datetime
+
+        from shefa.clinic import ClinicError, default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ, normalize_phone
+
+        clinic = default_clinic_store()
+        doctor = clinic.doctor(body.doctor_id)
+        if doctor is None or not doctor["active"]:
+            raise HTTPException(
+                status_code=404, detail={"code": "validation", "message": "Unknown doctor"}
+            )
+        now = datetime.now(CLINIC_TZ)
+        day = now.date().isoformat()
+        slots = clinic.available_slots(body.doctor_id, day, now=now)
+        if not slots:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "full", "message": "No free place left today for this doctor"},
+            )
+        phone = normalize_phone(body.phone) if body.phone.strip() else ""
+        # Someone without a phone still needs a patient row: a walk-in marker, never texted.
+        patient = clinic.upsert_patient(phone or f"W{int(_clock.time() * 1000)}", body.name.strip())
+        try:
+            booked = clinic.book(
+                patient, body.doctor_id, day, slots[0]["time"], source="walkin", confirmed=True,
+                now=now,
+            )
+        except ClinicError as exc:
+            raise HTTPException(
+                status_code=409, detail={"code": "slot_taken", "message": str(exc)}
+            ) from exc
+        _audit(request, "walk_in_added", appointment_id=booked["appointment_id"])
+        return {
+            "appointment_id": booked["appointment_id"],
+            "serial_no": booked.get("serial_no"),
+            "start_time": booked["start_time"],
+            "doctor": booked["doctor_en"],
+        }
 
     @app.get("/console", response_class=HTMLResponse)
     async def console(request: Request) -> HTMLResponse:
