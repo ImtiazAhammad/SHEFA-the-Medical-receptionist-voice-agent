@@ -1,5 +1,6 @@
 // Overview and Coverage tabs: the numbers that answer "how are we doing and is it safe to go on?".
 import { api } from "./api.js";
+import { offerPublicAddress } from "./admin-people.js";
 import { $, clear, el, toast } from "./dom.js";
 import { ask } from "./dialog.js";
 import { drawBars, setMeter } from "./charts.js";
@@ -44,6 +45,60 @@ async function saveSettings(body, done) {
 function paintImpactCount() {
   const length = $("#impact-input").value.length;
   $("#impact-count").textContent = `${num(length)}/${num(IMPACT_MAX)}`;
+}
+
+/** The public link (Tailscale Funnel): live or off. Asked for separately: tailscale can be slow. */
+export async function loadPublish() {
+  const state = $("#publish-state");
+  if (!state) return;
+  if (!state.textContent) state.textContent = t("link_checking");
+  try {
+    paintPublish(await api("/api/admin/publish"));
+  } catch (error) {
+    paintPublish({ available: false, error: error.code === "network" ? t("err_network") : "" });
+  }
+}
+
+function paintPublish(p) {
+  const card = $("#publish-card");
+  const state = $("#publish-state");
+  const link = $("#publish-link");
+  const button = $("#publish-btn");
+  const live = !!p.published;
+  card.classList.toggle("banner", !live || !!p.wrong_target);
+  card.classList.toggle("warn", !live || !!p.wrong_target);
+  state.textContent = !p.available ? t("link_unavailable") : p.wrong_target ? t("link_wrong") : t(live ? "link_is_on" : "link_is_off");
+  clear(link);
+  if (p.url) link.append(el("a", { href: p.url, target: "_blank", rel: "noopener", text: p.url }));
+  if (p.published && !p.wrong_target) offerPublicAddress(p.url);
+  if (p.error) link.append(el("span", { class: "muted", text: (p.url ? " · " : "") + p.error }));
+  button.hidden = !p.available;
+  button.disabled = false;
+  button.textContent = t(live ? "link_off_btn" : "link_on_btn");
+  button.className = live ? "big danger-outline" : "big primary";
+  button.onclick = () => togglePublish(live);
+}
+
+async function togglePublish(live) {
+  const { ok } = await ask({
+    title: t(live ? "link_off_title" : "link_on_title"),
+    body: t(live ? "link_off_body" : "link_on_body"),
+    confirmKey: live ? "link_off_btn" : "link_on_btn",
+    danger: live,
+  });
+  if (!ok) return;
+  const button = $("#publish-btn");
+  button.disabled = true;
+  $("#publish-state").textContent = t("link_working");
+  try {
+    const after = await api("/api/admin/publish", { method: "POST", body: { published: !live } });
+    paintPublish(after);
+    if (after.published === !live) toast(t(after.published ? "link_on_done" : "link_off_done"));
+    else toast(after.error || t("err_generic"));
+  } catch (error) {
+    toast(t(error.code === "network" ? "err_network" : "err_generic"));
+    await loadPublish();
+  }
 }
 
 /** The switch that stops uploads. A confirm dialog guards both directions. */

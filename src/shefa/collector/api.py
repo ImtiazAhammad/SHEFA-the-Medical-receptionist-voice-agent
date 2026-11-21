@@ -200,6 +200,7 @@ class Ctx:
         self.private_limiter = RateLimiter()  # a flood on the public address must not block staff
         self.drafter: Any = None  # set by `serve` when background drafting is on
         self.live: Any = None  # a LiveEngine, set by `serve` when live calls with the agent are on
+        self.publisher: Any = None  # a publish.Publisher (the public link), made on first use
         # Version 2 scripts are what people get now. The first version's cards stay known by id,
         # so a clip that waited on a phone, or an old two-person room, still finds its card.
         self.cards = S.load_bank(config.prompts_dir / "cards2.json")
@@ -1073,6 +1074,10 @@ class VoicePackBody(BaseModel):
     enabled: bool
 
 
+class PublishBody(BaseModel):
+    published: bool
+
+
 class SettingBody(BaseModel):
     kill_switch: bool | None = None
     human_voice_share: float | None = Field(default=None, ge=0, le=1)
@@ -1285,6 +1290,29 @@ def admin_router(ctx: Ctx) -> APIRouter:
             store.set_setting("impact_note", body.impact_note.strip())
             store.audit(s["name"], "impact_note", body.impact_note.strip()[:120])
         return {"ok": True}
+
+    def publisher():
+        if ctx.publisher is None:
+            from shefa.collector.publish import Publisher
+
+            ctx.publisher = Publisher(ctx.config.port)
+        return ctx.publisher
+
+    @r.get("/api/admin/publish")
+    async def publish_status(request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        return await asyncio.to_thread(publisher().status)
+
+    @r.post("/api/admin/publish")
+    async def publish_set(body: PublishBody, request: Request):
+        s = gate(request)
+        if isinstance(s, JSONResponse):
+            return s
+        after = await asyncio.to_thread(publisher().set, body.published)
+        store.audit(s["name"], "publish", f"{body.published} -> {after['published']}")
+        return after
 
     @r.get("/api/admin/audit")
     async def audit(request: Request, limit: int = 100):

@@ -23,6 +23,21 @@ let usernameTouched = false;
 function savedAddress() { try { return localStorage.getItem(PUB_KEY) || ""; } catch { return ""; } }
 function currentBase() { return normalisePublicAddress($("#pub-input").value); }
 
+/** The fixed public link, once known: fills the address when it is empty or a temporary
+ * trycloudflare one (those change on every restart). An address typed on purpose is kept. */
+export function offerPublicAddress(url) {
+  const input = $("#pub-input");
+  const base = normalisePublicAddress(url || "");
+  if (!input || !base) return;
+  const now = input.value.trim();
+  if (now && !/trycloudflare\.com/i.test(now)) return;
+  if (currentBase() === base) return;
+  input.value = base;
+  try { localStorage.setItem(PUB_KEY, base); } catch { /* a convenience only */ }
+  paintPubMessage();
+  renderCampaigns();
+}
+
 function paintPubMessage() {
   const raw = $("#pub-input").value.trim();
   const message = $("#pub-msg");

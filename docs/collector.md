@@ -262,18 +262,27 @@ uploads are still paused, or later withdrawals would come back.
 
 Find the current public address of a running quick tunnel: `curl -s localhost:20241/quicktunnel`.
 
-## Fixed link and start at power-on
+## Fixed link, publish switch, start and stop
 
 The public link is Tailscale Funnel: `https://<machine>.<tailnet>.ts.net`, which stays the same
-across reboots (the trycloudflare link changes every time). One-time setup:
+across reboots (the trycloudflare link changes every time). The everyday guide for the person at
+the PC is `docs/how-to-run-shefa.md`.
 
-1. Approve Funnel for the tailnet (the link `tailscale funnel 8100` prints), then
-   `tailscale funnel --bg 8100`. tailscaled remembers it; nothing to rerun after a reboot.
-   Only port 8100 is published; the staff site (8101) stays on this PC.
-2. `bash deploy/autostart/install.sh` installs two user services: `shefa-vllm` (starts first and
-   counts as up only when the model answers, so it gets its GPU share before Whisper loads) and
-   `shefa-collector`. Both restart themselves after a crash.
-3. `sudo loginctl enable-linger $USER` once, so they start at power-on, not only after login.
+One-time setup:
 
-Day to day: `systemctl --user status shefa-collector`, `systemctl --user restart shefa-collector`
-(pause the site first, as always). Logs stay in `data/collector/logs/serve.log` and `data/vllm.log`.
+1. Approve Funnel for the tailnet (the link `tailscale funnel 8100` prints) and let this user
+   change it without sudo: `sudo tailscale set --operator=$USER`.
+2. `bash deploy/autostart/install.sh` installs two user services, `shefa-vllm` (counts as up only
+   when the model answers, so it takes its GPU share before Whisper loads) and `shefa-collector`,
+   both restarted after a crash, plus **Start SHEFA** / **Stop SHEFA** icons (`deploy/shefa.sh`).
+   Nothing starts at power-on; `install.sh --autostart` (with `sudo loginctl enable-linger $USER`)
+   makes it start by itself.
+
+The admin Overview has a **Public link** switch (`/api/admin/publish`, admin only, audited;
+`collector/publish.py`). On, it runs `tailscale funnel --bg <public port>`: only the public port,
+never the staff one, and a link found pointing elsewhere is flagged. Off, it runs
+`tailscale funnel --https=443 off`. tailscaled keeps the setting across reboots. When the link is
+live, the admin page also fills the invite-link address with it (replacing an old trycloudflare one).
+
+Restarting by hand: pause uploads first, as always, then `systemctl --user restart shefa-collector`.
+Logs: `data/collector/logs/serve.log` and `data/vllm.log`.

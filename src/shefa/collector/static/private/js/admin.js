@@ -4,7 +4,7 @@
 import { ApiError, api, signOut } from "./api.js";
 import { $ } from "./dom.js";
 import { applyI18n, initLangToggle, onLangChange, t } from "./i18n.js";
-import { initOverview, renderCoverage, renderOverview } from "./admin-overview.js";
+import { initOverview, loadPublish, renderCoverage, renderOverview } from "./admin-overview.js";
 import { initPeople, loadCampaigns, loadStaff, renderCampaigns, renderTeam, setMe } from "./admin-people.js";
 import { initVoices, loadVoices, renderVoices, voicesLoaded } from "./admin-voices.js";
 import { clipsLoaded, initClipsTab, loadAudit, loadClips, renderAudit, renderClips } from "./admin-clips.js";
@@ -92,19 +92,20 @@ function initTabs() {
 async function start() {
   applyI18n();
   initLangToggle($("#lang"));
-  onLangChange(renderAll);
+  onLangChange(() => { renderAll(); loadPublish(); });
   initTabs();
   initOverview(reload);
   initPeople(reload);
   initClipsTab();
   initVoices(() => stats);
   initLive();
-  $("#refresh").addEventListener("click", () => { reload(); if (opened.has("clips")) loadClips(); if (opened.has("audit")) loadAudit(); if (opened.has("campaigns")) loadCampaigns(); if (opened.has("voices")) loadVoices(); });
+  $("#refresh").addEventListener("click", () => { reload(); loadPublish(); if (opened.has("clips")) loadClips(); if (opened.has("audit")) loadAudit(); if (opened.has("campaigns")) loadCampaigns(); if (opened.has("voices")) loadVoices(); });
   $("#error-retry").addEventListener("click", reload);
   $("#signout").addEventListener("click", () => signOut());
   const wanted = location.hash.slice(1);
   if (TABS.includes(wanted)) current = wanted;
   api("/api/review/me").then((me) => { $("#who").textContent = me.name; setMe(me); if (stats) renderTeam(stats); }).catch(() => {});
+  loadPublish();
   await reload();
   // Numbers drift while uploads come in; refresh the overview now and then while it is on screen.
   setInterval(() => { if (!document.hidden && (current === "overview" || current === "coverage")) reload(); }, 60000);

@@ -1,11 +1,14 @@
 # How to run SHEFA: the simple note
 
+**Nothing works until you start it.** SHEFA doesn't start when the PC turns on. You press
+**Start SHEFA**, and it stays on until you press **Stop SHEFA** or shut the PC down.
+
 Two addresses. Don't mix them up:
 
 | Address | Who uses it | Where it opens |
 |---|---|---|
-| **https://shefa-voice.tail195ef8.ts.net** | Volunteers (anyone) | Any phone or computer |
-| **http://127.0.0.1:8101** | You and the reviewers | **Only on this PC** |
+| **https://shefa-voice.tail195ef8.ts.net** | Volunteers (anyone) | Any phone or computer, while SHEFA is started **and** the link is on |
+| **http://127.0.0.1:8101** | You and the reviewers | **Only on this PC**, while SHEFA is started |
 
 ✅ Send people only the `shefa-voice` link. It never changes.
 ❌ Never send anyone the `127.0.0.1:8101` address. That's your private review room.
@@ -14,106 +17,77 @@ Two addresses. Don't mix them up:
 
 ## 1. Start SHEFA
 
-1. **Turn on the PC.** You don't have to log in; SHEFA starts by itself.
-2. **Wait about 5 minutes.** SHEFA's brain (the language model) takes a few minutes to wake up.
-3. **Check it:** open https://shefa-voice.tail195ef8.ts.net on your phone.
-   - The page opens → ✅ done.
-   - It doesn't open → wait 5 more minutes, then try again.
+1. Turn on the PC and log in.
+2. Double-click **Start SHEFA** on the desktop.
+   (Or press the Windows key, type **SHEFA**, and click **Start SHEFA**.)
+   - The first time, Ubuntu may ask about the icon: right-click it → **Allow Launching**.
+3. A black window opens and shows dots `.....` while SHEFA wakes up. That takes **1 to 5 minutes**.
+4. When it says **✅ SHEFA is running**, the admin page opens in your browser by itself.
+5. Press Enter to close the black window. SHEFA keeps running.
 
-## 2. Review recordings
+## 2. Turn the public link on or off (on the admin page)
 
-1. On this PC, open the browser.
-2. Go to **http://127.0.0.1:8101**
-3. Log in with your staff account.
+The admin page has a **পাবলিক লিংক (Public link)** box at the top of the
+**সারসংক্ষেপ (Overview)** tab.
 
-## 3. Turn the PC off
+- It says **লিংক চালু (Link is LIVE)** → volunteers can open the link.
+- It says **লিংক বন্ধ (Link is OFF)** → nobody can open the link.
+- Press **লিংক বন্ধ করুন** to take the link off the internet, or **লিংক চালু করুন** to put it back.
+  It asks "are you sure?" first.
 
-Shut down normally. Nothing else to do.
-While it's off, volunteers can't open the link. When you turn it on again, everything comes back by itself (step 1).
+The link is the same every time you turn it back on.
+The switch remembers its setting: if you turn the link off today, it's still off tomorrow until you turn it on.
+Review (127.0.0.1:8101) works whether the link is on or off.
 
----
+## 3. Review recordings
 
-## 4. PC stays on, SHEFA takes a break
+1. Start SHEFA (step 1).
+2. On this PC, open **http://127.0.0.1:8101** and log in with your staff account.
 
-Pick the one you need.
+## 4. Stop SHEFA
 
-### A. Short break: "Pause uploads" (easiest, no terminal)
+Double-click **Stop SHEFA** on the desktop (or search **SHEFA** → **Stop SHEFA**).
+It says **✅ SHEFA is off**. The link stops opening, and the graphics card is free for other work.
 
-Use this when you need a short pause, for example while you change something or take a backup.
-
-1. Open **http://127.0.0.1:8101** and log in.
-2. On the **সারসংক্ষেপ (Overview)** tab, press **আপলোড বন্ধ করুন (Pause uploads)**, then confirm.
-3. The page now says **আপলোড বন্ধ আছে (Uploads are PAUSED)**.
-
-What volunteers see: the page still opens, but it says SHEFA is resting today. Anything they record waits on their phone and uploads later by itself. SHEFA live calls stop.
-
-**To start again:** press **আপলোড চালু করুন (Resume uploads)** on the same tab.
-
-### B. Full stop until you start it again (frees the graphics card)
-
-Use this when you want the PC's power for something else, like gaming or other AI work.
-
-1. Open a terminal (**Ctrl+Alt+T**).
-2. Copy, paste, and press Enter:
-   ```
-   systemctl --user stop shefa-collector shefa-vllm
-   ```
-3. Done. The link stops opening, and the graphics card is free.
-
-**To start again:**
-```
-systemctl --user start shefa-vllm shefa-collector
-```
-Then wait about 5 minutes (like step 1).
-
-Note: with B, SHEFA still starts by itself the next time the PC is turned on.
-
-### C. Long holiday: don't start by itself any more
-
-Use this when you don't want SHEFA running at all, even after restarting the PC.
-
-1. Open a terminal (**Ctrl+Alt+T**).
-2. Copy, paste, and press Enter:
-   ```
-   systemctl --user disable --now shefa-collector shefa-vllm
-   ```
-
-**To bring it back (and start by itself again):**
-```
-systemctl --user enable --now shefa-vllm shefa-collector
-```
-Then wait about 5 minutes.
+Shutting the PC down also stops SHEFA. Next time, start it again with step 1.
 
 ---
 
-## 5. Is it running? (a quick check)
+## 5. Which button for what?
 
-Open a terminal (**Ctrl+Alt+T**) and type:
-```
-systemctl --user is-active shefa-vllm shefa-collector
-```
-- Two lines saying `active` → ✅ running.
-- `inactive` → it's stopped (see 4B to start it).
-- `failed` → see section 6.
+| I want… | Do this |
+|---|---|
+| SHEFA working for everyone | **Start SHEFA**, then check the link says **লিংক চালু** |
+| Only review, no volunteers coming in | **Start SHEFA**, then **লিংক বন্ধ করুন** |
+| A short pause; volunteers' recordings wait on their phones | Admin → Overview → **আপলোড বন্ধ করুন (Pause uploads)**. The page still opens and says SHEFA is resting. Undo with **আপলোড চালু করুন**. |
+| The PC for something else (games, other AI) | **Stop SHEFA** |
+| Nothing at all | Do nothing. SHEFA doesn't start by itself. |
 
 ---
 
 ## 6. Something's wrong
 
-**The link doesn't open after 10 minutes:**
-1. Restart the PC.
-2. Wait 5 minutes.
-3. Try the link again.
+**The black window says ❌ SHEFA did not start:**
+1. Restart the PC, log in, and press **Start SHEFA** again.
+2. Still ❌? Take a photo of the black window and send it to whoever looks after the code.
+   Logs for them: `data/collector/logs/serve.log` and `data/vllm.log`.
 
-**Still broken?** In a terminal, run:
-```
-systemctl --user status shefa-collector
-```
-Send what it shows to whoever looks after the code.
+**The admin page says the link is LIVE, but the link doesn't open:**
+Wait a minute and try again. Then press **লিংক বন্ধ করুন** and **লিংক চালু করুন** once.
 
-**Where the logs are (for whoever fixes it):**
-- Site: `data/collector/logs/serve.log`
-- Language model: `data/vllm.log`
+**The admin page says "এই কম্পিউটার থেকে লিংক বদলানো যাচ্ছে না":**
+Tailscale isn't running or isn't logged in. Open the Tailscale app and log in with **regnum.com.bd**.
+
+**Without icons, from a terminal (Ctrl+Alt+T):**
+```
+cd ~/"Projects/Shefa-Medical voice agent/SHEFA-the-Medical-receptionist-voice-agent"
+bash deploy/shefa.sh start     # start
+bash deploy/shefa.sh stop      # stop
+bash deploy/shefa.sh status    # is it running?
+```
+
+**Icons missing (after a reinstall):** run `bash deploy/autostart/install.sh` in the project folder.
+**Want it to start by itself at power-on again?** Run `bash deploy/autostart/install.sh --autostart`.
 
 ---
 
@@ -122,7 +96,7 @@ Send what it shows to whoever looks after the code.
 The recordings live on this PC's disk. Once a week, copy a backup to a **USB drive or another disk**:
 
 1. Plug in the USB drive.
-2. Open a terminal, go to the project folder, and run (change the USB path to yours):
+2. Open a terminal (Ctrl+Alt+T) and run (change the USB path to yours):
    ```
    cd ~/"Projects/Shefa-Medical voice agent/SHEFA-the-Medical-receptionist-voice-agent"
    uv run shefa collect backup /media/$USER/YOUR-USB/shefa-backup
@@ -135,4 +109,4 @@ The recordings live on this PC's disk. Once a week, copy a backup to a **USB dri
 
 - ❌ Don't share `127.0.0.1:8101` with anyone.
 - ❌ Don't rename the PC in Tailscale. That changes the link and breaks it for everyone.
-- ❌ Don't run `tailscale funnel reset` or `tailscale funnel off`. That turns the link off.
+- ❌ Don't log Tailscale out of **regnum.com.bd**. The link belongs to that account.

@@ -44,6 +44,16 @@
 
     <!-- ===== Overview ===== -->
     <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" class="stack" hidden>
+      <div class="card pause-switch" id="publish-card">
+        <div>
+          <h2 data-i18n="link_title">পাবলিক লিংক</h2>
+          <p class="state" id="publish-state" role="status"></p>
+          <p class="hint" id="publish-link"></p>
+          <p class="hint" data-i18n="link_hint">বন্ধ করলে লিংকটা আর খুলবে না। চালু করলে আবার আগের লিংকেই খুলবে।</p>
+        </div>
+        <button type="button" class="big" id="publish-btn" hidden></button>
+      </div>
+
       <div class="card pause-switch" id="pause-card">
         <div>
           <h2 data-i18n="pause_title">আপলোড চালু/বন্ধ</h2>
