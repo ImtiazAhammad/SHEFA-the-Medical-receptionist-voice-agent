@@ -240,6 +240,10 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("GET", "/demo/{path:path}"): PUBLIC_PERMISSION,
 }
 
+from shefa.directory_api import ROUTES as _DIRECTORY_ROUTES  # noqa: E402 - the admin setup screen
+
+ROUTE_PERMISSIONS.update(_DIRECTORY_ROUTES)
+
 
 # Any telephony route, whatever the provider mounts. Matched by prefix so a new
 # webhook cannot escape authorization by living under a different path.
@@ -554,6 +558,9 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
     # Mounted flat (not include_router): the auth middleware finds a route's permission by
     # walking app.routes, and an included router hides its routes from that walk.
     app.router.routes.extend(public_router.routes)
+    from shefa.directory_api import router as directory_router
+
+    app.router.routes.extend(directory_router.routes)
     if settings.demo.enabled:
         from shefa.demo_api import router as demo_router
 

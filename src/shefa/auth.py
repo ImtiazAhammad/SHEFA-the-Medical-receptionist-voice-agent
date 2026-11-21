@@ -60,7 +60,14 @@ _DESK = ("sessions:read", "records:read", "records:write", "calls:place", "chat:
 BUILTIN_ROLES: dict[str, frozenset[str]] = {
     "desk": frozenset(_DESK),
     "owner": frozenset(
-        {*_DESK, "config:read", "overview:read", "staff:manage", "records:export"}
+        {
+            *_DESK,
+            "config:read",
+            "overview:read",
+            "staff:manage",
+            "records:export",
+            "directory:write",
+        }
     ),
     "doctor": frozenset({"doctor:self"}),
 }

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarDays, ChartNoAxesColumn, ClipboardList, LogOut, Mic, PhoneCall, Radio, Stethoscope, Users } from 'lucide-react'
+import { CalendarDays, ChartNoAxesColumn, ClipboardList, LogOut, Mic, PhoneCall, Radio, Settings2, Stethoscope, Users } from 'lucide-react'
 import { useAuth } from './lib/auth'
 import { useI18n, type Lang } from './lib/i18n'
 
@@ -46,6 +46,7 @@ export function Shell() {
     { to: '/calls', label: t('navCalls'), icon: PhoneCall, show: can('records:read') },
     { to: '/appointments', label: t('navAppointments'), icon: CalendarDays, show: can('records:read') },
     { to: '/doctors', label: t('navDoctors'), icon: Stethoscope, show: can('records:read') },
+    { to: '/setup', label: t('navSetup'), icon: Settings2, show: can('directory:write') },
     { to: '/staff', label: t('navStaff'), icon: Users, show: can('staff:manage') },
     { to: '/my-day', label: t('navMyDay'), icon: ClipboardList, show: can('doctor:self') },
   ].filter((i) => i.show)

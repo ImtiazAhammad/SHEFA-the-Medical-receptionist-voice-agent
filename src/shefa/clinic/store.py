@@ -421,6 +421,114 @@ class ClinicStore:
             )
         return int(cur.lastrowid)
 
+    # -- directory editing (the admin screen) -----------------------------
+
+    def update_doctor(self, doctor_id: int, **fields: Any) -> dict[str, Any]:
+        """Change a doctor's details. Only the columns named below can change."""
+        allowed = {"name_en", "name_bn", "department_id", "qualification", "visit_fee", "active"}
+        if self.doctor(doctor_id) is None:
+            raise NotFoundError(f"Unknown doctor id: {doctor_id}")
+        changes = {k: v for k, v in fields.items() if k in allowed}
+        if "booking_mode" in fields:
+            self.set_booking_mode(doctor_id, fields["booking_mode"])
+        if changes:
+            sql = ", ".join(f"{k} = ?" for k in changes)
+            with self.connection:
+                self.connection.execute(
+                    f"UPDATE doctors SET {sql} WHERE id = ?",  # noqa: S608 - keys are allow-listed
+                    (*changes.values(), doctor_id),
+                )
+        return self.doctor(doctor_id) or {}
+
+    def schedule_rows(self, doctor_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.connection.execute(
+                "SELECT id, weekday, start_time, end_time, slot_minutes FROM doctor_schedules"
+                " WHERE doctor_id = ? ORDER BY weekday, start_time",
+                (doctor_id,),
+            )
+        ]
+
+    def replace_schedule(self, doctor_id: int, sessions: list[dict[str, Any]]) -> None:
+        """A doctor's whole week at once (all or nothing). Overlapping sessions on one day are
+        refused: they would give two slots the same time."""
+        if self.doctor(doctor_id) is None:
+            raise NotFoundError(f"Unknown doctor id: {doctor_id}")
+        by_day: dict[int, list[tuple[int, int]]] = {}
+        for session in sessions:
+            weekday = int(session["weekday"])
+            start, end = _to_minutes(session["start_time"]), _to_minutes(session["end_time"])
+            step = int(session["slot_minutes"])
+            if not 0 <= weekday <= 6:
+                raise ClinicError("Day must be 0 (Monday) to 6 (Sunday)")
+            if end <= start:
+                raise ClinicError("A session must end after it starts")
+            if not 1 <= step <= end - start:
+                raise ClinicError("Minutes per patient must fit inside the session")
+            for other_start, other_end in by_day.get(weekday, []):
+                if start < other_end and other_start < end:
+                    raise ClinicError(f"Two sessions overlap on {WEEKDAYS[weekday]}")
+            by_day.setdefault(weekday, []).append((start, end))
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM doctor_schedules WHERE doctor_id = ?", (doctor_id,)
+            )
+            for session in sessions:
+                self.connection.execute(
+                    "INSERT INTO doctor_schedules"
+                    " (doctor_id, weekday, start_time, end_time, slot_minutes)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (
+                        doctor_id,
+                        int(session["weekday"]),
+                        session["start_time"],
+                        session["end_time"],
+                        int(session["slot_minutes"]),
+                    ),
+                )
+
+    def leaves(self, doctor_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.connection.execute(
+                "SELECT * FROM doctor_leaves WHERE doctor_id = ? ORDER BY start_date", (doctor_id,)
+            )
+        ]
+
+    def delete_leave(self, leave_id: int) -> None:
+        with self.connection:
+            cur = self.connection.execute("DELETE FROM doctor_leaves WHERE id = ?", (leave_id,))
+        if cur.rowcount == 0:
+            raise NotFoundError(f"Unknown leave id: {leave_id}")
+
+    def stranded_bookings(
+        self, doctor_id: int, *, today: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Upcoming bookings that no longer fit this doctor's schedule or fall in their leave:
+        after the week or a leave changes, the desk must call these patients."""
+        today = today or datetime.now(CLINIC_TZ).date().isoformat()
+        rows = self.connection.execute(
+            "SELECT a.id, a.date, a.start_time, a.serial_no, p.phone, p.name AS patient_name"
+            " FROM appointments a JOIN patients p ON p.id = a.patient_id"
+            " WHERE a.doctor_id = ? AND a.status = 'booked' AND a.date >= ?"
+            " ORDER BY a.date, a.start_time",
+            (doctor_id, today),
+        ).fetchall()
+        windows = self.schedule_rows(doctor_id)
+        out = []
+        for r in rows:
+            weekday = _parse_date(r["date"]).weekday()
+            minute = _to_minutes(r["start_time"])
+            fits = any(
+                w["weekday"] == weekday
+                and _to_minutes(w["start_time"]) <= minute < _to_minutes(w["end_time"])
+                for w in windows
+            )
+            if not fits or self.doctor_on_leave(doctor_id, r["date"]):
+                out.append({**dict(r), "appointment_id": format_appointment_id(r["id"])})
+        return out
+
     # -- directory reads --------------------------------------------------
 
     def departments(self) -> list[dict[str, Any]]:
