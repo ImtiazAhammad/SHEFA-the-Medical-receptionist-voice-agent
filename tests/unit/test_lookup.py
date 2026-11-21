@@ -175,3 +175,10 @@ def test_a_misheard_serial_still_asks_for_a_lookup():
 
     assert WANTS.search("আমার সিডিল আছে কিনা দেখতে চাই")  # Whisper on a live call
     assert WANTS.search("আমার সিরিয়েল কবে")
+
+
+def test_the_sentence_shape_carries_a_badly_misheard_serial():
+    from shefa.pipeline.lookup import WANTS
+
+    assert WANTS.search("আমার সিলির আছে কিনা দেখতে চাই")  # Whisper on a live call
+    assert not WANTS.search("আমার রিপোর্ট আছে কিনা দেখতে চাই")

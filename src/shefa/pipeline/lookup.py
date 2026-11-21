@@ -33,7 +33,9 @@ WANTS = re.compile(
     rf"|আগের (?:{_SERIAL}|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট)|(?:{_SERIAL}|বুকিং|অ্যাপয়েন্টমেন্ট) (?:দেওয়া|নেওয়া|করা) আছে (?:কি|কিনা|কি না)"
     rf"|{_SERIAL} (?:নিয়েছিলাম|দিয়েছিলাম|নিয়েছি)|(?:কবে|কখন) (?:আমার )?{_SERIAL}"
     rf"|when (?:is|was) my (?:appointment|booking|serial)|my (?:last|previous|next|upcoming) appointment"
-    rf"|do i have an appointment|check my (?:appointment|booking)",
+    rf"|do i have an appointment|check my (?:appointment|booking)"
+    # "আমার সি... আছে কিনা দেখতে চাই": the sentence is clear even when সিরিয়াল is misheard (সিলির)
+    r"|আমার সি[\u0980-\u09ff]{1,6} (?:আছে|করা আছে|দেওয়া আছে) (?:কি|কিনা|কি না) (?:দেখ|জান|চেক)",
     re.IGNORECASE,
 )
 PAST = re.compile(r"আগের|ছিল|নিয়েছিলাম|দিয়েছিলাম|গতবার|last|previous|was", re.IGNORECASE)
