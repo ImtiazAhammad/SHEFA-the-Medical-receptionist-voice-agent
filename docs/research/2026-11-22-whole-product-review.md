@@ -295,3 +295,16 @@ hand-holding each one. Each of the 7 is a way SHEFA can fail even with a perfect
 - The call-back list and resolve API (`/api/v1/callbacks`) for desk alerts.
 - The collector's backup, pause switch and public-link switch patterns for operations.
 - The facilities table (`facilities:` in config) for each clinic's own facts.
+
+## Scope decisions (founder, 2026-11-22)
+
+| # | Proposal | Decision |
+|---|---|---|
+| 1 | Real SMS, remove the fake "sent" | ACCEPTED |
+| 2 | Alerts + nightly test call | ACCEPTED |
+| 3 | Desk alert, print list, walk-in | ACCEPTED |
+| 4 | Owner weekly report | ACCEPTED |
+| 5 | Serial-number booking (per doctor) | ACCEPTED |
+| 6 | Missed-call call-back | ACCEPTED |
+| 7 | Many clinics on one box (clinic id) | ACCEPTED |
+| 8 | Spreadsheet clinic setup | REPLACED by the founder: doctors and schedules are set up in the app itself (an admin screen), so a clinic never touches a file |
