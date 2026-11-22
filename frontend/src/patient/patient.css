@@ -60,8 +60,7 @@
 
 .p-note { padding: 0.8rem 1rem; border: 1px solid var(--ink); background: var(--sheet); margin: 0.8rem 0; }
 .p-note p { margin: 0 0 0.5rem; }
-.p-error { font-weight: 600; background-image: repeating-linear-gradient(45deg, var(--z8) 0 1px, transparent 1px 7px), repeating-linear-gradient(135deg, var(--z8) 0 1px, transparent 1px 7px); }
-.p-error > * { background: var(--sheet); }
+.p-error { font-weight: 600; background-image: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 5px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 5px); background-size: 100% 7px, 100% 7px; background-repeat: no-repeat; padding-top: calc(7px + var(--space-3, 0.75rem)); }
 
 /* the receipt: a ticket */
 .p-receipt { position: relative; padding: 1.1rem 1.2rem 1.25rem; background: var(--sheet); border: 1px solid var(--ink); margin: 1rem 0; }

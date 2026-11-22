@@ -6,6 +6,7 @@ zipped and sent, or opened from `shefa serve` at /lab.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import statistics
@@ -108,6 +109,26 @@ def _ms(value: float | None) -> str:
 
 # The page style lives in report.css so it can be edited as CSS.
 _CSS = Path(__file__).with_name("report.css").read_text(encoding="utf-8")
+_WORLD_FONTS = Path(__file__).resolve().parent.parent / "static" / "world" / "fonts"
+
+
+def _font_faces() -> str:
+    """SHEFA's Bangla face, inlined: the report is one file opened offline, so it carries its
+    own type (the light weight-only set, about 200 KB) instead of falling back to a system sans."""
+    faces = []
+    for name, unicode_range in (
+        ("anek-bangla-bengali-wght.woff2", "U+0964-0965,U+0980-09FE,U+200C-200D,U+25CC"),
+        ("anek-bangla-latin-wght.woff2", "U+0000-00FF,U+2000-206F"),
+    ):
+        path = _WORLD_FONTS / name
+        if path.is_file():
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+            faces.append(
+                '@font-face{font-family:"Anek Bangla";font-weight:100 800;font-display:swap;'
+                f'src:url(data:font/woff2;base64,{data}) format("woff2");'
+                f"unicode-range:{unicode_range}}}"
+            )
+    return "".join(faces)
 
 
 def _checks_html(checks: list[Any]) -> str:
@@ -198,7 +219,8 @@ def render_html(results: list[ScenarioResult], meta: dict[str, Any],
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>SHEFA conversation lab</title><style>{_CSS}</style></head><body><main>"
+        f"<title>SHEFA conversation lab</title><style>{_font_faces()}{_CSS}</style>"
+        "</head><body><main>"
         "<h1>SHEFA conversation lab</h1>"
         f'<p class="sub">{setup}</p><div class="grid">{stat_html}</div>'
         f'<div class="card"><table><tr><th>Scenario</th><th>What it tests</th><th></th></tr>'

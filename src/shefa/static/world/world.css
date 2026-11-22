@@ -98,8 +98,7 @@ textarea { min-height: 6rem; line-height: 1.5; }
 input:hover, select:hover, textarea:hover { border-color: var(--z3); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--rule-strong); box-shadow: inset 0 0 0 1px var(--rule-strong); }
 input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] {
-  border-color: var(--ink);
-  background-image: repeating-linear-gradient(45deg, var(--z8) 0 1px, transparent 1px 7px), repeating-linear-gradient(135deg, var(--z8) 0 1px, transparent 1px 7px);
+  border-color: var(--ink); border-bottom-width: 3px; border-bottom-style: double;
 }
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
 input[type='checkbox'], input[type='radio'] { min-height: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--select); margin: 0; }
@@ -127,8 +126,12 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 }
 .mark:lang(en), :lang(en) .mark { text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--step--2); font-stretch: 90%; }
 .mark-ok { }                                                                      /* settled: plain frame */
-.mark-warn { background-image: repeating-linear-gradient(135deg, var(--z7) 0 1px, transparent 1px 5px); } /* waiting: hatched */
-.mark-bad { background-image: repeating-linear-gradient(45deg, var(--z7) 0 1px, transparent 1px 5px), repeating-linear-gradient(135deg, var(--z7) 0 1px, transparent 1px 5px); } /* conflict/failed: crossed */
+/* waiting and conflict carry their hatch in a swatch cell at the start, never behind the words */
+.mark-warn, .mark-bad { padding-inline-start: 0; }
+.mark-warn::before, .mark-bad::before { content: ''; flex: none; align-self: stretch; width: 1.1rem; margin-block: -0.05rem; border-inline-end: 1px solid currentColor; }
+.mark-warn::before { background: repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } /* waiting: hatched */
+.mark-bad::before { background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 4px); } /* conflict/failed: crossed */
+
 .mark-quiet { border-style: dotted; border-color: var(--ink-3); color: var(--ink-2); }     /* held back */
 .mark-gone { border-color: var(--z7); color: var(--ink-3); text-decoration: line-through; } /* cancelled */
 .mark-sel { background: var(--select); color: var(--on-select); border-color: var(--select); }

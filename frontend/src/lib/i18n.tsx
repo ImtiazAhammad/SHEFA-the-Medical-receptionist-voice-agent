@@ -555,6 +555,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(n),
       date: (value, opts) => {
         const d = typeof value === 'number' ? new Date(value * 1000) : new Date(`${value}T12:00:00+06:00`)
+        if (lang === 'bn' && opts?.timeStyle) {
+          // Bangla times by part of the day ("বিকাল ৫:৪০"), never "PM".
+          const hhmm = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: opts.timeZone ?? tz }).format(d)
+          const [h, m] = hhmm.split(':').map(Number)
+          const part = h < 5 ? 'রাত' : h < 12 ? 'সকাল' : h < 16 ? 'দুপুর' : h < 18 ? 'বিকাল' : h < 20 ? 'সন্ধ্যা' : 'রাত'
+          const time = `${part} ${new Intl.NumberFormat('bn-BD').format(h % 12 === 0 ? 12 : h % 12)}:${new Intl.NumberFormat('bn-BD', { minimumIntegerDigits: 2 }).format(m)}`
+          if (!opts.dateStyle) return time
+          const day = new Intl.DateTimeFormat(locale, { dateStyle: opts.dateStyle, timeZone: opts.timeZone ?? tz }).format(d)
+          return `${day}, ${time}`
+        }
         return new Intl.DateTimeFormat(
           locale,
           opts ?? { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz },
@@ -562,6 +572,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       },
       clock: (hhmm) => {
         const [h, m] = hhmm.split(':').map(Number)
+        if (lang === 'bn') {
+          // "সকাল ৯:০০": a Bangladeshi reader expects the part of the day, not AM or PM.
+          const part = h < 5 ? 'রাত' : h < 12 ? 'সকাল' : h < 16 ? 'দুপুর' : h < 18 ? 'বিকাল' : h < 20 ? 'সন্ধ্যা' : 'রাত'
+          const bnNum = new Intl.NumberFormat('bn-BD', { useGrouping: false })
+          return `${part} ${bnNum.format(h % 12 === 0 ? 12 : h % 12)}:${new Intl.NumberFormat('bn-BD', { minimumIntegerDigits: 2 }).format(m)}`
+        }
         const d = new Date(Date.UTC(2000, 0, 1, h, m))
         return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(d)
       },

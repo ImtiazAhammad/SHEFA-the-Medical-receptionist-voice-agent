@@ -52,10 +52,10 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 .page-header p{color:var(--slate);font-size:.875rem;margin-top:4px}
 
 /* Stat cards */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:0;padding:16px 20px;box-shadow:var(--shadow)}
+.stats{display:grid;grid-template-columns:1fr;gap:0;margin-bottom:24px;border-top:2px solid var(--ink);max-width:720px}
+.stat-card{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:1px solid var(--border);padding:10px 4px}
 .stat-card .label{font-size:.75rem;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.stat-card .value{font-size:1.75rem;font-weight:700;color:var(--ink);margin-top:4px;font-family:var(--font-num)}
+.stat-card .value{font-size:1.3rem;font-weight:500;color:var(--ink);font-family:var(--font-num)}
 .stat-card .value.teal{color:var(--teal)}
 .stat-card .value.coral{color:var(--coral)}
 
@@ -167,7 +167,7 @@ tr.clickable{cursor:pointer}
   .sidebar-nav a.active{border-right:none;border-bottom:3px solid var(--teal)}
   .sidebar-footer{display:none}
   .main{margin-left:0;padding:16px}
-  .stats{grid-template-columns:repeat(2,1fr)}
+  .stats{grid-template-columns:1fr}
   .tool-grid{grid-template-columns:1fr}
 }
 

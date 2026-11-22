@@ -166,7 +166,7 @@ export function Appointments() {
       {list.data && rows.length === 0 ? <Empty title={t('noAppointments')} /> : null}
       {rows.length > 0 ? (
         <div className="table-wrap no-print">
-          <table>
+          <table className="stack-table">
             <thead>
               <tr>
                 <th scope="col">{t('time')}</th>
@@ -183,22 +183,22 @@ export function Appointments() {
                 const s = STATUS[a.status] ?? { key: 'statusBooked' as Key, tone: 'quiet' as const }
                 return (
                   <tr key={a.appointment_id}>
-                    <td className="num">
+                    <td className="num" data-label={t('time')}>
                       {a.serial_no ? <span className="serial">{num(a.serial_no)}</span> : null}
                       <div className={a.serial_no ? 'muted small' : ''}>{clock(a.start_time)}</div>
                     </td>
-                    <td>
+                    <td data-label={t('doctor')}>
                       {a.doctor_bn || a.doctor}
                       {a.source === 'walkin' ? <div className="small"><Pill tone="quiet">{t('walkIn')}</Pill></div> : null}
                       {a.source === 'phone' || a.source === 'web' ? <div className="small"><Pill tone="shefa">{t('byShefa')}</Pill></div> : null}
                     </td>
-                    <td>
+                    <td data-label={t('patient')}>
                       {a.patient_name ?? '—'}
                       <div className="muted small">
                         {a.phone} · {t('reference')} {num(Number(a.appointment_id.replace(/\D/g, '')) || 0)}
                       </div>
                     </td>
-                    <td>
+                    <td data-label={t('status')}>
                       <Pill tone={s.tone}>{t(s.key)}</Pill>
                       {a.status === 'booked' && a.confirmed === false ? (
                         <div className="small">

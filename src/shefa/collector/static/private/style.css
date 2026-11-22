@@ -342,3 +342,17 @@ h1:lang(en) { text-transform: uppercase; }
 .rules li[data-state="ok"], .rules li[data-state="ok"] .mark { color: var(--ink); }
 #toast { background: var(--select); color: var(--on-select); }
 kbd { border-color: var(--ink); background: var(--sheet); }
+
+/* the overview measures as a ruled table, never a wall of number tiles */
+.stat-grid { display: grid; grid-template-columns: 1fr; gap: 0; max-width: 46rem; border-top: 2px solid var(--ink); }
+.stat { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 16px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; padding: 10px 4px; }
+.stat .num { order: 2; font-size: 1.35rem; text-align: end; white-space: nowrap; }
+.stat .label { order: 1; color: var(--ink); font-size: 1rem; font-weight: 600; }
+
+/* hatch never runs behind words: a band at the top of a message, a swatch cell on a chip */
+.banner.warn, .line-msg.warn { background-image: var(--hatch); background-size: 100% 7px; background-repeat: no-repeat; padding-top: 19px; }
+.banner.error, .line-msg.bad { background-image: var(--cross); background-size: 100% 7px, 100% 7px; background-repeat: no-repeat; padding-top: 19px; }
+.chip.bad, .chip.warn { background-image: none; display: inline-flex; align-items: stretch; padding-inline-start: 0; }
+.chip.bad::before, .chip.warn::before { content: ''; width: 14px; margin-inline-end: 8px; border-inline-end: 1px solid var(--ink); }
+.chip.warn::before { background: var(--hatch); }
+.chip.bad::before { background: var(--cross); }

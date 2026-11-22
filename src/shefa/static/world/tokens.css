@@ -122,3 +122,7 @@
   --dichroic-wash: oklch(0.3 0.07 352);
   --sheet-shadow: -24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6);
 }
+
+/* Martian Mono draws Latin digits only. In Bangla the quantities stay in Anek, so a serial or a
+   time never mixes two faces; tables still right-align them. */
+:root:lang(bn) { --font-num: 'Anek', 'Noto Sans Bengali', system-ui, sans-serif; }

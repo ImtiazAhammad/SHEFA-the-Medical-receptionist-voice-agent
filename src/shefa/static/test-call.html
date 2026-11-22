@@ -39,9 +39,9 @@ h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
 @media(hover:hover) and (pointer:fine){
   .btn:not(:disabled):active{transform:scale(.97)}
 }
-.btn-green{background:var(--ink);color:var(--on-select)}.btn-green:hover{background:var(--z2)}
+.btn-go{background:var(--select);color:var(--on-select);border:1px solid var(--select)}.btn-go:hover{background:var(--z2)}
 .btn-red{background:var(--dichroic);color:var(--on-dichroic)}.btn-red:hover{background:var(--dichroic-ink)}
-.btn-blue{background:var(--z3);color:var(--on-select)}.btn-blue:hover{background:var(--z2)}
+.btn-alt{background:transparent;color:var(--ink);border:1px solid var(--ink)}.btn-alt:hover{background:var(--field-2)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .timer{font-size:2rem;font-weight:700;font-family:var(--font-num);color:var(--ink);margin:16px 0;text-align:center;min-height:48px}
 .visualizer{height:40px;display:flex;align-items:center;justify-content:center;gap:3px;margin:12px 0}
@@ -100,7 +100,7 @@ h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
     <div class="timer" id="timer"></div>
     <div class="status" id="v-status">Press to start</div>
     <div style="text-align:center">
-      <button class="btn btn-green" id="v-btn" onclick="voiceToggle()">&#128222; Start Call</button>
+      <button class="btn btn-go" id="v-btn" onclick="voiceToggle()">Start call</button>
     </div>
     <div class="transcript" id="v-transcript"></div>
   </div>
@@ -117,7 +117,7 @@ h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
   <div class="card">
     <div class="status" id="o-status">Ready to call</div>
     <div style="text-align:center;margin:16px 0">
-      <button class="btn btn-blue" id="o-btn" onclick="outboundCall()">&#128222; Call Me Now</button>
+      <button class="btn btn-alt" id="o-btn" onclick="outboundCall()">Call me now</button>
     </div>
     <div id="o-result"></div>
   </div>
@@ -139,7 +139,7 @@ h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
     <div class="transcript" id="t-transcript"></div>
     <div class="chat-input">
       <input type="text" id="t-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter')textSend()">
-      <button class="btn btn-green" onclick="textSend()">Send</button>
+      <button class="btn btn-go" onclick="textSend()">Send</button>
     </div>
   </div>
   <div class="info">
@@ -233,7 +233,7 @@ async function voiceToggle(){
     vWs.onopen=()=>{
       vConnected=true;
       document.getElementById('v-btn').className='btn btn-red';
-      document.getElementById('v-btn').innerHTML='&#128220; Hang Up';
+      document.getElementById('v-btn').innerHTML='Hang up';
       document.getElementById('v-btn').disabled=false;
       vStartTimer();vStatus('Connected — speak now','ok');
       vWs.send(JSON.stringify({event:'connected'}));
@@ -269,8 +269,8 @@ function voiceHangup(){
   if(vStream){vStream.getTracks().forEach(t=>t.stop());vStream=null;}
   if(vCtx){vCtx.close();vCtx=null;}
   clearInterval(vTimer);
-  document.getElementById('v-btn').className='btn btn-green';
-  document.getElementById('v-btn').innerHTML='&#128222; Start Call';
+  document.getElementById('v-btn').className='btn btn-go';
+  document.getElementById('v-btn').innerHTML='Start call';
   document.getElementById('v-btn').disabled=false;
   document.getElementById('timer').textContent='';
   vStatus('Call ended','');

@@ -485,7 +485,6 @@ function WeekPreview({ sessions }: { sessions: Session[] }) {
             </span>
           ))}
         </div>
-        <span />
       </div>
       {WEEK.map(([d, key]) => {
         const day = valid.filter((s) => s.weekday === d)
@@ -504,8 +503,20 @@ function WeekPreview({ sessions }: { sessions: Session[] }) {
                   />
                 )
               })}
+              {(() => {
+                const hit = day.filter(clashes)
+                if (!hit.length) return null
+                const from = Math.min(...hit.map((s) => toMin(s.start_time)))
+                const to = Math.max(...hit.map((s) => toMin(s.end_time)))
+                // beside the overlap: after it when there is room, before it otherwise
+                const after = (to - start) / span < 0.7
+                return (
+                  <span className="mark mark-bad week-clash" style={after ? { left: `calc(${at(to)} + 0.4rem)` } : { right: `calc(100% - ${at(from)} + 0.4rem)` }}>
+                    {t('overlap')}
+                  </span>
+                )
+              })()}
             </div>
-            {day.some(clashes) ? <span className="mark mark-bad week-clash">{t('overlap')}</span> : <span />}
           </div>
         )
       })}

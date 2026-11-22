@@ -49,7 +49,7 @@ export function Report() {
         <button type="button" className="btn no-print" onClick={() => window.print()}>{t('print')}</button>
       </PageHeader>
       <p className="muted meta">
-        {date(d.from, { dateStyle: 'medium' })} – {date(d.to, { dateStyle: 'medium' })} · {t('repDeskHours', { h: d.desk_hours })}
+        {date(d.from, { dateStyle: 'medium' })} – {date(d.to, { dateStyle: 'medium' })} · {t('repDeskHours', { h: d.desk_hours.replace(/\d/g, (c) => num(Number(c))) })}
       </p>
       <div className="tiles">
         {tiles.map(([key, value, sub]) => (
@@ -65,7 +65,7 @@ export function Report() {
         <ul className="ledger">
           {([
             ['srcPhone', d.bookings.by_shefa_phone, 'hatch-shefa'],
-            ['srcWeb', d.bookings.by_web_page, 'hatch-shefa'],
+            ['srcWeb', d.bookings.by_web_page, 'hatch-3'],
             ['srcWalkIn', d.bookings.walk_in, 'hatch-2'],
           ] as [Key, number, string][]).map(([key, n, hatch]) => {
             const most = Math.max(1, d.bookings.by_shefa_phone, d.bookings.by_web_page, d.bookings.walk_in)
