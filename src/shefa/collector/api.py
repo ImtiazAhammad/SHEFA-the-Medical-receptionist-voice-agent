@@ -1398,9 +1398,19 @@ def create_public_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAP
             app.mount(
                 "/review", StaticFiles(directory=STATIC / "private", html=True), name="review"
             )
+    _mount_world(app)
     if (STATIC / "public").exists():
         app.mount("/", StaticFiles(directory=STATIC / "public", html=True), name="public")
     return app
+
+
+# SHEFA's shared visual world (tokens and fonts, no data), the same files the clinic app uses.
+WORLD = Path(__file__).resolve().parent.parent / "static" / "world"
+
+
+def _mount_world(app: FastAPI) -> None:
+    if WORLD.is_dir():
+        app.mount("/world", StaticFiles(directory=WORLD), name="world")
 
 
 def create_private_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastAPI:
@@ -1428,6 +1438,7 @@ def create_private_app(config: CollectorConfig, ctx: Ctx | None = None) -> FastA
     async def health() -> dict[str, Any]:
         return {"ok": True}
 
+    _mount_world(app)
     if (STATIC / "private").exists():
         app.mount("/", StaticFiles(directory=STATIC / "private", html=True), name="private")
     return app

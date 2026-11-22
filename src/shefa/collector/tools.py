@@ -594,6 +594,15 @@ def build_shell(config: CollectorConfig, out: Path, api: str) -> int:
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(source, out)
+    # The page's look (tokens and the light font files) lives in SHEFA's shared world folder.
+    world = Path(__file__).parent.parent / "static" / "world"
+    if world.is_dir():
+        (out / "world" / "fonts").mkdir(parents=True, exist_ok=True)
+        for name in ("tokens.css", "fonts-lite.css"):
+            shutil.copy2(world / name, out / "world" / name)
+        for font in (world / "fonts").glob("*"):
+            if "wght" in font.name or font.name.startswith(("martian", "OFL")):
+                shutil.copy2(font, out / "world" / "fonts" / font.name)
     (out / "config.js").write_text(
         f"// Written by `shefa collect shell`. Change the address here when the tunnel address changes.\n"
         f"window.SHEFA_API = {json.dumps(api.rstrip('/'))};\n",

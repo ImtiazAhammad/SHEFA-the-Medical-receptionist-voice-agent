@@ -181,6 +181,20 @@ def test_shell_builder_points_the_page_at_the_server(config, tmp_path, monkeypat
     assert t.build_shell(config, out, "not-a-url") == 2
 
 
+def test_the_static_copy_carries_the_shared_look(config, tmp_path):
+    import shefa.collector.tools as t
+
+    out = tmp_path / "shell"
+    assert t.build_shell(config, out, "https://x.trycloudflare.com") == 0
+    assert (out / "world" / "tokens.css").is_file()
+    assert (out / "world" / "fonts-lite.css").is_file()
+    fonts = {f.name for f in (out / "world" / "fonts").iterdir()}
+    assert "anek-bangla-bengali-wght.woff2" in fonts
+    assert "anek-bangla-bengali.woff2" not in fonts  # the heavy file stays home
+    for href in __import__("re").findall(r"url\(\./fonts/([^)]+)\)", (out / "world" / "fonts-lite.css").read_text()):
+        assert href in fonts, href
+
+
 def test_compact_audio_encodes_any_length():
     rng = np.random.default_rng(0)
     for n in (16000, 68267, 68268, 204801):  # lengths that once gave two packets the same timestamp
