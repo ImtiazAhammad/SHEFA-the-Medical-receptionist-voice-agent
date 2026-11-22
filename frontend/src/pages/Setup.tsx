@@ -95,10 +95,10 @@ export function Setup() {
               <div>
                 <strong>{d.name_bn || d.name_en}</strong>{' '}
                 <span className="muted small">{deptName(data.departments, d.department_id)}</span>{' '}
-                <Pill tone={d.booking_mode === 'serial' ? 'info' : 'quiet'}>
+                <Pill tone={d.booking_mode === 'serial' ? 'sel' : 'ok'}>
                   {t(d.booking_mode === 'serial' ? 'modeSerial' : 'modeSlot')}
                 </Pill>{' '}
-                {!d.active ? <Pill tone="warn">{t('doctorOff')}</Pill> : null}
+                {!d.active ? <Pill tone="gone">{t('doctorOff')}</Pill> : null}
                 <div className="muted small">{sessionsLine(d.sessions, t)}</div>
               </div>
               <button type="button" className="btn btn-small" aria-expanded={open === d.id} onClick={() => setOpen(open === d.id ? null : d.id)}>
@@ -355,6 +355,7 @@ function DoctorEditor({
         <>
           <h3 className="section-title">{t('chamberWeek')}</h3>
           <p className="muted small">{t('chamberWeekHint')}</p>
+          <WeekPreview sessions={sessions} />
           {sessions.map((s, i) => (
             <div className="session-row" key={i}>
               <select aria-label={t('day')} value={s.weekday} onChange={(e) => patch(i, { weekday: Number(e.target.value) })}>
@@ -364,7 +365,7 @@ function DoctorEditor({
               </select>
               <input aria-label={t('from')} type="time" value={s.start_time} onChange={(e) => patch(i, { start_time: e.target.value })} />
               <input aria-label={t('to')} type="time" value={s.end_time} onChange={(e) => patch(i, { end_time: e.target.value })} />
-              <label className="inline-field">
+              <label className="unit-field">
                 <input
                   aria-label={t('patientsPerSession')}
                   type="number"
@@ -374,9 +375,9 @@ function DoctorEditor({
                   value={s.patients}
                   onChange={(e) => patch(i, { patients: Number(e.target.value) || 1 })}
                 />
-                <span className="muted small">{t('patientsWord')}</span>
+                <span>{t('patientsWord')}</span>
               </label>
-              <button type="button" className="btn btn-small" onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
+              <button type="button" className="btn btn-small btn-quiet btn-danger" onClick={() => setSessions(sessions.filter((_, j) => j !== i))}>
                 {t('remove')}
               </button>
             </div>
@@ -450,5 +451,64 @@ function StrandedList({ rows, onDone }: { rows: Stranded[]; onDone: () => void }
         <button type="button" className="btn btn-small" onClick={onDone}>{t('strandedDone')}</button>
       </div>
     </div>
+  )
+}
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/**
+ * The week being edited, drawn: each session a block as long as it really is. Two sessions on
+ * one day that overlap cross-hatch and say so, before the clinic presses save.
+ */
+function WeekPreview({ sessions }: { sessions: Session[] }) {
+  const { t, clock } = useI18n()
+  const valid = sessions.filter((s) => toMin(s.end_time) > toMin(s.start_time))
+  if (!valid.length) return null
+  const start = Math.floor(Math.min(...valid.map((s) => toMin(s.start_time))) / 60) * 60
+  const end = Math.ceil(Math.max(...valid.map((s) => toMin(s.end_time))) / 60) * 60
+  const span = Math.max(60, end - start)
+  const at = (m: number) => `${((m - start) / span) * 100}%`
+  const hours = Array.from({ length: span / 60 + 1 }, (_, i) => start + i * 60).filter((_, i, all) => all.length <= 5 || i % (all.length > 10 ? 3 : 2) === 0)
+  const clashes = (s: Session) =>
+    valid.some((o) => o !== s && o.weekday === s.weekday && toMin(s.start_time) < toMin(o.end_time) && toMin(o.start_time) < toMin(s.end_time))
+  return (
+    <figure className="week" aria-label={t('weekPreview')}>
+      <div className="week-axis" aria-hidden="true">
+        <span />
+        <div className="week-track">
+          {hours.map((h) => (
+            <span key={h} className="week-hour" style={{ left: at(h) }}>
+              {clock(`${String(h / 60).padStart(2, '0')}:00`)}
+            </span>
+          ))}
+        </div>
+        <span />
+      </div>
+      {WEEK.map(([d, key]) => {
+        const day = valid.filter((s) => s.weekday === d)
+        return (
+          <div className="week-row" key={d}>
+            <span className="week-day">{t(key)}</span>
+            <div className="week-track">
+              {day.map((s, i) => {
+                const clash = clashes(s)
+                return (
+                  <span
+                    key={i}
+                    className={`week-block${clash ? ' is-clash' : ''}`}
+                    style={{ left: at(toMin(s.start_time)), width: `${((toMin(s.end_time) - toMin(s.start_time)) / span) * 100}%` }}
+                    title={`${clock(s.start_time)} – ${clock(s.end_time)}${clash ? ` · ${t('overlap')}` : ''}`}
+                  />
+                )
+              })}
+            </div>
+            {day.some(clashes) ? <span className="mark mark-bad week-clash">{t('overlap')}</span> : <span />}
+          </div>
+        )
+      })}
+    </figure>
   )
 }

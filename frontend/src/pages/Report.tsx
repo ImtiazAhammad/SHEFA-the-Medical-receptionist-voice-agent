@@ -60,11 +60,32 @@ export function Report() {
           </div>
         ))}
       </div>
+      <section className="sources" aria-labelledby="src-h">
+        <h2 id="src-h" className="section-title">{t('repBySource')}</h2>
+        <ul className="ledger">
+          {([
+            ['srcPhone', d.bookings.by_shefa_phone, 'hatch-shefa'],
+            ['srcWeb', d.bookings.by_web_page, 'hatch-shefa'],
+            ['srcWalkIn', d.bookings.walk_in, 'hatch-2'],
+          ] as [Key, number, string][]).map(([key, n, hatch]) => {
+            const most = Math.max(1, d.bookings.by_shefa_phone, d.bookings.by_web_page, d.bookings.walk_in)
+            return (
+              <li key={key} className="ledger-row source-row">
+                <span className="source-name">{t(key)}</span>
+                <span className="source-track" aria-hidden="true">
+                  <span className={`source-bar ${n ? hatch : ''}`} style={{ width: `${(n / most) * 100}%` }} />
+                </span>
+                <span className="source-n mono">{num(n)}</span>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
       {d.sms.not_sent_no_gateway ? <div className="note note-warn">{t('repSmsOff', { n: num(d.sms.not_sent_no_gateway) })}</div> : null}
       <section className="card stack no-print">
         <h2 className="section-title">{t('repShare')}</h2>
         <pre className="share-text" lang="bn">{d.text_bn}</pre>
-        <div className="row">
+        <div className="inline-form">
           <button type="button" className="btn" onClick={() => void copy()}>{copied ? t('copied') : t('copy')}</button>
           <a className="btn btn-primary" href={`https://wa.me/?text=${encodeURIComponent(d.text_bn)}`} target="_blank" rel="noopener noreferrer">
             {t('repWhatsapp')}

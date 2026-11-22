@@ -948,6 +948,50 @@ class ClinicStore:
         sql += " ORDER BY date, start_time"
         return [self.get_appointment(r["id"]) for r in self.connection.execute(sql, params)]
 
+    def day_load(self, day: str) -> list[dict[str, Any]]:
+        """Each doctor's chamber sessions on `day`: places (capacity) and how many are taken.
+
+        Counts are real rows: `booked` is still-booked plus completed and no-show visits whose
+        time falls inside the session; cancelled ones free their place. A doctor on leave has
+        their sessions listed with `on_leave` so the desk sees why nothing is bookable.
+        """
+        weekday = _parse_date(day).weekday()
+        out: list[dict[str, Any]] = []
+        for d in self.doctors():
+            windows = self.connection.execute(
+                "SELECT start_time, end_time, slot_minutes FROM doctor_schedules"
+                " WHERE doctor_id = ? AND weekday = ? ORDER BY start_time",
+                (d["id"], weekday),
+            ).fetchall()
+            if not windows:
+                continue
+            taken = [
+                _to_minutes(r["start_time"])
+                for r in self.connection.execute(
+                    "SELECT start_time FROM appointments WHERE doctor_id = ? AND date = ?"
+                    " AND status IN ('booked', 'completed', 'no_show')",
+                    (d["id"], day),
+                )
+            ]
+            on_leave = self.doctor_on_leave(d["id"], day)
+            for w in windows:
+                start, end = _to_minutes(w["start_time"]), _to_minutes(w["end_time"])
+                step = w["slot_minutes"]
+                out.append(
+                    {
+                        "doctor_id": d["id"],
+                        "doctor_en": d["name_en"],
+                        "doctor_bn": d.get("name_bn") or "",
+                        "start_time": w["start_time"],
+                        "end_time": w["end_time"],
+                        "capacity": len(range(start, end - step + 1, step)),
+                        "booked": sum(1 for t in taken if start <= t < end),
+                        "on_leave": on_leave,
+                        "serial": self.is_serial(d["id"]),
+                    }
+                )
+        return sorted(out, key=lambda r: (r["start_time"], r["doctor_en"]))
+
     def appointments_on(self, day: str, *, status: str | None = "booked") -> list[dict[str, Any]]:
         """Appointments on `day` with the patient's phone — what a reminder run needs."""
         rows = self.connection.execute(

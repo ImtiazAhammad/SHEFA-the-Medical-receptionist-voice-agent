@@ -213,6 +213,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/staff/{username}/active"): "staff:manage",
     ("POST", "/api/v1/reminders/run"): "records:write",
     ("GET", "/api/v1/appointments"): "records:read",
+    ("GET", "/api/v1/day-load"): "records:read",
     ("GET", "/login"): PUBLIC_PERMISSION,
     ("DELETE", "/api/v1/calls/{call_sid}"): "records:write",
     ("GET", "/api/v1/callbacks"): "records:read",
@@ -275,6 +276,8 @@ def required_permission(app: FastAPI, method: str, path: str) -> str | None:
     """
     if path.startswith(TELEPHONY_PREFIX):
         return TELEPHONY_PERMISSION
+    if path.startswith("/static/world/"):
+        return PUBLIC_PERMISSION  # shared fonts and styles only: the sign-in page needs them
     if path == "/static" or path.startswith("/static/"):
         return "sessions:read"
     if path.startswith(APP_ASSETS_PREFIX + "/"):
@@ -984,6 +987,20 @@ def create_app(auth_store: AuthStore | None = None) -> FastAPI:
                 status_code=422, detail={"code": "validation", "message": "end must be YYYY-MM-DD"}
             ) from exc
         return weekly_report(default_clinic_store(), default_calls_store(), end=last, days=days)
+
+    @app.get("/api/v1/day-load")
+    async def day_load(date: str = "") -> list[dict]:
+        """How full each doctor's chamber sessions are on a day (default today, clinic time)."""
+        from datetime import datetime
+
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ, ClinicError
+
+        day = date or datetime.now(CLINIC_TZ).date().isoformat()
+        try:
+            return default_clinic_store().day_load(day)
+        except (ValueError, ClinicError) as exc:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
 
     @app.get("/api/v1/appointments")
     async def list_appointments(

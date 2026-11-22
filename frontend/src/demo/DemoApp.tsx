@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Mic, PhoneOff, Send } from 'lucide-react'
 import { dictionaries, type DKey, type DLang } from './strings'
 import { VoiceCall, type VoiceEnd, type VoiceState } from './voice'
+import '@world/fonts-lite.css'
 import '../patient/patient.css'
 import './demo.css'
 
@@ -137,7 +138,15 @@ export default function DemoApp() {
   return (
     <div className="patient demo">
       <header className="p-top">
-        <span className="p-brand">{t.brand}</span>
+        <span className="p-brand">
+          <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+              <rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="currentColor" />
+              <rect x="4" y="4" width="5" height="20" fill="currentColor" />
+              <rect x="11.5" y="4" width="5" height="20" fill="currentColor" opacity="0.55" />
+              <rect x="19" y="4" width="5" height="20" fill="var(--dichroic)" />
+          </svg>
+          {t.brand}
+        </span>
         <button type="button" className="p-lang" onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}>
           {t.language}
         </button>

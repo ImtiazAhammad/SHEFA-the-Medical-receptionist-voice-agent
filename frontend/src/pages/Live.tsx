@@ -1,17 +1,132 @@
-import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Phone } from 'lucide-react'
-import { api, type Callback, type CallRow } from '../lib/api'
+import { api, type Callback, type CallRow, type SessionLoad } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText } from '../components'
+import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText, hatchFor } from '../components'
 
 export function CallStatus({ call }: { call: CallRow }) {
   const { t } = useI18n()
-  return call.status === 'in_progress' ? <Pill tone="info">{t('inProgress')}</Pill> : <Pill tone="quiet">{t('completed')}</Pill>
+  return call.status === 'in_progress' ? <Pill tone="live">{t('inProgress')}</Pill> : <Pill tone="quiet">{t('completed')}</Pill>
 }
 
+const minutes = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+
+function nowMinutes() {
+  const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Dhaka' }).format(new Date())
+  return minutes(parts)
+}
+
+/**
+ * Today's chamber sessions on one time axis. A block's length is the session's real duration;
+ * its fill is the share of places taken, drawn as hatching that gets denser as it fills. Every
+ * block also says its count in words.
+ */
+function DayLoad() {
+  const { t, num, clock, pick } = useI18n()
+  const load = useLoad(() => api<SessionLoad[]>('/api/v1/day-load'), [], 30000)
+  const [now, setNow] = useState(nowMinutes)
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(nowMinutes()), 60000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const rows = load.data ?? []
+  const byDoctor = new Map<number, SessionLoad[]>()
+  for (const s of rows) byDoctor.set(s.doctor_id, [...(byDoctor.get(s.doctor_id) ?? []), s])
+  const start = rows.length ? Math.floor(Math.min(...rows.map((s) => minutes(s.start_time))) / 60) * 60 : 0
+  const end = rows.length ? Math.ceil(Math.max(...rows.map((s) => minutes(s.end_time))) / 60) * 60 : 0
+  const span = Math.max(60, end - start)
+  const at = (m: number) => `${((m - start) / span) * 100}%`
+  const hours = Array.from({ length: span / 60 + 1 }, (_, i) => start + i * 60)
+  const step = hours.length > 10 ? 2 : 1
+
+  return (
+    <section className="dayload" aria-labelledby="load-h">
+      <div className="section-head">
+        <h2 id="load-h">{t('loadTitle')}</h2>
+        <span className="legend">{t('loadLegend')}</span>
+      </div>
+      {load.error ? <ErrorNote error={load.error} onRetry={load.reload} /> : null}
+      {load.loading && !load.data ? <Skeleton rows={2} /> : null}
+      {load.data && rows.length === 0 ? <p className="muted">{t('loadNone')}</p> : null}
+      {rows.length > 0 ? (
+        <div className="load-grid">
+          <div className="load-axis" aria-hidden="true">
+            <span />
+            <div className="load-track">
+              {hours.map((h, i) =>
+                i % step === 0 ? (
+                  <span key={h} className="load-hour mono" style={{ left: at(h) }}>
+                    {clock(`${String(h / 60).padStart(2, '0')}:00`)}
+                  </span>
+                ) : null,
+              )}
+            </div>
+          </div>
+          <ul className="load-rows">
+            {[...byDoctor.values()].map((sessions) => {
+              const d = sessions[0]
+              return (
+                <li key={d.doctor_id} className="load-row">
+                  <span className="load-name">{pick(d.doctor_en, d.doctor_bn)}</span>
+                  <div className="load-track">
+                    {hours.map((h) => (
+                      <span key={h} className="load-tick" style={{ left: at(h) }} aria-hidden="true" />
+                    ))}
+                    {now > start && now < end ? <span className="load-now" style={{ left: at(now) }} aria-hidden="true" /> : null}
+                    {sessions.map((s) => {
+                      const full = s.booked >= s.capacity && s.capacity > 0
+                      const words = s.on_leave
+                        ? t('loadOnLeave')
+                        : `${t('sessionTime', { a: clock(s.start_time), b: clock(s.end_time) })}: ${t('loadPlaces', { b: num(s.booked), c: num(s.capacity) })}`
+                      return (
+                        <div
+                          key={s.start_time}
+                          className={`load-block${s.on_leave ? ' is-leave' : ''}${full ? ' is-full' : ''}`}
+                          style={{ left: at(minutes(s.start_time)), width: `calc(${((minutes(s.end_time) - minutes(s.start_time)) / span) * 100}% - 2px)` }}
+                          title={words}
+                        >
+                          {!s.on_leave ? (
+                            <span
+                              className={`load-fill ${hatchFor(s.booked, s.capacity)}`}
+                              style={{ width: `${Math.min(100, (s.booked / Math.max(1, s.capacity)) * 100)}%` }}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <span className="load-count">
+                            {s.on_leave ? (
+                              t('loadOnLeave')
+                            ) : (
+                              <>
+                                <span className="mono" aria-hidden="true">
+                                  {num(s.booked)}/{num(s.capacity)}
+                                </span>
+                                {full ? <span className="load-full"> {t('loadFull')}</span> : null}
+                              </>
+                            )}
+                            <span className="visually-hidden">{words}</span>
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+/** Callers SHEFA handed to a person: the desk's first job, so it comes first and lifts. */
 function Callbacks() {
   const { t, date } = useI18n()
   const { can } = useAuth()
@@ -28,44 +143,66 @@ function Callbacks() {
     }
   }
 
+  const items = list.data ?? []
   return (
-    <section aria-labelledby="cb-h" aria-live="polite">
-      <h2 id="cb-h">{t('callbacksTitle')}</h2>
+    <section className={`callbacks${items.length ? ' has-items' : ''}`} aria-labelledby="cb-h" aria-live="polite">
+      <div className="section-head">
+        <h2 id="cb-h">{t('callbacksTitle')}</h2>
+        {items.length ? <span className="count-big mono">{items.length}</span> : null}
+      </div>
       {list.error ? <ErrorNote error={list.error} onRetry={list.reload} /> : null}
-      {list.data && list.data.length === 0 ? <Empty title={t('noCallbacks')} /> : null}
-      <ul className="rows">
-        {(list.data ?? []).map((c) => (
-          <li key={c.id} className="row">
-            <Phone size={18} aria-hidden="true" />
-            {c.phone ? (
-              <a href={`tel:${c.phone}`} className="phone">
-                {c.phone}
-              </a>
-            ) : (
-              <span className="muted">—</span>
-            )}
-            <span className="muted">
-              {t('waiting', { when: date(c.created_at, { timeStyle: 'short', dateStyle: 'medium', timeZone: 'Asia/Dhaka' }) })}
-            </span>
-            {can('records:write') ? (
-              <button
-                type="button"
-                className="btn btn-small row-end"
-                disabled={busy === c.id}
-                onClick={() => void resolve(c.id)}
-              >
-                {busy === c.id ? t('resolving') : t('resolve')}
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      {list.data && items.length === 0 ? <p className="muted">{t('noCallbacks')}</p> : null}
+      {items.length ? (
+        <ul className="ledger">
+          {items.map((c) => (
+            <li key={c.id} className="ledger-row is-shefa">
+              <Pill tone="shefa">{t('needsPersonShort')}</Pill>
+              <Phone size={16} strokeWidth={1.75} aria-hidden="true" />
+              {c.phone ? (
+                <a href={`tel:${c.phone}`} className="phone mono">
+                  {c.phone}
+                </a>
+              ) : (
+                <span className="muted">—</span>
+              )}
+              <span className="muted">
+                {t('waiting', { when: date(c.created_at, { timeStyle: 'short', dateStyle: 'medium', timeZone: 'Asia/Dhaka' }) })}
+              </span>
+              {can('records:write') ? (
+                <button type="button" className="btn btn-small ledger-end" disabled={busy === c.id} onClick={() => void resolve(c.id)}>
+                  {busy === c.id ? t('resolving') : t('resolve')}
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   )
 }
 
-export function Live() {
+function CallRows({ calls, full }: { calls: CallRow[]; full?: boolean }) {
   const { t, num, date } = useI18n()
+  return (
+    <ul className="ledger">
+      {calls.map((c) => (
+        <li key={c.call_sid}>
+          <Link className="ledger-row" to={`call/${encodeURIComponent(c.call_sid)}`}>
+            <CallStatus call={c} />
+            <span>{c.direction === 'outbound' ? t('outbound') : t('inbound')}</span>
+            <span className="muted num">
+              {c.started_at ? date(c.started_at, full ? { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' } : { timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : ''}
+            </span>
+            <span className="ledger-end num">{full ? durationText(c.duration_seconds, t, num) : t('open')}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function Live() {
+  const { t, date } = useI18n()
   const calls = useLoad(() => api<CallRow[]>('/api/v1/calls?limit=30'), [], 3000)
   const active = (calls.data ?? []).filter((c) => c.status === 'in_progress')
   const recent = (calls.data ?? []).filter((c) => c.status !== 'in_progress').slice(0, 8)
@@ -74,59 +211,37 @@ export function Live() {
   return (
     <>
       <PageHeader title={t('liveTitle')} />
-      <Callbacks />
-      <h2>{t('inProgress')}</h2>
-      {calls.error ? <ErrorNote error={calls.error} onRetry={calls.reload} /> : null}
-      {calls.loading && !calls.data ? <Skeleton /> : null}
-      {calls.data ? (
-        <>
-          <section aria-labelledby="active-h" aria-live="polite">
-            <h2 id="active-h" className="visually-hidden">
-              {t('liveTitle')}
-            </h2>
-            {active.length === 0 ? (
-              <Empty
-                title={t('noCallsNow')}
-                hint={last ? t('lastCall', { when: date(last, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) }) : t('noCallsYet')}
-              />
-            ) : (
-              <ul className="rows">
-                {active.map((c) => (
-                  <li key={c.call_sid}>
-                    <Link className="row" to={`/calls/${encodeURIComponent(c.call_sid)}`}>
-                      <CallStatus call={c} />
-                      <span>{c.direction === 'outbound' ? t('outbound') : t('inbound')}</span>
-                      <span className="muted">
-                        {c.started_at ? date(c.started_at, { timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : ''}
-                      </span>
-                      <span className="row-end">{t('open')}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          {recent.length > 0 ? (
-            <section aria-labelledby="recent-h">
-              <h2 id="recent-h">{t('recentTitle')}</h2>
-              <ul className="rows">
-                {recent.map((c) => (
-                  <li key={c.call_sid}>
-                    <Link className="row" to={`/calls/${encodeURIComponent(c.call_sid)}`}>
-                      <CallStatus call={c} />
-                      <span>{c.direction === 'outbound' ? t('outbound') : t('inbound')}</span>
-                      <span className="muted">
-                        {c.started_at ? date(c.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : ''}
-                      </span>
-                      <span className="row-end">{durationText(c.duration_seconds, t, num)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
+      <DayLoad />
+      <div className="live-cols">
+        <Callbacks />
+        <section aria-labelledby="active-h" aria-live="polite">
+          <div className="section-head">
+            <h2 id="active-h">{t('inProgress')}</h2>
+            {active.length ? <span className="count-big mono">{active.length}</span> : null}
+          </div>
+          {calls.error ? <ErrorNote error={calls.error} onRetry={calls.reload} /> : null}
+          {calls.loading && !calls.data ? <Skeleton rows={2} /> : null}
+          {calls.data && active.length === 0 ? (
+            <Empty
+              title={t('noCallsNow')}
+              hint={last ? t('lastCall', { when: date(last, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) }) : t('noCallsYet')}
+            />
           ) : null}
-        </>
+          {active.length ? <CallRows calls={active} /> : null}
+        </section>
+      </div>
+      {recent.length > 0 ? (
+        <section aria-labelledby="recent-h">
+          <div className="section-head">
+            <h2 id="recent-h">{t('recentTitle')}</h2>
+            <Link to="/calls" className="legend-link">
+              {t('callsTitle')}
+            </Link>
+          </div>
+          <CallRows calls={recent} full />
+        </section>
       ) : null}
+      <Outlet />
     </>
   )
 }

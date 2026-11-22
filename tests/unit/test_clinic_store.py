@@ -338,3 +338,26 @@ def test_a_walk_in_without_a_phone_is_never_called(clinic):
     phones = [r["phone"] for r in clinic.due_reminders(now, lead_hours=48)]
     assert "01711000999" in phones  # the control: real numbers are still called
     assert not any(p.startswith(NO_PHONE_PREFIX) for p in phones)
+
+
+def test_day_load_counts_real_places_per_session(clinic):
+    patient = _patient(clinic)
+    other = _patient(clinic, "+8801711000002", "Rahim")
+    clinic.book(patient, clinic.doctor_id, MONDAY, "09:00", now=SUNDAY_NIGHT)
+    gone = clinic.book(other, clinic.doctor_id, MONDAY, "09:30", now=SUNDAY_NIGHT)
+    clinic.cancel(gone["appointment_id"], other)
+    clinic.book(other, clinic.doctor_id, MONDAY, "16:30", now=SUNDAY_NIGHT)
+
+    load = clinic.day_load(MONDAY)
+
+    assert [(s["start_time"], s["capacity"], s["booked"]) for s in load] == [
+        ("09:00", 2, 1),  # the cancelled place is free again
+        ("16:00", 2, 1),
+    ]
+    assert load[0]["doctor_bn"] == "রহমান" and load[0]["on_leave"] is False
+    assert clinic.day_load(TUESDAY) == []  # no chamber that day
+
+
+def test_day_load_shows_a_doctor_on_leave(clinic):
+    clinic.add_leave(clinic.doctor_id, MONDAY, MONDAY, "conference")
+    assert all(s["on_leave"] for s in clinic.day_load(MONDAY))

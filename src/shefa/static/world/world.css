@@ -1,0 +1,261 @@
+/* SHEFA world: the exposure record.
+ *
+ * One set of tokens for every SHEFA screen (staff app, patient page, demo, voice-collection site).
+ * - Tone comes only from an eleven-step neutral zone ramp, z0 (deepest) to z10 (lightest).
+ * - One dichroic magenta marks what SHEFA itself did or needs: a live call, a booking SHEFA made,
+ *   a call SHEFA handed to a person. Never decoration.
+ * - State is drawn, and always also said in words: load = hatch density, conflict = crossed hatch,
+ *   held back = dotted outline, cancelled/disabled = struck, selected = deepest zone.
+ * - Every rule is one device pixel, no radius, no shadow except the sliding sheet.
+ * Load a fonts file (fonts.css or fonts-lite.css) beside this one.
+ */
+
+:root {
+  /* zone ramp: faintly cool, never cream */
+  --z0: oklch(0.17 0.006 260);
+  --z1: oklch(0.235 0.007 260);
+  --z2: oklch(0.31 0.007 260);
+  --z3: oklch(0.39 0.007 260);
+  --z4: oklch(0.47 0.006 260);
+  --z5: oklch(0.56 0.006 260);
+  --z6: oklch(0.65 0.005 260);
+  --z7: oklch(0.745 0.005 260);
+  --z8: oklch(0.845 0.004 260);
+  --z9: oklch(0.925 0.003 260);
+  --z10: oklch(0.982 0.002 260);
+  --white: oklch(1 0 0);
+
+  /* the one colour */
+  --dichroic: oklch(0.54 0.215 352);
+  --dichroic-ink: oklch(0.5 0.2 352);
+  --on-dichroic: oklch(0.99 0.01 352);
+  --dichroic-wash: oklch(0.955 0.03 352);
+
+  /* semantic roles over the ramp */
+  --ground: var(--z10);         /* the work field */
+  --sheet: var(--white);        /* a sheet laid over the field */
+  --field-2: var(--z9);         /* a second neutral layer: table heads, wells */
+  --ink: var(--z0);
+  --ink-2: var(--z3);           /* secondary text: 8:1 on ground */
+  --ink-3: var(--z4);           /* the faintest text allowed: 5.9:1 on ground */
+  --rule: var(--z8);            /* hairline between rows */
+  --rule-strong: var(--z0);     /* frame of a control, a table, a sheet */
+  --hatch-ink: var(--z3);
+  --rail: var(--z1);            /* the staff app's left rail */
+  --rail-ink: var(--z9);
+  --rail-ink-2: var(--z7);
+  --rail-rule: var(--z3);
+  --select: var(--z0);
+  --on-select: var(--z10);
+  --focus: var(--z0);
+  --sheet-shadow: -24px 0 48px -12px oklch(0.17 0.006 260 / 0.22), -1px 0 0 var(--z0);
+
+  /* hatch densities: +1/3 to +2 stops of load */
+  --hatch-gap-1: 9px;
+  --hatch-gap-2: 6px;
+  --hatch-gap-3: 4px;
+  --hatch-gap-4: 2.75px;
+
+  /* type */
+  --font: 'Anek', 'Noto Sans Bengali', 'Kalpurush', system-ui, sans-serif;
+  --font-num: 'Martian', 'Anek', ui-monospace, monospace;
+  --step--2: 0.6875rem;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.4375rem;
+  --step-3: 2rem;
+  --step-4: 2.75rem;
+  --step-5: 4rem;
+  --condensed: 78%;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --tap: 44px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --sheet-ease: cubic-bezier(0.34, 1.12, 0.64, 1); /* slides with mass, overshoots a hair */
+
+  color-scheme: light;
+}
+
+/* Dark: the ramp is read the other way round. Chosen by the viewer's system or by data-theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ground: var(--z1);
+    --sheet: var(--z2);
+    --field-2: var(--z2);
+    --ink: var(--z10);
+    --ink-2: var(--z8);
+    --ink-3: var(--z7);
+    --rule: var(--z3);
+    --rule-strong: var(--z8);
+    --hatch-ink: var(--z7);
+    --rail: var(--z0);
+    --rail-rule: var(--z2);
+    --select: var(--z10);
+    --on-select: var(--z0);
+    --focus: var(--z10);
+    --dichroic: oklch(0.72 0.19 352);
+    --dichroic-ink: oklch(0.78 0.16 352);
+    --on-dichroic: oklch(0.17 0.02 352);
+    --dichroic-wash: oklch(0.3 0.07 352);
+    --sheet-shadow: -24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: var(--z1);
+  --sheet: var(--z2);
+  --field-2: var(--z2);
+  --ink: var(--z10);
+  --ink-2: var(--z8);
+  --ink-3: var(--z7);
+  --rule: var(--z3);
+  --rule-strong: var(--z8);
+  --hatch-ink: var(--z7);
+  --rail: var(--z0);
+  --rail-rule: var(--z2);
+  --select: var(--z10);
+  --on-select: var(--z0);
+  --focus: var(--z10);
+  --dichroic: oklch(0.72 0.19 352);
+  --dichroic-ink: oklch(0.78 0.16 352);
+  --on-dichroic: oklch(0.17 0.02 352);
+  --dichroic-wash: oklch(0.3 0.07 352);
+  --sheet-shadow: -24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6);
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+:lang(en) { line-height: 1.5; }
+::selection { background: var(--ink); color: var(--ground); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+input, textarea { caret-color: var(--dichroic); }
+* { scrollbar-color: var(--z7) transparent; scrollbar-width: thin; }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.22em; }
+a:hover { text-decoration-thickness: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+p { margin: 0 0 var(--space-2); text-wrap: pretty; }
+img, svg { max-width: 100%; }
+.num, table, time, .tabular { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; letter-spacing: -0.01em; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Display: tall condensed. Latin display goes to caps; Bangla has no case and keeps its shaping. */
+.display { font-stretch: var(--condensed); font-weight: 600; line-height: 1.02; letter-spacing: -0.01em; }
+.display:lang(en) { text-transform: uppercase; letter-spacing: 0; }
+
+/* Legend: the small label over a field or column. Tracked caps in English only. */
+.legend { font-size: var(--step--1); font-weight: 600; color: var(--ink-2); line-height: 1.3; }
+.legend:lang(en), :lang(en) > .legend { font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.14em; font-stretch: 90%; }
+
+/* ---------- hatch: load, drawn ---------- */
+.hatch-1 { --gap: var(--hatch-gap-1); }
+.hatch-2 { --gap: var(--hatch-gap-2); }
+.hatch-3 { --gap: var(--hatch-gap-3); }
+.hatch-4 { --gap: var(--hatch-gap-4); }
+.hatch-1, .hatch-2, .hatch-3, .hatch-4 {
+  background-image: repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px var(--gap));
+}
+.hatch-cross {
+  background-image:
+    repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 6px);
+}
+.hatch-shefa { background-image: repeating-linear-gradient(135deg, var(--dichroic) 0 1.25px, transparent 1.25px 6px); }
+
+/* ---------- controls ---------- */
+.btn {
+  display: inline-flex; align-items: stretch; justify-content: center;
+  min-height: var(--tap); padding: 0; border: 1px solid var(--rule-strong); border-radius: 0;
+  background: transparent; color: var(--ink);
+  font: inherit; font-weight: 600; line-height: 1.2; text-decoration: none; cursor: pointer;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.btn > .btn-label, .btn:not(:has(.btn-label)) { padding: 0.55rem 1rem; display: inline-flex; align-items: center; gap: 0.45rem; }
+.btn:lang(en), :lang(en) .btn { letter-spacing: 0.06em; text-transform: uppercase; font-size: var(--step--1); font-stretch: 90%; }
+.btn > .btn-seg { display: inline-flex; align-items: center; padding: 0 0.7rem; border-inline-start: 1px solid currentColor; font-family: var(--font-num); font-size: var(--step--1); letter-spacing: 0; }
+.btn:hover:not(:disabled) { background: var(--field-2); }
+.btn:active:not(:disabled) { background: var(--z8); }
+.btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; color: var(--ink-3); border-color: var(--z7); text-decoration: line-through; text-decoration-thickness: 1px; }
+.btn-primary { background: var(--select); color: var(--on-select); border-color: var(--select); }
+.btn-primary:hover:not(:disabled) { background: var(--z2); }
+.btn-primary:active:not(:disabled) { background: var(--z3); }
+.btn-primary > .btn-seg { background-image: repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 5px); background-color: transparent; }
+.btn-shefa { background: var(--dichroic); color: var(--on-dichroic); border-color: var(--dichroic); }
+.btn-shefa:hover:not(:disabled) { background: var(--dichroic-ink); }
+.btn-quiet { border-color: transparent; }
+.btn-quiet:hover:not(:disabled) { border-color: var(--rule); background: transparent; }
+.btn-danger:hover:not(:disabled) { background-image: repeating-linear-gradient(45deg, var(--z8) 0 1px, transparent 1px 6px), repeating-linear-gradient(135deg, var(--z8) 0 1px, transparent 1px 6px); }
+.btn-small { min-height: 36px; }
+.btn-small > .btn-label, .btn-small:not(:has(.btn-label)) { padding: 0.3rem 0.7rem; }
+.btn-block { width: 100%; }
+
+input, select, textarea {
+  font: inherit; color: var(--ink); background: var(--sheet);
+  border: 1px solid var(--z6); border-radius: 0;
+  min-height: var(--tap); padding: 0.45rem 0.7rem;
+}
+textarea { min-height: 6rem; line-height: 1.5; }
+input:hover, select:hover, textarea:hover { border-color: var(--z3); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--rule-strong); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] {
+  border-color: var(--ink);
+  background-image: repeating-linear-gradient(45deg, var(--z8) 0 1px, transparent 1px 7px), repeating-linear-gradient(135deg, var(--z8) 0 1px, transparent 1px 7px);
+}
+input::placeholder, textarea::placeholder { color: var(--ink-3); }
+input[type='checkbox'], input[type='radio'] { min-height: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--select); margin: 0; }
+select { appearance: none; padding-inline-end: 2rem; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 1rem) 55%, calc(100% - 0.7rem) 55%; background-size: 0.3rem 0.3rem; background-repeat: no-repeat; }
+
+/* Unit field: an input with its unit set in a segment, like "045.0 | SEC". */
+.unit-field { display: inline-flex; align-items: stretch; border: 1px solid var(--z6); background: var(--sheet); }
+.unit-field input { border: 0; min-width: 0; }
+.unit-field > span { display: inline-flex; align-items: center; padding: 0 0.6rem; border-inline-start: 1px solid var(--z6); color: var(--ink-2); font-size: var(--step--1); }
+.unit-field:focus-within { border-color: var(--rule-strong); }
+.unit-field:focus-within > span { background: var(--select); color: var(--on-select); border-color: var(--select); }
+
+/* Segmented choice (language, view) */
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); }
+.seg button { font: inherit; min-height: 36px; padding: 0.25rem 0.85rem; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.seg button + button { border-inline-start: 1px solid var(--rule-strong); }
+.seg button[aria-pressed='true'] { background: var(--select); color: var(--on-select); font-weight: 600; }
+
+/* ---------- marks: state, drawn and said ---------- */
+.mark {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: 1.6rem; padding: 0.05rem 0.55rem;
+  border: 1px solid var(--rule-strong); background: var(--sheet); color: var(--ink);
+  font-size: var(--step--1); font-weight: 600; line-height: 1.2; white-space: nowrap;
+}
+.mark:lang(en), :lang(en) .mark { text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--step--2); font-stretch: 90%; }
+.mark-ok { }                                                                      /* settled: plain frame */
+.mark-warn { background-image: repeating-linear-gradient(135deg, var(--z7) 0 1px, transparent 1px 5px); } /* waiting: hatched */
+.mark-bad { background-image: repeating-linear-gradient(45deg, var(--z7) 0 1px, transparent 1px 5px), repeating-linear-gradient(135deg, var(--z7) 0 1px, transparent 1px 5px); } /* conflict/failed: crossed */
+.mark-quiet { border-style: dotted; border-color: var(--ink-3); color: var(--ink-2); }     /* held back */
+.mark-gone { border-color: var(--z7); color: var(--ink-3); text-decoration: line-through; } /* cancelled */
+.mark-sel { background: var(--select); color: var(--on-select); border-color: var(--select); }
+.mark-shefa { border-color: var(--dichroic); color: var(--dichroic-ink); }
+.mark-shefa::before { content: ''; width: 0.5rem; height: 0.5rem; background: var(--dichroic); flex: none; }
+.mark-live::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--dichroic); flex: none; animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}

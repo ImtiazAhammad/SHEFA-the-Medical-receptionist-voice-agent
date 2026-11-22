@@ -1,32 +1,39 @@
-/* SHEFA demo page: the patient page's paper-and-teal look with one large call button. */
-.demo .demo-sample { font-size: 0.9rem; color: var(--p-ink-2); background: var(--p-warm); border-radius: 0.6rem; padding: 0.6rem 0.8rem; margin: 0 0 1.25rem; }
-.demo-call { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.25rem 0 0.5rem; }
-.demo-orb { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; width: 9.5rem; height: 9.5rem; border-radius: 50%; border: 0; cursor: pointer; background: var(--p-accent); color: var(--p-on-accent); box-shadow: 0 0 0 0 color-mix(in oklch, var(--p-accent) 45%, transparent); font-weight: 600; transition: transform 0.15s ease, background 0.15s ease; }
-.demo-orb:hover:not(:disabled) { background: var(--p-accent-hover); transform: scale(1.03); }
-.demo-orb:disabled { opacity: 0.7; cursor: progress; }
-.demo-orb.live { background: var(--p-bad); animation: demo-pulse 1.8s ease-out infinite; }
-@keyframes demo-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--p-bad) 45%, transparent); } 100% { box-shadow: 0 0 0 1.6rem transparent; } }
-@media (prefers-reduced-motion: reduce) { .demo-orb.live { animation: none; } .demo-orb { transition: none; } }
-.demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--p-ink-2); }
-.demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; }
-.demo-chips button { min-height: 44px; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); cursor: pointer; text-align: left; }
-.demo-chips button:hover:not(:disabled) { border-color: var(--p-accent); background: var(--p-wash); }
-.demo-chips button:disabled { opacity: 0.55; cursor: not-allowed; }
+/* SHEFA demo page: the patient page's world with one large call control. The live call is
+   SHEFA speaking, so it takes the magenta; nothing else does. */
+.demo .demo-sample { font-size: 0.9rem; color: var(--ink-2); border: 1px dotted var(--ink-3); padding: 0.6rem 0.8rem; margin: 0 0 1.25rem; }
+.demo-call { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.5rem 0 0.75rem; }
+.demo-orb {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
+  width: 10rem; height: 10rem; border: 1px solid var(--ink); cursor: pointer;
+  background: var(--select); color: var(--on-select); font: inherit; font-weight: 650;
+  outline: 1px solid var(--ink); outline-offset: 6px;
+  transition: transform 0.15s var(--ease-out), background-color 0.15s;
+}
+.demo-orb:hover:not(:disabled) { background: var(--z2); }
+.demo-orb:active:not(:disabled) { transform: scale(0.98); }
+.demo-orb:disabled { cursor: progress; background-image: repeating-linear-gradient(135deg, var(--z4) 0 1px, transparent 1px 6px); }
+.demo-orb.live { background: var(--dichroic); color: var(--on-dichroic); border-color: var(--dichroic); outline-color: var(--dichroic); animation: demo-breathe 1.8s ease-in-out infinite; }
+@keyframes demo-breathe { 50% { background-color: var(--dichroic-ink); } }
+.demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
+.demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; }
+.demo-chips button { min-height: 44px; padding: 0.45rem 0.9rem; border: 1px solid var(--z6); background: var(--sheet); color: var(--ink); cursor: pointer; text-align: start; font: inherit; }
+.demo-chips button:hover:not(:disabled) { border-color: var(--ink); }
+.demo-chips button:disabled { color: var(--ink-3); cursor: not-allowed; }
 .demo-chat { margin-top: 1.25rem; }
-.demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; max-height: 22rem; overflow-y: auto; }
-.demo-line { max-width: 85%; padding: 0.55rem 0.8rem; border-radius: 0.8rem; background: var(--p-surface); border: 1px solid var(--p-line); }
-.demo-line small { color: var(--p-ink-2); font-size: 0.75rem; }
-.demo-line p { margin: 0.1rem 0 0; line-height: 1.5; overflow-wrap: anywhere; }
-.demo-user { align-self: flex-end; background: var(--p-wash); border-color: transparent; }
-.demo-form label { display: block; font-size: 0.9rem; color: var(--p-ink-2); margin-bottom: 0.3rem; }
-.demo-row { display: flex; gap: 0.5rem; }
-.demo-row input { flex: 1; min-height: 48px; padding: 0.5rem 0.8rem; border-radius: 0.6rem; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); }
-.demo-row button { min-width: 48px; min-height: 48px; border-radius: 0.6rem; border: 0; background: var(--p-accent); color: var(--p-on-accent); cursor: pointer; }
-.demo-row button:disabled { opacity: 0.5; cursor: not-allowed; }
-.demo-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
-.demo-steps li { display: grid; gap: 0.1rem; padding: 0.7rem 0.9rem; border-left: 3px solid var(--p-accent); background: var(--p-surface); border-radius: 0 0.6rem 0.6rem 0; }
-.demo-steps span { color: var(--p-ink-2); }
-.demo-safe { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.4rem; color: var(--p-ink-2); }
-.demo-foot { margin: 2rem 0 0; color: var(--p-ink-2); font-size: 0.9rem; }
-.demo-foot a { color: var(--p-accent); }
-@media (max-width: 30rem) { .demo-line { max-width: 95%; } }
+.demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; max-height: 22rem; overflow-y: auto; border-top: 1px solid var(--ink); }
+.demo-line { padding: 0.6rem 0.25rem; border-bottom: 1px solid var(--rule); }
+.demo-line small { color: var(--ink-2); font-size: 0.75rem; font-weight: 650; }
+.demo-line p { margin: 0.1rem 0 0; line-height: 1.55; overflow-wrap: anywhere; }
+.demo-assistant small { color: var(--dichroic-ink); }
+.demo-assistant { box-shadow: inset 3px 0 0 -2px var(--dichroic); padding-inline-start: 0.6rem; }
+.demo-form label { display: block; font-size: 0.9rem; color: var(--ink-2); margin-bottom: 0.3rem; font-weight: 600; }
+.demo-row { display: flex; }
+.demo-row input { flex: 1; min-height: 50px; min-width: 0; }
+.demo-row button { min-width: 52px; min-height: 50px; border: 1px solid var(--select); background: var(--select); color: var(--on-select); cursor: pointer; }
+.demo-row button:disabled { background: transparent; color: var(--ink-3); border-color: var(--z6); cursor: not-allowed; }
+.demo-steps { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--ink); counter-reset: step; }
+.demo-steps li { display: grid; gap: 0.1rem; padding: 0.7rem 0 0.7rem 2.5rem; border-bottom: 1px solid var(--rule); position: relative; counter-increment: step; }
+.demo-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.7rem; font-family: var(--font-num); font-size: 0.8rem; width: 1.7rem; height: 1.7rem; display: grid; place-items: center; border: 1px solid var(--ink); }
+.demo-steps span { color: var(--ink-2); }
+.demo-safe { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 0.4rem; color: var(--ink-2); }
+.demo-foot { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.9rem; }

@@ -3,15 +3,16 @@ import { api, ApiError, type Appointment, type Department } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useI18n, type Key } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { Empty, ErrorNote, PageHeader, Pill, Skeleton } from '../components'
+import { Empty, ErrorNote, PageHeader, Pill, Skeleton, type Tone } from '../components'
 
 const TODAY = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date())
 
-const STATUS: Record<string, { key: Key; tone: 'ok' | 'warn' | 'bad' | 'info' | 'quiet' }> = {
-  booked: { key: 'statusBooked', tone: 'info' },
-  completed: { key: 'statusCompleted', tone: 'ok' },
-  no_show: { key: 'statusNoShow', tone: 'warn' },
-  cancelled: { key: 'statusCancelled', tone: 'quiet' },
+// booked: a plain frame; seen: the deepest zone; no-show: held back (dotted); cancelled: struck.
+const STATUS: Record<string, { key: Key; tone: Tone }> = {
+  booked: { key: 'statusBooked', tone: 'ok' },
+  completed: { key: 'statusCompleted', tone: 'sel' },
+  no_show: { key: 'statusNoShow', tone: 'quiet' },
+  cancelled: { key: 'statusCancelled', tone: 'gone' },
 }
 
 export function Appointments() {
@@ -183,12 +184,13 @@ export function Appointments() {
                 return (
                   <tr key={a.appointment_id}>
                     <td className="num">
-                      {a.serial_no ? <strong>#{num(a.serial_no)} </strong> : null}
-                      {clock(a.start_time)}
+                      {a.serial_no ? <span className="serial">{num(a.serial_no)}</span> : null}
+                      <div className={a.serial_no ? 'muted small' : ''}>{clock(a.start_time)}</div>
                     </td>
                     <td>
                       {a.doctor_bn || a.doctor}
                       {a.source === 'walkin' ? <div className="small"><Pill tone="quiet">{t('walkIn')}</Pill></div> : null}
+                      {a.source === 'phone' || a.source === 'web' ? <div className="small"><Pill tone="shefa">{t('byShefa')}</Pill></div> : null}
                     </td>
                     <td>
                       {a.patient_name ?? '—'}

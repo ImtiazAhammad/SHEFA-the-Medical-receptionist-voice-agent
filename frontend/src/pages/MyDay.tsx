@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { api, type MyAppointment } from '../lib/api'
 import { useI18n, type Key } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { Empty, ErrorNote, PageHeader, Pill, Skeleton } from '../components'
+import { Empty, ErrorNote, PageHeader, Pill, Skeleton, type Tone } from '../components'
 
 const TODAY = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date())
 
-const STATUS: Record<string, { key: Key; tone: 'ok' | 'warn' | 'info' | 'quiet' }> = {
-  booked: { key: 'statusBooked', tone: 'info' },
-  completed: { key: 'statusCompleted', tone: 'ok' },
-  no_show: { key: 'statusNoShow', tone: 'warn' },
-  cancelled: { key: 'statusCancelled', tone: 'quiet' },
+const STATUS: Record<string, { key: Key; tone: Tone }> = {
+  booked: { key: 'statusBooked', tone: 'ok' },
+  completed: { key: 'statusCompleted', tone: 'sel' },
+  no_show: { key: 'statusNoShow', tone: 'quiet' },
+  cancelled: { key: 'statusCancelled', tone: 'gone' },
 }
 
 /** A doctor's own day: their patients and nobody else's. */
@@ -65,7 +65,7 @@ export function MyDay() {
           const s = STATUS[a.status] ?? STATUS.booked
           return (
             <li key={a.appointment_id} className="row">
-              <strong className="num">{clock(a.start_time)}</strong>
+              <strong className="num serial">{clock(a.start_time)}</strong>
               <span>{a.patient_name ?? '—'}</span>
               <Pill tone={s.tone}>{t(s.key)}</Pill>
               {a.reason ? (

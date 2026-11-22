@@ -1,9 +1,9 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Languages } from 'lucide-react'
+import { Link, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { Languages } from 'lucide-react'
 import { api, type CallDetail, type CallRow } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText } from '../components'
+import { Empty, ErrorNote, PageHeader, Pill, Sheet, Skeleton, durationText } from '../components'
 import { useAuth } from '../lib/auth'
 import { CallStatus } from './Live'
 import { actionLabel, dispositionLabel } from '../lib/labels'
@@ -53,8 +53,10 @@ export function Calls() {
             <tbody>
               {calls.data.map((c) => (
                 <tr key={c.call_sid}>
-                  <td>
-                    {c.started_at ? date(c.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
+                  <td className="num">
+                    <Link to={encodeURIComponent(c.call_sid)}>
+                      {c.started_at ? date(c.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
+                    </Link>
                   </td>
                   <td>{c.direction === 'outbound' ? t('outbound') : t('inbound')}</td>
                   <td>
@@ -75,7 +77,9 @@ export function Calls() {
                   </td>
                   <td className="num">{durationText(c.duration_seconds, t, num)}</td>
                   <td>
-                    <Link to={`/calls/${encodeURIComponent(c.call_sid)}`}>{t('open')}</Link>
+                    <Link className="btn btn-small btn-quiet" to={encodeURIComponent(c.call_sid)}>
+                      {t('open')}
+                    </Link>
                   </td>
                 </tr>
               ))}
@@ -83,11 +87,13 @@ export function Calls() {
           </table>
         </div>
       ) : null}
+      <Outlet />
     </>
   )
 }
 
-export function CallPage() {
+/** One call, laid over the list it was opened from: the list stays where it was. */
+export function CallSheet({ back }: { back: string }) {
   const { sid = '' } = useParams()
   const { t, num, date, lang } = useI18n()
   const call = useLoad(() => api<CallDetail>(`/api/v1/calls/${encodeURIComponent(sid)}`), [sid], 3000)
@@ -95,26 +101,21 @@ export function CallPage() {
   const fmt = useFormatters()
   const { can } = useAuth()
   const navigate = useNavigate()
+  const close = () => navigate(back)
+  const prefix = back === '/live' ? '/live/call/' : '/calls/'
 
   async function erase() {
     if (!window.confirm(t('deleteConfirm'))) return
     await api(`/api/v1/calls/${encodeURIComponent(sid)}`, { method: 'DELETE' })
-    navigate('/calls')
+    close()
   }
 
   return (
-    <>
-      <Link className="back" to="/calls">
-        <ArrowLeft size={16} aria-hidden="true" /> {t('back')}
-      </Link>
-      <PageHeader title={t('transcript')}>
+    <Sheet label={t('callSheet')} onClose={close}>
+      <header className="page-head">
+        <h2 className="display sheet-title">{t('transcript')}</h2>
         {d ? <CallStatus call={d} /> : null}
-        {d && can('records:write') ? (
-          <button type="button" className="btn btn-small" onClick={() => void erase()}>
-            {t('deleteCall')}
-          </button>
-        ) : null}
-      </PageHeader>
+      </header>
       {call.error ? <ErrorNote error={call.error} onRetry={call.reload} /> : null}
       {call.loading && !d ? <Skeleton rows={5} /> : null}
       {d ? (
@@ -141,7 +142,7 @@ export function CallPage() {
               <ul className="earlier">
                 {d.earlier_calls.map((e) => (
                   <li key={e.call_sid}>
-                    <Link to={`/calls/${encodeURIComponent(e.call_sid)}`}>
+                    <Link to={`${prefix}${encodeURIComponent(e.call_sid)}`}>
                       {e.started_at ? date(e.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
                     </Link>{' '}
                     <span className="muted">{summaryText(e.summary, lang, fmt)?.text ?? dispositionLabel(e.disposition, lang)}</span>
@@ -161,8 +162,7 @@ export function CallPage() {
                     <div className="turn-who">
                       {turn.role === 'user' ? t('caller') : t('agent')}
                       <span className="muted">
-                        {' '}
-                        · {date(turn.at, { timeStyle: 'medium', timeZone: 'Asia/Dhaka' })}
+                        {date(turn.at, { timeStyle: 'medium', timeZone: 'Asia/Dhaka' })}
                       </span>
                     </div>
                     <p className="turn-text" lang={turn.language === 'en' ? 'en' : 'bn'}>
@@ -179,7 +179,7 @@ export function CallPage() {
                       ) : null}
                       {low ? <Pill tone="warn">{t('lowConfidence')}</Pill> : null}
                       {turn.actions.map((a) => (
-                        <Pill key={a} tone="info">
+                        <Pill key={a} tone="shefa">
                           {actionLabel(a, lang)}
                         </Pill>
                       ))}
@@ -190,8 +190,15 @@ export function CallPage() {
               })}
             </ol>
           )}
+          {can('records:write') ? (
+            <div className="danger-zone">
+              <button type="button" className="btn btn-small btn-danger" onClick={() => void erase()}>
+                {t('deleteCall')}
+              </button>
+            </div>
+          ) : null}
         </>
       ) : null}
-    </>
+    </Sheet>
   )
 }

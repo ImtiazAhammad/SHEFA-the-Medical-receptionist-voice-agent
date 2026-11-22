@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
-import { LangSwitch, Logo } from '../Shell'
+import { LangSwitch, Wordmark } from '../Shell'
 
 export function SignIn() {
   const { signIn } = useAuth()
@@ -33,12 +33,21 @@ export function SignIn() {
 
   return (
     <main className="signin">
+      <div className="signin-field">
+        <Wordmark />
+        <p className="signin-say display">{t('signInSay')}</p>
+        <div className="signin-wedge" aria-hidden="true">
+          {Array.from({ length: 11 }, (_, i) => (
+            <span key={i} />
+          ))}
+        </div>
+      </div>
+      <div className="signin-side">
       <div className="signin-top">
         <LangSwitch />
       </div>
       <form className="signin-card" onSubmit={submit}>
-        <Logo />
-        <h1>{t('signIn')}</h1>
+        <h1 className="display">{t('signIn')}</h1>
         {useToken ? (
           <>
             <p className="muted">{t('signInIntro')}</p>
@@ -96,6 +105,7 @@ export function SignIn() {
           {useToken ? t('usePassword') : t('useToken')}
         </button>
       </form>
+      </div>
     </main>
   )
 }

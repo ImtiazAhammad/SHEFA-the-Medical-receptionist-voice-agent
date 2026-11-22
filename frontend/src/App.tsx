@@ -1,10 +1,12 @@
+import '@world/fonts.css'
+import './styles.css'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { I18nProvider, useI18n } from './lib/i18n'
 import { Shell } from './Shell'
 import { SignIn } from './pages/SignIn'
 import { Live } from './pages/Live'
-import { Calls, CallPage } from './pages/Calls'
+import { Calls, CallSheet } from './pages/Calls'
 import { Appointments } from './pages/Appointments'
 import { Doctors } from './pages/Doctors'
 import { Overview } from './pages/Overview'
@@ -40,9 +42,12 @@ function Gate() {
           <Route path="my-day" element={<MyDay />} />
         </Route>
         <Route element={<Need permission="records:read" home={home} />}>
-          <Route path="live" element={<Live />} />
-          <Route path="calls" element={<Calls />} />
-          <Route path="calls/:sid" element={<CallPage />} />
+          <Route path="live" element={<Live />}>
+            <Route path="call/:sid" element={<CallSheet back="/live" />} />
+          </Route>
+          <Route path="calls" element={<Calls />}>
+            <Route path=":sid" element={<CallSheet back="/calls" />} />
+          </Route>
           <Route path="appointments" element={<Appointments />} />
           <Route path="doctors" element={<Doctors />} />
         </Route>

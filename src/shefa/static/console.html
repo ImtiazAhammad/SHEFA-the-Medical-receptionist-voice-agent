@@ -1,58 +1,61 @@
 <!doctype html>
 <html lang="en">
 <head>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%230b7a63%27/%3E%3Cpath d=%27M16 7v18M7 16h18%27 stroke=%27white%27 stroke-width=%274%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 28 28%27%3E%3Crect width=%2728%27 height=%2728%27 fill=%27%23f9fafb%27/%3E%3Crect x=%270.5%27 y=%270.5%27 width=%2727%27 height=%2727%27 fill=%27none%27 stroke=%27%2317191c%27/%3E%3Crect x=%274%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%2317191c%27/%3E%3Crect x=%2711.5%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23808388%27/%3E%3Crect x=%2719%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23c4127a%27/%3E%3C/svg%3E">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SHEFA Console</title>
+<link rel="stylesheet" href="/static/world/fonts.css"><link rel="stylesheet" href="/static/world/world.css">
 <style>
-:root{color-scheme:light dark;--bg:#f4f6f4;--panel:#fff;--fg:#14211d;--mute:#66756f;--line:#dde3df;--accent:#0b7a63;--accent-fg:#fff;--warn:#b45309;--bad:#c0392b;--ok:#15803d;--chip:#e8efeb;--r:14px}
-@media(prefers-color-scheme:dark){:root{--bg:#0e1513;--panel:#16201d;--fg:#e7eeeb;--mute:#91a39b;--line:#26332e;--accent:#38b89c;--accent-fg:#06231c;--warn:#f0a44b;--bad:#ef6b5b;--ok:#4ade80;--chip:#1e2b27}}
+:root{--bg:var(--ground);--panel:var(--sheet);--fg:var(--ink);--mute:var(--ink-2);--line:var(--rule);--accent:var(--select);--accent-fg:var(--on-select);--warn:var(--ink-2);--bad:var(--dichroic);--ok:var(--ink);--chip:var(--field-2);--r:0}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Bengali",sans-serif;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 var(--font);padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 header{display:flex;align-items:center;gap:10px;padding:14px 16px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
-header h1{font-size:18px;margin:0;flex:1}header h1 span{color:var(--accent)}
+header h1{font-size:18px;margin:0;flex:1}header h1 span{color:var(--dichroic-ink)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--mute)}.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
 main{max-width:760px;margin:0 auto;padding:16px}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
 nav button{flex:1;background:none;border:0;color:var(--mute);padding:12px 4px;font:inherit;font-size:12px;cursor:pointer}
 nav button b{display:block;font-size:20px;line-height:1.2}nav button.on{color:var(--accent);font-weight:600}
 section{display:none}section.on{display:block}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:0;padding:16px;margin-bottom:14px}
 h2{font-size:15px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
-input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
-.btn{border:0;border-radius:12px;padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
-.btn.alt{background:var(--chip);color:var(--fg)}.btn.red{background:var(--bad);color:#fff}.btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}.btn:disabled{opacity:.5}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:0;background:transparent;color:inherit;font:inherit}
+.btn{border:0;border-radius:0;padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
+.btn.alt{background:var(--chip);color:var(--fg)}.btn.red{background:var(--bad);color:var(--on-dichroic)}.btn.sm{padding:7px 12px;font-size:13px;border-radius:0}.btn:disabled{opacity:.5}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}
 .call{display:grid;place-items:center;text-align:center;padding:26px 16px}
 .orb{width:116px;height:116px;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
-.orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:#fff}
+.orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:var(--on-dichroic)}
 @keyframes pulse{70%{box-shadow:0 0 0 26px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @media(prefers-reduced-motion:reduce){.orb.live{animation:none}}
 #state{margin-top:14px;font-weight:600}#hint{color:var(--mute);font-size:14px;margin-top:2px;min-height:1.4em}
 .chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:4px 0}
-.msg{max-width:86%;padding:9px 12px;border-radius:14px;background:var(--chip);word-wrap:break-word}
+.msg{max-width:86%;padding:9px 12px;border-radius:0;background:var(--chip);word-wrap:break-word}
 .msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-fg)}.msg small{display:block;opacity:.65;font-size:11px}
-.ring{background:var(--accent);color:var(--accent-fg);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;display:none;gap:10px;align-items:center}
-.ring.on{display:flex}.ring b{flex:1}.ring .btn{background:#fff;color:#0b4d3f}
+.ring{background:var(--dichroic);color:var(--on-dichroic);border-radius:0;padding:14px 16px;margin-bottom:14px;display:none;gap:10px;align-items:center}
+.ring.on{display:flex}.ring b{flex:1}.ring .btn{background:var(--sheet);color:var(--ink)}
 table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--mute);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-.tag{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--chip);font-size:12px}.tag.booked{background:color-mix(in srgb,var(--accent) 20%,transparent)}.tag.cancelled,.tag.no_show{background:color-mix(in srgb,var(--bad) 20%,transparent)}
+.tag{display:inline-block;padding:2px 8px;border-radius:0;background:var(--chip);font-size:12px}.tag.booked{background:color-mix(in srgb,var(--accent) 20%,transparent)}.tag.cancelled,.tag.no_show{background:color-mix(in srgb,var(--bad) 20%,transparent)}
 .doc{padding:10px 0;border-top:1px solid var(--line)}.doc:first-of-type{border-top:0}.doc small{color:var(--mute)}
 .empty{color:var(--mute);text-align:center;padding:18px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}.kv span:nth-child(odd){color:var(--mute)}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.note{color:var(--mute);font-size:14px;margin-top:8px;min-height:1.4em}
-#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:9;max-width:90vw}
+#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:0;font-size:14px;display:none;z-index:9;max-width:90vw}
+
+/* Bangla has no case, and tracking breaks its conjuncts. */
+:lang(bn){letter-spacing:0!important}
 </style>
 </head>
 <body>
 <header><h1><span>SHEFA</span> console</h1><span id="hdot" class="dot" title="server health"></span></header>
 <main>
-<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:#0b4d3f;color:#fff">Decline</button></div>
+<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:transparent;color:var(--on-dichroic);outline:1px solid var(--on-dichroic)">Decline</button></div>
 
 <section id="talk" class="on">
   <div class="card call">
-    <button id="orb" class="orb" aria-label="Call the agent">📞</button>
+    <button id="orb" class="orb" aria-label="Call the agent"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg></button>
     <div id="state">Tap to call the agent</div>
     <div id="hint">Speak Bangla or English. Allow the microphone when asked.</div>
   </div>
@@ -103,14 +106,15 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 </section>
 </main>
 <nav>
-  <button data-tab="talk" class="on"><b>🎙️</b>Talk</button>
-  <button data-tab="today"><b>📅</b>Today</button>
-  <button data-tab="calls"><b>📋</b>Calls</button>
-  <button data-tab="clinic"><b>🏥</b>Clinic</button>
-  <button data-tab="status"><b>⚙️</b>Status</button>
+  <button data-tab="talk" class="on"><b><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></b>Talk</button>
+  <button data-tab="today"><b><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></b>Today</button>
+  <button data-tab="calls"><b><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M8 11h8M8 16h5"/></svg></b>Calls</button>
+  <button data-tab="clinic"><b><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M12 9v6M9 12h6"/></svg></b>Clinic</button>
+  <button data-tab="status"><b><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></b>Status</button>
 </nav>
 <div id="toast" role="status"></div>
 <script>
+const ICON_PHONE='<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg>',ICON_STOP='<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/></svg>';
 const $=id=>document.getElementById(id);
 const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -144,7 +148,7 @@ async function startCall(uuid){
   node=new AudioWorkletNode(ctx,'p');ctx.createMediaStreamSource(micStream).connect(node);
   const q=new URLSearchParams();if(uuid)q.set('uuid',uuid);if($('phone').value.trim())q.set('phone',$('phone').value.trim());
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/call?'+q);ws.binaryType='arraybuffer';
-  ws.onopen=()=>{$('orb').classList.add('live','red');$('orb').textContent='⏹';setState('Connected','Speak now. Pause when you finish a sentence.')};
+  ws.onopen=()=>{$('orb').classList.add('live','red');$('orb').innerHTML=ICON_STOP;setState('Connected','Speak now. Pause when you finish a sentence.')};
   ws.onmessage=e=>{if(typeof e.data==='string'){const m=JSON.parse(e.data);if(m.type==='turn')addMsg(m.role,m.text);else if(m.type==='hangup')hangupWhenQuiet();return}play(e.data)};
   ws.onclose=ev=>{endCall(ev.code===4401?'Not allowed. Sign in again.':'Call ended')};
   node.port.onmessage=e=>{if(ws?.readyState!==1)return;
@@ -157,11 +161,11 @@ function play(buf){const s=new Int16Array(buf),f=new Float32Array(s.length);for(
 // The agent ended the call (handover, goodbye): hang up once its last words have played out.
 function hangupWhenQuiet(){const t=setInterval(()=>{if(!ctx||ctx.currentTime>=agentUntil){clearInterval(t);endCall('The agent ended the call')}},200)}
 function endCall(msg){try{ws&&ws.close()}catch{}ws=null;node&&node.disconnect();micStream?.getTracks().forEach(t=>t.stop());ctx?.close();ctx=null;node=null;playAt=agentUntil=0;
-  $('orb').classList.remove('live','red');$('orb').textContent='📞';setState(msg||'Call ended','Tap to call again.')}
+  $('orb').classList.remove('live','red');$('orb').innerHTML=ICON_PHONE;setState(msg||'Call ended','Tap to call again.')}
 $('orb').onclick=()=>ws?endCall('Call ended'):startCall('');
 $('ringme').onclick=async()=>{try{await api('/api/v1/calls/ring',{method:'POST',body:JSON.stringify({phone:$('phone').value.trim()})});toast('The agent is calling you…');pollRing()}catch(e){toast(e.message)}};
 let ringTimer=null;async function pollRing(){try{const r=await api('/api/v1/calls/ringing');const el=$('ring');
-  if(r.length&&!ws){callUuid=r[0].call_uuid;$('ringlabel').textContent='📞 '+(r[0].label||'SHEFA')+' is calling';el.classList.add('on')}else el.classList.remove('on')}catch{}}
+  if(r.length&&!ws){callUuid=r[0].call_uuid;$('ringlabel').textContent=''+(r[0].label||'SHEFA')+' is calling';el.classList.add('on')}else el.classList.remove('on')}catch{}}
 $('answer').onclick=()=>{$('ring').classList.remove('on');document.querySelector('[data-tab=talk]').click();startCall(callUuid)};
 $('decline').onclick=async()=>{$('ring').classList.remove('on');try{await api('/api/v1/calls/ringing/'+callUuid+'/decline',{method:'POST'})}catch{}};
 setInterval(pollRing,2500);pollRing();

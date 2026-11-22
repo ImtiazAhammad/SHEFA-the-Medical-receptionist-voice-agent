@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api, ApiError } from '../lib/api'
 import { dictionaries, type PKey, type PLang } from './strings'
+import '@world/fonts-lite.css'
 import './patient.css'
 
 interface PublicDoctor {
@@ -203,9 +204,11 @@ export default function PatientApp() {
     <div className="patient">
       <header className="p-top">
         <span className="p-brand" aria-label="SHEFA">
-          <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="currentColor" />
-            <path d="M16 7v18M7 16h18" stroke="white" strokeWidth="4" strokeLinecap="round" />
+          <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="currentColor" />
+            <rect x="4" y="4" width="5" height="20" fill="currentColor" />
+            <rect x="11.5" y="4" width="5" height="20" fill="currentColor" opacity="0.55" />
+            <rect x="19" y="4" width="5" height="20" fill="var(--dichroic)" />
           </svg>
           SHEFA
         </span>

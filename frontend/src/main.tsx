@@ -1,8 +1,7 @@
-import '@fontsource-variable/inter'
-import '@fontsource-variable/noto-sans-bengali'
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
-import './styles.css'
+// The shared SHEFA world (tokens, controls, state marks). Each app adds its own fonts and layout.
+import '@world/world.css'
 
 // Three apps share one build: the staff app at /app, the public booking page at /book and the
 // public demo at /demo. Each is its own chunk, so a patient on a slow phone never downloads the

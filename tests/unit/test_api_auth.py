@@ -142,6 +142,12 @@ class TestEveryRouteRequiresAuthentication:
 
         assert response.status_code in (401, 403)
 
+    def test_the_shared_world_styles_are_public_but_nothing_else_in_static(self, client):
+        # The sign-in page is shown signed out and needs its fonts and styles.
+        assert client.get("/static/world/world.css").status_code == 200
+        assert client.get("/static/world/../index.html").status_code in (401, 403, 404)
+        assert client.get("/static/console.html").status_code in (401, 403)
+
     def test_the_docs_are_not_reachable_without_a_token(self, client):
         for path in ("/docs", "/openapi.json"):
             response = client.get(path)

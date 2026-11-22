@@ -188,3 +188,16 @@ export interface DoctorChoice {
   name: string
   name_bn: string
 }
+
+/** One doctor's chamber session on a day, with how many of its places are taken. */
+export interface SessionLoad {
+  doctor_id: number
+  doctor_en: string
+  doctor_bn: string
+  start_time: string
+  end_time: string
+  capacity: number
+  booked: number
+  on_leave: boolean
+  serial: boolean
+}

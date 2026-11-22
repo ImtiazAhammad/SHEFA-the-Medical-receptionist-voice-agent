@@ -5,13 +5,31 @@ import { useAuth } from './lib/auth'
 import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
 
-export function Logo() {
+/** SHEFA's mark: a short zone wedge, deepest to lightest, with the one magenta step that is
+ * SHEFA itself. Drawn, not lettered, so it reads the same in Bangla and English. */
+export function Logo({ size = 28 }: { size?: number }) {
   return (
     <span className="logo" aria-hidden="true">
-      <svg viewBox="0 0 32 32" width="28" height="28">
-        <rect width="32" height="32" rx="8" fill="currentColor" />
-        <path d="M16 8v16M8 16h16" stroke="var(--on-accent)" strokeWidth="4" strokeLinecap="round" />
+      <svg viewBox="0 0 28 28" width={size} height={size}>
+        <rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="currentColor" />
+        <rect x="4" y="4" width="5" height="20" fill="currentColor" />
+        <rect x="11.5" y="4" width="5" height="20" fill="currentColor" opacity="0.55" />
+        <rect x="19" y="4" width="5" height="20" fill="var(--dichroic)" />
       </svg>
+    </span>
+  )
+}
+
+export function Wordmark() {
+  const { lang } = useI18n()
+  return (
+    <span className="brand">
+      <Logo />
+      <span className="brand-name" aria-hidden="true">
+        <span className="brand-en" lang="en">SHEFA</span>
+        <span className="brand-bn" lang="bn">শেফা</span>
+      </span>
+      <span className="visually-hidden">{lang === 'bn' ? 'শেফা' : 'SHEFA'}</span>
     </span>
   )
 }
@@ -62,14 +80,11 @@ export function Shell() {
         {t('skip')}
       </a>
       <aside className="side">
-        <div className="brand">
-          <Logo />
-          <span className="brand-name">{t('appName')}</span>
-        </div>
+        <Wordmark />
         <nav aria-label={t('navMain')}>
           {items.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
-              <Icon size={20} aria-hidden="true" />
+              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
               <span>{label}</span>
             </NavLink>
           ))}
@@ -77,7 +92,7 @@ export function Shell() {
         <div className="side-foot">
           {can('calls:place') ? (
             <a className="nav-item" href="/console">
-              <Mic size={20} aria-hidden="true" />
+              <Mic size={18} strokeWidth={1.75} aria-hidden="true" />
               <span>{t('consoleLink')}</span>
             </a>
           ) : null}
@@ -98,10 +113,10 @@ export function Shell() {
       </aside>
       <main id="main" className="main" tabIndex={-1}>
         {alert.fresh.length ? (
-          <div className="note note-warn desk-alert" role="alert">
+          <div className="desk-alert hatch-shefa" role="alert">
             <strong>{t('needsPerson')}</strong>
             <span>{alert.fresh.map((c) => c.reason || c.phone || '').filter(Boolean).join(' · ')}</span>
-            <Link className="btn btn-small btn-primary" to="/live" onClick={alert.dismiss}>
+            <Link className="btn btn-small btn-shefa" to="/live" onClick={alert.dismiss}>
               {t('openCallbacks')}
             </Link>
             <button type="button" className="btn btn-small" onClick={alert.dismiss}>

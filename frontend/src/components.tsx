@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
-import { AlertTriangle, WifiOff } from 'lucide-react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { AlertTriangle, WifiOff, X } from 'lucide-react'
 import { ApiError } from './lib/api'
 import { useI18n } from './lib/i18n'
 
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <header className="page-head">
-      <h1>{title}</h1>
+      <h1 className="display">{title}</h1>
       {children ? <div className="page-tools">{children}</div> : null}
     </header>
   )
@@ -51,8 +51,62 @@ export function ErrorNote({ error, onRetry }: { error: ApiError; onRetry: () => 
   )
 }
 
-export function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'info' | 'quiet'; children: ReactNode }) {
-  return <span className={`pill pill-${tone}`}>{children}</span>
+export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'quiet' | 'gone' | 'sel' | 'shefa' | 'live'
+
+/** A state mark. State is drawn (frame, hatch, crossed hatch, dotted, struck) AND said in words;
+ * the drawing never carries meaning alone. `info` reads as a plain settled frame. */
+export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
+  const cls = tone === 'info' ? 'ok' : tone === 'live' ? 'shefa mark-live' : tone
+  return <span className={`mark mark-${cls}`}>{children}</span>
+}
+
+/** Hatch density for a share of places taken: one of four steps, or full. */
+export function hatchFor(booked: number, capacity: number): string {
+  if (capacity <= 0 || booked <= 0) return ''
+  const r = booked / capacity
+  return r >= 1 ? 'hatch-4' : r > 0.66 ? 'hatch-3' : r > 0.33 ? 'hatch-2' : 'hatch-1'
+}
+
+/**
+ * A sheet laid over the page, sliding in from the side like a tracing sheet over the record.
+ * It is a modal <dialog>: Esc and the close button leave, focus stays inside while it is open
+ * and returns to where it was. The page under it stays visible.
+ */
+export function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const { t } = useI18n()
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = ref.current
+    const before = document.activeElement as HTMLElement | null
+    if (dialog && !dialog.open) dialog.showModal()
+    return () => {
+      before?.focus?.()
+    }
+  }, [])
+  return (
+    <dialog
+      ref={ref}
+      className="sheet"
+      aria-label={label}
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current) onClose()
+      }}
+    >
+      <div className="sheet-body">
+        <div className="sheet-bar">
+          <span className="legend">{label}</span>
+          <button type="button" className="btn btn-small btn-quiet" onClick={onClose}>
+            <X size={16} aria-hidden="true" /> {t('close')}
+          </button>
+        </div>
+        {children}
+      </div>
+    </dialog>
+  )
 }
 
 export function durationText(seconds: number | null, t: ReturnType<typeof useI18n>['t'], num: (n: number) => string) {
