@@ -1,646 +1,890 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-22T06:05:49.130743+00:00",
+  "generatedAt": "2026-11-22T00:00:00Z",
   "title": "Design System: SHEFA",
   "extensions": {
     "colorMeta": {
-      "z0": {
+      "shelf": {
         "role": "neutral",
-        "displayName": "Darkroom Black",
-        "canonical": "oklch(0.17 0.006 260)",
+        "displayName": "Warm Shelf",
+        "canonical": "oklch(0.963 0.006 78)",
+        "cssVar": "--shelf",
+        "dark": "oklch(0.2 0.008 60)",
         "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "ink (light); select; rule-strong; focus; rail (dark)"
+          "oklch(0.15 0.006 78.0)",
+          "oklch(0.26 0.006 78.0)",
+          "oklch(0.38 0.006 78.0)",
+          "oklch(0.50 0.006 78.0)",
+          "oklch(0.62 0.006 78.0)",
+          "oklch(0.74 0.006 78.0)",
+          "oklch(0.85 0.006 78.0)",
+          "oklch(0.95 0.006 78.0)"
+        ]
       },
-      "z1": {
+      "box": {
         "role": "neutral",
-        "displayName": "Rail Graphite",
-        "canonical": "oklch(0.235 0.007 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "rail (light); ground (dark)"
-      },
-      "z2": {
-        "role": "neutral",
-        "displayName": "Deep Slate Zone",
-        "canonical": "oklch(0.31 0.007 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "sheet and field-2 (dark); rail hover"
-      },
-      "z3": {
-        "role": "neutral",
-        "displayName": "Secondary Ink Zone",
-        "canonical": "oklch(0.39 0.007 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "ink-2 and hatch-ink (light); rule and rail-rule (dark)"
-      },
-      "z4": {
-        "role": "neutral",
-        "displayName": "Faint Ink Zone",
-        "canonical": "oklch(0.47 0.006 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "ink-3 (light)"
-      },
-      "z5": {
-        "role": "neutral",
-        "displayName": "Middle Grey Zone",
-        "canonical": "oklch(0.56 0.006 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "ramp step; used in hatch tones"
-      },
-      "z6": {
-        "role": "neutral",
-        "displayName": "Field Frame Zone",
-        "canonical": "oklch(0.65 0.005 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "input and chip frame at rest"
-      },
-      "z7": {
-        "role": "neutral",
-        "displayName": "Disabled Frame Zone",
-        "canonical": "oklch(0.745 0.005 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "disabled frame; ink-3 and hatch-ink (dark); second sheet edge"
-      },
-      "z8": {
-        "role": "neutral",
-        "displayName": "Hairline Zone",
-        "canonical": "oklch(0.845 0.004 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "rule (light); ink-2 and rule-strong (dark); button press"
-      },
-      "z9": {
-        "role": "neutral",
-        "displayName": "Well Zone",
-        "canonical": "oklch(0.925 0.003 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "field-2 (light); load tick; rail-ink"
-      },
-      "z10": {
-        "role": "neutral",
-        "displayName": "Exposure Paper",
-        "canonical": "oklch(0.982 0.002 260)",
-        "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "ground (light); ink, select and focus (dark)"
-      },
-      "white": {
-        "role": "neutral",
-        "displayName": "Sheet White",
+        "displayName": "Box Board",
         "canonical": "oklch(1 0 0)",
+        "cssVar": "--box",
+        "dark": "oklch(0.25 0.009 60)",
         "tonalRamp": [
-          "oklch(0.17 0.006 260)",
-          "oklch(0.235 0.007 260)",
-          "oklch(0.39 0.007 260)",
-          "oklch(0.47 0.006 260)",
-          "oklch(0.65 0.005 260)",
-          "oklch(0.745 0.005 260)",
-          "oklch(0.845 0.004 260)",
-          "oklch(0.982 0.002 260)"
-        ],
-        "usage": "sheet (light): fields, marks, notes, the sliding sheet"
+          "oklch(0.15 0.0 0.0)",
+          "oklch(0.26 0.0 0.0)",
+          "oklch(0.38 0.0 0.0)",
+          "oklch(0.50 0.0 0.0)",
+          "oklch(0.62 0.0 0.0)",
+          "oklch(0.74 0.0 0.0)",
+          "oklch(0.85 0.0 0.0)",
+          "oklch(0.95 0.0 0.0)"
+        ]
       },
-      "dichroic": {
-        "role": "primary",
-        "displayName": "Dichroic Magenta",
-        "canonical": "oklch(0.54 0.215 352)",
-        "dark": "oklch(0.72 0.19 352)",
+      "box-2": {
+        "role": "neutral",
+        "displayName": "Box Board, shaded",
+        "canonical": "oklch(0.975 0.005 78)",
+        "cssVar": "--box-2",
+        "dark": "oklch(0.23 0.009 60)",
         "tonalRamp": [
-          "oklch(0.2 0.08 352)",
-          "oklch(0.3 0.12 352)",
-          "oklch(0.42 0.18 352)",
-          "oklch(0.5 0.2 352)",
-          "oklch(0.6 0.2 352)",
-          "oklch(0.72 0.17 352)",
-          "oklch(0.85 0.09 352)",
-          "oklch(0.955 0.03 352)"
-        ],
-        "usage": "SHEFA's voice and actions only"
+          "oklch(0.15 0.005 78.0)",
+          "oklch(0.26 0.005 78.0)",
+          "oklch(0.38 0.005 78.0)",
+          "oklch(0.50 0.005 78.0)",
+          "oklch(0.62 0.005 78.0)",
+          "oklch(0.74 0.005 78.0)",
+          "oklch(0.85 0.005 78.0)",
+          "oklch(0.95 0.005 78.0)"
+        ]
       },
-      "dichroic-ink": {
-        "role": "primary",
-        "displayName": "Dichroic Ink",
-        "canonical": "oklch(0.5 0.2 352)",
-        "dark": "oklch(0.78 0.16 352)",
+      "ink": {
+        "role": "neutral",
+        "displayName": "Carton Ink",
+        "canonical": "oklch(0.23 0.012 60)",
+        "cssVar": "--ink",
+        "dark": "oklch(0.95 0.006 80)",
         "tonalRamp": [
-          "oklch(0.2 0.08 352)",
-          "oklch(0.3 0.12 352)",
-          "oklch(0.42 0.18 352)",
-          "oklch(0.5 0.2 352)",
-          "oklch(0.6 0.2 352)",
-          "oklch(0.72 0.17 352)",
-          "oklch(0.85 0.09 352)",
-          "oklch(0.955 0.03 352)"
-        ],
-        "usage": "magenta as text; magenta button hover"
+          "oklch(0.15 0.012 60.0)",
+          "oklch(0.26 0.012 60.0)",
+          "oklch(0.38 0.012 60.0)",
+          "oklch(0.50 0.012 60.0)",
+          "oklch(0.62 0.012 60.0)",
+          "oklch(0.74 0.012 60.0)",
+          "oklch(0.85 0.012 60.0)",
+          "oklch(0.95 0.012 60.0)"
+        ]
       },
-      "on-dichroic": {
-        "role": "primary",
-        "displayName": "On Dichroic",
-        "canonical": "oklch(0.99 0.01 352)",
-        "dark": "oklch(0.17 0.02 352)",
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Carton Ink, secondary",
+        "canonical": "oklch(0.41 0.012 60)",
+        "cssVar": "--ink-2",
+        "dark": "oklch(0.8 0.01 80)",
         "tonalRamp": [
-          "oklch(0.2 0.08 352)",
-          "oklch(0.3 0.12 352)",
-          "oklch(0.42 0.18 352)",
-          "oklch(0.5 0.2 352)",
-          "oklch(0.6 0.2 352)",
-          "oklch(0.72 0.17 352)",
-          "oklch(0.85 0.09 352)",
-          "oklch(0.955 0.03 352)"
-        ],
-        "usage": "text on a magenta fill"
+          "oklch(0.15 0.012 60.0)",
+          "oklch(0.26 0.012 60.0)",
+          "oklch(0.38 0.012 60.0)",
+          "oklch(0.50 0.012 60.0)",
+          "oklch(0.62 0.012 60.0)",
+          "oklch(0.74 0.012 60.0)",
+          "oklch(0.85 0.012 60.0)",
+          "oklch(0.95 0.012 60.0)"
+        ]
       },
-      "dichroic-wash": {
-        "role": "primary",
-        "displayName": "Dichroic Wash",
-        "canonical": "oklch(0.955 0.03 352)",
-        "dark": "oklch(0.3 0.07 352)",
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Carton Ink, hint",
+        "canonical": "oklch(0.5 0.01 60)",
+        "cssVar": "--ink-3",
+        "dark": "oklch(0.72 0.01 80)",
         "tonalRamp": [
-          "oklch(0.2 0.08 352)",
-          "oklch(0.3 0.12 352)",
-          "oklch(0.42 0.18 352)",
-          "oklch(0.5 0.2 352)",
-          "oklch(0.6 0.2 352)",
-          "oklch(0.72 0.17 352)",
-          "oklch(0.85 0.09 352)",
-          "oklch(0.955 0.03 352)"
+          "oklch(0.15 0.01 60.0)",
+          "oklch(0.26 0.01 60.0)",
+          "oklch(0.38 0.01 60.0)",
+          "oklch(0.50 0.01 60.0)",
+          "oklch(0.62 0.01 60.0)",
+          "oklch(0.74 0.01 60.0)",
+          "oklch(0.85 0.01 60.0)",
+          "oklch(0.95 0.01 60.0)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Fold Line",
+        "canonical": "oklch(0.895 0.007 70)",
+        "cssVar": "--rule",
+        "dark": "oklch(0.33 0.01 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.007 70.0)",
+          "oklch(0.26 0.007 70.0)",
+          "oklch(0.38 0.007 70.0)",
+          "oklch(0.50 0.007 70.0)",
+          "oklch(0.62 0.007 70.0)",
+          "oklch(0.74 0.007 70.0)",
+          "oklch(0.85 0.007 70.0)",
+          "oklch(0.95 0.007 70.0)"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Fold Line, strong",
+        "canonical": "oklch(0.79 0.01 70)",
+        "cssVar": "--rule-strong",
+        "dark": "oklch(0.45 0.01 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.01 70.0)",
+          "oklch(0.26 0.01 70.0)",
+          "oklch(0.38 0.01 70.0)",
+          "oklch(0.50 0.01 70.0)",
+          "oklch(0.62 0.01 70.0)",
+          "oklch(0.74 0.01 70.0)",
+          "oklch(0.85 0.01 70.0)",
+          "oklch(0.95 0.01 70.0)"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Pharma Green Rail",
+        "canonical": "oklch(0.35 0.075 162)",
+        "cssVar": "--rail",
+        "dark": "oklch(0.24 0.045 162)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 162.0)",
+          "oklch(0.26 0.075 162.0)",
+          "oklch(0.38 0.075 162.0)",
+          "oklch(0.50 0.075 162.0)",
+          "oklch(0.62 0.075 162.0)",
+          "oklch(0.74 0.075 162.0)",
+          "oklch(0.85 0.072 162.0)",
+          "oklch(0.95 0.027 162.0)"
+        ]
+      },
+      "rail-hover": {
+        "role": "neutral",
+        "displayName": "Rail, hover",
+        "canonical": "oklch(0.4 0.08 162)",
+        "cssVar": "--rail-hover",
+        "dark": "oklch(0.29 0.05 162)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 162.0)",
+          "oklch(0.26 0.076 162.0)",
+          "oklch(0.38 0.08 162.0)",
+          "oklch(0.50 0.08 162.0)",
+          "oklch(0.62 0.08 162.0)",
+          "oklch(0.74 0.08 162.0)",
+          "oklch(0.85 0.072 162.0)",
+          "oklch(0.95 0.027 162.0)"
+        ]
+      },
+      "rail-rule": {
+        "role": "neutral",
+        "displayName": "Rail divider",
+        "canonical": "oklch(0.43 0.07 162)",
+        "cssVar": "--rail-rule",
+        "dark": "oklch(0.32 0.04 162)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 162.0)",
+          "oklch(0.26 0.07 162.0)",
+          "oklch(0.38 0.07 162.0)",
+          "oklch(0.50 0.07 162.0)",
+          "oklch(0.62 0.07 162.0)",
+          "oklch(0.74 0.07 162.0)",
+          "oklch(0.85 0.07 162.0)",
+          "oklch(0.95 0.027 162.0)"
+        ]
+      },
+      "rail-ink": {
+        "role": "neutral",
+        "displayName": "Rail ink",
+        "canonical": "oklch(0.99 0.005 160)",
+        "cssVar": "--rail-ink",
+        "dark": "oklch(0.99 0.005 160)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 160.0)",
+          "oklch(0.26 0.005 160.0)",
+          "oklch(0.38 0.005 160.0)",
+          "oklch(0.50 0.005 160.0)",
+          "oklch(0.62 0.005 160.0)",
+          "oklch(0.74 0.005 160.0)",
+          "oklch(0.85 0.005 160.0)",
+          "oklch(0.95 0.005 160.0)"
+        ]
+      },
+      "rail-ink-2": {
+        "role": "neutral",
+        "displayName": "Rail ink, secondary",
+        "canonical": "oklch(0.87 0.035 160)",
+        "cssVar": "--rail-ink-2",
+        "dark": "oklch(0.87 0.035 160)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 160.0)",
+          "oklch(0.26 0.035 160.0)",
+          "oklch(0.38 0.035 160.0)",
+          "oklch(0.50 0.035 160.0)",
+          "oklch(0.62 0.035 160.0)",
+          "oklch(0.74 0.035 160.0)",
+          "oklch(0.85 0.035 160.0)",
+          "oklch(0.95 0.027 160.0)"
+        ]
+      },
+      "urgent": {
+        "role": "tertiary",
+        "displayName": "Needs-a-Person Red",
+        "canonical": "oklch(0.55 0.2 27)",
+        "cssVar": "--urgent",
+        "dark": "oklch(0.62 0.19 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 27.0)",
+          "oklch(0.26 0.076 27.0)",
+          "oklch(0.38 0.129 27.0)",
+          "oklch(0.50 0.183 27.0)",
+          "oklch(0.62 0.174 27.0)",
+          "oklch(0.74 0.121 27.0)",
+          "oklch(0.85 0.072 27.0)",
+          "oklch(0.95 0.027 27.0)"
+        ]
+      },
+      "urgent-ink": {
+        "role": "tertiary",
+        "displayName": "Needs-a-Person Red, ink",
+        "canonical": "oklch(0.49 0.19 27)",
+        "cssVar": "--urgent-ink",
+        "dark": "oklch(0.76 0.14 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 27.0)",
+          "oklch(0.26 0.076 27.0)",
+          "oklch(0.38 0.129 27.0)",
+          "oklch(0.50 0.183 27.0)",
+          "oklch(0.62 0.174 27.0)",
+          "oklch(0.74 0.121 27.0)",
+          "oklch(0.85 0.072 27.0)",
+          "oklch(0.95 0.027 27.0)"
+        ]
+      },
+      "urgent-wash": {
+        "role": "tertiary",
+        "displayName": "Needs-a-Person Red, wash",
+        "canonical": "oklch(0.955 0.03 27)",
+        "cssVar": "--urgent-wash",
+        "dark": "oklch(0.3 0.07 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 27.0)",
+          "oklch(0.26 0.03 27.0)",
+          "oklch(0.38 0.03 27.0)",
+          "oklch(0.50 0.03 27.0)",
+          "oklch(0.62 0.03 27.0)",
+          "oklch(0.74 0.03 27.0)",
+          "oklch(0.85 0.03 27.0)",
+          "oklch(0.95 0.027 27.0)"
+        ]
+      },
+      "on-urgent": {
+        "role": "tertiary",
+        "displayName": "On red",
+        "canonical": "oklch(0.99 0.01 27)",
+        "cssVar": "--on-urgent",
+        "dark": "oklch(0.17 0.03 27)",
+        "tonalRamp": [
+          "oklch(0.15 0.01 27.0)",
+          "oklch(0.26 0.01 27.0)",
+          "oklch(0.38 0.01 27.0)",
+          "oklch(0.50 0.01 27.0)",
+          "oklch(0.62 0.01 27.0)",
+          "oklch(0.74 0.01 27.0)",
+          "oklch(0.85 0.01 27.0)",
+          "oklch(0.95 0.01 27.0)"
+        ]
+      },
+      "waiting": {
+        "role": "tertiary",
+        "displayName": "Waiting Amber",
+        "canonical": "oklch(0.82 0.15 82)",
+        "cssVar": "--waiting",
+        "dark": "oklch(0.82 0.15 82)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 82.0)",
+          "oklch(0.26 0.076 82.0)",
+          "oklch(0.38 0.129 82.0)",
+          "oklch(0.50 0.15 82.0)",
+          "oklch(0.62 0.15 82.0)",
+          "oklch(0.74 0.121 82.0)",
+          "oklch(0.85 0.072 82.0)",
+          "oklch(0.95 0.027 82.0)"
+        ]
+      },
+      "waiting-ink": {
+        "role": "tertiary",
+        "displayName": "Waiting Amber, ink",
+        "canonical": "oklch(0.5 0.11 70)",
+        "cssVar": "--waiting-ink",
+        "dark": "oklch(0.84 0.13 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 70.0)",
+          "oklch(0.26 0.076 70.0)",
+          "oklch(0.38 0.11 70.0)",
+          "oklch(0.50 0.11 70.0)",
+          "oklch(0.62 0.11 70.0)",
+          "oklch(0.74 0.11 70.0)",
+          "oklch(0.85 0.072 70.0)",
+          "oklch(0.95 0.027 70.0)"
+        ]
+      },
+      "waiting-wash": {
+        "role": "tertiary",
+        "displayName": "Waiting Amber, wash",
+        "canonical": "oklch(0.965 0.05 88)",
+        "cssVar": "--waiting-wash",
+        "dark": "oklch(0.31 0.06 80)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 88.0)",
+          "oklch(0.26 0.05 88.0)",
+          "oklch(0.38 0.05 88.0)",
+          "oklch(0.50 0.05 88.0)",
+          "oklch(0.62 0.05 88.0)",
+          "oklch(0.74 0.05 88.0)",
+          "oklch(0.85 0.05 88.0)",
+          "oklch(0.95 0.027 88.0)"
+        ]
+      },
+      "done": {
+        "role": "primary",
+        "displayName": "Settled Green (primary action)",
+        "canonical": "oklch(0.5 0.12 158)",
+        "cssVar": "--done",
+        "dark": "oklch(0.58 0.12 158)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 158.0)",
+          "oklch(0.26 0.076 158.0)",
+          "oklch(0.38 0.12 158.0)",
+          "oklch(0.50 0.12 158.0)",
+          "oklch(0.62 0.12 158.0)",
+          "oklch(0.74 0.12 158.0)",
+          "oklch(0.85 0.072 158.0)",
+          "oklch(0.95 0.027 158.0)"
         ],
-        "usage": "row ground of a callback SHEFA raised"
+        "aliases": [
+          "--primary"
+        ]
+      },
+      "done-hover": {
+        "role": "primary",
+        "displayName": "Settled Green, deep",
+        "canonical": "oklch(0.44 0.11 158)",
+        "cssVar": "--primary-hover",
+        "dark": "oklch(0.63 0.12 158)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 158.0)",
+          "oklch(0.26 0.076 158.0)",
+          "oklch(0.38 0.11 158.0)",
+          "oklch(0.50 0.11 158.0)",
+          "oklch(0.62 0.11 158.0)",
+          "oklch(0.74 0.11 158.0)",
+          "oklch(0.85 0.072 158.0)",
+          "oklch(0.95 0.027 158.0)"
+        ]
+      },
+      "done-ink": {
+        "role": "primary",
+        "displayName": "Settled Green, ink",
+        "canonical": "oklch(0.45 0.11 158)",
+        "cssVar": "--done-ink",
+        "dark": "oklch(0.78 0.11 158)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 158.0)",
+          "oklch(0.26 0.076 158.0)",
+          "oklch(0.38 0.11 158.0)",
+          "oklch(0.50 0.11 158.0)",
+          "oklch(0.62 0.11 158.0)",
+          "oklch(0.74 0.11 158.0)",
+          "oklch(0.85 0.072 158.0)",
+          "oklch(0.95 0.027 158.0)"
+        ]
+      },
+      "done-wash": {
+        "role": "primary",
+        "displayName": "Settled Green, wash",
+        "canonical": "oklch(0.955 0.035 158)",
+        "cssVar": "--done-wash",
+        "dark": "oklch(0.29 0.05 158)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 158.0)",
+          "oklch(0.26 0.035 158.0)",
+          "oklch(0.38 0.035 158.0)",
+          "oklch(0.50 0.035 158.0)",
+          "oklch(0.62 0.035 158.0)",
+          "oklch(0.74 0.035 158.0)",
+          "oklch(0.85 0.035 158.0)",
+          "oklch(0.95 0.027 158.0)"
+        ]
+      },
+      "on-done": {
+        "role": "primary",
+        "displayName": "On green",
+        "canonical": "oklch(0.99 0.01 158)",
+        "cssVar": "--on-done",
+        "dark": "oklch(0.18 0.03 158)",
+        "tonalRamp": [
+          "oklch(0.15 0.01 158.0)",
+          "oklch(0.26 0.01 158.0)",
+          "oklch(0.38 0.01 158.0)",
+          "oklch(0.50 0.01 158.0)",
+          "oklch(0.62 0.01 158.0)",
+          "oklch(0.74 0.01 158.0)",
+          "oklch(0.85 0.01 158.0)",
+          "oklch(0.95 0.01 158.0)"
+        ],
+        "aliases": [
+          "--on-primary"
+        ]
+      },
+      "shefa": {
+        "role": "secondary",
+        "displayName": "SHEFA Blue",
+        "canonical": "oklch(0.52 0.17 262)",
+        "cssVar": "--shefa",
+        "dark": "oklch(0.6 0.16 262)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 262.0)",
+          "oklch(0.26 0.076 262.0)",
+          "oklch(0.38 0.129 262.0)",
+          "oklch(0.50 0.17 262.0)",
+          "oklch(0.62 0.17 262.0)",
+          "oklch(0.74 0.121 262.0)",
+          "oklch(0.85 0.072 262.0)",
+          "oklch(0.95 0.027 262.0)"
+        ]
+      },
+      "shefa-ink": {
+        "role": "secondary",
+        "displayName": "SHEFA Blue, ink and links",
+        "canonical": "oklch(0.47 0.17 262)",
+        "cssVar": "--shefa-ink",
+        "dark": "oklch(0.78 0.11 262)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 262.0)",
+          "oklch(0.26 0.076 262.0)",
+          "oklch(0.38 0.129 262.0)",
+          "oklch(0.50 0.17 262.0)",
+          "oklch(0.62 0.17 262.0)",
+          "oklch(0.74 0.121 262.0)",
+          "oklch(0.85 0.072 262.0)",
+          "oklch(0.95 0.027 262.0)"
+        ]
+      },
+      "shefa-wash": {
+        "role": "secondary",
+        "displayName": "SHEFA Blue, wash",
+        "canonical": "oklch(0.955 0.03 262)",
+        "cssVar": "--shefa-wash",
+        "dark": "oklch(0.3 0.07 262)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 262.0)",
+          "oklch(0.26 0.03 262.0)",
+          "oklch(0.38 0.03 262.0)",
+          "oklch(0.50 0.03 262.0)",
+          "oklch(0.62 0.03 262.0)",
+          "oklch(0.74 0.03 262.0)",
+          "oklch(0.85 0.03 262.0)",
+          "oklch(0.95 0.027 262.0)"
+        ]
+      },
+      "on-shefa": {
+        "role": "secondary",
+        "displayName": "On blue",
+        "canonical": "oklch(0.99 0.01 262)",
+        "cssVar": "--on-shefa",
+        "dark": "oklch(0.17 0.03 262)",
+        "tonalRamp": [
+          "oklch(0.15 0.01 262.0)",
+          "oklch(0.26 0.01 262.0)",
+          "oklch(0.38 0.01 262.0)",
+          "oklch(0.50 0.01 262.0)",
+          "oklch(0.62 0.01 262.0)",
+          "oklch(0.74 0.01 262.0)",
+          "oklch(0.85 0.01 262.0)",
+          "oklch(0.95 0.01 262.0)"
+        ]
+      },
+      "focus": {
+        "role": "secondary",
+        "displayName": "Focus Blue",
+        "canonical": "oklch(0.52 0.17 262)",
+        "cssVar": "--focus",
+        "dark": "oklch(0.75 0.12 262)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 262.0)",
+          "oklch(0.26 0.076 262.0)",
+          "oklch(0.38 0.129 262.0)",
+          "oklch(0.50 0.17 262.0)",
+          "oklch(0.62 0.17 262.0)",
+          "oklch(0.74 0.121 262.0)",
+          "oklch(0.85 0.072 262.0)",
+          "oklch(0.95 0.027 262.0)"
+        ]
+      },
+      "doc-0": {
+        "role": "doctor",
+        "displayName": "Doctor Teal",
+        "canonical": "oklch(0.52 0.1 200)",
+        "cssVar": "--doc-0",
+        "dark": "oklch(0.52 0.1 200)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 200.0)",
+          "oklch(0.26 0.076 200.0)",
+          "oklch(0.38 0.1 200.0)",
+          "oklch(0.50 0.1 200.0)",
+          "oklch(0.62 0.1 200.0)",
+          "oklch(0.74 0.1 200.0)",
+          "oklch(0.85 0.072 200.0)",
+          "oklch(0.95 0.027 200.0)"
+        ]
+      },
+      "doc-1": {
+        "role": "doctor",
+        "displayName": "Doctor Magenta",
+        "canonical": "oklch(0.5 0.17 350)",
+        "cssVar": "--doc-1",
+        "dark": "oklch(0.5 0.17 350)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 350.0)",
+          "oklch(0.26 0.076 350.0)",
+          "oklch(0.38 0.129 350.0)",
+          "oklch(0.50 0.17 350.0)",
+          "oklch(0.62 0.17 350.0)",
+          "oklch(0.74 0.121 350.0)",
+          "oklch(0.85 0.072 350.0)",
+          "oklch(0.95 0.027 350.0)"
+        ]
+      },
+      "doc-2": {
+        "role": "doctor",
+        "displayName": "Doctor Violet",
+        "canonical": "oklch(0.47 0.14 300)",
+        "cssVar": "--doc-2",
+        "dark": "oklch(0.47 0.14 300)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 300.0)",
+          "oklch(0.26 0.076 300.0)",
+          "oklch(0.38 0.129 300.0)",
+          "oklch(0.50 0.14 300.0)",
+          "oklch(0.62 0.14 300.0)",
+          "oklch(0.74 0.121 300.0)",
+          "oklch(0.85 0.072 300.0)",
+          "oklch(0.95 0.027 300.0)"
+        ]
+      },
+      "doc-3": {
+        "role": "doctor",
+        "displayName": "Doctor Brown",
+        "canonical": "oklch(0.47 0.08 55)",
+        "cssVar": "--doc-3",
+        "dark": "oklch(0.47 0.08 55)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 55.0)",
+          "oklch(0.26 0.076 55.0)",
+          "oklch(0.38 0.08 55.0)",
+          "oklch(0.50 0.08 55.0)",
+          "oklch(0.62 0.08 55.0)",
+          "oklch(0.74 0.08 55.0)",
+          "oklch(0.85 0.072 55.0)",
+          "oklch(0.95 0.027 55.0)"
+        ]
+      },
+      "doc-4": {
+        "role": "doctor",
+        "displayName": "Doctor Olive",
+        "canonical": "oklch(0.5 0.1 125)",
+        "cssVar": "--doc-4",
+        "dark": "oklch(0.5 0.1 125)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 125.0)",
+          "oklch(0.26 0.076 125.0)",
+          "oklch(0.38 0.1 125.0)",
+          "oklch(0.50 0.1 125.0)",
+          "oklch(0.62 0.1 125.0)",
+          "oklch(0.74 0.1 125.0)",
+          "oklch(0.85 0.072 125.0)",
+          "oklch(0.95 0.027 125.0)"
+        ]
+      },
+      "doc-5": {
+        "role": "doctor",
+        "displayName": "Doctor Sky",
+        "canonical": "oklch(0.5 0.1 230)",
+        "cssVar": "--doc-5",
+        "dark": "oklch(0.5 0.1 230)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 230.0)",
+          "oklch(0.26 0.076 230.0)",
+          "oklch(0.38 0.1 230.0)",
+          "oklch(0.50 0.1 230.0)",
+          "oklch(0.62 0.1 230.0)",
+          "oklch(0.74 0.1 230.0)",
+          "oklch(0.85 0.072 230.0)",
+          "oklch(0.95 0.027 230.0)"
+        ]
       }
-    },
-    "semanticRoles": {
-      "light": {
-        "ground": "z10",
-        "sheet": "white",
-        "field-2": "z9",
-        "ink": "z0",
-        "ink-2": "z3",
-        "ink-3": "z4",
-        "rule": "z8",
-        "rule-strong": "z0",
-        "hatch-ink": "z3",
-        "rail": "z1",
-        "rail-ink": "z9",
-        "rail-ink-2": "z7",
-        "rail-rule": "z3",
-        "select": "z0",
-        "on-select": "z10",
-        "focus": "z0"
-      },
-      "dark": {
-        "ground": "z1",
-        "sheet": "z2",
-        "field-2": "z2",
-        "ink": "z10",
-        "ink-2": "z8",
-        "ink-3": "z7",
-        "rule": "z3",
-        "rule-strong": "z8",
-        "hatch-ink": "z7",
-        "rail": "z0",
-        "rail-rule": "z2",
-        "select": "z10",
-        "on-select": "z0",
-        "focus": "z10"
-      },
-      "source": "src/shefa/static/world/tokens.css (prefers-color-scheme: dark, or :root[data-theme])"
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Page titles over a 2px ink rule; English uppercase; font-stretch 78%. Public pages (fonts-lite) render at normal width."
+        "purpose": "Page titles and the sign-in statement (sign-in up to clamp(2.4rem, 5.5vw, 4.75rem)); 1.875rem on a phone."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Sheet titles; patient and volunteer h1."
+        "purpose": "Section heads."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Section heads over a 1px ink rule; doctor names."
+        "purpose": "Box titles, empty-state titles, doctor band."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Measures in overview and report, the big serial on a doctor's phone. Tabular."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Running text; line-height 1.6 Bangla, 1.5 English."
+        "purpose": "Running text and data in Hind Siliguri; English line-height 1.5; transcript lines 62ch."
       },
       "label": {
-        "displayName": "Legend",
-        "purpose": "Label over a field or column, table heads, sheet-bar identity. Not a kicker above headings."
-      },
-      "label-en": {
-        "displayName": "Legend (English)",
-        "purpose": "English legend: tracked uppercase at 90% width."
-      },
-      "num": {
-        "displayName": "Quantity",
-        "purpose": "Serials, counts, times, references, measure values. Under :lang(bn) --font-num is Anek, not Martian."
+        "displayName": "Label",
+        "purpose": "Field labels, table heads, pills, hints; axis hours and legend at 0.75rem."
       }
     },
     "typeSteps": {
-      "step--2": "0.6875rem",
-      "step--1": "0.8125rem",
-      "step-0": "1rem",
-      "step-1": "1.1875rem",
-      "step-2": "1.4375rem",
-      "step-3": "2rem",
-      "step-4": "2.75rem",
-      "step-5": "4rem",
-      "condensed": "78%"
+      "--step--2": "0.75rem",
+      "--step--1": "0.875rem",
+      "--step-0": "1rem",
+      "--step-1": "1.1875rem",
+      "--step-2": "1.4375rem",
+      "--step-3": "1.875rem",
+      "--step-4": "2.5rem"
     },
     "fonts": [
       {
-        "name": "fonts.css",
-        "families": [
-          "Anek (wght 100-800, wdth 75-125%)",
-          "Martian (Latin digits)"
-        ],
-        "used": "staff app, private admin, legacy pages"
+        "family": "Baloo Da 2",
+        "weights": "400 800 (variable)",
+        "license": "SIL OFL",
+        "role": "display: names, headings, buttons, stamps, figures",
+        "source": "src/shefa/static/world/fonts.css"
       },
       {
-        "name": "fonts-lite.css",
+        "family": "Hind Siliguri",
+        "weights": "400, 500, 600, 700",
+        "license": "SIL OFL",
+        "role": "body and data",
+        "source": "src/shefa/static/world/fonts.css"
+      },
+      {
+        "set": "lite",
         "families": [
-          "Anek (wght only)",
-          "Martian"
+          "Baloo Da 2"
         ],
-        "used": "patient, demo, volunteer pages"
+        "note": "Public patient, demo and volunteer pages; body falls through to Baloo.",
+        "source": "src/shefa/static/world/fonts-lite.css"
       }
     ],
     "shadows": [
       {
-        "name": "sheet-shadow",
-        "value": "-24px 0 48px -12px oklch(0.17 0.006 260 / 0.22), -1px 0 0 var(--z0)",
-        "dark": "-24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6)",
-        "purpose": "The sliding sheet only. The one elevation in the world."
+        "name": "box",
+        "cssVar": "--shadow-box",
+        "value": "0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18)",
+        "dark": "0 1px 2px oklch(0 0 0 / 0.35)",
+        "purpose": "A box resting on the shelf: every container, active rail item, pressed segment, button hover."
       },
       {
-        "name": "focus-inset",
-        "value": "inset 0 0 0 1px var(--rule-strong)",
-        "purpose": "Doubles a focused field frame. A rule, not elevation."
-      },
-      {
-        "name": "shefa-turn-rule",
-        "value": "inset 3px 0 0 -2px var(--dichroic)",
-        "purpose": "1px magenta rule beside SHEFA's transcript turns."
-      }
-    ],
-    "materials": [
-      {
-        "name": "tracing-paper",
-        "value": "background: color-mix(in oklch, var(--sheet) 82%, transparent); backdrop-filter: blur(10px)",
-        "purpose": "Sheet body; opaque var(--sheet) with no blur at 52rem and below."
-      },
-      {
-        "name": "second-sheet",
-        "value": "border 1px var(--z7); color-mix(in oklch, var(--sheet) 70%, transparent); rotate(-0.8deg)",
-        "purpose": "The sheet beneath the sheet."
-      },
-      {
-        "name": "sheet-backdrop",
-        "value": "oklch(0.17 0.006 260 / 0.18)",
-        "purpose": "Dialog backdrop."
-      }
-    ],
-    "hatch": [
-      {
-        "name": "hatch-1",
-        "value": "repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 9px)",
-        "purpose": "Load up to a third."
-      },
-      {
-        "name": "hatch-2",
-        "value": "gap 6px",
-        "purpose": "Load to two thirds."
-      },
-      {
-        "name": "hatch-3",
-        "value": "gap 4px",
-        "purpose": "Load below full."
-      },
-      {
-        "name": "hatch-4",
-        "value": "gap 2.75px",
-        "purpose": "Full."
-      },
-      {
-        "name": "hatch-cross",
-        "value": "repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 6px)",
-        "purpose": "Conflict, failure, overlap."
-      },
-      {
-        "name": "hatch-shefa",
-        "value": "repeating-linear-gradient(135deg, var(--dichroic) 0 1.25px, transparent 1.25px 6px)",
-        "purpose": "SHEFA band: desk alert top band, receipt foot."
-      },
-      {
-        "name": "message-band",
-        "value": "background-size: 100% 7px; no-repeat; padding-top: calc(7px + 0.75rem)",
-        "purpose": "Hatch on a message box sits in a top band, never behind words."
+        "name": "lift",
+        "cssVar": "--shadow-lift",
+        "value": "0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28)",
+        "dark": "0 18px 40px -12px oklch(0 0 0 / 0.6)",
+        "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb."
       }
     ],
     "motion": [
       {
         "name": "ease-out",
-        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Control state transitions, 0.15s on background and colour."
-      },
-      {
-        "name": "sheet-ease",
+        "cssVar": "--ease-out",
         "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "Sheet slide-in, 0.42s (second sheet 0.5s), translateX(104%) to 0. Settles, no overshoot."
+        "purpose": "Control state transitions (0.15s) and the sheet slide-in (0.32s)."
       },
       {
         "name": "live-pulse",
-        "value": "opacity 1 to 0.25, 1.6s ease-in-out infinite",
-        "purpose": "Live dot only."
+        "value": "1.6s ease-in-out infinite, opacity to 0.25",
+        "purpose": "The dot in a live pill; only while a call is live."
       },
       {
-        "name": "skeleton-sweep",
-        "value": "faint z9 hatch sweeping, 1.6s linear",
-        "purpose": "Loading rows."
+        "name": "demo-ring",
+        "value": "1.8s ease-out infinite, 0 to 18px SHEFA-wash ring",
+        "purpose": "The demo orb while SHEFA is on the call; never at rest."
       },
       {
         "name": "reduced-motion",
-        "value": "all animation and transition to 0.001ms",
+        "value": "all animation and transition durations to 0.001ms",
         "purpose": "prefers-reduced-motion: reduce."
       }
     ],
     "breakpoints": [
       {
-        "name": "phone",
+        "name": "phone-shell",
         "value": "52rem",
-        "purpose": "Rail to bottom bar; sheet opaque full-screen; load rows stack."
+        "purpose": "Rail becomes a top bar and a bottom tab bar; legend repeats on the page."
       },
       {
-        "name": "stack-table",
+        "name": "phone-records",
         "value": "40rem",
-        "purpose": "Tables become stacked records."
+        "purpose": "Tables stack into labelled records; a doctor's day becomes a one-patient-per-screen feed."
       }
-    ]
+    ],
+    "themes": {
+      "mechanism": "prefers-color-scheme: dark applies unless :root[data-theme=\"light\"]; :root[data-theme=\"dark\"] forces dark.",
+      "switch": "frontend/src/lib/theme.tsx: auto | light | dark, stored in localStorage \"shefa.theme\" (auto removes it), applied before first paint.",
+      "darkValues": "colorMeta.<token>.dark and shadows[].dark"
+    },
+    "patterns": {
+      "leave": "Off or leave session: repeating-linear-gradient(-45deg, var(--box-2) 0 8px, var(--box) 8px 16px), dashed rule-strong frame, label struck through.",
+      "fullSession": "box-shadow: 0 0 0 2px var(--box), 0 0 0 3.5px var(--doc).",
+      "callbacksActive": "box-shadow: 0 0 0 2px var(--urgent), var(--shadow-lift); header band solid urgent.",
+      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash). On the rail --focus is oklch(0.9 0.1 90)."
+    }
   },
   "components": [
-    {
-      "name": "Button",
-      "kind": "button",
-      "refersTo": "button",
-      "description": "Default framed square button; hover fills field-2.",
-      "html": "<button class=\"ds-btn\">বাতিল</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; gap:0.45rem; min-height:44px; padding:0.55rem 1rem; border:1px solid var(--rule-strong); border-radius:0; background:transparent; color:var(--ink); font:inherit; font-family:var(--font); font-weight:600; line-height:1.2; cursor:pointer; transition:background-color 0.15s var(--ease-out), color 0.15s var(--ease-out); } .ds-btn:hover { background:var(--field-2); } .ds-btn:active { background:var(--z8); } .ds-btn:focus-visible { outline:2px solid var(--focus); outline-offset:2px; } .ds-btn:disabled { color:var(--ink-3); border-color:var(--z7); text-decoration:line-through; cursor:not-allowed; background:transparent; }"
-    },
     {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Deepest-zone fill for the one main action.",
-      "html": "<button class=\"ds-btn-primary\">সংরক্ষণ করুন</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; min-height:44px; padding:0.55rem 1rem; border:1px solid var(--select); border-radius:0; background:var(--select); color:var(--on-select); font:inherit; font-family:var(--font); font-weight:600; cursor:pointer; transition:background-color 0.15s var(--ease-out); } .ds-btn-primary:hover { background:var(--z2); } .ds-btn-primary:active { background:var(--z3); } .ds-btn-primary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }"
+      "description": "Going ahead: book, save, confirm. Settled green.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg> নিশ্চিত করুন</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);} .ds-btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary);} .ds-btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover);} .ds-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-btn:active{box-shadow:none;}"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Every ordinary action: a box-face button with a strong rule stroke.",
+      "html": "<button class=\"ds-btn-default\">হয়েছে: কল করেছি</button>",
+      "css": ".ds-btn-default{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);} .ds-btn-default:hover{border-color:var(--ink-2);box-shadow:var(--shadow-box);} .ds-btn-default:active{background:var(--box-2);box-shadow:none;} .ds-btn-default:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
     {
       "name": "SHEFA Button",
       "kind": "button",
       "refersTo": "button-shefa",
-      "description": "Magenta fill, only for acting on what SHEFA raised.",
-      "html": "<button class=\"ds-btn-shefa\">দেখুন</button>",
-      "css": ".ds-btn-shefa { display:inline-flex; align-items:center; min-height:36px; padding:0.3rem 0.7rem; border:1px solid var(--dichroic); border-radius:0; background:var(--dichroic); color:var(--on-dichroic); font:inherit; font-family:var(--font); font-weight:600; cursor:pointer; transition:background-color 0.15s var(--ease-out); } .ds-btn-shefa:hover { background:var(--dichroic-ink); } .ds-btn-shefa:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }"
+      "description": "An action that hands work to SHEFA. SHEFA blue.",
+      "html": "<button class=\"ds-btn-shefa\">শেফাকে দিন</button>",
+      "css": ".ds-btn-shefa{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);background:var(--shefa);border-color:var(--shefa);color:var(--on-shefa);} .ds-btn-shefa:hover{background:var(--shefa-ink);border-color:var(--shefa-ink);} .ds-btn-shefa:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
     {
       "name": "Text Field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Square field; focus doubles the frame; error is a double bottom rule.",
-      "html": "<label class=\"ds-field\"><span>ফোন নম্বর</span><input class=\"ds-input\" value=\"01711-000000\"></label>",
-      "css": ".ds-field { display:inline-grid; gap:0.2rem; font-family:var(--font); } .ds-field > span { font-size:0.8125rem; font-weight:600; color:var(--ink-2); } .ds-input { font:inherit; color:var(--ink); background:var(--sheet); border:1px solid var(--z6); border-radius:0; min-height:44px; padding:0.45rem 0.7rem; caret-color:var(--dichroic); } .ds-input:hover { border-color:var(--z3); } .ds-input:focus-visible { outline:0; border-color:var(--rule-strong); box-shadow:inset 0 0 0 1px var(--rule-strong); } .ds-input[aria-invalid='true'] { border-color:var(--ink); border-bottom:3px double var(--ink); }"
+      "description": "Box face, strong rule, 6px; focus turns the border blue with a SHEFA-wash halo.",
+      "html": "<label class=\"ds-field\"><span>রোগীর নাম</span><input class=\"ds-input\" placeholder=\"নাম লিখুন\"></label>",
+      "css": ".ds-field{display:inline-grid;gap:.2rem;} .ds-field>span{font-size:var(--step--1);font-weight:600;color:var(--ink-2);} .ds-input{font:inherit;color:var(--ink);background:var(--box);border:1px solid var(--rule-strong);border-radius:var(--r-sm);min-height:44px;padding:.45rem .75rem;} .ds-input:hover{border-color:var(--ink-3);} .ds-input:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px var(--shefa-wash);} .ds-input::placeholder{color:var(--ink-3);}"
     },
     {
-      "name": "State Marks",
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented",
+      "description": "Language and theme switches: a box-2 well, the chosen segment a lifted box face.",
+      "html": "<div class=\"ds-seg\" role=\"group\"><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
+      "css": ".ds-seg{display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-sm);background:var(--box-2);border:1px solid var(--rule);} .ds-seg button{font:inherit;font-weight:600;min-height:34px;padding:.2rem .85rem;border:0;border-radius:4px;background:transparent;color:var(--ink);cursor:pointer;} .ds-seg button[aria-pressed=\"true\"]{background:var(--box);box-shadow:var(--shadow-box);} .ds-seg button:hover{color:var(--ink);} .ds-seg button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
+    },
+    {
+      "name": "Status Marks",
       "kind": "chip",
-      "refersTo": "mark",
-      "description": "State drawn and said: settled frame, waiting hatched swatch, conflict crossed swatch, held dotted, cancelled struck, selected fill, SHEFA square, live dot.",
-      "html": "<span class=\"ds-mark\">শেষ</span> <span class=\"ds-mark ds-mark-warn\">অপেক্ষায়</span> <span class=\"ds-mark ds-mark-bad\">ঝামেলা</span> <span class=\"ds-mark ds-mark-quiet\">স্থগিত</span> <span class=\"ds-mark ds-mark-gone\">বাতিল</span> <span class=\"ds-mark ds-mark-sel\">বাছাই</span> <span class=\"ds-mark ds-mark-shefa\">শেফা বুক করেছে</span> <span class=\"ds-mark ds-mark-shefa ds-mark-live\">চলছে</span>",
-      "css": ".ds-mark { display:inline-flex; align-items:center; gap:0.4rem; min-height:1.6rem; padding:0.05rem 0.55rem; border:1px solid var(--rule-strong); background:var(--sheet); color:var(--ink); font-family:var(--font); font-size:0.8125rem; font-weight:600; line-height:1.2; white-space:nowrap; } .ds-mark-warn, .ds-mark-bad { padding-inline-start:0; } .ds-mark-warn::before, .ds-mark-bad::before { content:''; flex:none; align-self:stretch; width:1.1rem; margin-block:-0.05rem; border-inline-end:1px solid currentColor; } .ds-mark-warn::before { background:repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } .ds-mark-bad::before { background:repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 4px); } .ds-mark-quiet { border-style:dotted; border-color:var(--ink-3); color:var(--ink-2); } .ds-mark-gone { border-color:var(--z7); color:var(--ink-3); text-decoration:line-through; } .ds-mark-sel { background:var(--select); color:var(--on-select); border-color:var(--select); } .ds-mark-shefa { border-color:var(--dichroic); color:var(--dichroic-ink); } .ds-mark-shefa::before { content:''; width:0.5rem; height:0.5rem; background:var(--dichroic); flex:none; } .ds-mark-live::before { border-radius:50%; animation:ds-pulse 1.6s ease-in-out infinite; } @keyframes ds-pulse { 50% { opacity:0.25; } }"
+      "refersTo": "mark-done",
+      "description": "The legend as pills: a dot plus words. Done, waiting, needs a person, SHEFA, live, gone.",
+      "html": "<span class=\"ds-mark ds-ok\">নিশ্চিত</span> <span class=\"ds-mark ds-warn\">অপেক্ষায়</span> <span class=\"ds-mark ds-bad\">মানুষ দরকার</span> <span class=\"ds-mark ds-shefa\">শেফা বুক করেছে</span> <span class=\"ds-mark ds-live\">চলছে</span> <span class=\"ds-mark ds-gone\">বাতিল</span>",
+      "css": ".ds-mark{display:inline-flex;align-items:center;gap:.4rem;min-height:1.65rem;padding:.05rem .65rem;border-radius:var(--r-pill);border:1px solid transparent;background:var(--box-2);color:var(--ink-2);font-size:var(--step--1);font-weight:600;line-height:1.2;white-space:nowrap;} .ds-mark::before{content:\"\";flex:none;width:.5rem;height:.5rem;border-radius:50%;background:currentColor;} .ds-ok{background:var(--done-wash);color:var(--done-ink);} .ds-warn{background:var(--waiting-wash);color:var(--waiting-ink);} .ds-bad{background:var(--urgent);color:var(--on-urgent);} .ds-shefa{background:var(--shefa-wash);color:var(--shefa-ink);} .ds-live{background:var(--shefa);color:var(--on-shefa);} .ds-live::before{animation:ds-pulse 1.6s ease-in-out infinite;} @keyframes ds-pulse{50%{opacity:.25;}} .ds-gone{background:transparent;color:var(--ink-3);text-decoration:line-through;} .ds-gone::before{display:none;} @media (prefers-reduced-motion:reduce){.ds-live::before{animation:none;}}"
     },
     {
-      "name": "Segmented Choice",
-      "kind": "nav",
-      "refersTo": "seg-pressed",
-      "description": "Language or view switch; pressed segment takes the deepest zone.",
-      "html": "<div class=\"ds-seg\"><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
-      "css": ".ds-seg { display:inline-flex; border:1px solid var(--rule-strong); font-family:var(--font); } .ds-seg button { font:inherit; min-height:36px; padding:0.25rem 0.85rem; border:0; background:transparent; color:var(--ink); cursor:pointer; } .ds-seg button + button { border-inline-start:1px solid var(--rule-strong); } .ds-seg button:focus-visible { outline:2px solid var(--focus); outline-offset:2px; } .ds-seg button[aria-pressed='true'] { background:var(--select); color:var(--on-select); font-weight:600; }"
+      "name": "Doctor Name Block",
+      "kind": "custom",
+      "refersTo": "doc-name",
+      "description": "A doctor's name reversed out of their box colour, as printed on the box.",
+      "html": "<span class=\"ds-doc-name\" style=\"--doc:var(--doc-1)\">ডা. এ. করিম</span> <span class=\"ds-doc-name\" style=\"--doc:var(--doc-2)\">ডা. এন. সুলতানা</span> <span class=\"ds-doc-chip\" style=\"--doc:var(--doc-3)\">ডা. আর. হোসেন</span>",
+      "css": ".ds-doc-name{display:inline-block;padding:.1rem .6rem;border-radius:var(--r-sm);background:var(--doc,var(--ink-2));color:#fff;font-family:var(--font-display);font-weight:700;line-height:1.45;} .ds-doc-chip{display:inline-flex;align-items:center;gap:.4rem;font-weight:600;} .ds-doc-chip::before{content:\"\";width:.75rem;height:.75rem;border-radius:3px;background:var(--doc,var(--ink-3));}"
+    },
+    {
+      "name": "Batch Stamp",
+      "kind": "custom",
+      "description": "Serials and references printed like a carton MFG/EXP block: dashed frame, tabular digits.",
+      "html": "<span class=\"ds-stamp\">১৯/২৪ <small>সিরিয়াল</small></span>",
+      "css": ".ds-stamp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.05rem .5rem;border:1.5px dashed currentColor;border-radius:4px;color:var(--ink);font-family:var(--font-display);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.35;} .ds-stamp small{font-family:var(--font);font-weight:600;font-size:.7em;opacity:.8;}"
     },
     {
       "name": "Rail Navigation",
       "kind": "nav",
-      "refersTo": "nav-rail",
-      "description": "z1 rail; active item reverses to z10.",
-      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav-item ds-active\" href=\"#\">এখন</a><a class=\"ds-nav-item\" href=\"#\">কল</a><a class=\"ds-nav-item\" href=\"#\">ডাক্তার</a></nav>",
-      "css": ".ds-rail { display:flex; flex-direction:column; width:15.5rem; background:var(--rail); border-top:1px solid var(--rail-rule); font-family:var(--font); } .ds-nav-item { display:flex; align-items:center; min-height:44px; padding:0.55rem 1.5rem; border-bottom:1px solid var(--rail-rule); color:var(--rail-ink); text-decoration:none; font-weight:500; } .ds-nav-item:hover { background:var(--z2); } .ds-nav-item:focus-visible { outline:2px solid var(--z10); outline-offset:2px; } .ds-nav-item.ds-active { background:var(--z10); color:var(--z0); font-weight:650; }"
+      "refersTo": "rail",
+      "description": "The pharma-green rail: Lucide icon tiles, the active item a white box, the legend at the foot.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav ds-active\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4.9 19.1C1 15.2 1 8.8 4.9 4.9\"/><path d=\"M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5\"/><path d=\"M19.1 4.9C23 8.8 23 15.1 19.1 19\"/></svg></span>এখন</a><a class=\"ds-nav\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M16 2v4\"/><path d=\"M8 2v4\"/><path d=\"M3 10h18\"/></svg></span>অ্যাপয়েন্টমেন্ট</a><dl class=\"ds-legend\"><div><dt style=\"background:var(--urgent)\"></dt><dd>মানুষ দরকার</dd></div><div><dt style=\"background:var(--waiting)\"></dt><dd>অপেক্ষায়</dd></div><div><dt style=\"background:oklch(0.7 0.13 158)\"></dt><dd>হয়ে গেছে</dd></div><div><dt style=\"background:oklch(0.7 0.14 262)\"></dt><dd>শেফা করছে</dd></div></dl></nav>",
+      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:16rem;padding:1rem .75rem;background:var(--rail);color:var(--rail-ink);border-radius:var(--r);--focus:oklch(0.9 0.1 90);} .ds-nav{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.35rem .5rem;border-radius:var(--r-sm);color:var(--rail-ink);text-decoration:none;font-weight:500;} .ds-nav:hover{background:var(--rail-hover);} .ds-nav:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-ic{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:7px;background:oklch(1 0 0 / .14);color:#fff;} .ds-active{background:var(--box);color:var(--ink);font-weight:700;box-shadow:var(--shadow-box);} .ds-active .ds-ic{background:var(--primary);} .ds-active:hover{background:var(--box);} .ds-legend{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .6rem;margin:1rem 0 0;padding:.75rem .5rem 0;border-top:1px solid var(--rail-rule);font-size:var(--step--2);color:var(--rail-ink-2);} .ds-legend div{display:flex;align-items:center;gap:.4rem;} .ds-legend dt{width:.7rem;height:.7rem;border-radius:50%;} .ds-legend dd{margin:0;}"
     },
     {
-      "name": "Ruled Measures",
+      "name": "Today's Chambers Row",
       "kind": "card",
-      "refersTo": "table-head",
-      "description": "Measures as a ruled table, never tiles.",
-      "html": "<dl class=\"ds-stats\"><div class=\"ds-stat\"><dt>কল</dt><dd>—</dd></div><div class=\"ds-stat\"><dt>শেফা বুক করেছে</dt><dd>—</dd></div></dl>",
-      "css": ".ds-stats { display:grid; max-width:52rem; margin:0; border-top:2px solid var(--ink); font-family:var(--font); } .ds-stat { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:0 1rem; padding:0.75rem 0.25rem; border-bottom:1px solid var(--rule); } .ds-stat dt { font-weight:600; } .ds-stat dd { margin:0; font-family:var(--font-num); font-size:1.4375rem; font-weight:500; line-height:1.1; text-align:end; font-variant-numeric:tabular-nums; }"
-    },
-    {
-      "name": "Day Load Bar",
-      "kind": "custom",
-      "refersTo": "",
-      "description": "Signature: a session block at real duration, filled with hatch density for serials booked; count on an opaque chip.",
-      "html": "<div class=\"ds-load\"><span class=\"ds-load-name\">ডা. এ. করিম</span><div class=\"ds-load-track\"><div class=\"ds-load-block\" style=\"left:10%;width:55%\"><span class=\"ds-load-fill\" style=\"width:79%\"></span><span class=\"ds-load-count\">১৯/২৪</span></div><div class=\"ds-load-block ds-leave\" style=\"left:70%;width:28%\"><span class=\"ds-load-count\">ছুটিতে</span></div></div></div>",
-      "css": ".ds-load { display:grid; grid-template-columns:11rem minmax(0,1fr); gap:0.75rem; align-items:center; min-height:3.25rem; border-top:1px solid var(--ink); border-bottom:1px solid var(--rule); font-family:var(--font); } .ds-load-name { font-weight:600; } .ds-load-track { position:relative; height:2.4rem; } .ds-load-block { position:absolute; top:0.45rem; bottom:0.45rem; border:1px solid var(--ink); background:var(--sheet); overflow:hidden; display:flex; align-items:center; } .ds-load-fill { position:absolute; inset:0 auto 0 0; border-inline-end:1px solid var(--ink); background-image:repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } .ds-load-count { position:relative; z-index:1; margin-inline-start:0.35rem; padding:0 0.3rem; background:var(--sheet); font-size:0.8125rem; line-height:1.4; } .ds-leave { border-style:dotted; border-color:var(--ink-3); color:var(--ink-2); }"
-    },
-    {
-      "name": "Note (warning band)",
-      "kind": "card",
-      "refersTo": "",
-      "description": "Framed message; hatch in a 7px top band, never behind words.",
-      "html": "<div class=\"ds-note ds-note-warn\">সময়সূচি এখনো যাচাই হয়নি।</div>",
-      "css": ".ds-note { padding:0.75rem 1rem; border:1px solid var(--ink); background:var(--sheet); color:var(--ink); font-family:var(--font); } .ds-note-warn { background-image:repeating-linear-gradient(135deg, var(--z6) 0 1px, transparent 1px 5px); background-size:100% 7px; background-repeat:no-repeat; padding-top:calc(7px + 0.75rem); }"
+      "refersTo": "box",
+      "description": "One doctor's session on the day axis: name block, a bar filling in the doctor's colour, booked/capacity in a stamp.",
+      "html": "<div class=\"ds-box\"><div class=\"ds-load\" style=\"--doc:var(--doc-1)\"><span class=\"ds-load-name\">ডা. এ. করিম</span><div class=\"ds-track\"><div class=\"ds-block\" style=\"left:2%;width:46%\"><div class=\"ds-fill\" style=\"width:79%\"></div><span class=\"ds-count\"><span class=\"ds-lstamp\">১৯/২৪</span></span></div></div></div></div>",
+      "css": ".ds-box{background:var(--box);border-radius:var(--r);box-shadow:var(--shadow-box);padding:1rem 1.5rem;} .ds-load{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:1rem;align-items:center;min-height:3.4rem;border-top:1px solid var(--rule);} .ds-load-name{padding:.35rem .7rem;border-radius:var(--r-sm);background:var(--doc);color:#fff;font-family:var(--font-display);font-weight:700;line-height:1.25;} .ds-track{position:relative;height:2.5rem;} .ds-block{position:absolute;top:.45rem;bottom:.45rem;border-radius:var(--r-sm);overflow:hidden;display:flex;align-items:center;background:color-mix(in oklch,var(--doc) 14%,var(--box));border:1.5px solid var(--doc);} .ds-fill{position:absolute;inset:0 auto 0 0;background:var(--doc);} .ds-count{position:relative;z-index:1;margin-inline-start:.35rem;} .ds-lstamp{display:inline-flex;padding:.05rem .5rem;border:1.5px dashed var(--doc);border-radius:4px;background:var(--box);color:var(--ink);font-family:var(--font-display);font-weight:700;font-variant-numeric:tabular-nums;font-size:var(--step--1);}"
     }
   ],
   "narrative": {
-    "northStar": "The Exposure Record",
-    "overview": "**Creative North Star: \"The Exposure Record\"**\n\nSHEFA is drawn as a darkroom printer's exposure card: a ruled record of zones, densities and marks, read by people who need to know at a glance what is filling up, what clashes, and where the machine acted. Tone comes from a single eleven-step neutral zone ramp, faintly cool and never cream. Load and conflict are drawn, not coloured: a session fills with hatching that gets denser as its serials are taken, and two things that collide cross-hatch at ninety degrees. Every state is drawn and also said in words; the drawing never carries meaning on its own.\n\nOne dichroic magenta belongs to SHEFA's own voice and actions: a live call, a booking SHEFA made, a call SHEFA handed to a person, SHEFA's turns in a transcript. Everything else is zone. The world rejects the category default, which is white cards, a slate sidebar, one teal accent and KPI tiles. Data sits on the field in ruled ledgers and tables. Measures are ruled tables, and detail opens as a sheet of tracing paper over the list, so the list stays in place underneath.\n\nBangla is the primary language and is set first. English is the second view, and only English goes to tracked caps. The density is a working desk: hairline rows of 52px, 44px targets, and no ornament the record doesn't need.",
+    "northStar": "The Medicine Shelf",
+    "overview": "SHEFA looks like a Bangladeshi pharmacy shelf, read as a working screen. Bright white box board sits on a warm off-white shelf. A deep pharma-green rail runs down the staff app and across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.\n\nStatus is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done, and green is also the colour of going ahead. SHEFA blue means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.\n\nThe density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light shelf and an after-hours dark shelf, chosen by the device or by the viewer.",
     "keyCharacteristics": [
-      "Eleven neutral zones (z0 to z10) are the only tonal tokens. The dark theme reads the same ramp the other way round.",
-      "One magenta, reserved for SHEFA's voice and actions.",
-      "State vocabulary: selected is the deepest zone, waiting is hatched, conflict is cross-hatched, held back is a dotted outline, cancelled or disabled is struck through, and settled is a plain frame.",
-      "Square everywhere, with 1px hairlines and a 2px ink rule heading each page and table.",
-      "Anek for words (condensed for display), Martian Mono for Latin quantities, Anek for Bangla quantities.",
-      "The only elevation is the sliding sheet."
+      "White boxes on a warm shelf; a pharma-green rail or top bar.",
+      "One colour, one meaning: urgent red, waiting amber, done green, SHEFA blue, gone grey, always with words.",
+      "Six doctor box colours that never collide with the legend hues.",
+      "Reversed name blocks and dashed batch stamps borrowed from medicine packaging.",
+      "Baloo Da 2 for names, headings and numbers that matter; Hind Siliguri for body and data.",
+      "Light and dark shelves, with a three-way theme switch (follow device, light, dark)."
     ],
     "rules": [
       {
-        "name": "The One Voice Rule",
-        "body": "Magenta marks only what SHEFA did or needs: a live call, a booking SHEFA made, a hand-off to a person, SHEFA speaking. Never use it for navigation, selection, errors, danger or decoration. If a person did it, or nobody did, it is zone.",
+        "name": "The One Colour, One Meaning Rule",
+        "body": "Each legend hue means one thing on every surface: red needs a person, amber waits, green is done or go, blue is SHEFA, grey struck through is gone. Never use a legend hue for decoration, and never let colour speak without a word beside it.",
         "section": "colors"
       },
       {
-        "name": "The Zone-Only Rule",
-        "body": "No other hue enters the world. There is no red for errors, no green for success and no amber for warnings. Severity is drawn with hatching, cross-hatching, dotted or struck rules, and weight, and it is always said in words.",
+        "name": "The Box Colour Rule",
+        "body": "Doctors wear only the six doc colours, which sit clear of the legend hues. A doctor's colour appears wherever that doctor does (name block, session bar, box band, chip). A clash overrides the doctor's colour with urgent red.",
         "section": "colors"
       },
       {
-        "name": "The Reversed Ramp Rule",
-        "body": "Dark mode does not invent colours. It maps the same roles onto the ramp the other way round, chosen by the viewer's system or by `data-theme`.",
+        "name": "The Two Shelves Rule",
+        "body": "Every colour has a dark-shelf value (see the sidecar). The theme is chosen by `prefers-color-scheme`, unless `:root[data-theme]` forces light or dark. Surfaces read tokens and never hard-code a light value. On the dark shelf, text on a solid green, blue or red fill turns dark (the on-done, on-shefa and on-urgent values), so the fills keep their hue and stay legible.",
         "section": "colors"
       },
       {
-        "name": "The Bangla Quantity Rule",
-        "body": "Martian draws Latin digits only. Under `:lang(bn)`, `--font-num` swaps to Anek, so a Bangla serial or time never mixes two faces. Tables still right-align it with tabular figures.",
+        "name": "The Label Voice Rule",
+        "body": "Baloo Da 2 is for what the box shouts (names, headings, numbers that matter, buttons, stamps). Never set paragraphs or table data in it on staff surfaces, where Hind Siliguri is loaded.",
         "section": "typography"
       },
       {
-        "name": "The Part-of-Day Rule",
-        "body": "Bangla times read by part of the day, never AM or PM: \"সকাল ৯:০০\", দুপুর, বিকাল, সন্ধ্যা, রাত. This is one clock everywhere: axes, rows, call summaries and the patient page.",
+        "name": "The Tabular Digits Rule",
+        "body": "Times, serials, phone numbers, counts and tables always use tabular numerals.",
         "section": "typography"
       },
       {
-        "name": "The English-Only Caps Rule",
-        "body": "Tracked uppercase applies only to English labels, buttons, marks and Latin display. Bangla is never tracked or forced into a case.",
-        "section": "typography"
-      },
-      {
-        "name": "The Light Fonts Rule",
-        "body": "Public pages (patient, demo, volunteer) load `fonts-lite.css`, which has no width axis. Their display type falls back to normal width, which the source calls the honest trade for about 290 KB less on a slow phone. The staff and admin pages load the full file.",
-        "section": "typography"
-      },
-      {
-        "name": "The Tracing Paper Rule",
-        "body": "The sheet is blurred tracing paper: the sheet tone at 82% with a 10px backdrop blur, so the tone of the list shows through and its words do not. A second sheet sits beneath it at 70%, askew by -0.8deg, behind a z7 hairline. On a phone the sheet is fully opaque, with no blur.",
+        "name": "The Live Ring Rule",
+        "body": "A ring only pulses while a call or a recording is live (the blue live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.",
         "section": "elevation"
-      },
-      {
-        "name": "The Settle Rule",
-        "body": "The sheet slides in over 0.42s on `cubic-bezier(0.22, 1, 0.36, 1)`. It arrives with mass and settles with no overshoot or bounce.",
-        "section": "elevation"
-      },
-      {
-        "name": "The Hatch Never Behind Words Rule",
-        "body": "Hatching never runs under text. On marks and chips it sits in a swatch cell (1.1rem wide, with a 1px divider) at the start. On messages it is a 7px band across the top of the box (6px on the desk alert and receipt). In a load bar, the count sits on an opaque sheet chip over the fill.",
-        "section": "shapes"
       }
     ],
     "dos": [
-      "**Do** draw every state and also say it in words: hatch density for load, cross-hatch for conflict, dotted for held back, struck for cancelled or disabled, and the deepest zone for selected.",
-      "**Do** take tone from the zone roles (ground, sheet, field-2, ink, ink-2, ink-3, rule, rule-strong) so dark mode reverses for free.",
-      "**Do** keep magenta to SHEFA's own actions and voice: a live dot, a swatch, a 1px rule, the needs-a-person alert.",
-      "**Do** put hatching in a swatch cell, a 7px top band or behind an opaque count chip, never under words.",
-      "**Do** set quantities in the num face with tabular figures, right-aligned in tables, and let `:lang(bn)` swap it to Anek.",
-      "**Do** write Bangla times by part of the day (\"সকাল ৯:০০\").",
-      "**Do** show measures as a ruled table with the label on the left and a right-aligned figure.",
-      "**Do** draw time to scale: a block's length is its real duration.",
-      "**Do** open detail as the sheet over the list, opaque on a phone.",
-      "**Do** keep targets at 44px by default and on every phone or public surface (50px on public forms). 36px is allowed only for small buttons and segments in dense desktop rows, and stacked tables restore 44px on a phone."
+      "**Do** put words beside every status colour; a mark is always a dot plus a label.",
+      "**Do** give each doctor one of the six box colours and use it on every surface that names them.",
+      "**Do** use settled green for the primary action and SHEFA blue only for what SHEFA is doing or did.",
+      "**Do** print serials and references in the dashed batch stamp with tabular digits.",
+      "**Do** keep corners on the scale: 6px controls, 10px boxes, pill for marks and chips.",
+      "**Do** use Lucide icons (lucide-react in the app; Lucide paths copied into static sprites) at 16 to 20px with a 2px stroke.",
+      "**Do** read every colour from tokens so both shelves work, and keep tap targets at least 44px.",
+      "**Do** keep metadata lines to at most one middle dot."
     ],
     "donts": [
-      "**Don't** use white rounded cards, a slate sidebar with one teal accent, or KPI number tiles.",
-      "**Don't** use magenta for navigation, selection, tabs, errors, danger, offline states or decoration.",
-      "**Don't** introduce any hue beyond the zone ramp and the one magenta. There is no red, green or amber state colour.",
-      "**Don't** round corners. Circles are only for motion indicators (the live dot, a loading spinner).",
-      "**Don't** add elevation shadows to anything but the sheet.",
-      "**Don't** run hatching behind text.",
-      "**Don't** fade a disabled control with opacity. Strike it and drop it to ink-3 and z7.",
-      "**Don't** track or uppercase Bangla.",
-      "**Don't** let the sheet bounce or overshoot.",
-      "**Don't** mix Martian and Anek inside one Bangla quantity."
+      "**Don't** use a legend hue (red, amber, green, blue) as decoration or as a doctor's colour.",
+      "**Don't** pulse or glow a ring around anything at rest; a ring moves only while a call or recording is live.",
+      "**Don't** put em or en dashes in visible text.",
+      "**Don't** set body paragraphs or table data in Baloo Da 2 where Hind Siliguri is loaded.",
+      "**Don't** draw icons with text glyphs or emoji; use Lucide."
     ]
   }
 }

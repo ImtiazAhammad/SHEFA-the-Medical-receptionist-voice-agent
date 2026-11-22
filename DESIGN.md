@@ -1,353 +1,355 @@
 ---
 name: SHEFA
-description: The exposure record. A bilingual clinic voice receptionist drawn in one neutral zone ramp, one magenta, and hatching instead of colour.
+description: A Bangla voice receptionist for small clinics, set on a Bangladeshi medicine shelf.
 colors:
-  z0: "oklch(0.17 0.006 260)"
-  z1: "oklch(0.235 0.007 260)"
-  z2: "oklch(0.31 0.007 260)"
-  z3: "oklch(0.39 0.007 260)"
-  z4: "oklch(0.47 0.006 260)"
-  z5: "oklch(0.56 0.006 260)"
-  z6: "oklch(0.65 0.005 260)"
-  z7: "oklch(0.745 0.005 260)"
-  z8: "oklch(0.845 0.004 260)"
-  z9: "oklch(0.925 0.003 260)"
-  z10: "oklch(0.982 0.002 260)"
-  white: "oklch(1 0 0)"
-  dichroic: "oklch(0.54 0.215 352)"
-  dichroic-ink: "oklch(0.5 0.2 352)"
-  on-dichroic: "oklch(0.99 0.01 352)"
-  dichroic-wash: "oklch(0.955 0.03 352)"
+  shelf: "oklch(0.963 0.006 78)"
+  box: "oklch(1 0 0)"
+  box-2: "oklch(0.975 0.005 78)"
+  ink: "oklch(0.23 0.012 60)"
+  ink-2: "oklch(0.41 0.012 60)"
+  ink-3: "oklch(0.5 0.01 60)"
+  rule: "oklch(0.895 0.007 70)"
+  rule-strong: "oklch(0.79 0.01 70)"
+  rail: "oklch(0.35 0.075 162)"
+  rail-hover: "oklch(0.4 0.08 162)"
+  rail-rule: "oklch(0.43 0.07 162)"
+  rail-ink: "oklch(0.99 0.005 160)"
+  rail-ink-2: "oklch(0.87 0.035 160)"
+  urgent: "oklch(0.55 0.2 27)"
+  urgent-ink: "oklch(0.49 0.19 27)"
+  urgent-wash: "oklch(0.955 0.03 27)"
+  on-urgent: "oklch(0.99 0.01 27)"
+  waiting: "oklch(0.82 0.15 82)"
+  waiting-ink: "oklch(0.5 0.11 70)"
+  waiting-wash: "oklch(0.965 0.05 88)"
+  done: "oklch(0.5 0.12 158)"
+  done-hover: "oklch(0.44 0.11 158)"
+  done-ink: "oklch(0.45 0.11 158)"
+  done-wash: "oklch(0.955 0.035 158)"
+  on-done: "oklch(0.99 0.01 158)"
+  shefa: "oklch(0.52 0.17 262)"
+  shefa-ink: "oklch(0.47 0.17 262)"
+  shefa-wash: "oklch(0.955 0.03 262)"
+  on-shefa: "oklch(0.99 0.01 262)"
+  focus: "oklch(0.52 0.17 262)"
+  doc-0: "oklch(0.52 0.1 200)"
+  doc-1: "oklch(0.5 0.17 350)"
+  doc-2: "oklch(0.47 0.14 300)"
+  doc-3: "oklch(0.47 0.08 55)"
+  doc-4: "oklch(0.5 0.1 125)"
+  doc-5: "oklch(0.5 0.1 230)"
 typography:
   display:
-    fontFamily: "Anek, 'Noto Sans Bengali', Kalpurush, system-ui, sans-serif"
-    fontSize: "2.75rem"
-    fontWeight: 600
-    lineHeight: 1.02
-    letterSpacing: "-0.01em"
-    fontVariation: "'wdth' 78"
-  headline:
-    fontFamily: "Anek, 'Noto Sans Bengali', Kalpurush, system-ui, sans-serif"
-    fontSize: "2rem"
-    fontWeight: 600
-    lineHeight: 1.02
-    fontVariation: "'wdth' 78"
-  title:
-    fontFamily: "Anek, 'Noto Sans Bengali', Kalpurush, system-ui, sans-serif"
-    fontSize: "1.1875rem"
-    fontWeight: 650
-    lineHeight: 1.3
-  body:
-    fontFamily: "Anek, 'Noto Sans Bengali', Kalpurush, system-ui, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.6
-  label:
-    fontFamily: "Anek, 'Noto Sans Bengali', Kalpurush, system-ui, sans-serif"
-    fontSize: "0.8125rem"
-    fontWeight: 600
-    lineHeight: 1.3
-  label-en:
-    fontFamily: "Anek, system-ui, sans-serif"
-    fontSize: "0.6875rem"
-    fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: "0.14em"
-    fontVariation: "'wdth' 90"
-  num:
-    fontFamily: "Martian, Anek, ui-monospace, monospace"
-    fontSize: "1.4375rem"
-    fontWeight: 500
+    fontFamily: "'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 800
     lineHeight: 1.1
     letterSpacing: "-0.01em"
-    fontFeature: "'tnum' 1, 'zero' 1"
+  headline:
+    fontFamily: "'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "1.4375rem"
+    fontWeight: 700
+    lineHeight: 1.2
+  title:
+    fontFamily: "'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "1.1875rem"
+    fontWeight: 700
+    lineHeight: 1.2
+  figure:
+    fontFamily: "'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "1.875rem"
+    fontWeight: 800
+    lineHeight: 1.1
+    fontFeature: "tnum"
+  body:
+    fontFamily: "'Hind Siliguri', 'Baloo Da 2', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.65
+  label:
+    fontFamily: "'Hind Siliguri', 'Baloo Da 2', 'Noto Sans Bengali', system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 600
+    lineHeight: 1.3
 rounded:
-  none: "0px"
+  sm: "6px"
+  md: "10px"
+  pill: "999px"
 spacing:
-  space-1: "0.25rem"
-  space-2: "0.5rem"
-  space-3: "0.75rem"
-  space-4: "1rem"
-  space-5: "1.5rem"
-  space-6: "2rem"
-  space-7: "3rem"
+  "1": "0.25rem"
+  "2": "0.5rem"
+  "3": "0.75rem"
+  "4": "1rem"
+  "5": "1.5rem"
+  "6": "2rem"
+  "7": "3rem"
   tap: "44px"
 components:
   button:
-    backgroundColor: "transparent"
-    textColor: "{colors.z0}"
-    rounded: "{rounded.none}"
-    padding: "0.55rem 1rem"
-    height: "{spacing.tap}"
-  button-hover:
-    backgroundColor: "{colors.z9}"
-  button-active:
-    backgroundColor: "{colors.z8}"
+    backgroundColor: "{colors.box}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.sm}"
+    padding: "0.5rem 1.05rem"
+    height: "44px"
   button-primary:
-    backgroundColor: "{colors.z0}"
-    textColor: "{colors.z10}"
-    rounded: "{rounded.none}"
-    padding: "0.55rem 1rem"
-    height: "{spacing.tap}"
+    backgroundColor: "{colors.done}"
+    textColor: "{colors.on-done}"
+    rounded: "{rounded.sm}"
+    padding: "0.5rem 1.05rem"
+    height: "44px"
   button-primary-hover:
-    backgroundColor: "{colors.z2}"
+    backgroundColor: "{colors.done-hover}"
+    textColor: "{colors.on-done}"
   button-shefa:
-    backgroundColor: "{colors.dichroic}"
-    textColor: "{colors.on-dichroic}"
-    rounded: "{rounded.none}"
-    padding: "0.3rem 0.7rem"
-    height: "36px"
-  button-shefa-hover:
-    backgroundColor: "{colors.dichroic-ink}"
+    backgroundColor: "{colors.shefa}"
+    textColor: "{colors.on-shefa}"
+    rounded: "{rounded.sm}"
+    padding: "0.5rem 1.05rem"
+    height: "44px"
+  button-urgent:
+    backgroundColor: "{colors.urgent}"
+    textColor: "{colors.on-urgent}"
+    rounded: "{rounded.sm}"
+    padding: "0.5rem 1.05rem"
+    height: "44px"
   button-small:
-    padding: "0.3rem 0.7rem"
+    rounded: "{rounded.sm}"
+    padding: "0.3rem 0.75rem"
     height: "36px"
   input:
-    backgroundColor: "{colors.white}"
-    textColor: "{colors.z0}"
-    rounded: "{rounded.none}"
-    padding: "0.45rem 0.7rem"
-    height: "{spacing.tap}"
-  mark:
-    backgroundColor: "{colors.white}"
-    textColor: "{colors.z0}"
+    backgroundColor: "{colors.box}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.sm}"
+    padding: "0.45rem 0.75rem"
+    height: "44px"
+  segmented:
+    backgroundColor: "{colors.box-2}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.sm}"
+    padding: "3px"
+  mark-done:
+    backgroundColor: "{colors.done-wash}"
+    textColor: "{colors.done-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.none}"
-    padding: "0.05rem 0.55rem"
-    height: "1.6rem"
-  mark-selected:
-    backgroundColor: "{colors.z0}"
-    textColor: "{colors.z10}"
+    rounded: "{rounded.pill}"
+    padding: "0.05rem 0.65rem"
+  mark-waiting:
+    backgroundColor: "{colors.waiting-wash}"
+    textColor: "{colors.waiting-ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "0.05rem 0.65rem"
+  mark-urgent:
+    backgroundColor: "{colors.urgent}"
+    textColor: "{colors.on-urgent}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "0.05rem 0.65rem"
   mark-shefa:
-    textColor: "{colors.dichroic-ink}"
-  seg-pressed:
-    backgroundColor: "{colors.z0}"
-    textColor: "{colors.z10}"
-    height: "36px"
-  nav-rail:
-    backgroundColor: "{colors.z1}"
-    textColor: "{colors.z9}"
-    width: "15.5rem"
-  nav-item-active:
-    backgroundColor: "{colors.z10}"
-    textColor: "{colors.z0}"
-    height: "{spacing.tap}"
-  table-head:
-    backgroundColor: "{colors.z9}"
-    textColor: "{colors.z3}"
+    backgroundColor: "{colors.shefa-wash}"
+    textColor: "{colors.shefa-ink}"
     typography: "{typography.label}"
-    padding: "0.65rem 0.75rem"
-  sheet:
-    backgroundColor: "{colors.white}"
-    width: "min(46rem, 100vw)"
+    rounded: "{rounded.pill}"
+    padding: "0.05rem 0.65rem"
+  mark-live:
+    backgroundColor: "{colors.shefa}"
+    textColor: "{colors.on-shefa}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "0.05rem 0.65rem"
+  box:
+    backgroundColor: "{colors.box}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "1rem"
+  doc-name:
+    backgroundColor: "{colors.doc-0}"
+    textColor: "#ffffff"
+    rounded: "{rounded.sm}"
+    padding: "0.1rem 0.6rem"
+  rail:
+    backgroundColor: "{colors.rail}"
+    textColor: "{colors.rail-ink}"
+    width: "16rem"
+  rail-item-active:
+    backgroundColor: "{colors.box}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.sm}"
+    height: "44px"
 ---
 
 # Design System: SHEFA
 
 ## Overview
 
-**Creative North Star: "The Exposure Record"**
+**Creative North Star: "The Medicine Shelf"**
 
-SHEFA is drawn as a darkroom printer's exposure card: a ruled record of zones, densities and marks, read by people who need to know at a glance what is filling up, what clashes, and where the machine acted. Tone comes from a single eleven-step neutral zone ramp, faintly cool and never cream. Load and conflict are drawn, not coloured: a session fills with hatching that gets denser as its serials are taken, and two things that collide cross-hatch at ninety degrees. Every state is drawn and also said in words; the drawing never carries meaning on its own.
+SHEFA looks like a Bangladeshi pharmacy shelf, read as a working screen. Bright white box board sits on a warm off-white shelf. A deep pharma-green rail runs down the staff app and across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.
 
-One dichroic magenta belongs to SHEFA's own voice and actions: a live call, a booking SHEFA made, a call SHEFA handed to a person, SHEFA's turns in a transcript. Everything else is zone. The world rejects the category default, which is white cards, a slate sidebar, one teal accent and KPI tiles. Data sits on the field in ruled ledgers and tables. Measures are ruled tables, and detail opens as a sheet of tracing paper over the list, so the list stays in place underneath.
+Status is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done, and green is also the colour of going ahead. SHEFA blue means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.
 
-Bangla is the primary language and is set first. English is the second view, and only English goes to tracked caps. The density is a working desk: hairline rows of 52px, 44px targets, and no ornament the record doesn't need.
+The density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light shelf and an after-hours dark shelf, chosen by the device or by the viewer.
 
 **Key Characteristics:**
-- Eleven neutral zones (z0 to z10) are the only tonal tokens. The dark theme reads the same ramp the other way round.
-- One magenta, reserved for SHEFA's voice and actions.
-- State vocabulary: selected is the deepest zone, waiting is hatched, conflict is cross-hatched, held back is a dotted outline, cancelled or disabled is struck through, and settled is a plain frame.
-- Square everywhere, with 1px hairlines and a 2px ink rule heading each page and table.
-- Anek for words (condensed for display), Martian Mono for Latin quantities, Anek for Bangla quantities.
-- The only elevation is the sliding sheet.
+- White boxes on a warm shelf; a pharma-green rail or top bar.
+- One colour, one meaning: urgent red, waiting amber, done green, SHEFA blue, gone grey, always with words.
+- Six doctor box colours that never collide with the legend hues.
+- Reversed name blocks and dashed batch stamps borrowed from medicine packaging.
+- Baloo Da 2 for names, headings and numbers that matter; Hind Siliguri for body and data.
+- Light and dark shelves, with a three-way theme switch (follow device, light, dark).
 
 ## Colors
 
-A cool neutral zone ramp carries all tone; one dichroic magenta carries SHEFA.
+A warm, near-neutral shelf and box board, a deep pharma-green structural rail, a five-meaning status legend, and six doctor box colours that each get a meaning of their own.
 
 ### Primary
-- **Dichroic Magenta** (`dichroic`): SHEFA's own voice and nothing else. It appears as the live-call dot, the "needs a person" alert band and its action button, the square swatch on a booking SHEFA made, the 1px rule beside SHEFA's transcript turns, the caret in fields, and the third bar of the logo. In dark mode it lifts to oklch(0.72 0.19 352).
-- **Dichroic Ink** (`dichroic-ink`): magenta used as text, such as SHEFA-mark labels, the callback heading when people are waiting, and the speaker name on SHEFA's turns. It is also the hover state of the magenta button. In dark mode it is oklch(0.78 0.16 352).
-- **On Dichroic** (`on-dichroic`): text on a magenta fill.
-- **Dichroic Wash** (`dichroic-wash`): the faint row ground behind a callback SHEFA raised for a person. It is the only tinted surface in the world. In dark mode it is oklch(0.3 0.07 352).
+- **Settled Green** (done): the legend's "done, confirmed, seen" and the colour of going ahead. Primary buttons, the selected time slot, the patient's current step, checkbox accents and the receipt's top band all use it. In the frontmatter it appears once, as `done`; the code aliases it as `--primary`.
+- **Settled Green, deep** (done-hover): the hover state for primary actions.
+- **Settled Green ink and wash** (done-ink, done-wash): green text on white, and the pale fill behind a done pill or a completed step.
+
+### Secondary
+- **SHEFA Blue** (shefa): only for what SHEFA itself is doing or did. The live-call pill, the live demo orb, the "now" line on the day axis, the in-progress count, the SHEFA bar in the source report, and the capsule half in the logo. Its ink is the link colour, and its wash is the background of SHEFA's transcript turns, text selection and the input focus halo.
+- **Focus Blue** (focus): the 3px focus outline. It is the same hue as SHEFA blue and turns lighter on the dark shelf. On the green rail, focus turns warm yellow so it stays visible.
+
+### Tertiary: the legend
+- **Needs-a-Person Red** (urgent, urgent-ink, urgent-wash, on-urgent): a caller who needs a person, a clash in the week preview, an error, the emergency notice. A solid red fill is reserved for the loudest cases: the callbacks header band, the desk alert, the "needs a person" pill. Errors in a field use the wash with an urgent border.
+- **Waiting Amber** (waiting, waiting-ink, waiting-wash): pending, unconfirmed, retrying. Mostly used as a wash for notes and sample banners, with amber ink on the pill.
+- **Gone**: cancelled, off or disabled renders as ink-3 text, struck through, with no dot. The tokens.css file declares a `--gone` value, but the build never reads it.
+
+### Doctor box colours
+- **Teal, Magenta, Violet, Brown, Olive, Sky** (doc-0 to doc-5, in that order): each doctor's identity. Each colour appears as a solid name block, a colour band on the doctor's box, a session bar on the day axis, and a chip square. White type on every one passes AA. In code, a `.doc-cN` class sets a local `--doc` that every doctor-coloured element reads.
 
 ### Neutral
-The zone ramp runs from z0 (near-black) to z10 (near-white), hue 260, with chroma at or below 0.007. Components use the semantic roles below, never raw zones, except where a zone itself is the meaning (the selected state, the zone wedge).
-
-| Role | Light | Dark | Use |
-|---|---|---|---|
-| ground | z10 | z1 | The work field |
-| sheet | white | z2 | A sheet laid over the field: fields, marks, notes, the sliding sheet |
-| field-2 | z9 | z2 | Table heads, wells, row and button hover |
-| ink | z0 | z10 | Text and heavy rules |
-| ink-2 | z3 | z8 | Secondary text (8:1 on ground) |
-| ink-3 | z4 | z7 | Faintest allowed text (5.9:1); dotted and held-back outlines |
-| rule | z8 | z3 | Hairline between rows |
-| rule-strong | z0 | z8 | Frame of a control, table or sheet |
-| hatch-ink | z3 | z7 | Load hatching |
-| rail / rail-ink | z1 / z9 | z0 / z9 | The staff app's left rail |
-| select / on-select | z0 / z10 | z10 / z0 | Selected state, primary action |
-| focus | z0 | z10 | Focus outline |
-
-Fields use a z6 border at rest and a z3 border on hover. Disabled frames use z7.
+- **Warm Shelf** (shelf): the page field behind every box.
+- **Box Board** (box): every container, button and input face.
+- **Box Board, shaded** (box-2): table heads, hover rows, the segmented-control well, editor panels, summary cards, user transcript turns.
+- **Carton Ink** (ink, ink-2, ink-3): body text, secondary text, and hints, placeholders and disabled text.
+- **Fold Lines** (rule, rule-strong): row dividers, and the stroke on controls and dashed empty states.
+- **Pharma Green Rail** (rail, rail-hover, rail-rule, rail-ink, rail-ink-2): the staff rail, the sign-in field, the patient, demo and collector top bars, and the lab report's title band.
 
 ### Named Rules
-**The One Voice Rule.** Magenta marks only what SHEFA did or needs: a live call, a booking SHEFA made, a hand-off to a person, SHEFA speaking. Never use it for navigation, selection, errors, danger or decoration. If a person did it, or nobody did, it is zone.
+**The One Colour, One Meaning Rule.** Each legend hue means one thing on every surface: red needs a person, amber waits, green is done or go, blue is SHEFA, grey struck through is gone. Never use a legend hue for decoration, and never let colour speak without a word beside it.
 
-**The Zone-Only Rule.** No other hue enters the world. There is no red for errors, no green for success and no amber for warnings. Severity is drawn with hatching, cross-hatching, dotted or struck rules, and weight, and it is always said in words.
+**The Box Colour Rule.** Doctors wear only the six doc colours, which sit clear of the legend hues. A doctor's colour appears wherever that doctor does (name block, session bar, box band, chip). A clash overrides the doctor's colour with urgent red.
 
-**The Reversed Ramp Rule.** Dark mode does not invent colours. It maps the same roles onto the ramp the other way round, chosen by the viewer's system or by `data-theme`.
+**The Two Shelves Rule.** Every colour has a dark-shelf value (see the sidecar). The theme is chosen by `prefers-color-scheme`, unless `:root[data-theme]` forces light or dark. Surfaces read tokens and never hard-code a light value. On the dark shelf, text on a solid green, blue or red fill turns dark (the on-done, on-shefa and on-urgent values), so the fills keep their hue and stay legible.
 
 ## Typography
 
-**Display Font:** Anek (self-hosted Anek Bangla, variable weight 100–800 and width 75–125%), falling back to Noto Sans Bengali, Kalpurush, system-ui
-**Body Font:** Anek
-**Label/Mono Font:** Martian Mono (family name `Martian`) for Latin quantities
+**Display Font:** Baloo Da 2 (variable 400 to 800), falling back to Hind Siliguri, Noto Sans Bengali and system-ui
+**Body Font:** Hind Siliguri (400, 500, 600, 700), falling back to Baloo Da 2, Noto Sans Bengali and system-ui
 
-**Character:** Tall, condensed display type sits over a calm, open Bangla text face. Quantities sit in a ruled monospace, like the figures on a print log.
+**Character:** Baloo Da 2 is the round, bold voice of the label. It sets doctors' names, headings, buttons, stamps, phone numbers and the big figures. Hind Siliguri is the quiet, highly legible Bangla for body text and data. Both are self-hosted under SIL OFL. Public pages for patients and volunteers on slow phones load the light set (Baloo Da 2 only, about 120 KB), so their body text falls through to Baloo.
 
 ### Hierarchy
-- **Display** (600, 2.75rem, line-height 1.02, width 78%): page titles in the page head, over a 2px ink rule. English display goes to uppercase with no tracking. Bangla has no case and keeps its shaping. On a phone it drops to 2rem. The sign-in statement scales up to clamp(2.5rem, 6vw, 5.5rem).
-- **Headline** (600, 2rem, width 78%): sheet titles and the patient page h1 (2.1rem, 650).
-- **Title** (650, 1.1875rem): section heads, which sit over a 1px ink rule, and doctor names.
-- **Body** (400, 1rem, line-height 1.6 in Bangla and 1.5 in English): running text. Transcript turns run at 1.1875rem with a 62ch measure. Patient and collector pages set the body at 17–18px for phones.
-- **Label** (600, 0.8125rem, ink-2): the legend over a field or column, table heads, and the sheet-bar identity. In English it becomes 0.6875rem uppercase, tracked 0.12–0.14em, at 90% width.
-- **Num** (Martian, 500, tabular with a slashed zero): serials, counts, times, references and measure values. Measures run at 1.4375rem and right-align. The patient booking reference is 2.6rem.
+- **Display** (800, 2.5rem; sign-in up to clamp(2.4rem, 5.5vw, 4.75rem); line-height 1.1): page titles and the sign-in statement. On a phone, page titles step down to 1.875rem.
+- **Headline** (700, 1.4375rem, 1.2): section heads such as "today's chambers" and "recent calls".
+- **Title** (700, 1.1875rem, 1.2): box titles, empty-state titles, the doctor band, transcript text size.
+- **Figure** (800, 1.875rem, 1.1, tabular): measures in the overview and report tables, and the big serial on a doctor's phone.
+- **Body** (400, 1rem, 1.65; English 1.5): running text and data. Transcript lines hold to 62ch.
+- **Label** (600, 0.875rem, 1.3): field labels, table heads, pills and hints. Axis hours and legend entries drop to 0.75rem.
 
-The step scale runs 0.6875, 0.8125, 1, 1.1875, 1.4375, 2, 2.75 and 4rem.
+The type steps are 0.75, 0.875, 1, 1.1875, 1.4375, 1.875 and 2.5rem.
 
 ### Named Rules
-**The Bangla Quantity Rule.** Martian draws Latin digits only. Under `:lang(bn)`, `--font-num` swaps to Anek, so a Bangla serial or time never mixes two faces. Tables still right-align it with tabular figures.
+**The Label Voice Rule.** Baloo Da 2 is for what the box shouts (names, headings, numbers that matter, buttons, stamps). Never set paragraphs or table data in it on staff surfaces, where Hind Siliguri is loaded.
 
-**The Part-of-Day Rule.** Bangla times read by part of the day, never AM or PM: "সকাল ৯:০০", দুপুর, বিকাল, সন্ধ্যা, রাত. This is one clock everywhere: axes, rows, call summaries and the patient page.
-
-**The English-Only Caps Rule.** Tracked uppercase applies only to English labels, buttons, marks and Latin display. Bangla is never tracked or forced into a case.
-
-**The Light Fonts Rule.** Public pages (patient, demo, volunteer) load `fonts-lite.css`, which has no width axis. Their display type falls back to normal width, which the source calls the honest trade for about 290 KB less on a slow phone. The staff and admin pages load the full file.
+**The Tabular Digits Rule.** Times, serials, phone numbers, counts and tables always use tabular numerals.
 
 ## Layout
 
-The staff app is a two-column shell: a 15.5rem z1 rail and a work field capped at 84rem, padded `space-6` above and clamp(1rem, 3.2vw, 3rem) at the sides. Pages open with a page head (display title and tools, a 2px ink rule, `space-5` below). Sections are separated by `space-6` and headed by a 1px ink rule.
+The staff app is a two-column grid: a sticky 16rem green rail, and a main work field with padding of clamp(1rem, 3.2vw, 3rem) and a maximum width of 86rem. Page heads put the title and tools on one line and wrap. Sections stack with 2rem gaps. Spacing runs 0.25, 0.5, 0.75, 1, 1.5, 2 and 3rem, and every tap target is at least 44px. Live leads with the needs-a-person box, then today's chambers (a 12rem name column beside a time axis), then two working boxes laid out in an auto-fit grid of columns at least 24rem wide.
 
-Data is set in ledgers and tables, not cards. Ledger rows are at least 52px high with 1px rule separators and a field-2 hover. Table wraps carry a 2px ink top and a 1px ink bottom, and tables have z9 heads. Measures are a single-column ruled table, at most 52rem wide, with the label on the left and a right-aligned Martian figure. Two working lists sit side by side in auto-fit columns of at least 24rem.
+At 52rem and below, the rail becomes a top bar and the nav moves to a fixed bottom tab bar with icons over labels. The legend repeats on the page, and day-axis rows stack the name block above the bar. At 40rem and below, tables become stacked records with each cell labelled, and a doctor's day becomes a feed: one patient fills most of the screen in its own box, with a green top band, and the page snaps from one patient to the next. Patient, demo and volunteer pages are single columns of 40rem (patient) or 560px (volunteer), with a sticky green top bar.
 
-Time is drawn to scale. In the Live chamber strip and the Setup week preview, a block's length is its real duration on an hourly axis with z9 tick lines, and a 2px ink "now" line with a square head marks the present.
-
-The spacing rhythm follows space-1 to space-7 (0.25, 0.5, 0.75, 1, 1.5, 2 and 3rem). Targets are at least 44px (`tap`). Small buttons and segmented choices are 36px.
-
-**Phone (52rem and below):** the rail collapses to a top bar, and navigation moves to a fixed bottom bar of equal cells with icons over labels. The chamber strip drops its axis and stacks the name over the track. The sheet goes full-screen and opaque. At 40rem and below, a stack table turns each row into a stacked record with a per-cell label, so nothing is clipped. Public pages are single-column, mobile-first at 360px, and capped at 40rem (patient) or 560px (volunteer).
-
-**Print:** the day list prints one doctor per page as a black-ruled table, with the chrome hidden.
+Detail opens in a sheet: a box pulled off the shelf that slides in from the right, up to 46rem wide, with a 16px leading radius.
 
 ## Elevation & Depth
 
-The world is flat. Depth comes from tone (field, sheet and rail zones) and rules. The only lift is the sheet: a panel slides in from the right over a z0 backdrop at 18% opacity and casts one long, soft shadow to its left, paired with a 1px edge.
+Depth is a printed box resting on a shelf: a short contact shadow plus a soft drop. Boxes carry the resting shadow. Anything pulled forward (the sheet, the desk alert, the sign-in card, the receipt, the active needs-a-person box, a hovered patient card) carries the lifted shadow. On the dark shelf, both shadows become plain black at higher opacity. Empty states lift nothing: they are a dashed outline on the bare shelf.
 
 ### Shadow Vocabulary
-- **Sheet shadow** (`box-shadow: -24px 0 48px -12px oklch(0.17 0.006 260 / 0.22), -1px 0 0 var(--z0)`; in dark mode `-24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6)`): the sliding sheet only.
-- **Inset rule** (`box-shadow: inset 0 0 0 1px` or `inset 3px 0 0 -2px`): not elevation. It thickens a focused field's frame and draws the 1px magenta rule beside SHEFA's transcript turns.
+- **Box on shelf** (`box-shadow: 0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18)`): every resting container, the active rail item, the pressed segment, button hover.
+- **Pulled forward** (`box-shadow: 0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28)`): sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb.
 
 ### Named Rules
-**The Tracing Paper Rule.** The sheet is blurred tracing paper: the sheet tone at 82% with a 10px backdrop blur, so the tone of the list shows through and its words do not. A second sheet sits beneath it at 70%, askew by -0.8deg, behind a z7 hairline. On a phone the sheet is fully opaque, with no blur.
-
-**The Settle Rule.** The sheet slides in over 0.42s on `cubic-bezier(0.22, 1, 0.36, 1)`. It arrives with mass and settles with no overshoot or bounce.
+**The Live Ring Rule.** A ring only pulses while a call or a recording is live (the blue live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.
 
 ## Shapes
 
-Every corner is square (0px): buttons, fields, marks, notes, blocks, tables and the sheet. Circles are kept for things in motion: the live dot (a 0.5rem magenta circle that pulses on a live call) and the volunteer page's small loading spinner. SHEFA's own mark is a 0.5rem magenta square. Rules are 1px hairlines in `rule` between rows, 1px `rule-strong` frames around controls, and a 2px ink rule under page heads, across table tops and around the patient emergency notice. Dotted rules mean held back or set aside (held marks, leave blocks, empty states, the danger zone). Struck text means cancelled or disabled.
-
-Hatching is the recurring texture. It runs at 135deg with a 1px line, in four densities of load at gaps of 9, 6, 4 and 2.75px. Conflict crosses 45deg over 135deg. SHEFA's hatch is magenta at 1.25px.
-
-**The Hatch Never Behind Words Rule.** Hatching never runs under text. On marks and chips it sits in a swatch cell (1.1rem wide, with a 1px divider) at the start. On messages it is a 7px band across the top of the box (6px on the desk alert and receipt). In a load bar, the count sits on an opaque sheet chip over the fill.
+Small, honest corners, like card stock: 6px for controls, name blocks and session bars; 10px for boxes, notes and panels; full pills for marks, chips and patient choice chips. Status dots are circles. Doctor chips are 3px-rounded squares. Stamps are dashed 1.5px frames with tight 4px corners. Transcript turns are 14px bubbles with one 4px corner on the speaker's side. Dashed borders mean something printed or not yet there: the batch stamp, an empty state, the danger zone divider, the patient's callback divider. Off days and leave on the day axis use a diagonal stripe in two box tones inside a dashed frame, with the label struck through.
 
 ## Components
 
 ### Buttons
-Square, framed and quiet. The frame does the work.
-- **Shape:** square (0px), 1px `rule-strong` frame, 44px high, weight 600. English labels are uppercase at 0.8125rem, tracked 0.06em, at 90% width.
-- **Default:** transparent with ink text. Hover fills field-2 and press fills z8, over 0.15s on `cubic-bezier(0.16, 1, 0.3, 1)`.
-- **Primary:** a select (z0) fill with on-select text. Hover goes to z2 and press to z3.
-- **SHEFA:** a magenta fill, only for acting on what SHEFA raised (the "needs a person" alert). It ships at the small size.
-- **Quiet:** no frame until hover, which shows a rule-coloured frame.
-- **Disabled:** ink-3 text, a z7 frame and a struck label, never faded opacity.
-- **Segment:** a button may carry a unit or count in a trailing segment behind a 1px divider, set in the num face.
-- **Small:** 36px high. **Block:** full width.
+Square-shouldered and plainly labelled, set in Baloo Da 2 at 600.
+- **Shape:** gently rounded (6px), at least 44px tall, padding 0.5rem 1.05rem; Lucide icons at 16px inline, with a 0.45rem gap.
+- **Default:** box face, strong rule stroke, ink text. On hover, the stroke darkens to ink-2 and the button gains the box shadow. When pressed, it drops to box-2 with no shadow.
+- **Primary:** settled green fill with on-done text; on hover, deep green. Used for going ahead (book, save, confirm).
+- **SHEFA:** blue fill, for actions that hand work to SHEFA.
+- **Urgent:** red fill, for the needs-a-person action. **Danger** is a default button with urgent ink that turns to an urgent wash on hover.
+- **Quiet:** no stroke and no fill; hover shades to box-2. **Small:** 36px tall at 0.875rem.
+- **Disabled:** box-2 face, rule stroke, ink-3 text, not-allowed cursor.
+- **Focus:** 3px focus-blue outline offset 2px (warm yellow on the rail).
 
-### Marks (state chips)
-State is drawn and said. A mark is a small framed label (1.6rem high, label type, white sheet ground).
-- **Settled / info:** a plain 1px frame.
-- **Waiting:** a hatched swatch cell at the start.
-- **Conflict / failed:** a cross-hatched swatch cell.
-- **Held back:** a dotted ink-3 frame with ink-2 text.
-- **Cancelled:** a z7 frame with ink-3 struck text.
-- **Selected:** a select fill.
-- **SHEFA:** a magenta frame, dichroic-ink text and a leading magenta square.
-- **Live:** a SHEFA mark with a pulsing round magenta dot (1.6s).
+### Marks (status pills)
+The legend in pill form: colour plus words.
+- **Style:** pill, at least 1.65rem tall, 0.875rem at 600, with a 0.5rem dot in the current colour before the words.
+- **Variants:** done (green wash, green ink), waiting (amber wash, amber ink), needs a person (solid red, white), SHEFA (blue wash, blue ink), live (solid blue, with the dot pulsing every 1.6s), quiet (outlined, hollow dot), gone (no fill, ink-3, struck through, no dot), selected (ink fill with a green dot).
 
-### Cards / Containers
-There are no cards in the dashboard sense. Containers are framed sheets.
-- **Corner Style:** square (0px).
-- **Background:** sheet on the ground.
-- **Shadow Strategy:** none (see Elevation & Depth).
-- **Border:** a 1px ink frame for notes, editors and form panels. Ledger items and doctor cells use 1px rule dividers only.
-- **Internal Padding:** `space-4` (editor `space-4`/`space-5`).
-- **Notes:** a warning note carries a 7px hatched top band and an error note a 7px cross-hatched band, with the message in words below.
-- **Empty:** a dotted ink-3 frame, a title and a hint.
+### Doctor name block, band and chip
+- **Name block:** a doctor's name reversed out of their box colour, white Baloo Da 2 at 700, 6px corners. It heads each row of the day axis and appears inline wherever a doctor is named.
+- **Band:** on the Doctors page and the patient's doctor list, each doctor is a white box with a full-bleed colour band across its top that carries the name.
+- **Chip:** a 0.75rem colour square before a doctor's name in dense lists.
+
+### Batch stamp
+The printed MFG/EXP block. A dashed 1.5px frame in the current colour with 4px corners, holding tabular Baloo Da 2 digits at 700 and a small Hind Siliguri unit. It carries serials such as "১৯/২৪" on a session bar (on a box face, framed in the doctor's colour) and references. The patient receipt prints its reference as a large stamp in green.
+
+### Boxes / Containers
+- **Corner Style:** 10px.
+- **Background:** box on the shelf.
+- **Shadow Strategy:** box-on-shelf at rest; pulled-forward when active (see Elevation).
+- **Border:** none at rest. Rows inside a box are divided by 1px rule lines, and table heads shade to box-2.
+- **Internal Padding:** 1rem to 1.5rem; ledger rows at least 54px tall.
 
 ### Inputs / Fields
-- **Style:** square, with a 1px z6 frame on a sheet ground and 44px high (50px on public pages). The caret is magenta.
-- **Hover / Focus:** hover darkens the frame to z3. Focus shows a rule-strong frame doubled by an inset 1px, with no glow.
-- **Error:** an ink frame with a 3px double rule along the bottom, plus a worded field error below.
-- **Unit field:** an input with its unit in a trailing cell ("045.0 | SEC"). On focus the unit cell fills with select.
-- **Select:** a drawn chevron, square.
-- **Labels:** a label-type legend above the field. In English it is tracked caps.
+- **Style:** box face, 1px strong rule stroke, 6px corners, at least 44px tall (50px on patient pages). Labels sit above in 0.875rem at 600, in ink-2. A unit field prints its unit in a box-2 cell beside the input.
+- **Focus:** the border turns focus blue, with a 3px SHEFA-wash halo.
+- **Error:** urgent border on an urgent wash; the message sits below in urgent ink at 600.
+- **Select:** a drawn chevron, no native arrow. Checkboxes and radios are accent green.
 
-### Segmented choice
-A 1px rule-strong frame split by 1px dividers, 36px high. The pressed segment fills with select. It is used for language and view switches, including in the rail, where the pressed segment fills z10.
+### Segmented control
+A box-2 well with a 3px inset. The chosen segment is a box face with the resting shadow. On the rail, the well darkens to translucent black and the chosen segment stays white. It is used for language (বাংলা / English) and the three-way theme switch (follow device, light, dark; Lucide Monitor, Sun and Moon at 16px). The theme choice is remembered per device under `shefa.theme` and applied before first paint.
 
 ### Navigation
-- **Rail (desktop):** z1, holding the wordmark (SHEFA in 75% width with tracked caps, plus শেফা in rail-ink-2), then full-width 44px items divided by z3 rules, with an icon, a Bangla label and weight 500. Hover fills z2. The active item reverses to a z10 fill with z0 text at weight 650.
-- **Foot:** the voice console link, the sound toggle, the language segment and the user with sign-out.
-- **Phone:** a fixed bottom bar of equal cells, with the icon over a 0.72rem label.
+- **Rail (desktop):** a 16rem pharma-green column. At the top is the capsule logo (a white and SHEFA-blue capsule tilted on a green tile) with SHEFA in Baloo Da 2 at 800 and শেফা beside it. Nav items are 44px rows, each with a 1.9rem translucent icon tile holding a Lucide icon. On hover the row turns rail-hover. The active item becomes a white box with ink text at 700 and a green icon tile. The legend sits at the rail's foot, then preferences, then the signed-in user.
+- **Phone:** the rail collapses to a top bar holding the logo and preferences, and the nav becomes a fixed bottom tab bar on the rail green, with icons over 0.72rem labels.
+- **Public pages:** a sticky green top bar with the logo, a pill language toggle and the theme switch.
 
-### Tables and measures
-Tables have 1px rule rows, z9 heads in label type over an ink rule, start-aligned text and end-aligned numbers. Hovered rows fill field-2. Measures (overview, report) are a ruled two-column table of label and Martian figure, never number tiles.
+### Today's chambers (signature)
+One row per doctor: a name block, then a time axis with hourly ticks and a blue "now" line. Each session is a bar framed in the doctor's colour on a 14% tint. It fills in solid doctor colour as serials are booked, and a stamp shows booked over capacity. A full session gains a 2px outline in the doctor's colour and the word "full". Leave shows as the striped, dashed, struck-through block.
 
-### The Sheet (signature)
-A modal panel on the right (up to 46rem) for any call, booking or record. It is tracing paper over the list (see Elevation & Depth). Its sticky bar holds a small identity label and a quiet close button over a 1px ink rule, and its title uses the headline style. Esc, the close button or a click on the backdrop dismisses it, and focus returns to the row that opened it. Destructive actions sit far below in a danger zone set off by a dotted rule.
+### Needs-a-person box (signature)
+The first box on Live. When callers are waiting, its header becomes a solid red band with a white count badge, the box takes a 2px red outline and the lifted shadow, and each row sits on an urgent wash. When nobody waits, it shrinks to a quiet one-line box with an ink-2 heading.
 
-### Day Load strip (signature)
-Each doctor has one row: a name column of 11rem and a time track. Each session is a framed block whose length is its real duration. The block fills from the start in proportion to serials booked, with hatching at one of four densities (up to a third, two thirds, below full, full). The count ("১৯/২৪") sits on an opaque chip over the fill, with a worded version for screen readers. A full session adds a bold "full" word. Leave is a dotted block with a struck count. The Setup week preview uses the same grammar. Overlapping sessions cross-hatch and carry a conflict mark beside the block.
-
-### Transcript turns
-Each turn is a two-column row: speaker and time on the left, words on the right at 1.1875rem. SHEFA's turns take a dichroic-ink speaker name and a 1px magenta rule at the left edge. Caller turns are plain.
-
-### Patient steps and receipt
-The booking steps form a zone wedge. Each completed step fills z8, and the current step fills select. The receipt is a framed ticket with the reference set huge in the num face and a 6px magenta hatch band along its foot, because SHEFA made the booking.
+### Week preview
+In setup, each session is a 6px-rounded bar in the doctor's colour, as long as the session really is. Overlapping sessions turn urgent red, and a clash pill sits on top.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** draw every state and also say it in words: hatch density for load, cross-hatch for conflict, dotted for held back, struck for cancelled or disabled, and the deepest zone for selected.
-- **Do** take tone from the zone roles (ground, sheet, field-2, ink, ink-2, ink-3, rule, rule-strong) so dark mode reverses for free.
-- **Do** keep magenta to SHEFA's own actions and voice: a live dot, a swatch, a 1px rule, the needs-a-person alert.
-- **Do** put hatching in a swatch cell, a 7px top band or behind an opaque count chip, never under words.
-- **Do** set quantities in the num face with tabular figures, right-aligned in tables, and let `:lang(bn)` swap it to Anek.
-- **Do** write Bangla times by part of the day ("সকাল ৯:০০").
-- **Do** show measures as a ruled table with the label on the left and a right-aligned figure.
-- **Do** draw time to scale: a block's length is its real duration.
-- **Do** open detail as the sheet over the list, opaque on a phone.
-- **Do** keep targets at 44px by default and on every phone or public surface (50px on public forms). 36px is allowed only for small buttons and segments in dense desktop rows, and stacked tables restore 44px on a phone.
+- **Do** put words beside every status colour; a mark is always a dot plus a label.
+- **Do** give each doctor one of the six box colours and use it on every surface that names them.
+- **Do** use settled green for the primary action and SHEFA blue only for what SHEFA is doing or did.
+- **Do** print serials and references in the dashed batch stamp with tabular digits.
+- **Do** keep corners on the scale: 6px controls, 10px boxes, pill for marks and chips.
+- **Do** use Lucide icons (lucide-react in the app; Lucide paths copied into static sprites) at 16 to 20px with a 2px stroke.
+- **Do** read every colour from tokens so both shelves work, and keep tap targets at least 44px.
+- **Do** keep metadata lines to at most one middle dot.
 
 ### Don't:
-- **Don't** use white rounded cards, a slate sidebar with one teal accent, or KPI number tiles.
-- **Don't** use magenta for navigation, selection, tabs, errors, danger, offline states or decoration.
-- **Don't** introduce any hue beyond the zone ramp and the one magenta. There is no red, green or amber state colour.
-- **Don't** round corners. Circles are only for motion indicators (the live dot, a loading spinner).
-- **Don't** add elevation shadows to anything but the sheet.
-- **Don't** run hatching behind text.
-- **Don't** fade a disabled control with opacity. Strike it and drop it to ink-3 and z7.
-- **Don't** track or uppercase Bangla.
-- **Don't** let the sheet bounce or overshoot.
-- **Don't** mix Martian and Anek inside one Bangla quantity.
+- **Don't** use a legend hue (red, amber, green, blue) as decoration or as a doctor's colour.
+- **Don't** pulse or glow a ring around anything at rest; a ring moves only while a call or recording is live.
+- **Don't** put em or en dashes in visible text.
+- **Don't** set body paragraphs or table data in Baloo Da 2 where Hind Siliguri is loaded.
+- **Don't** draw icons with text glyphs or emoji; use Lucide.

@@ -122,6 +122,10 @@
     --shefa-ink: oklch(0.78 0.11 262);
     --shefa-wash: oklch(0.3 0.07 262);
     --primary-hover: oklch(0.63 0.12 158);
+    --on-done: oklch(0.18 0.03 158);
+    --on-primary: oklch(0.18 0.03 158);
+    --on-shefa: oklch(0.17 0.03 262);
+    --on-urgent: oklch(0.17 0.03 27);
     --focus: oklch(0.75 0.12 262);
     --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
     --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
@@ -152,6 +156,10 @@
   --shefa-ink: oklch(0.78 0.11 262);
   --shefa-wash: oklch(0.3 0.07 262);
   --primary-hover: oklch(0.63 0.12 158);
+  --on-done: oklch(0.18 0.03 158);
+  --on-primary: oklch(0.18 0.03 158);
+  --on-shefa: oklch(0.17 0.03 262);
+  --on-urgent: oklch(0.17 0.03 27);
   --focus: oklch(0.75 0.12 262);
   --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
   --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);

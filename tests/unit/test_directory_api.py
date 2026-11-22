@@ -190,7 +190,9 @@ def test_a_walk_in_takes_the_next_serial_and_is_never_texted(app):
     c = as_(app, OWNER)
     doctor = make_doctor(c)
     today = datetime.now(CLINIC_TZ).weekday()
-    whole_day = {"weekday": today, "start_time": "00:00", "end_time": "23:50", "slot_minutes": 10}
+    # One-minute places up to 23:59, so a place is still free whenever the test runs (a
+    # 10-minute grid ending 23:50 had none left after 23:40).
+    whole_day = {"weekday": today, "start_time": "00:00", "end_time": "23:59", "slot_minutes": 1}
     c.put(f"/api/v1/admin/doctors/{doctor['id']}/schedule", json={"sessions": [whole_day]})
     desk = as_(app, DESK)
     got = desk.post(
