@@ -27,7 +27,7 @@
   min-height: var(--tap); padding: 0.35rem var(--space-2);
   border-radius: var(--r-sm); color: var(--rail-ink); text-decoration: none; font-weight: 500;
 }
-.nav-icon { display: inline-grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 7px; background: oklch(1 0 0 / 0.14); color: #fff; }
+.nav-icon { display: inline-grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 7px; background: oklch(1 0 0 / 0.14); color: var(--on-fill); }
 .nav-item.active .nav-icon { background: var(--primary); }
 .nav-item:hover { background: var(--rail-hover); }
 .nav-item.active { background: var(--box); color: var(--ink); font-weight: 700; box-shadow: var(--shadow-box); }
@@ -143,7 +143,7 @@ div.actions, span.actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem;
 .load-row { min-height: 3.4rem; border-top: 1px solid var(--rule); }
 .load-name {
   align-self: center; padding: 0.35rem 0.7rem; border-radius: var(--r-sm);
-  background: var(--doc, var(--ink-3)); color: #fff;
+  background: var(--doc, var(--ink-3)); color: var(--on-fill);
   font-family: var(--font-display); font-weight: 700; line-height: 1.25; overflow-wrap: anywhere;
 }
 .load-track { position: relative; height: 100%; min-height: 2.5rem; }
@@ -161,7 +161,7 @@ div.actions, span.actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem;
 .load-fill { position: absolute; inset: 0 auto 0 0; background: var(--doc, var(--ink-3)); }
 .load-count { position: relative; z-index: 1; margin-inline-start: 0.35rem; font-size: var(--step--1); white-space: nowrap; color: var(--ink); }
 .load-count .stamp { background: var(--box); border-color: var(--doc, var(--ink-3)); color: var(--ink); }
-.load-full { font-family: var(--font-display); font-weight: 800; color: #fff; margin-inline-start: 0.2rem; }
+.load-full { font-family: var(--font-display); font-weight: 800; color: var(--on-fill); margin-inline-start: 0.2rem; }
 .load-block.is-full { box-shadow: 0 0 0 2px var(--box), 0 0 0 3.5px var(--doc); }
 .load-block.is-leave { background: repeating-linear-gradient(-45deg, var(--box-2) 0 8px, var(--box) 8px 16px); border-style: dashed; border-color: var(--rule-strong); }
 .load-block.is-leave .load-count { text-decoration: line-through; color: var(--ink-2); padding: 0 0.3rem; }
@@ -204,7 +204,7 @@ section:not(.live-cols section) > .ledger { margin-top: var(--space-2); }
 /* ---------- doctors: each one a medicine box ---------- */
 .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr)); gap: var(--space-4); }
 .doc { overflow: hidden; padding: 0 var(--space-4) var(--space-4); }
-.doc-band { margin: 0 calc(-1 * var(--space-4)) var(--space-3); padding: var(--space-3) var(--space-4); background: var(--doc, var(--ink-2)); color: #fff; font-size: var(--step-1); }
+.doc-band { margin: 0 calc(-1 * var(--space-4)) var(--space-3); padding: var(--space-3) var(--space-4); background: var(--doc, var(--ink-2)); color: var(--on-fill); font-size: var(--step-1); }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem var(--space-4); margin: var(--space-3) 0; }
 .facts dt { color: var(--ink-2); font-size: var(--step--1); }
 .facts dd { margin: 0; }
@@ -230,7 +230,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 .sources { margin-bottom: var(--space-5); }
 .sources .ledger { max-width: 52rem; }
 .source-row { display: grid; grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) 4rem; }
-.source-track { height: 1.25rem; border-radius: var(--r-pill); background: var(--box-2); overflow: hidden; }
+.source-track { height: 1.25rem; overflow: hidden; } /* no grey track: the bar alone says the share */
 .source-bar { display: block; height: 100%; min-width: 2px; border-radius: var(--r-pill); }
 .bar-shefa { background: var(--shefa); } .bar-web { background: var(--ink-2); } .bar-desk { background: var(--ink-3); }
 .source-n { text-align: end; font-family: var(--font-display); font-size: var(--step-1); font-weight: 700; }

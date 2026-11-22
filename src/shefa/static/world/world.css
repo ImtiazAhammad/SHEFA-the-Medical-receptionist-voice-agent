@@ -36,10 +36,10 @@ img, svg { max-width: 100%; }
   background: var(--box); color: var(--ink);
   font: inherit; font-family: var(--font-display); font-weight: 600; line-height: 1.2;
   text-decoration: none; cursor: pointer;
-  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.1s var(--ease-out);
 }
 .btn:hover:not(:disabled) { border-color: var(--ink-2); box-shadow: var(--shadow-box); }
-.btn:active:not(:disabled) { background: var(--box-2); box-shadow: none; }
+.btn:active:not(:disabled) { background: var(--box-2); box-shadow: none; transform: scale(0.98); }
 .btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; color: var(--ink-3); background: var(--box-2); border-color: var(--rule); }
 .btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
@@ -89,7 +89,7 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 .mark-warn { background: var(--waiting-wash); color: var(--waiting-ink); }
 .mark-bad { background: var(--urgent); color: var(--on-urgent); }
 .mark-quiet { background: transparent; border-color: var(--rule-strong); color: var(--ink-2); }
-.mark-quiet::before { background: transparent; border: 1.5px solid currentColor; }
+.mark-quiet::before { display: none; } /* a settled, ordinary state needs no dot */
 .mark-gone { background: transparent; color: var(--ink-3); text-decoration: line-through; }
 .mark-gone::before { display: none; }
 .mark-sel { background: var(--ink); color: var(--box); }
@@ -118,4 +118,4 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 }
 
 /* a doctor's reversed name block, as printed on the box */
-.doc-name { display: inline-block; padding: 0.1rem 0.6rem; border-radius: var(--r-sm); background: var(--doc, var(--ink-2)); color: #fff; font-family: var(--font-display); font-weight: 700; line-height: 1.45; }
+.doc-name { display: inline-block; padding: 0.1rem 0.6rem; border-radius: var(--r-sm); background: var(--doc, var(--ink-2)); color: var(--on-fill); font-family: var(--font-display); font-weight: 700; line-height: 1.45; }

@@ -33,7 +33,7 @@ const en = {
   back: 'Back',
   done: 'You are booked',
   reference: 'Your reference',
-  keepRef: 'Keep this reference. With your phone number you need it to change or cancel.',
+  keepRef: 'Keep this reference. To change or cancel, you need it and your phone number.',
   unconfirmed: 'The clinic will confirm this booking by phone. Until then your time is held for you.',
   confirmed: 'The clinic has confirmed this booking.',
   addCalendar: 'Add to calendar',

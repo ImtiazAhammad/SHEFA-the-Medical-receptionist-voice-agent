@@ -41,10 +41,10 @@
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
 }
 .p-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
-.p-card strong { margin: 0 -1rem 0.5rem; padding: 0.6rem 1rem; background: var(--doc, var(--done)); color: #fff; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; }
+.p-card strong { margin: 0 -1rem 0.5rem; padding: 0.6rem 1rem; background: var(--doc, var(--done)); color: var(--on-fill); font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; }
 .p-fee { margin-top: 0.3rem; font-weight: 700; }
 .p-picked { margin: 0 0 0.75rem; }
-.p-docname { display: inline-block; padding: 0.3rem 0.85rem; border-radius: var(--r-sm); background: var(--doc, var(--done)); color: #fff; font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; }
+.p-docname { display: inline-block; padding: 0.3rem 0.85rem; border-radius: var(--r-sm); background: var(--doc, var(--done)); color: var(--on-fill); font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; }
 .p-chosen { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; margin: 0.5rem 0 1.1rem; }
 .p-when { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
 
@@ -59,6 +59,7 @@
 .p-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
 .p-btn { min-height: 50px; padding: 0.55rem 1.3rem; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); font-family: var(--font-display); font-weight: 700; cursor: pointer; }
 .p-btn:hover:not(:disabled) { border-color: var(--ink-2); box-shadow: var(--shadow-box); }
+.p-btn:active:not(:disabled), .p-card:active, .p-times button:active, .p-chips button:active { transform: scale(0.98); }
 .p-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .p-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
 .p-danger { color: var(--urgent-ink); }

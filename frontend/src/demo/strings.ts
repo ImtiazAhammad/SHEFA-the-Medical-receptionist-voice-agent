@@ -3,7 +3,7 @@ export type DLang = 'bn' | 'en'
 const en = {
   brand: 'SHEFA',
   language: 'বাংলা',
-  title: 'Talk to the hospital receptionist that never puts you on hold',
+  title: 'Talk to SHEFA, the clinic receptionist on the phone',
   lead: 'SHEFA answers the phone in Bangla and English, books the visit, and hands the desk a clean list. Try it now: press the button and speak.',
   sample: 'This is a demo clinic with sample doctors. Please do not give your real phone number or health details.',
   start: 'Start a call',
@@ -53,7 +53,7 @@ const en = {
 const bn: typeof en = {
   brand: 'শেফা',
   language: 'English',
-  title: 'যে রিসেপশনিস্ট আপনাকে কখনো হোল্ডে রাখে না',
+  title: 'শেফার সাথে কথা বলুন, ফোনের ক্লিনিক রিসেপশনিস্ট',
   lead: 'শেফা বাংলা ও ইংরেজিতে ফোন ধরে, ভিজিট বুক করে, আর ডেস্কের জন্য পরিষ্কার তালিকা বানায়। এখনই চেষ্টা করুন: বোতাম চেপে কথা বলুন।',
   sample: 'এটি নমুনা ডাক্তারসহ একটি ডেমো ক্লিনিক। দয়া করে আপনার আসল ফোন নম্বর বা স্বাস্থ্যের তথ্য দেবেন না।',
   start: 'কল শুরু করুন',

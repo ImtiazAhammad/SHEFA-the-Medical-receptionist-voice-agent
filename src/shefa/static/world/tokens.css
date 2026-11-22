@@ -17,7 +17,8 @@
 :root {
   /* shelf and boxes */
   --shelf: oklch(0.963 0.006 78);
-  --box: oklch(1 0 0);
+  --box: oklch(0.993 0.003 78);  /* never pure white */
+  --on-fill: oklch(0.985 0.004 80);  /* text on a doctor's box colour: off-white */
   --box-2: oklch(0.975 0.005 78);
   --ink: oklch(0.23 0.012 60);
   --ink-2: oklch(0.41 0.012 60);

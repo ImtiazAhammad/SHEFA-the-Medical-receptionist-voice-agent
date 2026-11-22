@@ -61,11 +61,12 @@ main { max-width: 560px; margin: 0 auto; padding: 18px 16px 104px; outline: none
   transition: background-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 .btn:hover:not(:disabled) { border-color: var(--ink-2); box-shadow: var(--shadow-box); }
+.btn:active:not(:disabled), .chip:active { transform: scale(0.98); }
 .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .btn.primary:hover:not(:disabled) { background: var(--primary-hover); }
 .btn.alt { background: var(--box); }
 .btn.big { min-height: 62px; font-size: 1.2rem; }
-.btn.wa { background: oklch(0.55 0.13 150); border-color: oklch(0.55 0.13 150); color: #fff; }
+.btn.wa { background: oklch(0.55 0.13 150); border-color: oklch(0.55 0.13 150); color: var(--on-fill); }
 .btn.danger { color: var(--urgent-ink); }
 .btn.danger:hover:not(:disabled) { background: var(--urgent-wash); border-color: var(--urgent); }
 .btn:disabled { color: var(--ink-3); background: var(--box-2); border-color: var(--rule); cursor: not-allowed; }

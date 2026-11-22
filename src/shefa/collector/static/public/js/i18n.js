@@ -153,7 +153,7 @@ const D = {
   topic_shop: ["অনলাইন শপ", "Online shop"],
   topic_hospital: ["হাসপাতাল", "Hospital"],
   topic_any: ["যেকোনো", "Any"],
-  lv_entry: ["SHEFA-র সাথে কথা বলুন (নতুন)", "Talk to SHEFA (new)"],
+  lv_entry: ["SHEFA-র সাথে কথা বলুন", "Talk to SHEFA"],
   lv_title: ["SHEFA-র সাথে সরাসরি কথা", "Talk to SHEFA live"],
   lv_sub: ["এবার কোনো লেখা নেই। আসল ফোনের মতো করে সিরিয়াল নিন, যা খুশি জিজ্ঞেস করুন। SHEFA নিজে উত্তর দেবে।", "No script this time. Book an appointment as on a real call and ask anything. SHEFA answers by itself."],
   lv_rule_test: ["এটা পরীক্ষা: SHEFA একটা কম্পিউটার সহকারী, ভুল করতে পারে। আসলে কিছুই বুক হয় না।", "This is a test: SHEFA is a computer assistant and can make mistakes. Nothing is really booked."],
