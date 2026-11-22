@@ -105,12 +105,11 @@ tr.clickable{cursor:pointer}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:var(--r-sm);font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
-/* Press feedback, gated so touch never inherits a stuck pressed state.
-   Buttons only — the nav rows are full-bleed and would visibly detach from
-   the rail edge if scaled. */
-@media(hover:hover) and (pointer:fine){
-  .btn:not(:disabled):active{transform:scale(.97)}
-}
+/* Press feedback, the same 0.98 as every SHEFA button. Not gated by hover:
+   :active ends with the touch, and a phone deserves the press too. Buttons
+   only; nav rows are full-bleed and would detach from the rail if scaled. */
+.btn:not(:disabled):active{transform:scale(.98)}
+@media(prefers-reduced-motion:reduce){.btn:not(:disabled):active{transform:none}}
 .btn-primary{background:var(--teal);color:var(--on-primary)}
 .btn-primary:hover{background:var(--ink-2)}
 .btn-secondary{background:var(--paper);color:var(--ink);border:1px solid var(--border)}

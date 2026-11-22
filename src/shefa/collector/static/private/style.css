@@ -228,8 +228,10 @@ dialog { border: 1px solid var(--rule-strong); border-radius: var(--radius); bac
 dialog::backdrop { background: oklch(0.17 0.006 260 / 0.35); }
 dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
+/* reduced motion: gentler, not zero. Loops stop, nothing moves or scales; colour and opacity still fade */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation: none !important; transition-property: color, background-color, border-color, box-shadow, opacity !important; scroll-behavior: auto !important; }
+  button:active:not(:disabled), .btn:active { transform: none !important; }
 }
 @media print { .topbar, .tabs, button { display: none; } }
 
@@ -337,7 +339,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--focus); outline:
 .line-msg.bad { background: var(--urgent-wash); color: var(--urgent-ink); }
 .danger-zone { box-shadow: 0 0 0 1px var(--urgent); }
 .rules li[data-state="ok"], .rules li[data-state="ok"] .mark { color: var(--done-ink); }
-#toast { background: var(--ink); color: var(--box); box-shadow: var(--shadow-lift); }
+#toast { background: var(--ink); color: var(--box); box-shadow: var(--shadow-lift); transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out); }
+/* the message rises 8px into place when it appears */
+@starting-style { #toast { opacity: 0; transform: translateY(8px); } }
+
+/* press: the same 0.98 as every SHEFA button. Tabs stay still: a scaled tab lifts off its underline */
+button, .btn { transition: transform 0.16s var(--ease-out); }
+button:active:not(:disabled), .btn:active { transform: scale(0.98); }
+.tabs button:active:not(:disabled) { transform: none; }
 
 /* the overview measures as a ruled table in a box, never a wall of number tiles */
 .stat-grid { display: grid; grid-template-columns: 1fr; gap: 0; max-width: 46rem; padding: 4px 0; background: var(--box); border-radius: var(--r); box-shadow: var(--shadow-box); }

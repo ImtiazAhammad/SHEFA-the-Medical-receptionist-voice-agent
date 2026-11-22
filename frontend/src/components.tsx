@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, WifiOff, X } from 'lucide-react'
 import { ApiError } from './lib/api'
 import { useI18n } from './lib/i18n'
@@ -70,34 +70,47 @@ export function docClass(id: number | undefined | null): string {
  * It is a modal <dialog>: Esc and the close button leave, focus stays inside while it is open
  * and returns to where it was. The page under it stays visible.
  */
+/** How long the sheet takes to slide out (styles.css .sheet.is-closing) before it is unmounted. */
+const SHEET_EXIT_MS = 160
+
 export function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   const { t } = useI18n()
   const ref = useRef<HTMLDialogElement>(null)
+  const exitTimer = useRef(0)
+  const [closing, setClosing] = useState(false)
   useEffect(() => {
     const dialog = ref.current
     const before = document.activeElement as HTMLElement | null
     if (dialog && !dialog.open) dialog.showModal()
     return () => {
+      window.clearTimeout(exitTimer.current)
       before?.focus?.()
     }
   }, [])
+  /* A pointer close slides the box back onto the shelf first; a second click while it goes is ignored. */
+  const closeAnimated = () => {
+    if (exitTimer.current) return
+    setClosing(true)
+    exitTimer.current = window.setTimeout(onClose, SHEET_EXIT_MS)
+  }
   return (
     <dialog
       ref={ref}
-      className="sheet"
+      className={closing ? 'sheet is-closing' : 'sheet'}
       aria-label={label}
       onCancel={(e) => {
+        /* Esc is a keyboard action: it closes at once, no animation */
         e.preventDefault()
         onClose()
       }}
       onClick={(e) => {
-        if (e.target === ref.current) onClose()
+        if (e.target === ref.current) closeAnimated()
       }}
     >
       <div className="sheet-body">
         <div className="sheet-bar">
           <span className="legend">{label}</span>
-          <button type="button" className="btn btn-small btn-quiet" onClick={onClose}>
+          <button type="button" className="btn btn-small btn-quiet" onClick={closeAnimated}>
             <X size={16} aria-hidden="true" /> {t('close')}
           </button>
         </div>

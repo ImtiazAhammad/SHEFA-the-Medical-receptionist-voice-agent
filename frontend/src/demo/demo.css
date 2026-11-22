@@ -7,17 +7,17 @@
   width: 10rem; height: 10rem; border: 0; border-radius: 50%; cursor: pointer;
   background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 700;
   box-shadow: var(--shadow-lift);
-  transition: transform 0.15s var(--ease-out), background-color 0.15s;
+  transition: transform 0.16s var(--ease-out), background-color 0.15s;
 }
 .demo-orb:hover:not(:disabled) { background: var(--primary-hover); }
-.demo-orb:active:not(:disabled) { transform: scale(0.97); }
+.demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: scale(0.98); }
 .demo-orb:disabled { cursor: progress; background: var(--ink-3); }
 .demo-orb.live { background: var(--shefa); color: var(--on-shefa); animation: demo-ring 1.8s ease-out infinite; }
 /* the ring only while SHEFA is on the call: it says the line is live */
 @keyframes demo-ring { 0% { box-shadow: 0 0 0 0 var(--shefa-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 18px transparent, var(--shadow-lift); } }
 .demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
 .demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; }
-.demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; }
+.demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; transition: background-color 0.15s, border-color 0.15s, transform 0.16s var(--ease-out); }
 .demo-chips button:hover:not(:disabled) { border-color: var(--shefa); background: var(--shefa-wash); }
 .demo-chips button:disabled { color: var(--ink-3); cursor: not-allowed; }
 .demo-chat { margin-top: 1.25rem; }
@@ -31,7 +31,7 @@
 .demo-form label { display: block; font-size: 0.9rem; color: var(--ink-2); margin-bottom: 0.3rem; font-weight: 600; }
 .demo-row { display: flex; gap: 0.45rem; }
 .demo-row input { flex: 1; min-height: 50px; min-width: 0; border-radius: var(--r-pill); padding-inline: 1rem; }
-.demo-row button { min-width: 52px; min-height: 50px; border-radius: 50%; border: 0; background: var(--primary); color: var(--on-primary); cursor: pointer; }
+.demo-row button { min-width: 52px; min-height: 50px; border-radius: 50%; border: 0; background: var(--primary); color: var(--on-primary); cursor: pointer; transition: transform 0.16s var(--ease-out); }
 .demo-row button:disabled { background: var(--box-2); color: var(--ink-3); cursor: not-allowed; }
 .demo-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; counter-reset: step; }
 .demo-steps { gap: 0; padding: 0.4rem 1rem; border-radius: var(--r); background: var(--box); box-shadow: var(--shadow-box); }
@@ -41,4 +41,7 @@
 .demo-steps span { color: var(--ink-2); }
 .demo-safe { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 0.4rem; color: var(--ink-2); }
 .demo-foot { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.9rem; }
-@media (prefers-reduced-motion: reduce) { .demo-orb.live { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .demo-orb.live { animation: none; }
+  .demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: none; }
+}

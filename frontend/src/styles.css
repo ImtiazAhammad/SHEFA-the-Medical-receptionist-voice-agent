@@ -119,7 +119,7 @@ div.actions, span.actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem;
 .note-error { background: var(--urgent-wash); border-color: var(--urgent); color: var(--urgent-ink); font-weight: 600; }
 .note-warn { background: var(--waiting-wash); border-color: var(--waiting); }
 .skeleton { display: flex; flex-direction: column; gap: var(--space-2); }
-.skeleton-row { height: 52px; border-radius: var(--r); background: linear-gradient(90deg, var(--box-2), var(--box), var(--box-2)); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+.skeleton-row { height: 52px; border-radius: var(--r); background: linear-gradient(90deg, var(--box-2), var(--box), var(--box-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .boot { padding: var(--space-6) var(--space-4); max-width: 30rem; margin: 0 auto; }
 .field-error { color: var(--urgent-ink); min-height: 1.4em; font-weight: 600; }
@@ -130,7 +130,10 @@ div.actions, span.actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
   margin: 0 0 var(--space-5); padding: var(--space-3) var(--space-4);
   border-radius: var(--r); background: var(--urgent); color: var(--on-urgent); box-shadow: var(--shadow-lift);
+  transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out);
 }
+/* it arrives (a state change the desk must see), it does not blink in; it stays put while it is up */
+@starting-style { .desk-alert { opacity: 0; transform: translateY(-6px); } }
 .desk-alert .btn { border-color: oklch(1 0 0 / 0.6); background: transparent; color: var(--on-urgent); }
 .desk-alert .btn-urgent { background: var(--box); color: var(--urgent-ink); border-color: var(--box); }
 
@@ -178,9 +181,24 @@ section:not(.live-cols section) > .ledger { margin-top: var(--space-2); }
 
 /* ---------- the sheet: a box pulled off the shelf ---------- */
 .sheet { position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0; width: min(46rem, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; background: transparent; color: var(--ink); overflow: visible; }
-.sheet::backdrop { background: oklch(0.23 0.012 60 / 0.35); }
-.sheet-body { position: relative; height: 100%; overflow-y: auto; padding: 0 clamp(1rem, 3vw, 2.25rem) var(--space-7); background: var(--box); box-shadow: var(--shadow-lift); border-start-start-radius: 16px; border-end-start-radius: 16px; animation: sheet-in 0.32s var(--ease-out) both; }
-@keyframes sheet-in { from { transform: translateX(100%); } }
+/* In on the iOS drawer curve (no overshoot: every y stays inside 0..1), out faster than in.
+ * Transitions, not keyframes, so a close mid-entry turns back from where the box is. Closing adds
+ * .is-closing for SHEET_EXIT_MS (components.tsx) before the route unmounts it. */
+.sheet { --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); }
+.sheet::backdrop { background: oklch(0.23 0.012 60 / 0.35); transition: opacity 0.24s var(--ease-out); }
+.sheet-body { position: relative; height: 100%; overflow-y: auto; padding: 0 clamp(1rem, 3vw, 2.25rem) var(--space-7); background: var(--box); box-shadow: var(--shadow-lift); border-start-start-radius: 16px; border-end-start-radius: 16px; transition: transform 0.24s var(--ease-drawer), opacity 0.24s var(--ease-out); }
+@starting-style {
+  .sheet[open]::backdrop { opacity: 0; }
+  .sheet[open] .sheet-body { transform: translateX(100%); }
+}
+.sheet.is-closing { pointer-events: none; }
+.sheet.is-closing::backdrop { opacity: 0; transition-duration: 0.16s; }
+.sheet.is-closing .sheet-body { transform: translateX(100%); transition-duration: 0.16s; transition-timing-function: var(--ease-out); }
+/* reduced motion: the box fades in and out in place instead of sliding */
+@media (prefers-reduced-motion: reduce) {
+  @starting-style { .sheet[open] .sheet-body { opacity: 0; } }
+  .sheet.is-closing .sheet-body { opacity: 0; transform: none; }
+}
 .sheet-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0 calc(-1 * clamp(1rem, 3vw, 2.25rem)) var(--space-5); padding: var(--space-2) clamp(1rem, 3vw, 2.25rem); background: var(--box); border-bottom: 1px solid var(--rule); }
 .sheet-title { font-size: var(--step-3); }
 .danger-zone { margin-top: var(--space-7); padding-top: var(--space-5); border-top: 1px dashed var(--rule-strong); }

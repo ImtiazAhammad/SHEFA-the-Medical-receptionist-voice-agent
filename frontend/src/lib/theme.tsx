@@ -17,8 +17,11 @@ export function readTheme(): Theme {
 /** Light, dark, or follow the device. The tokens read :root[data-theme]; "auto" removes it. */
 export function applyTheme(theme: Theme) {
   const root = document.documentElement
+  /* one repaint for the whole page: without this, controls with a colour transition fade on their own clock */
+  root.classList.add('theme-changing')
   if (theme === 'auto') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', theme)
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-changing')))
   try {
     if (theme === 'auto') localStorage.removeItem(KEY)
     else localStorage.setItem(KEY, theme)

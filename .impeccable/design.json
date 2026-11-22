@@ -703,7 +703,7 @@
         "name": "ease-out",
         "cssVar": "--ease-out",
         "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "Control state transitions (0.15s) and the sheet slide-in (0.32s)."
+        "purpose": "Control state transitions (0.15s), press scale 0.98 (0.16s), the sheet slide-out (0.16s), the desk alert and toast arrival (0.2s)."
       },
       {
         "name": "live-pulse",
@@ -716,8 +716,13 @@
         "purpose": "The demo orb while SHEFA is on the call; never at rest."
       },
       {
+        "name": "ease-drawer",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "The sheet slide-in (0.24s); no overshoot."
+      },
+      {
         "name": "reduced-motion",
-        "value": "all animation and transition durations to 0.001ms",
+        "value": "loops stop; transform transitions and press scale removed; colour and opacity transitions kept (the sheet fades instead of sliding)",
         "purpose": "prefers-reduced-motion: reduce."
       }
     ],

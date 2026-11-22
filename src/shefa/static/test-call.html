@@ -35,10 +35,10 @@ h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
 .status.err{color:var(--shefa)}
 .status.busy{color:var(--ink-2)}
 .btn{padding:12px 24px;border:none;border-radius:var(--r-sm);font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
-/* Press feedback, gated so touch never inherits a stuck pressed state. */
-@media(hover:hover) and (pointer:fine){
-  .btn:not(:disabled):active{transform:scale(.97)}
-}
+/* Press feedback, the same 0.98 as every SHEFA button. Not gated by hover:
+   :active ends with the touch, and a phone deserves the press too. */
+.btn:not(:disabled):active{transform:scale(.98)}
+@media(prefers-reduced-motion:reduce){.btn:not(:disabled):active{transform:none}}
 .btn-go{background:var(--primary);color:var(--on-primary);border:1px solid var(--primary)}.btn-go:hover{background:var(--ink-2)}
 .btn-red{background:var(--urgent);color:var(--on-urgent)}.btn-red:hover{background:var(--urgent-ink)}
 .btn-alt{background:transparent;color:var(--ink);border:1px solid var(--ink)}.btn-alt:hover{background:var(--box-2)}

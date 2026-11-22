@@ -262,7 +262,7 @@ The staff app is a two-column grid: a sticky 16rem green rail, and a main work f
 
 At 52rem and below, the rail becomes a top bar and the nav moves to a fixed bottom tab bar with icons over labels. The legend repeats on the page, and day-axis rows stack the name block above the bar. At 40rem and below, tables become stacked records with each cell labelled, and a doctor's day becomes a feed: one patient fills most of the screen in its own box, with a green top band, and the page snaps from one patient to the next. Patient, demo and volunteer pages are single columns of 40rem (patient) or 560px (volunteer), with a sticky green top bar.
 
-Detail opens in a sheet: a box pulled off the shelf that slides in from the right, up to 46rem wide, with a 16px leading radius.
+Detail opens in a sheet: a box pulled off the shelf that slides in from the right, up to 46rem wide, with a 16px leading radius. It slides in over 0.24s on the drawer curve `cubic-bezier(0.32, 0.72, 0, 1)` (no overshoot) and back out over 0.16s when closed with the pointer; Esc closes it at once. The backdrop fades with it.
 
 ## Elevation & Depth
 
@@ -284,7 +284,7 @@ Small, honest corners, like card stock: 6px for controls, name blocks and sessio
 ### Buttons
 Square-shouldered and plainly labelled, set in Baloo Da 2 at 600.
 - **Shape:** gently rounded (6px), at least 44px tall, padding 0.5rem 1.05rem; Lucide icons at 16px inline, with a 0.45rem gap.
-- **Default:** box face, strong rule stroke, ink text. On hover, the stroke darkens to ink-2 and the button gains the box shadow. When pressed, it drops to box-2 with no shadow.
+- **Default:** box face, strong rule stroke, ink text. On hover (pointer devices only), the stroke darkens to ink-2 and the button gains the box shadow. When pressed, it drops to box-2 with no shadow and scales to 0.98, easing back over 0.16s. Every pressable control uses the same 0.98.
 - **Primary:** settled green fill with on-done text; on hover, deep green. Used for going ahead (book, save, confirm).
 - **SHEFA:** blue fill, for actions that hand work to SHEFA.
 - **Urgent:** red fill, for the needs-a-person action. **Danger** is a default button with urgent ink that turns to an urgent wash on hover.
