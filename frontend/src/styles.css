@@ -90,7 +90,7 @@ a.ledger-row:hover .ledger-end { text-decoration: underline; }
 .ledger-end, .row-end { margin-inline-start: auto; color: var(--ink-2); }
 .rows > li.row, .rows > li > .row { background: transparent; }
 
-.table-wrap { overflow-x: auto; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); }
+.table-wrap { position: relative; overflow-x: auto; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: start; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
 th { font-size: var(--step--1); font-weight: 600; color: var(--ink-2); white-space: nowrap; background: var(--field-2); border-bottom-color: var(--ink); }
