@@ -114,17 +114,17 @@ _WORLD_FONTS = Path(__file__).resolve().parent.parent / "static" / "world" / "fo
 
 def _font_faces() -> str:
     """SHEFA's Bangla face, inlined: the report is one file opened offline, so it carries its
-    own type (the light weight-only set, about 200 KB) instead of falling back to a system sans."""
+    own type (Baloo Da 2, the light set, about 120 KB) instead of falling back to a system sans."""
     faces = []
     for name, unicode_range in (
-        ("anek-bangla-bengali-wght.woff2", "U+0964-0965,U+0980-09FE,U+200C-200D,U+25CC"),
-        ("anek-bangla-latin-wght.woff2", "U+0000-00FF,U+2000-206F"),
+        ("baloo-da-2-bengali.woff2", "U+0964-0965,U+0980-09FE,U+200C-200D,U+25CC"),
+        ("baloo-da-2-latin.woff2", "U+0000-00FF,U+2000-206F"),
     ):
         path = _WORLD_FONTS / name
         if path.is_file():
             data = base64.b64encode(path.read_bytes()).decode("ascii")
             faces.append(
-                '@font-face{font-family:"Anek Bangla";font-weight:100 800;font-display:swap;'
+                '@font-face{font-family:"Baloo Da 2";font-weight:100 800;font-display:swap;'
                 f'src:url(data:font/woff2;base64,{data}) format("woff2");'
                 f"unicode-range:{unicode_range}}}"
             )

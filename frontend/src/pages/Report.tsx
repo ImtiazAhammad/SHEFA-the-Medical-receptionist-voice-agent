@@ -64,9 +64,9 @@ export function Report() {
         <h2 id="src-h" className="section-title">{t('repBySource')}</h2>
         <ul className="ledger">
           {([
-            ['srcPhone', d.bookings.by_shefa_phone, 'hatch-shefa'],
-            ['srcWeb', d.bookings.by_web_page, 'hatch-3'],
-            ['srcWalkIn', d.bookings.walk_in, 'hatch-2'],
+            ['srcPhone', d.bookings.by_shefa_phone, 'bar-shefa'],
+            ['srcWeb', d.bookings.by_web_page, 'bar-web'],
+            ['srcWalkIn', d.bookings.walk_in, 'bar-desk'],
           ] as [Key, number, string][]).map(([key, n, hatch]) => {
             const most = Math.max(1, d.bookings.by_shefa_phone, d.bookings.by_web_page, d.bookings.walk_in)
             return (
@@ -75,7 +75,7 @@ export function Report() {
                 <span className="source-track" aria-hidden="true">
                   <span className={`source-bar ${n ? hatch : ''}`} style={{ width: `${(n / most) * 100}%` }} />
                 </span>
-                <span className="source-n mono">{num(n)}</span>
+                <span className="source-n">{num(n)}</span>
               </li>
             )
           })}

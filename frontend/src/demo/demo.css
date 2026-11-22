@@ -1,39 +1,41 @@
-/* SHEFA demo page: the patient page's world with one large call control. The live call is
-   SHEFA speaking, so it takes the magenta; nothing else does. */
-.demo .demo-sample { font-size: 0.9rem; color: var(--ink-2); border: 1px dotted var(--ink-3); padding: 0.6rem 0.8rem; margin: 0 0 1.25rem; }
+/* SHEFA demo page: the patient page's shelf with one big call button. A live call is SHEFA
+ * talking, so it takes SHEFA's blue; the transcript reads like a chat. */
+.demo .demo-sample { font-size: 0.9rem; color: var(--ink-2); background: var(--waiting-wash); border-radius: var(--r); padding: 0.6rem 0.85rem; margin: 0 0 1.25rem; }
 .demo-call { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.5rem 0 0.75rem; }
 .demo-orb {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
-  width: 10rem; height: 10rem; border: 1px solid var(--ink); cursor: pointer;
-  background: var(--select); color: var(--on-select); font: inherit; font-weight: 650;
-  outline: 1px solid var(--ink); outline-offset: 6px;
+  width: 10rem; height: 10rem; border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 700;
+  box-shadow: 0 0 0 8px var(--done-wash), var(--shadow-lift);
   transition: transform 0.15s var(--ease-out), background-color 0.15s;
 }
-.demo-orb:hover:not(:disabled) { background: var(--z2); }
-.demo-orb:active:not(:disabled) { transform: scale(0.98); }
-.demo-orb:disabled { cursor: progress; background-image: repeating-linear-gradient(135deg, var(--z4) 0 1px, transparent 1px 6px); }
-.demo-orb.live { background: var(--dichroic); color: var(--on-dichroic); border-color: var(--dichroic); outline-color: var(--dichroic); animation: demo-breathe 1.8s ease-in-out infinite; }
-@keyframes demo-breathe { 50% { background-color: var(--dichroic-ink); } }
+.demo-orb:hover:not(:disabled) { background: var(--primary-hover); }
+.demo-orb:active:not(:disabled) { transform: scale(0.97); }
+.demo-orb:disabled { cursor: progress; background: var(--ink-3); }
+.demo-orb.live { background: var(--shefa); color: var(--on-shefa); box-shadow: 0 0 0 8px var(--shefa-wash), var(--shadow-lift); animation: demo-ring 1.8s ease-out infinite; }
+@keyframes demo-ring { 0% { box-shadow: 0 0 0 8px var(--shefa-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 18px transparent, var(--shadow-lift); } }
 .demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
-.demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; }
-.demo-chips button { min-height: 44px; padding: 0.45rem 0.9rem; border: 1px solid var(--z6); background: var(--sheet); color: var(--ink); cursor: pointer; text-align: start; font: inherit; }
-.demo-chips button:hover:not(:disabled) { border-color: var(--ink); }
+.demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; }
+.demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; }
+.demo-chips button:hover:not(:disabled) { border-color: var(--shefa); background: var(--shefa-wash); }
 .demo-chips button:disabled { color: var(--ink-3); cursor: not-allowed; }
 .demo-chat { margin-top: 1.25rem; }
-.demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; max-height: 22rem; overflow-y: auto; border-top: 1px solid var(--ink); }
-.demo-line { padding: 0.6rem 0.25rem; border-bottom: 1px solid var(--rule); }
-.demo-line small { color: var(--ink-2); font-size: 0.75rem; font-weight: 650; }
+.demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; max-height: 22rem; overflow-y: auto; }
+.demo-line { max-width: 86%; padding: 0.6rem 0.9rem; border-radius: 14px; background: var(--box); box-shadow: var(--shadow-box); }
+.demo-line small { color: var(--ink-2); font-size: 0.75rem; font-weight: 700; }
 .demo-line p { margin: 0.1rem 0 0; line-height: 1.55; overflow-wrap: anywhere; }
-.demo-assistant small { color: var(--dichroic-ink); }
-.demo-assistant { box-shadow: inset 3px 0 0 -2px var(--dichroic); padding-inline-start: 0.6rem; }
+.demo-assistant { align-self: flex-start; background: var(--shefa-wash); border-end-start-radius: 4px; box-shadow: none; }
+.demo-assistant small { color: var(--shefa-ink); }
+.demo-user { align-self: flex-end; border-end-end-radius: 4px; }
 .demo-form label { display: block; font-size: 0.9rem; color: var(--ink-2); margin-bottom: 0.3rem; font-weight: 600; }
-.demo-row { display: flex; }
-.demo-row input { flex: 1; min-height: 50px; min-width: 0; }
-.demo-row button { min-width: 52px; min-height: 50px; border: 1px solid var(--select); background: var(--select); color: var(--on-select); cursor: pointer; }
-.demo-row button:disabled { background: transparent; color: var(--ink-3); border-color: var(--z6); cursor: not-allowed; }
-.demo-steps { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--ink); counter-reset: step; }
-.demo-steps li { display: grid; gap: 0.1rem; padding: 0.7rem 0 0.7rem 2.5rem; border-bottom: 1px solid var(--rule); position: relative; counter-increment: step; }
-.demo-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.7rem; font-family: var(--font-num); font-size: 0.8rem; width: 1.7rem; height: 1.7rem; display: grid; place-items: center; border: 1px solid var(--ink); }
+.demo-row { display: flex; gap: 0.45rem; }
+.demo-row input { flex: 1; min-height: 50px; min-width: 0; border-radius: var(--r-pill); padding-inline: 1rem; }
+.demo-row button { min-width: 52px; min-height: 50px; border-radius: 50%; border: 0; background: var(--primary); color: var(--on-primary); cursor: pointer; }
+.demo-row button:disabled { background: var(--box-2); color: var(--ink-3); cursor: not-allowed; }
+.demo-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; counter-reset: step; }
+.demo-steps li { display: grid; gap: 0.1rem; padding: 0.75rem 0.9rem 0.75rem 3.1rem; border-radius: var(--r); background: var(--box); box-shadow: var(--shadow-box); position: relative; counter-increment: step; }
+.demo-steps li::before { content: counter(step); position: absolute; left: 0.85rem; top: 0.8rem; width: 1.65rem; height: 1.65rem; display: grid; place-items: center; border-radius: 50%; background: var(--done); color: var(--on-done); font-family: var(--font-display); font-weight: 800; font-size: 0.85rem; }
 .demo-steps span { color: var(--ink-2); }
 .demo-safe { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 0.4rem; color: var(--ink-2); }
 .demo-foot { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.9rem; }
+@media (prefers-reduced-motion: reduce) { .demo-orb.live { animation: none; } }

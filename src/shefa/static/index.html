@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 28 28%27%3E%3Crect width=%2728%27 height=%2728%27 fill=%27%23f9fafb%27/%3E%3Crect x=%270.5%27 y=%270.5%27 width=%2727%27 height=%2727%27 fill=%27none%27 stroke=%27%2317191c%27/%3E%3Crect x=%274%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%2317191c%27/%3E%3Crect x=%2711.5%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23808388%27/%3E%3Crect x=%2719%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23c4127a%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230b5d44%27/%3E%3Cg transform=%27rotate(-38 16 16)%27%3E%3Crect x=%276%27 y=%2711.5%27 width=%2720%27 height=%279%27 rx=%274.5%27 fill=%27%23fff%27/%3E%3Cpath d=%27M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z%27 fill=%27%232d5bc8%27/%3E%3C/g%3E%3C/svg%3E">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SHEFA — Medical Voice Agent</title>
@@ -9,10 +9,10 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --paper:var(--ground);--teal:var(--select);--teal-light:var(--field-2);
-  --coral:var(--dichroic);--coral-light:var(--dichroic-wash);--slate:var(--ink-2);--border:var(--rule);
-  --surface:var(--sheet);--sidebar-bg:var(--rail);--sidebar-text:var(--rail-ink-2);
-  --sidebar-active:var(--dichroic);--radius:0;--shadow:none;
+  --paper:var(--shelf);--teal:var(--primary);--teal-light:var(--box-2);
+  --coral:var(--urgent);--coral-light:var(--urgent-wash);--slate:var(--ink-2);--border:var(--rule);
+  --surface:var(--box);--sidebar-bg:var(--rail);--sidebar-text:var(--rail-ink-2);
+  --sidebar-active:var(--waiting);--radius:0;--shadow:none;
   /* Motion vocabulary. Every transition in this file pulls from these tokens
      rather than ad-hoc durations, and the reduced-motion block below collapses
      them all at once. */
@@ -29,8 +29,8 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 .sidebar-brand span{font-size:.75rem;color:var(--sidebar-text);display:block;margin-top:2px}
 .sidebar-nav{flex:1;padding:12px 0}
 .sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--sidebar-text);text-decoration:none;font-size:.875rem;transition:color var(--dur-press) var(--ease-out),background-color var(--dur-press) var(--ease-out)}
-.sidebar-nav a:hover{color:var(--rail-ink);background:var(--z2)}
-.sidebar-nav a.active{color:var(--z0);background:var(--z10);box-shadow:inset 4px 0 0 var(--dichroic)}
+.sidebar-nav a:hover{color:var(--rail-ink);background:var(--ink-2)}
+.sidebar-nav a.active{color:var(--ink);background:var(--box);box-shadow:var(--shadow-box)}
 .sidebar-nav a svg{width:18px;height:18px;flex-shrink:0}
 .sidebar-footer{padding:16px 20px;border-top:1px solid var(--rail-rule);font-size:.75rem}
 .sidebar-footer .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
@@ -55,12 +55,12 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 .stats{display:grid;grid-template-columns:1fr;gap:0;margin-bottom:24px;border-top:2px solid var(--ink);max-width:720px}
 .stat-card{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:1px solid var(--border);padding:10px 4px}
 .stat-card .label{font-size:.75rem;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.stat-card .value{font-size:1.3rem;font-weight:500;color:var(--ink);font-family:var(--font-num)}
+.stat-card .value{font-size:1.3rem;font-weight:500;color:var(--ink);font-family:var(--font-display)}
 .stat-card .value.teal{color:var(--teal)}
 .stat-card .value.coral{color:var(--coral)}
 
 /* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:0;box-shadow:var(--shadow);margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow);margin-bottom:20px}
 .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .card-header h3{font-size:1rem;font-weight:600}
 .card-body{padding:20px}
@@ -70,69 +70,69 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 table{width:100%;border-collapse:collapse}
 th{text-align:left;padding:10px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;border-bottom:1px solid var(--border);background:var(--paper)}
 td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.875rem}
-tr:hover{background:var(--field-2)}
-tr.selected{background:var(--z9)}
+tr:hover{background:var(--box-2)}
+tr.selected{background:var(--box-2)}
 tr.clickable{cursor:pointer}
 
 /* Badges */
-.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:0;font-size:.75rem;font-weight:600}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r-sm);font-size:.75rem;font-weight:600}
 .badge-greeting{background:var(--teal-light);color:var(--ink)}
-.badge-active{background:var(--field-2);color:var(--z3)}
-.badge-escalated{background:var(--coral-light);color:var(--dichroic-ink)}
-.badge-en{background:var(--field-2);color:var(--slate)}
-.badge-bn{background:var(--field-2);color:var(--ink)}
+.badge-active{background:var(--box-2);color:var(--ink-2)}
+.badge-escalated{background:var(--coral-light);color:var(--shefa-ink)}
+.badge-en{background:var(--box-2);color:var(--slate)}
+.badge-bn{background:var(--box-2);color:var(--ink)}
 
 /* Pulse animation for active calls */
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in oklch, var(--dichroic) 40%, transparent)}50%{box-shadow:0 0 0 6px transparent}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in oklch, var(--shefa) 40%, transparent)}50%{box-shadow:0 0 0 6px transparent}}
 .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
 
 /* Conversation panel */
 .conversation{max-height:400px;overflow-y:auto;padding:16px 20px}
 .msg{margin-bottom:12px;display:flex;gap:10px}
 .msg-user .msg-role{color:var(--teal);font-weight:600;font-size:.75rem;text-transform:uppercase}
-.msg-assistant .msg-role{color:var(--dichroic);font-weight:600;font-size:.75rem;text-transform:uppercase}
+.msg-assistant .msg-role{color:var(--shefa);font-weight:600;font-size:.75rem;text-transform:uppercase}
 .msg-tool .msg-role{color:var(--coral);font-weight:600;font-size:.75rem;text-transform:uppercase}
 .msg-content{font-size:.875rem;line-height:1.6;color:var(--ink)}
-.msg-tool .msg-content{background:var(--field-2);border:1px solid var(--z7);border-radius:0;padding:8px 12px;font-family:var(--font-num);font-size:.8rem}
+.msg-tool .msg-content{background:var(--box-2);border:1px solid var(--rule-strong);border-radius:var(--r-sm);padding:8px 12px;font-family:var(--font-display);font-size:.8rem}
 .msg-meta{font-size:.7rem;color:var(--slate);margin-top:2px}
 .msg-time{color:var(--slate);font-size:.7rem;white-space:nowrap}
 
 /* Forms */
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-.form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:0;font-size:.875rem;font-family:inherit;transition:border-color var(--dur-press) var(--ease-out)}
-.form-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--field-2)}
+.form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:.875rem;font-family:inherit;transition:border-color var(--dur-press) var(--ease-out)}
+.form-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--box-2)}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:0;font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border:none;border-radius:var(--r-sm);font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
 /* Press feedback, gated so touch never inherits a stuck pressed state.
    Buttons only — the nav rows are full-bleed and would visibly detach from
    the rail edge if scaled. */
 @media(hover:hover) and (pointer:fine){
   .btn:not(:disabled):active{transform:scale(.97)}
 }
-.btn-primary{background:var(--teal);color:var(--on-select)}
-.btn-primary:hover{background:var(--z2)}
+.btn-primary{background:var(--teal);color:var(--on-primary)}
+.btn-primary:hover{background:var(--ink-2)}
 .btn-secondary{background:var(--paper);color:var(--ink);border:1px solid var(--border)}
 .btn-secondary:hover{background:var(--border)}
-.btn-danger{background:var(--coral);color:var(--on-select)}
-.btn-danger:hover{background:var(--dichroic-ink)}
+.btn-danger{background:var(--coral);color:var(--on-primary)}
+.btn-danger:hover{background:var(--shefa-ink)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 
 /* Config grid */
 .config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.config-item{padding:12px 16px;background:var(--paper);border-radius:0;border:1px solid var(--border)}
+.config-item{padding:12px 16px;background:var(--paper);border-radius:var(--r-sm);border:1px solid var(--border)}
 .config-item .config-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600}
-.config-item .config-value{font-size:.9rem;font-weight:600;color:var(--ink);margin-top:4px;font-family:var(--font-num)}
+.config-item .config-value{font-size:.9rem;font-weight:600;color:var(--ink);margin-top:4px;font-family:var(--font-display)}
 
 /* Tool cards */
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-.tool-card{padding:16px;background:var(--paper);border:1px solid var(--border);border-radius:0;transition:border-color var(--dur-press) var(--ease-out)}
+.tool-card{padding:16px;background:var(--paper);border:1px solid var(--border);border-radius:var(--r-sm);transition:border-color var(--dur-press) var(--ease-out)}
 .tool-card:hover{border-color:var(--teal)}
 .tool-card h4{font-size:.875rem;font-weight:600;color:var(--teal);margin-bottom:4px}
 .tool-card p{font-size:.8rem;color:var(--slate);line-height:1.4}
 .tool-card .tool-params{margin-top:8px;font-size:.75rem;color:var(--slate)}
-.tool-card code{background:var(--surface);padding:1px 4px;border-radius:0;font-size:.75rem;border:1px solid var(--border)}
+.tool-card code{background:var(--surface);padding:1px 4px;border-radius:var(--r-sm);font-size:.75rem;border:1px solid var(--border)}
 
 /* Conversation card: was materialised with style.display, so the whole block
    arrived cold and shoved everything below it down. Opacity + a 4px rise.
@@ -154,7 +154,7 @@ tr.clickable{cursor:pointer}
    the .error class swap at showToast() also animated background-color, fading
    the toast from ink to coral over 300ms as a side effect. Percentage-based
    translate so it tracks its own height. Enter and exit share one edge. */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:var(--on-select);padding:12px 20px;border-radius:0;font-size:.875rem;z-index:100;transform:translateY(100%);opacity:0;transition:transform var(--dur-toast) var(--ease-out),opacity var(--dur-toast) var(--ease-out)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:var(--on-primary);padding:12px 20px;border-radius:var(--r-sm);font-size:.875rem;z-index:100;transform:translateY(100%);opacity:0;transition:transform var(--dur-toast) var(--ease-out),opacity var(--dur-toast) var(--ease-out)}
 .toast.show{transform:translateY(0);opacity:1}
 .toast.error{background:var(--coral)}
 

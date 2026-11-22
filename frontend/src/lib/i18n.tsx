@@ -234,7 +234,6 @@ const en = {
   loadFull: 'Full',
   loadOnLeave: 'On leave',
   loadNone: 'No chamber sessions today.',
-  loadLegend: 'Denser hatching = fuller session',
   callSheet: 'Call',
   weekPreview: 'The week at a glance',
   overlap: 'Overlaps',
@@ -247,6 +246,11 @@ const en = {
   srcPhone: 'SHEFA on the phone',
   srcWeb: 'Booking page',
   srcWalkIn: 'At the desk',
+  legendTitle: 'What the colours mean',
+  legendUrgent: 'Needs a person',
+  legendWaiting: 'Waiting',
+  legendDone: 'Done',
+  legendShefa: 'SHEFA is on it',
 }
 
 export type Key = keyof typeof en
@@ -483,7 +487,6 @@ const bn: Record<Key, string> = {
   loadFull: 'ভরা',
   loadOnLeave: 'ছুটিতে',
   loadNone: 'আজ কোনো চেম্বার নেই।',
-  loadLegend: 'দাগ যত ঘন, সেশন তত ভরা',
   callSheet: 'কল',
   weekPreview: 'এক নজরে সপ্তাহ',
   overlap: 'সময় মিলে যাচ্ছে',
@@ -496,6 +499,11 @@ const bn: Record<Key, string> = {
   srcPhone: 'ফোনে শেফা',
   srcWeb: 'বুকিং পেজ',
   srcWalkIn: 'ডেস্কে',
+  legendTitle: 'রঙের মানে',
+  legendUrgent: 'মানুষ দরকার',
+  legendWaiting: 'অপেক্ষায়',
+  legendDone: 'হয়ে গেছে',
+  legendShefa: 'শেফা করছে',
 }
 
 const dictionaries: Record<Lang, Record<Key, string>> = { en, bn }

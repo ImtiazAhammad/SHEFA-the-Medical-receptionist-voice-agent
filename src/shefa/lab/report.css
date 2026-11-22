@@ -1,59 +1,69 @@
-/* The lab report, in SHEFA's exposure-record world. It is a single file opened offline, so the
-   zone ramp and the one magenta are written out here instead of loaded from static/world. */
-:root{--bg:oklch(0.982 0.002 260);
+/* The lab report, on SHEFA's medicine shelf. It is a single file opened offline, so the shelf
+   colours are written out here and the Baloo Da 2 face is inlined by report.py. Red a problem,
+   green a pass, blue SHEFA speaking. */
+:root{--bg:oklch(0.963 0.006 78);
   --panel:#fff;
-  --fg:oklch(0.17 0.006 260);
-  --mute:oklch(0.39 0.007 260);
-  --line:oklch(0.845 0.004 260);
-  --frame:oklch(0.17 0.006 260);
-  --accent:oklch(0.17 0.006 260);
-  --shefa:oklch(0.5 0.2 352);
-  --field:oklch(0.925 0.003 260);
-  --cross:repeating-linear-gradient(45deg,oklch(0.745 0.005 260) 0 1px,transparent 1px 6px),repeating-linear-gradient(135deg,oklch(0.745 0.005 260) 0 1px,transparent 1px 6px)}
+  --fg:oklch(0.23 0.012 60);
+  --mute:oklch(0.41 0.012 60);
+  --line:oklch(0.895 0.007 70);
+  --accent:oklch(0.47 0.17 262);
+  --shefa:oklch(0.47 0.17 262);
+  --shefa-wash:oklch(0.955 0.03 262);
+  --ok:oklch(0.45 0.11 158);
+  --ok-wash:oklch(0.955 0.035 158);
+  --bad:oklch(0.55 0.2 27);
+  --rail:oklch(0.35 0.075 162);
+  --soft:oklch(0.975 0.005 78);
+  --shadow:0 1px 2px oklch(0.3 0.02 60 / .07),0 6px 16px -8px oklch(0.3 0.02 60 / .18)}
 @media(prefers-color-scheme:dark){
-:root{--bg:oklch(0.235 0.007 260);
-  --panel:oklch(0.31 0.007 260);
-  --fg:oklch(0.982 0.002 260);
-  --mute:oklch(0.845 0.004 260);
-  --line:oklch(0.39 0.007 260);
-  --frame:oklch(0.845 0.004 260);
-  --accent:oklch(0.982 0.002 260);
-  --shefa:oklch(0.78 0.16 352);
-  --field:oklch(0.31 0.007 260);
-  --cross:repeating-linear-gradient(45deg,oklch(0.56 0.006 260) 0 1px,transparent 1px 6px),repeating-linear-gradient(135deg,oklch(0.56 0.006 260) 0 1px,transparent 1px 6px)}
+:root{--bg:oklch(0.2 0.008 60);
+  --panel:oklch(0.25 0.009 60);
+  --fg:oklch(0.95 0.006 80);
+  --mute:oklch(0.8 0.01 80);
+  --line:oklch(0.33 0.01 60);
+  --accent:oklch(0.78 0.11 262);
+  --shefa:oklch(0.78 0.11 262);
+  --shefa-wash:oklch(0.3 0.07 262);
+  --ok:oklch(0.78 0.11 158);
+  --ok-wash:oklch(0.29 0.05 158);
+  --bad:oklch(0.62 0.19 27);
+  --rail:oklch(0.24 0.045 162);
+  --soft:oklch(0.23 0.009 60);
+  --shadow:0 1px 2px oklch(0 0 0 / .35)}
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 "Anek Bangla","Noto Sans Bengali",system-ui,sans-serif}
-::selection{background:var(--fg);color:var(--bg)}
-main{max-width:860px;margin:0 auto;padding:24px 16px 64px}
-h1{margin:0 0 4px;font-size:30px;font-weight:650;line-height:1.1;padding-bottom:10px;border-bottom:2px solid var(--frame)}
-h2{font-size:19px;margin:0}
-.sub{color:var(--mute);margin:8px 0 20px}
-.grid{display:grid;grid-template-columns:1fr;margin:18px 0;border-top:2px solid var(--frame)}
-.stat{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:9px 4px;border-bottom:1px solid var(--line)}
-.stat b{order:2;font:500 20px/1.1 ui-monospace,"Cascadia Mono",monospace;font-variant-numeric:tabular-nums}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 "Baloo Da 2","Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif}
+::selection{background:var(--shefa-wash)}
+main{max-width:860px;margin:0 auto;padding:0 16px 64px}
+h1{margin:0 -16px 0;padding:22px 16px 18px;font-size:30px;font-weight:800;line-height:1.1;background:var(--rail);color:#fff;border-radius:0 0 12px 12px}
+h2{font-size:19px;font-weight:700;margin:0}
+.sub{color:var(--mute);margin:12px 0 20px}
+.grid{display:grid;grid-template-columns:1fr;margin:18px 0;padding:4px 0;background:var(--panel);border-radius:10px;box-shadow:var(--shadow)}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:9px 16px;border-bottom:1px solid var(--line)}
+.stat:last-child{border-bottom:0}
+.stat b{order:2;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
 .stat span{order:1;font-size:15px;font-weight:600}
-.card{background:var(--panel);border:1px solid var(--frame);padding:16px;margin:14px 0}
+.card{background:var(--panel);border-radius:10px;box-shadow:var(--shadow);padding:16px;margin:14px 0}
 .head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .head .tag{margin-left:auto}
-.tag{display:inline-block;padding:1px 9px;font-size:12px;font-weight:650;border:1px solid var(--frame)}
+.tag{display:inline-block;padding:1px 11px;font-size:13px;font-weight:700;border-radius:999px;background:var(--ok-wash);color:var(--ok)}
 .tag.ok{}
-.tag.bad{display:inline-flex;align-items:stretch;padding-left:0}
-.tag.bad::before{content:"";width:14px;margin-right:7px;border-right:1px solid var(--frame);background-image:var(--cross)}
+.tag.bad{background:var(--bad);color:#fff}
 .tests{color:var(--mute);margin:6px 0 10px}
-.msg{margin:0;padding:9px 4px 9px 12px;border-bottom:1px solid var(--line);box-shadow:inset 3px 0 0 -2px var(--shefa)}
-.msg small{display:block;font-size:11px;font-weight:650;color:var(--shefa)}
-.msg.me{box-shadow:none;padding-left:28px}
+.msg{max-width:88%;margin:8px 0;padding:9px 12px;border-radius:14px 14px 14px 4px;background:var(--shefa-wash)}
+.msg small{display:block;font-size:11px;font-weight:700;color:var(--shefa)}
+.msg.me{margin-left:auto;border-radius:14px 14px 4px 14px;background:var(--soft)}
 .msg.me small{color:var(--mute)}
 .msg .heard{color:var(--mute);font-size:13px;margin-top:4px}
 audio{width:100%;height:32px;margin-top:6px}
 ul.checks{list-style:none;padding:0;margin:10px 0 0;font-size:14px}
-ul.checks li{padding:2px 0}
-ul.checks .ok::before{content:"✓ "}
-ul.checks .bad::before{content:"× ";font-weight:700}
-ul.checks .bad{font-weight:600}
+ul.checks li{padding:2px 0 2px 18px;position:relative}
+ul.checks li::before{content:"";position:absolute;left:0;top:.55em;width:9px;height:9px;border-radius:50%}
+ul.checks .ok::before{background:var(--ok)}
+ul.checks .bad{font-weight:600;color:var(--bad)}
+ul.checks .bad::before{background:var(--bad)}
 .mute{color:var(--mute)}
 table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
 td,th{text-align:left;padding:6px;border-bottom:1px solid var(--line)}
-th{background:var(--field);border-bottom-color:var(--frame)}
-a{color:var(--accent);text-underline-offset:.22em}
+th{background:var(--soft)}
+a{color:var(--accent);text-underline-offset:.2em}

@@ -1,3 +1,4 @@
+import type React from 'react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CalendarDays, ChartNoAxesColumn, ClipboardList, FileText, LogOut, Mic, PhoneCall, Radio, Settings2, Stethoscope, Users } from 'lucide-react'
@@ -5,16 +6,18 @@ import { useAuth } from './lib/auth'
 import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
 
-/** SHEFA's mark: a short zone wedge, deepest to lightest, with the one magenta step that is
- * SHEFA itself. Drawn, not lettered, so it reads the same in Bangla and English. */
-export function Logo({ size = 28 }: { size?: number }) {
+/** SHEFA's mark: a capsule on a pharma-green box, half white, half SHEFA blue.
+ * Drawn, not lettered, so it reads the same in Bangla and English. */
+export function Logo({ size = 30 }: { size?: number }) {
   return (
     <span className="logo" aria-hidden="true">
-      <svg viewBox="0 0 28 28" width={size} height={size}>
-        <rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="currentColor" />
-        <rect x="4" y="4" width="5" height="20" fill="currentColor" />
-        <rect x="11.5" y="4" width="5" height="20" fill="currentColor" opacity="0.55" />
-        <rect x="19" y="4" width="5" height="20" fill="var(--dichroic)" />
+      <svg viewBox="0 0 32 32" width={size} height={size}>
+        <rect width="32" height="32" rx="8" fill="var(--rail)" />
+        <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="7.25" fill="none" stroke="oklch(1 0 0 / 0.35)" strokeWidth="1.5" />
+        <g transform="rotate(-38 16 16)">
+          <rect x="6" y="11.5" width="20" height="9" rx="4.5" fill="#fff" />
+          <path d="M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z" fill="var(--shefa)" />
+        </g>
       </svg>
     </span>
   )
@@ -63,15 +66,15 @@ export function Shell() {
   const alert = useDeskAlert(can('records:read'))
   const [sound, setSoundState] = useState(soundOn)
   const items = [
-    { to: '/live', label: t('navLive'), icon: Radio, show: can('records:read') },
-    { to: '/overview', label: t('navOverview'), icon: ChartNoAxesColumn, show: can('overview:read') },
-    { to: '/report', label: t('navReport'), icon: FileText, show: can('overview:read') },
-    { to: '/calls', label: t('navCalls'), icon: PhoneCall, show: can('records:read') },
-    { to: '/appointments', label: t('navAppointments'), icon: CalendarDays, show: can('records:read') },
-    { to: '/doctors', label: t('navDoctors'), icon: Stethoscope, show: can('records:read') },
-    { to: '/setup', label: t('navSetup'), icon: Settings2, show: can('directory:write') },
-    { to: '/staff', label: t('navStaff'), icon: Users, show: can('staff:manage') },
-    { to: '/my-day', label: t('navMyDay'), icon: ClipboardList, show: can('doctor:self') },
+    { to: '/live', label: t('navLive'), icon: Radio, show: can('records:read'), hue: 'var(--urgent)' },
+    { to: '/overview', label: t('navOverview'), icon: ChartNoAxesColumn, show: can('overview:read'), hue: 'var(--doc-0)' },
+    { to: '/report', label: t('navReport'), icon: FileText, show: can('overview:read'), hue: 'var(--doc-4)' },
+    { to: '/calls', label: t('navCalls'), icon: PhoneCall, show: can('records:read'), hue: 'var(--shefa)' },
+    { to: '/appointments', label: t('navAppointments'), icon: CalendarDays, show: can('records:read'), hue: 'var(--doc-1)' },
+    { to: '/doctors', label: t('navDoctors'), icon: Stethoscope, show: can('records:read'), hue: 'var(--doc-2)' },
+    { to: '/setup', label: t('navSetup'), icon: Settings2, show: can('directory:write'), hue: 'var(--doc-3)' },
+    { to: '/staff', label: t('navStaff'), icon: Users, show: can('staff:manage'), hue: 'var(--doc-5)' },
+    { to: '/my-day', label: t('navMyDay'), icon: ClipboardList, show: can('doctor:self'), hue: 'var(--doc-1)' },
   ].filter((i) => i.show)
 
   return (
@@ -82,13 +85,21 @@ export function Shell() {
       <aside className="side">
         <Wordmark />
         <nav aria-label={t('navMain')}>
-          {items.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
-              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+          {items.map(({ to, label, icon: Icon, hue }) => (
+            <NavLink key={to} to={to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`} style={{ '--hue': hue } as React.CSSProperties}>
+              <span className="nav-icon" aria-hidden="true">
+                <Icon size={16} strokeWidth={2} />
+              </span>
               <span>{label}</span>
             </NavLink>
           ))}
         </nav>
+        <dl className="rail-legend" aria-label={t('legendTitle')}>
+          <div className="lg-urgent"><dt /><dd>{t('legendUrgent')}</dd></div>
+          <div className="lg-waiting"><dt /><dd>{t('legendWaiting')}</dd></div>
+          <div className="lg-done"><dt /><dd>{t('legendDone')}</dd></div>
+          <div className="lg-shefa"><dt /><dd>{t('legendShefa')}</dd></div>
+        </dl>
         <div className="side-foot">
           {can('calls:place') ? (
             <a className="nav-item" href="/console">
@@ -113,10 +124,10 @@ export function Shell() {
       </aside>
       <main id="main" className="main" tabIndex={-1}>
         {alert.fresh.length ? (
-          <div className="desk-alert hatch-shefa" role="alert">
+          <div className="desk-alert" role="alert">
             <strong>{t('needsPerson')}</strong>
             <span>{alert.fresh.map((c) => c.reason || c.phone || '').filter(Boolean).join(' · ')}</span>
-            <Link className="btn btn-small btn-shefa" to="/live" onClick={alert.dismiss}>
+            <Link className="btn btn-small btn-urgent" to="/live" onClick={alert.dismiss}>
               {t('openCallbacks')}
             </Link>
             <button type="button" className="btn btn-small" onClick={alert.dismiss}>

@@ -189,8 +189,8 @@ def test_the_static_copy_carries_the_shared_look(config, tmp_path):
     assert (out / "world" / "tokens.css").is_file()
     assert (out / "world" / "fonts-lite.css").is_file()
     fonts = {f.name for f in (out / "world" / "fonts").iterdir()}
-    assert "anek-bangla-bengali-wght.woff2" in fonts
-    assert "anek-bangla-bengali.woff2" not in fonts  # the heavy file stays home
+    assert "baloo-da-2-bengali.woff2" in fonts
+    assert not any(f.startswith("hind-siliguri") for f in fonts)  # the staff-only body face stays home
     for href in __import__("re").findall(r"url\(\./fonts/([^)]+)\)", (out / "world" / "fonts-lite.css").read_text()):
         assert href in fonts, href
 

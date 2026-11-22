@@ -1,144 +1,117 @@
-/* SHEFA world: the exposure record.
- *
- * One set of tokens for every SHEFA screen (staff app, patient page, demo, voice-collection site).
- * - Tone comes only from an eleven-step neutral zone ramp, z0 (deepest) to z10 (lightest).
- * - One dichroic magenta marks what SHEFA itself did or needs: a live call, a booking SHEFA made,
- *   a call SHEFA handed to a person. Never decoration.
- * - State is drawn, and always also said in words: load = hatch density, conflict = crossed hatch,
- *   held back = dotted outline, cancelled/disabled = struck, selected = deepest zone.
- * - Every rule is one device pixel, no radius, no shadow except the sliding sheet.
- * Load a fonts file (fonts.css or fonts-lite.css) beside this one.
- */
-
+/* SHEFA world: the medicine shelf. Base styles and the shared controls.
+ * Tokens and the colour legend live in tokens.css. Load a fonts file (fonts.css or
+ * fonts-lite.css) beside this one. */
 @import url('./tokens.css');
 
 /* ---------- base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
-  margin: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: var(--font);
-  font-size: var(--step-0);
-  line-height: 1.6;
-  font-synthesis: none;
-  -webkit-font-smoothing: antialiased;
+  margin: 0; background: var(--shelf); color: var(--ink);
+  font-family: var(--font); font-size: var(--step-0); line-height: 1.65;
+  font-synthesis: none; -webkit-font-smoothing: antialiased;
 }
 :lang(en) { line-height: 1.5; }
-::selection { background: var(--ink); color: var(--ground); }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-input, textarea { caret-color: var(--dichroic); }
-* { scrollbar-color: var(--z7) transparent; scrollbar-width: thin; }
-a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.22em; }
+::selection { background: var(--shefa-wash); color: var(--ink); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+input, textarea { caret-color: var(--shefa); }
+* { scrollbar-color: var(--rule-strong) transparent; scrollbar-width: thin; }
+a { color: var(--shefa-ink); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
 a:hover { text-decoration-thickness: 2px; }
-h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); font-weight: 700; line-height: 1.2; }
 p { margin: 0 0 var(--space-2); text-wrap: pretty; }
 img, svg { max-width: 100%; }
 .num, table, time, .tabular { font-variant-numeric: tabular-nums; }
-.mono { font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; letter-spacing: -0.01em; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* Display: tall condensed. Latin display goes to caps; Bangla has no case and keeps its shaping. */
-.display { font-stretch: var(--condensed); font-weight: 600; line-height: 1.02; letter-spacing: -0.01em; }
-.display:lang(en) { text-transform: uppercase; letter-spacing: 0; }
-
-/* Legend: the small label over a field or column. Tracked caps in English only. */
+.display { font-family: var(--font-display); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
 .legend { font-size: var(--step--1); font-weight: 600; color: var(--ink-2); line-height: 1.3; }
-.legend:lang(en), :lang(en) > .legend { font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.14em; font-stretch: 90%; }
-
-/* ---------- hatch: load, drawn ---------- */
-.hatch-1 { --gap: var(--hatch-gap-1); }
-.hatch-2 { --gap: var(--hatch-gap-2); }
-.hatch-3 { --gap: var(--hatch-gap-3); }
-.hatch-4 { --gap: var(--hatch-gap-4); }
-.hatch-1, .hatch-2, .hatch-3, .hatch-4 {
-  background-image: repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px var(--gap));
-}
-.hatch-cross {
-  background-image:
-    repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 6px);
-}
-.hatch-shefa { background-image: repeating-linear-gradient(135deg, var(--dichroic) 0 1.25px, transparent 1.25px 6px); }
+:lang(en) .legend, .legend:lang(en) { font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.08em; }
 
 /* ---------- controls ---------- */
 .btn {
-  display: inline-flex; align-items: stretch; justify-content: center;
-  min-height: var(--tap); padding: 0; border: 1px solid var(--rule-strong); border-radius: 0;
-  background: transparent; color: var(--ink);
-  font: inherit; font-weight: 600; line-height: 1.2; text-decoration: none; cursor: pointer;
-  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+  min-height: var(--tap); padding: 0.5rem 1.05rem;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  background: var(--box); color: var(--ink);
+  font: inherit; font-family: var(--font-display); font-weight: 600; line-height: 1.2;
+  text-decoration: none; cursor: pointer;
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
-.btn > .btn-label, .btn:not(:has(.btn-label)) { padding: 0.55rem 1rem; display: inline-flex; align-items: center; gap: 0.45rem; }
-.btn:lang(en), :lang(en) .btn { letter-spacing: 0.06em; text-transform: uppercase; font-size: var(--step--1); font-stretch: 90%; }
-.btn > .btn-seg { display: inline-flex; align-items: center; padding: 0 0.7rem; border-inline-start: 1px solid currentColor; font-family: var(--font-num); font-size: var(--step--1); letter-spacing: 0; }
-.btn:hover:not(:disabled) { background: var(--field-2); }
-.btn:active:not(:disabled) { background: var(--z8); }
-.btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; color: var(--ink-3); border-color: var(--z7); text-decoration: line-through; text-decoration-thickness: 1px; }
-.btn-primary { background: var(--select); color: var(--on-select); border-color: var(--select); }
-.btn-primary:hover:not(:disabled) { background: var(--z2); }
-.btn-primary:active:not(:disabled) { background: var(--z3); }
-.btn-primary > .btn-seg { background-image: repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 5px); background-color: transparent; }
-.btn-shefa { background: var(--dichroic); color: var(--on-dichroic); border-color: var(--dichroic); }
-.btn-shefa:hover:not(:disabled) { background: var(--dichroic-ink); }
-.btn-quiet { border-color: transparent; }
-.btn-quiet:hover:not(:disabled) { border-color: var(--rule); background: transparent; }
-.btn-danger:hover:not(:disabled) { background-image: repeating-linear-gradient(45deg, var(--z8) 0 1px, transparent 1px 6px), repeating-linear-gradient(135deg, var(--z8) 0 1px, transparent 1px 6px); }
-.btn-small { min-height: 36px; }
-.btn-small > .btn-label, .btn-small:not(:has(.btn-label)) { padding: 0.3rem 0.7rem; }
+.btn:hover:not(:disabled) { border-color: var(--ink-2); box-shadow: var(--shadow-box); }
+.btn:active:not(:disabled) { background: var(--box-2); box-shadow: none; }
+.btn:disabled, .btn[aria-disabled='true'] { cursor: not-allowed; color: var(--ink-3); background: var(--box-2); border-color: var(--rule); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn-shefa { background: var(--shefa); border-color: var(--shefa); color: var(--on-shefa); }
+.btn-shefa:hover:not(:disabled) { background: var(--shefa-ink); border-color: var(--shefa-ink); }
+.btn-urgent { background: var(--urgent); border-color: var(--urgent); color: var(--on-urgent); }
+.btn-quiet { border-color: transparent; background: transparent; }
+.btn-quiet:hover:not(:disabled) { background: var(--box-2); box-shadow: none; border-color: transparent; }
+.btn-danger { color: var(--urgent-ink); }
+.btn-danger:hover:not(:disabled) { border-color: var(--urgent); background: var(--urgent-wash); box-shadow: none; }
+.btn-small { min-height: 36px; padding: 0.3rem 0.75rem; font-size: var(--step--1); }
 .btn-block { width: 100%; }
 
 input, select, textarea {
-  font: inherit; color: var(--ink); background: var(--sheet);
-  border: 1px solid var(--z6); border-radius: 0;
-  min-height: var(--tap); padding: 0.45rem 0.7rem;
+  font: inherit; color: var(--ink); background: var(--box);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
+  min-height: var(--tap); padding: 0.45rem 0.75rem;
 }
-textarea { min-height: 6rem; line-height: 1.5; }
-input:hover, select:hover, textarea:hover { border-color: var(--z3); }
-input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--rule-strong); box-shadow: inset 0 0 0 1px var(--rule-strong); }
-input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] {
-  border-color: var(--ink); border-bottom-width: 3px; border-bottom-style: double;
-}
+textarea { min-height: 6rem; line-height: 1.55; }
+input:hover, select:hover, textarea:hover { border-color: var(--ink-3); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--focus); box-shadow: 0 0 0 3px var(--shefa-wash); }
+input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--urgent); background: var(--urgent-wash); }
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
-input[type='checkbox'], input[type='radio'] { min-height: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--select); margin: 0; }
+input[type='checkbox'], input[type='radio'] { min-height: 0; width: 1.2rem; height: 1.2rem; accent-color: var(--primary); margin: 0; }
 select { appearance: none; padding-inline-end: 2rem; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 1rem) 55%, calc(100% - 0.7rem) 55%; background-size: 0.3rem 0.3rem; background-repeat: no-repeat; }
 
-/* Unit field: an input with its unit set in a segment, like "045.0 | SEC". */
-.unit-field { display: inline-flex; align-items: stretch; border: 1px solid var(--z6); background: var(--sheet); }
-.unit-field input { border: 0; min-width: 0; }
-.unit-field > span { display: inline-flex; align-items: center; padding: 0 0.6rem; border-inline-start: 1px solid var(--z6); color: var(--ink-2); font-size: var(--step--1); }
-.unit-field:focus-within { border-color: var(--rule-strong); }
-.unit-field:focus-within > span { background: var(--select); color: var(--on-select); border-color: var(--select); }
+/* an input with its unit printed beside it */
+.unit-field { display: inline-flex; align-items: stretch; border: 1px solid var(--rule-strong); border-radius: var(--r-sm); background: var(--box); overflow: hidden; }
+.unit-field input { border: 0; border-radius: 0; min-width: 0; }
+.unit-field > span { display: inline-flex; align-items: center; padding: 0 0.65rem; background: var(--box-2); border-inline-start: 1px solid var(--rule); color: var(--ink-2); font-size: var(--step--1); }
+.unit-field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px var(--shefa-wash); }
 
-/* Segmented choice (language, view) */
-.seg { display: inline-flex; border: 1px solid var(--rule-strong); }
-.seg button { font: inherit; min-height: 36px; padding: 0.25rem 0.85rem; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.seg button + button { border-inline-start: 1px solid var(--rule-strong); }
-.seg button[aria-pressed='true'] { background: var(--select); color: var(--on-select); font-weight: 600; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--r-sm); background: var(--box-2); border: 1px solid var(--rule); }
+.seg button { font: inherit; font-weight: 600; min-height: 34px; padding: 0.2rem 0.85rem; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+.seg button[aria-pressed='true'] { background: var(--box); color: var(--ink); box-shadow: var(--shadow-box); }
 
-/* ---------- marks: state, drawn and said ---------- */
+/* ---------- marks: the legend's pills, colour plus words ---------- */
 .mark {
   display: inline-flex; align-items: center; gap: 0.4rem;
-  min-height: 1.6rem; padding: 0.05rem 0.55rem;
-  border: 1px solid var(--rule-strong); background: var(--sheet); color: var(--ink);
+  min-height: 1.65rem; padding: 0.05rem 0.65rem;
+  border-radius: var(--r-pill); border: 1px solid transparent;
+  background: var(--box-2); color: var(--ink-2);
   font-size: var(--step--1); font-weight: 600; line-height: 1.2; white-space: nowrap;
 }
-.mark:lang(en), :lang(en) .mark { text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--step--2); font-stretch: 90%; }
-.mark-ok { }                                                                      /* settled: plain frame */
-/* waiting and conflict carry their hatch in a swatch cell at the start, never behind the words */
-.mark-warn, .mark-bad { padding-inline-start: 0; }
-.mark-warn::before, .mark-bad::before { content: ''; flex: none; align-self: stretch; width: 1.1rem; margin-block: -0.05rem; border-inline-end: 1px solid currentColor; }
-.mark-warn::before { background: repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } /* waiting: hatched */
-.mark-bad::before { background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 4px); } /* conflict/failed: crossed */
-
-.mark-quiet { border-style: dotted; border-color: var(--ink-3); color: var(--ink-2); }     /* held back */
-.mark-gone { border-color: var(--z7); color: var(--ink-3); text-decoration: line-through; } /* cancelled */
-.mark-sel { background: var(--select); color: var(--on-select); border-color: var(--select); }
-.mark-shefa { border-color: var(--dichroic); color: var(--dichroic-ink); }
-.mark-shefa::before { content: ''; width: 0.5rem; height: 0.5rem; background: var(--dichroic); flex: none; }
-.mark-live::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--dichroic); flex: none; animation: live-pulse 1.6s ease-in-out infinite; }
+.mark::before { content: ''; flex: none; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+.mark-ok { background: var(--done-wash); color: var(--done-ink); }
+.mark-warn { background: var(--waiting-wash); color: var(--waiting-ink); }
+.mark-bad { background: var(--urgent); color: var(--on-urgent); }
+.mark-quiet { background: transparent; border-color: var(--rule-strong); color: var(--ink-2); }
+.mark-quiet::before { background: transparent; border: 1.5px solid currentColor; }
+.mark-gone { background: transparent; color: var(--ink-3); text-decoration: line-through; }
+.mark-gone::before { display: none; }
+.mark-sel { background: var(--ink); color: var(--box); }
+.mark-sel::before { background: var(--done); }
+.mark-shefa { background: var(--shefa-wash); color: var(--shefa-ink); }
+.mark-live { background: var(--shefa); color: var(--on-shefa); }
+.mark-live::before { animation: live-pulse 1.6s ease-in-out infinite; }
 @keyframes live-pulse { 50% { opacity: 0.25; } }
+
+/* ---------- a doctor's box colour ---------- */
+.doc-c0 { --doc: var(--doc-0); } .doc-c1 { --doc: var(--doc-1); } .doc-c2 { --doc: var(--doc-2); }
+.doc-c3 { --doc: var(--doc-3); } .doc-c4 { --doc: var(--doc-4); } .doc-c5 { --doc: var(--doc-5); }
+.doc-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+.doc-chip::before { content: ''; flex: none; width: 0.75rem; height: 0.75rem; border-radius: 3px; background: var(--doc, var(--ink-3)); }
+
+/* the batch/expiry stamp: serials and references, printed like a box's MFG/EXP block */
+.stamp {
+  display: inline-flex; align-items: baseline; gap: 0.35rem;
+  padding: 0.05rem 0.5rem; border: 1.5px dashed currentColor; border-radius: 4px;
+  font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.35;
+}
+.stamp small { font-family: var(--font); font-weight: 600; font-size: 0.7em; opacity: 0.8; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

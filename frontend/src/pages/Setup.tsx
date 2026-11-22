@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useI18n, type Key } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { ErrorNote, PageHeader, Pill, Skeleton } from '../components'
+import { ErrorNote, PageHeader, Pill, Skeleton, docClass } from '../components'
 
 // The clinic sets up its own doctors, chamber hours and leave here: no file to edit, no call to us.
 // Every change goes to /api/v1/admin/* (owner only); a change that strands upcoming bookings
@@ -93,9 +93,9 @@ export function Setup() {
           <section key={d.id} className="card">
             <div className="row-between">
               <div>
-                <strong>{d.name_bn || d.name_en}</strong>{' '}
+                <strong className={`doc-chip ${docClass(d.id)}`}>{d.name_bn || d.name_en}</strong>{' '}
                 <span className="muted small">{deptName(data.departments, d.department_id)}</span>{' '}
-                <Pill tone={d.booking_mode === 'serial' ? 'sel' : 'ok'}>
+                <Pill tone={d.booking_mode === 'serial' ? 'sel' : 'quiet'}>
                   {t(d.booking_mode === 'serial' ? 'modeSerial' : 'modeSlot')}
                 </Pill>{' '}
                 {!d.active ? <Pill tone="gone">{t('doctorOff')}</Pill> : null}
@@ -461,7 +461,7 @@ const toMin = (hhmm: string) => {
 
 /**
  * The week being edited, drawn: each session a block as long as it really is. Two sessions on
- * one day that overlap cross-hatch and say so, before the clinic presses save.
+ * one day that overlap turn red and say so, before the clinic presses save.
  */
 function WeekPreview({ sessions }: { sessions: Session[] }) {
   const { t, clock } = useI18n()

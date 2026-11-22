@@ -7,20 +7,20 @@ related_targets: ["frontend/src/patient/PatientApp.tsx","frontend/src/demo/DemoA
 
 # SHEFA UI (all surfaces)
 
-Scope: every SHEFA screen. Staff app (Live, Calls, Appointments, Doctors, Setup, Report, Staff, My Day, Overview, Sign-in), patient booking page, demo console, voice-collection public site and its private admin/review/voice/sign-in pages, legacy static pages. Mode: Operate (the collector's public page leans Persuade inside the same world).
+Scope: every SHEFA screen. Staff app (Live, Calls, Appointments, Doctors, Setup, Report, Staff, My Day, Overview, Sign-in), patient booking page, demo, voice-collection public site and its private admin/review/voice/sign-in pages, legacy static pages, lab report. Mode: Operate (public pages lean warm and reassuring inside the same world).
 
-Audience/job: front desk under pressure (two taps while a phone rings), owner checking the agent pays, doctor between patients, patient booking on a slow phone, volunteer recording their voice. Constraints: Bangla first, WCAG 2.2 AA, bright reception room, low bandwidth, no invented data.
+Second pass (2026-11-22): the Exposure Record world was rejected by the user as too cold and clinical-tech, slow to read at a glance, not Bangladeshi, and too austere for patients. Lean: bold and distinctive. Nothing visual kept; all function kept.
 
 ## Direction contract
 
-THESIS: Load and conflict are drawn, not coloured. A busy chamber session hatches denser as its serials fill; two bookings on one serial, or two schedule sessions that overlap, cross-hatch at ninety degrees. Refuses the category default: white cards, slate sidebar, one teal accent, KPI tiles.
+THESIS: Every doctor wears a box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box on the shelf. Status speaks in plain colour plus words, readable across the room. Refuses the category default (white cards, slate sidebar, one teal accent) and the grey austerity of the previous pass.
 
-OWN-WORLD: An eleven-step neutral zone ramp (Z0 near-black to Z10 near-white, faintly cool, never cream) is the only tonal token set. One dichroic magenta marks SHEFA's own voice and actions only (live call, booked by SHEFA, needs-a-person flag). Type: Anek Bangla/Anek Latin, condensed width for display, tracked caps legends; Martian Mono for quantities (serials, times, counts). Every rule one device pixel, zero radius, no shadows except the sheet. State vocabulary: selected = deepest zone fill; held back = dotted outline; disabled/cancelled = struck rule; load = hatch density; conflict = crossed hatch. Raises: one-device-pixel rules (centre-rail); block length is real duration (labanotation); destructive actions isolated by empty space (graphite console).
+OWN-WORLD: Bangladeshi medicine packaging. Bright white box board on a warm shelf field; a deep pharma-green rail; solid colour label blocks with reversed bold type (a doctor's name block, a status pill); a printed batch/expiry stamp block (dashed frame, tabular digits) for serials and references. Type: Baloo Da 2 bold for names, headings and numbers that matter; Hind Siliguri for body and data. Small radius, box-on-shelf soft shadow. Raises: one colour one meaning everywhere with a printed legend (orienteering map); each app area owns a hue on the rail (tabbed manual); on a doctor's phone one patient fills the screen (vertical feed).
 
-STORY: The desk sees at a glance which sessions are filling, which call needs a person, and where SHEFA acted; opens any call or booking as a sheet over the list without losing place; acts in two taps.
+STORY: The desk sees each doctor's session filling in that doctor's colour, sees the red needs-a-person queue first, sees what SHEFA did in its blue, and acts in two taps; patients and volunteers feel a friendly, local, trustworthy place.
 
-FIRST VIEWPORT: Staff app shell: a Z1 left rail (brand, Bangla nav, who/language/sign-out), main field on Z10. Live/Today leads: a top strip of doctors' sessions as hatch-density bars (serials booked / capacity, real numbers), below it the calls-in-progress table with magenta live marks and the needs-a-person rows first; any row opens a translucent sheet sliding from the right, the list beneath still visible.
+FIRST VIEWPORT: Deep green rail with Bangla nav (area hue squares) and a status legend at its foot; white work field. Live leads: the needs-a-person queue in a red-banded block at top when present; then "today's chambers": one row per doctor, a solid colour name block, sessions on a time axis as bars filling in the doctor's colour with "১৯/২৪" in a stamp; in-progress calls with blue live pills.
 
-FORM: Exposure Record (darkroom printer's exposure card), dealt as the bolder-register lead, chosen by the user; seed key f7d0721e.
+FORM: Medicine Shelf (Bangladeshi pharma packaging), grounded candidate 3 dealt by the roll and chosen by the user; seed key 5e2bc9d4.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

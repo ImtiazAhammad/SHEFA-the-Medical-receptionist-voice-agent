@@ -204,11 +204,13 @@ export default function PatientApp() {
     <div className="patient">
       <header className="p-top">
         <span className="p-brand" aria-label="SHEFA">
-          <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="currentColor" />
-            <rect x="4" y="4" width="5" height="20" fill="currentColor" />
-            <rect x="11.5" y="4" width="5" height="20" fill="currentColor" opacity="0.55" />
-            <rect x="19" y="4" width="5" height="20" fill="var(--dichroic)" />
+          <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="8" fill="var(--rail)" />
+            <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="7.25" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
+            <g transform="rotate(-38 16 16)">
+              <rect x="6" y="11.5" width="20" height="9" rx="4.5" fill="#fff" />
+              <path d="M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z" fill="var(--shefa)" />
+            </g>
           </svg>
           SHEFA
         </span>
@@ -272,7 +274,7 @@ export default function PatientApp() {
             <ul className="p-list">
               {shown.map((d) => (
                 <li key={d.id}>
-                  <button type="button" className="p-card" onClick={() => void chooseDoctor(d)}>
+                  <button type="button" className={`p-card doc-c${Math.abs(d.id) % 6}`} onClick={() => void chooseDoctor(d)}>
                     <strong>{doctorName(d)}</strong>
                     <span>{lang === 'bn' && d.department_bn ? d.department_bn : d.department}</span>
                     {d.qualification ? <span className="p-muted">{d.qualification}</span> : null}

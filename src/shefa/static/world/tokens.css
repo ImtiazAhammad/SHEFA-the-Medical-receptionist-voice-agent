@@ -1,65 +1,86 @@
-/* SHEFA world tokens only: the zone ramp, the one magenta, type and spacing, light and dark.
- * world.css imports this and adds base styles and controls. Pages with their own class
- * vocabulary (the voice-collection site) load this file alone. */
+/* SHEFA world tokens: the medicine shelf.
+ *
+ * A Bangladeshi pharmacy shelf, read as a working screen: bright white box board on a warm shelf,
+ * a deep pharma-green rail, solid colour label blocks with reversed bold type.
+ *
+ * One colour, one meaning, everywhere (the printed legend):
+ *   urgent  red    a caller who needs a person, a clash, an error
+ *   waiting amber  not yet confirmed, pending, retrying
+ *   done    green  confirmed, seen, settled; also the colour of going ahead (primary action)
+ *   shefa   blue   what SHEFA itself is doing or did: a live call, a booking it made
+ *   gone    grey   cancelled, off, disabled (always also struck or said)
+ * Doctors wear their own box colours (--doc-0..5), chosen to stay clear of the legend hues.
+ * Pages with their own class vocabulary (the voice-collection site) load this file alone;
+ * world.css imports it and adds the shared controls.
+ */
 
 :root {
-  /* zone ramp: faintly cool, never cream */
-  --z0: oklch(0.17 0.006 260);
-  --z1: oklch(0.235 0.007 260);
-  --z2: oklch(0.31 0.007 260);
-  --z3: oklch(0.39 0.007 260);
-  --z4: oklch(0.47 0.006 260);
-  --z5: oklch(0.56 0.006 260);
-  --z6: oklch(0.65 0.005 260);
-  --z7: oklch(0.745 0.005 260);
-  --z8: oklch(0.845 0.004 260);
-  --z9: oklch(0.925 0.003 260);
-  --z10: oklch(0.982 0.002 260);
-  --white: oklch(1 0 0);
+  /* shelf and boxes */
+  --shelf: oklch(0.963 0.006 78);
+  --box: oklch(1 0 0);
+  --box-2: oklch(0.975 0.005 78);
+  --ink: oklch(0.23 0.012 60);
+  --ink-2: oklch(0.41 0.012 60);
+  --ink-3: oklch(0.5 0.01 60);
+  --rule: oklch(0.895 0.007 70);
+  --rule-strong: oklch(0.79 0.01 70);
 
-  /* the one colour */
-  --dichroic: oklch(0.54 0.215 352);
-  --dichroic-ink: oklch(0.5 0.2 352);
-  --on-dichroic: oklch(0.99 0.01 352);
-  --dichroic-wash: oklch(0.955 0.03 352);
+  /* the rail: pharma green */
+  --rail: oklch(0.35 0.075 162);
+  --rail-hover: oklch(0.4 0.08 162);
+  --rail-rule: oklch(0.43 0.07 162);
+  --rail-ink: oklch(0.99 0.005 160);
+  --rail-ink-2: oklch(0.87 0.035 160);
 
-  /* semantic roles over the ramp */
-  --ground: var(--z10);         /* the work field */
-  --sheet: var(--white);        /* a sheet laid over the field */
-  --field-2: var(--z9);         /* a second neutral layer: table heads, wells */
-  --ink: var(--z0);
-  --ink-2: var(--z3);           /* secondary text: 8:1 on ground */
-  --ink-3: var(--z4);           /* the faintest text allowed: 5.9:1 on ground */
-  --rule: var(--z8);            /* hairline between rows */
-  --rule-strong: var(--z0);     /* frame of a control, a table, a sheet */
-  --hatch-ink: var(--z3);
-  --rail: var(--z1);            /* the staff app's left rail */
-  --rail-ink: var(--z9);
-  --rail-ink-2: var(--z7);
-  --rail-rule: var(--z3);
-  --select: var(--z0);
-  --on-select: var(--z10);
-  --focus: var(--z0);
-  --sheet-shadow: -24px 0 48px -12px oklch(0.17 0.006 260 / 0.22), -1px 0 0 var(--z0);
+  /* the legend */
+  --urgent: oklch(0.55 0.2 27);
+  --urgent-ink: oklch(0.49 0.19 27);
+  --urgent-wash: oklch(0.955 0.03 27);
+  --on-urgent: oklch(0.99 0.01 27);
+  --waiting: oklch(0.82 0.15 82);
+  --waiting-ink: oklch(0.5 0.11 70);
+  --waiting-wash: oklch(0.965 0.05 88);
+  --on-waiting: oklch(0.25 0.04 70);
+  --done: oklch(0.5 0.12 158);
+  --done-ink: oklch(0.45 0.11 158);
+  --done-wash: oklch(0.955 0.035 158);
+  --on-done: oklch(0.99 0.01 158);
+  --shefa: oklch(0.52 0.17 262);
+  --shefa-ink: oklch(0.47 0.17 262);
+  --shefa-wash: oklch(0.955 0.03 262);
+  --on-shefa: oklch(0.99 0.01 262);
+  --gone: oklch(0.62 0.01 70);
 
-  /* hatch densities: +1/3 to +2 stops of load */
-  --hatch-gap-1: 9px;
-  --hatch-gap-2: 6px;
-  --hatch-gap-3: 4px;
-  --hatch-gap-4: 2.75px;
+  /* doctors' box colours (white type on each passes AA) */
+  --doc-0: oklch(0.52 0.1 200);  /* teal */
+  --doc-1: oklch(0.5 0.17 350);  /* magenta */
+  --doc-2: oklch(0.47 0.14 300); /* violet */
+  --doc-3: oklch(0.47 0.08 55);  /* brown */
+  --doc-4: oklch(0.5 0.1 125);   /* olive */
+  --doc-5: oklch(0.5 0.1 230);   /* sky */
+
+  --primary: var(--done);
+  --primary-hover: oklch(0.44 0.11 158);
+  --on-primary: var(--on-done);
+  --focus: oklch(0.52 0.17 262);
 
   /* type */
-  --font: 'Anek', 'Noto Sans Bengali', 'Kalpurush', system-ui, sans-serif;
-  --font-num: 'Martian', 'Anek', ui-monospace, monospace;
-  --step--2: 0.6875rem;
-  --step--1: 0.8125rem;
+  --font-display: 'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif;
+  --font: 'Hind Siliguri', 'Baloo Da 2', 'Noto Sans Bengali', system-ui, sans-serif;
+  --step--2: 0.75rem;
+  --step--1: 0.875rem;
   --step-0: 1rem;
   --step-1: 1.1875rem;
   --step-2: 1.4375rem;
-  --step-3: 2rem;
-  --step-4: 2.75rem;
-  --step-5: 4rem;
-  --condensed: 78%;
+  --step-3: 1.875rem;
+  --step-4: 2.5rem;
+
+  /* shape and depth: a printed box on a shelf */
+  --r-sm: 6px;
+  --r: 10px;
+  --r-pill: 999px;
+  --shadow-box: 0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18);
+  --shadow-lift: 0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -69,60 +90,69 @@
   --space-6: 2rem;
   --space-7: 3rem;
   --tap: 44px;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --sheet-ease: cubic-bezier(0.22, 1, 0.36, 1); /* slides in with mass and settles, no bounce */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   color-scheme: light;
 }
 
-/* Dark: the ramp is read the other way round. Chosen by the viewer's system or by data-theme. */
+/* Dark: the shelf after hours. Chosen by the viewer's system or by data-theme. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --ground: var(--z1);
-    --sheet: var(--z2);
-    --field-2: var(--z2);
-    --ink: var(--z10);
-    --ink-2: var(--z8);
-    --ink-3: var(--z7);
-    --rule: var(--z3);
-    --rule-strong: var(--z8);
-    --hatch-ink: var(--z7);
-    --rail: var(--z0);
-    --rail-rule: var(--z2);
-    --select: var(--z10);
-    --on-select: var(--z0);
-    --focus: var(--z10);
-    --dichroic: oklch(0.72 0.19 352);
-    --dichroic-ink: oklch(0.78 0.16 352);
-    --on-dichroic: oklch(0.17 0.02 352);
-    --dichroic-wash: oklch(0.3 0.07 352);
-    --sheet-shadow: -24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6);
+    --shelf: oklch(0.2 0.008 60);
+    --box: oklch(0.25 0.009 60);
+    --box-2: oklch(0.23 0.009 60);
+    --ink: oklch(0.95 0.006 80);
+    --ink-2: oklch(0.8 0.01 80);
+    --ink-3: oklch(0.72 0.01 80);
+    --rule: oklch(0.33 0.01 60);
+    --rule-strong: oklch(0.45 0.01 60);
+    --rail: oklch(0.24 0.045 162);
+    --rail-hover: oklch(0.29 0.05 162);
+    --rail-rule: oklch(0.32 0.04 162);
+    --urgent: oklch(0.62 0.19 27);
+    --urgent-ink: oklch(0.76 0.14 27);
+    --urgent-wash: oklch(0.3 0.07 27);
+    --waiting-ink: oklch(0.84 0.13 85);
+    --waiting-wash: oklch(0.31 0.06 80);
+    --done: oklch(0.58 0.12 158);
+    --done-ink: oklch(0.78 0.11 158);
+    --done-wash: oklch(0.29 0.05 158);
+    --shefa: oklch(0.6 0.16 262);
+    --shefa-ink: oklch(0.78 0.11 262);
+    --shefa-wash: oklch(0.3 0.07 262);
+    --primary-hover: oklch(0.63 0.12 158);
+    --focus: oklch(0.75 0.12 262);
+    --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
+    --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --ground: var(--z1);
-  --sheet: var(--z2);
-  --field-2: var(--z2);
-  --ink: var(--z10);
-  --ink-2: var(--z8);
-  --ink-3: var(--z7);
-  --rule: var(--z3);
-  --rule-strong: var(--z8);
-  --hatch-ink: var(--z7);
-  --rail: var(--z0);
-  --rail-rule: var(--z2);
-  --select: var(--z10);
-  --on-select: var(--z0);
-  --focus: var(--z10);
-  --dichroic: oklch(0.72 0.19 352);
-  --dichroic-ink: oklch(0.78 0.16 352);
-  --on-dichroic: oklch(0.17 0.02 352);
-  --dichroic-wash: oklch(0.3 0.07 352);
-  --sheet-shadow: -24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6);
+  --shelf: oklch(0.2 0.008 60);
+  --box: oklch(0.25 0.009 60);
+  --box-2: oklch(0.23 0.009 60);
+  --ink: oklch(0.95 0.006 80);
+  --ink-2: oklch(0.8 0.01 80);
+  --ink-3: oklch(0.72 0.01 80);
+  --rule: oklch(0.33 0.01 60);
+  --rule-strong: oklch(0.45 0.01 60);
+  --rail: oklch(0.24 0.045 162);
+  --rail-hover: oklch(0.29 0.05 162);
+  --rail-rule: oklch(0.32 0.04 162);
+  --urgent: oklch(0.62 0.19 27);
+  --urgent-ink: oklch(0.76 0.14 27);
+  --urgent-wash: oklch(0.3 0.07 27);
+  --waiting-ink: oklch(0.84 0.13 85);
+  --waiting-wash: oklch(0.31 0.06 80);
+  --done: oklch(0.58 0.12 158);
+  --done-ink: oklch(0.78 0.11 158);
+  --done-wash: oklch(0.29 0.05 158);
+  --shefa: oklch(0.6 0.16 262);
+  --shefa-ink: oklch(0.78 0.11 262);
+  --shefa-wash: oklch(0.3 0.07 262);
+  --primary-hover: oklch(0.63 0.12 158);
+  --focus: oklch(0.75 0.12 262);
+  --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
+  --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
 }
-
-/* Martian Mono draws Latin digits only. In Bangla the quantities stay in Anek, so a serial or a
-   time never mixes two faces; tables still right-align them. */
-:root:lang(bn) { --font-num: 'Anek', 'Noto Sans Bengali', system-ui, sans-serif; }

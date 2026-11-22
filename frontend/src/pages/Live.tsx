@@ -5,7 +5,7 @@ import { api, type Callback, type CallRow, type SessionLoad } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { Empty, ErrorNote, PageHeader, Pill, Skeleton, durationText, hatchFor } from '../components'
+import { Empty, ErrorNote, PageHeader, Pill, Skeleton, docClass, durationText } from '../components'
 
 export function CallStatus({ call }: { call: CallRow }) {
   const { t } = useI18n()
@@ -23,9 +23,9 @@ function nowMinutes() {
 }
 
 /**
- * Today's chamber sessions on one time axis. A block's length is the session's real duration;
- * its fill is the share of places taken, drawn as hatching that gets denser as it fills. Every
- * block also says its count in words.
+ * Today's chamber sessions on one time axis, each doctor in their own box colour. A block's
+ * length is the session's real duration; it fills with the doctor's colour as places are taken,
+ * and says its count in a printed stamp.
  */
 function DayLoad() {
   const { t, num, clock, pick } = useI18n()
@@ -50,7 +50,7 @@ function DayLoad() {
     <section className="dayload" aria-labelledby="load-h">
       <div className="section-head">
         <h2 id="load-h">{t('loadTitle')}</h2>
-        <span className="legend">{t('loadLegend')}</span>
+
       </div>
       {load.error ? <ErrorNote error={load.error} onRetry={load.reload} /> : null}
       {load.loading && !load.data ? <Skeleton rows={2} /> : null}
@@ -62,7 +62,7 @@ function DayLoad() {
             <div className="load-track">
               {hours.map((h, i) =>
                 i % step === 0 ? (
-                  <span key={h} className="load-hour mono" style={{ left: at(h) }}>
+                  <span key={h} className="load-hour" style={{ left: at(h) }}>
                     {clock(`${String(h / 60).padStart(2, '0')}:00`)}
                   </span>
                 ) : null,
@@ -73,7 +73,7 @@ function DayLoad() {
             {[...byDoctor.values()].map((sessions) => {
               const d = sessions[0]
               return (
-                <li key={d.doctor_id} className="load-row">
+                <li key={d.doctor_id} className={`load-row ${docClass(d.doctor_id)}`}>
                   <span className="load-name">{pick(d.doctor_en, d.doctor_bn)}</span>
                   <div className="load-track">
                     {hours.map((h) => (
@@ -94,7 +94,7 @@ function DayLoad() {
                         >
                           {!s.on_leave ? (
                             <span
-                              className={`load-fill ${hatchFor(s.booked, s.capacity)}`}
+                              className="load-fill"
                               style={{ width: `${Math.min(100, (s.booked / Math.max(1, s.capacity)) * 100)}%` }}
                               aria-hidden="true"
                             />
@@ -104,7 +104,7 @@ function DayLoad() {
                               t('loadOnLeave')
                             ) : (
                               <>
-                                <span className="mono" aria-hidden="true">
+                                <span className="stamp" aria-hidden="true">
                                   {num(s.booked)}/{num(s.capacity)}
                                 </span>
                                 {full ? <span className="load-full"> {t('loadFull')}</span> : null}
@@ -148,18 +148,18 @@ function Callbacks() {
     <section className={`callbacks${items.length ? ' has-items' : ''}`} aria-labelledby="cb-h" aria-live="polite">
       <div className="section-head">
         <h2 id="cb-h">{t('callbacksTitle')}</h2>
-        {items.length ? <span className="count-big mono">{items.length}</span> : null}
+        {items.length ? <span className="count-big">{items.length}</span> : null}
       </div>
       {list.error ? <ErrorNote error={list.error} onRetry={list.reload} /> : null}
       {list.data && items.length === 0 ? <p className="muted">{t('noCallbacks')}</p> : null}
       {items.length ? (
         <ul className="ledger">
           {items.map((c) => (
-            <li key={c.id} className="ledger-row is-shefa">
-              <Pill tone="shefa">{t('needsPersonShort')}</Pill>
+            <li key={c.id} className="ledger-row is-urgent">
+              <Pill tone="bad">{t('needsPersonShort')}</Pill>
               <Phone size={16} strokeWidth={1.75} aria-hidden="true" />
               {c.phone ? (
-                <a href={`tel:${c.phone}`} className="phone mono">
+                <a href={`tel:${c.phone}`} className="phone">
                   {c.phone}
                 </a>
               ) : (
@@ -217,7 +217,7 @@ export function Live() {
         <section aria-labelledby="active-h" aria-live="polite">
           <div className="section-head">
             <h2 id="active-h">{t('inProgress')}</h2>
-            {active.length ? <span className="count-big mono">{active.length}</span> : null}
+            {active.length ? <span className="count-big count-shefa">{active.length}</span> : null}
           </div>
           {calls.error ? <ErrorNote error={calls.error} onRetry={calls.reload} /> : null}
           {calls.loading && !calls.data ? <Skeleton rows={2} /> : null}

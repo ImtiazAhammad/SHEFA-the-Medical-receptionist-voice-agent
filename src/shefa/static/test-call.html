@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SHEFA — Test Center</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 28 28%27%3E%3Crect width=%2728%27 height=%2728%27 fill=%27%23f9fafb%27/%3E%3Crect x=%270.5%27 y=%270.5%27 width=%2727%27 height=%2727%27 fill=%27none%27 stroke=%27%2317191c%27/%3E%3Crect x=%274%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%2317191c%27/%3E%3Crect x=%2711.5%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23808388%27/%3E%3Crect x=%2719%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23c4127a%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230b5d44%27/%3E%3Cg transform=%27rotate(-38 16 16)%27%3E%3Crect x=%276%27 y=%2711.5%27 width=%2720%27 height=%279%27 rx=%274.5%27 fill=%27%23fff%27/%3E%3Cpath d=%27M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z%27 fill=%27%232d5bc8%27/%3E%3C/g%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/world/fonts.css"><link rel="stylesheet" href="/static/world/world.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -14,14 +14,14 @@
   --ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);
   --dur-press:120ms;--dur-enter:180ms;
 }
-body{font-family:var(--font);background:var(--ground);color:var(--ink);min-height:100vh}
-.topbar{background:var(--sheet);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule)}
+body{font-family:var(--font);background:var(--shelf);color:var(--ink);min-height:100vh}
+.topbar{background:var(--box);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule)}
 .topbar h1{font-size:1.4rem;font-stretch:78%;font-weight:650;color:var(--ink)}
 .topbar a{color:var(--ink-2);text-decoration:none;font-size:.85rem}
-.tabs{display:flex;gap:0;background:var(--sheet);border-bottom:1px solid var(--rule);padding:0 24px}
+.tabs{display:flex;gap:0;background:var(--box);border-bottom:1px solid var(--rule);padding:0 24px}
 .tab{padding:12px 24px;cursor:pointer;color:var(--ink-2);font-size:.875rem;font-weight:600;border-bottom:2px solid transparent;transition:color var(--dur-press) var(--ease-out),border-color var(--dur-press) var(--ease-out)}
 .tab:hover{color:var(--ink)}
-.tab.active{color:var(--ink);border-bottom-color:var(--dichroic)}
+.tab.active{color:var(--ink);border-bottom-color:var(--shefa)}
 /* Panel switch: was a bare display:none -> block teleport. Opacity only, for
    the same reason as index.html — sibling panels have no spatial relationship. */
 .panel{display:none;padding:32px 24px;max-width:640px;margin:0 auto}
@@ -29,43 +29,43 @@ body{font-family:var(--font);background:var(--ground);color:var(--ink);min-heigh
 @starting-style{.panel.active{opacity:0}}
 h2{font-size:1.25rem;color:var(--ink);margin-bottom:4px}
 .sub{color:var(--ink-2);font-size:.85rem;margin-bottom:24px}
-.card{background:var(--sheet);border-radius:0;padding:24px;border:1px solid var(--ink)}
+.card{background:var(--box);border-radius:var(--r-sm);padding:24px;border:1px solid var(--ink)}
 .status{font-size:.875rem;margin-bottom:16px;min-height:20px}
 .status.ok{color:var(--ink)}
-.status.err{color:var(--dichroic)}
+.status.err{color:var(--shefa)}
 .status.busy{color:var(--ink-2)}
-.btn{padding:12px 24px;border:none;border-radius:0;font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
+.btn{padding:12px 24px;border:none;border-radius:var(--r-sm);font-size:.875rem;font-weight:600;cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out);font-family:inherit}
 /* Press feedback, gated so touch never inherits a stuck pressed state. */
 @media(hover:hover) and (pointer:fine){
   .btn:not(:disabled):active{transform:scale(.97)}
 }
-.btn-go{background:var(--select);color:var(--on-select);border:1px solid var(--select)}.btn-go:hover{background:var(--z2)}
-.btn-red{background:var(--dichroic);color:var(--on-dichroic)}.btn-red:hover{background:var(--dichroic-ink)}
-.btn-alt{background:transparent;color:var(--ink);border:1px solid var(--ink)}.btn-alt:hover{background:var(--field-2)}
+.btn-go{background:var(--primary);color:var(--on-primary);border:1px solid var(--primary)}.btn-go:hover{background:var(--ink-2)}
+.btn-red{background:var(--urgent);color:var(--on-urgent)}.btn-red:hover{background:var(--urgent-ink)}
+.btn-alt{background:transparent;color:var(--ink);border:1px solid var(--ink)}.btn-alt:hover{background:var(--box-2)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.timer{font-size:2rem;font-weight:700;font-family:var(--font-num);color:var(--ink);margin:16px 0;text-align:center;min-height:48px}
+.timer{font-size:2rem;font-weight:700;font-family:var(--font-display);color:var(--ink);margin:16px 0;text-align:center;min-height:48px}
 .visualizer{height:40px;display:flex;align-items:center;justify-content:center;gap:3px;margin:12px 0}
 /* Fixed 32px track scaled by transform, never height: at 60fps, animating
    height on 20 elements relayouts every frame. Resting scaleY .125 == 4px,
    matching the bar height this visualizer used to hardcode. */
-.bar{width:4px;height:32px;background:var(--select);border-radius:0;transform:scaleY(.125);transform-origin:center}
-.transcript{max-height:300px;overflow-y:auto;background:var(--ground);border-radius:0;padding:12px;font-size:.8rem;margin-top:16px}
+.bar{width:4px;height:32px;background:var(--primary);border-radius:var(--r-sm);transform:scaleY(.125);transform-origin:center}
+.transcript{max-height:300px;overflow-y:auto;background:var(--shelf);border-radius:var(--r-sm);padding:12px;font-size:.8rem;margin-top:16px}
 .turn{margin-bottom:8px}
 .role{font-weight:600;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em}
-.role.user{color:var(--ink)}.role.assistant{color:var(--dichroic)}.role.system{color:var(--ink-2)}
+.role.user{color:var(--ink)}.role.assistant{color:var(--shefa)}.role.system{color:var(--ink-2)}
 .text{color:var(--ink);margin-top:2px;line-height:1.5}
 .chat-input{display:flex;gap:8px;margin-top:16px}
-.chat-input input{flex:1;padding:10px 14px;border:1px solid var(--rule);border-radius:0;background:var(--ground);color:var(--ink);font-size:.875rem;font-family:inherit}
-.chat-input input:focus{outline:none;border-color:var(--select)}
+.chat-input input{flex:1;padding:10px 14px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--shelf);color:var(--ink);font-size:.875rem;font-family:inherit}
+.chat-input input:focus{outline:none;border-color:var(--primary)}
 /* Outbound result block: arrived cold via style.display. Same entrance as the
    conversation card in index.html — opacity plus a 4px rise. */
-#o-result{display:none;opacity:0;translate:0 4px;background:var(--ground);border-radius:0;padding:12px;font-size:.8rem;margin-top:12px;
+#o-result{display:none;opacity:0;translate:0 4px;background:var(--shelf);border-radius:var(--r-sm);padding:12px;font-size:.8rem;margin-top:12px;
   transition:opacity var(--dur-enter) var(--ease-out),translate var(--dur-enter) var(--ease-out)}
 #o-result.open{display:block;opacity:1;translate:0 0}
 @starting-style{#o-result.open{opacity:0;translate:0 4px}}
-.info{background:var(--ground);border-radius:0;padding:12px;font-size:.8rem;color:var(--ink-2);margin-top:16px;line-height:1.6}
+.info{background:var(--shelf);border-radius:var(--r-sm);padding:12px;font-size:.8rem;color:var(--ink-2);margin-top:16px;line-height:1.6}
 .info strong{color:var(--ink)}
-.cost{background:var(--field-2);border:1px solid var(--z6);border-radius:0;padding:12px;font-size:.8rem;color:var(--ink);margin-top:12px}
+.cost{background:var(--box-2);border:1px solid var(--rule-strong);border-radius:var(--r-sm);padding:12px;font-size:.8rem;color:var(--ink);margin-top:12px}
 
 /* Reduced motion. This page previously had no block at all. Collapsing the
    duration tokens covers every transition here in one place; gentler, not

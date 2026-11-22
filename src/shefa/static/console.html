@@ -1,48 +1,48 @@
 <!doctype html>
 <html lang="en">
 <head>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 28 28%27%3E%3Crect width=%2728%27 height=%2728%27 fill=%27%23f9fafb%27/%3E%3Crect x=%270.5%27 y=%270.5%27 width=%2727%27 height=%2727%27 fill=%27none%27 stroke=%27%2317191c%27/%3E%3Crect x=%274%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%2317191c%27/%3E%3Crect x=%2711.5%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23808388%27/%3E%3Crect x=%2719%27 y=%274%27 width=%275%27 height=%2720%27 fill=%27%23c4127a%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%230b5d44%27/%3E%3Cg transform=%27rotate(-38 16 16)%27%3E%3Crect x=%276%27 y=%2711.5%27 width=%2720%27 height=%279%27 rx=%274.5%27 fill=%27%23fff%27/%3E%3Cpath d=%27M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z%27 fill=%27%232d5bc8%27/%3E%3C/g%3E%3C/svg%3E">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SHEFA Console</title>
 <link rel="stylesheet" href="/static/world/fonts.css"><link rel="stylesheet" href="/static/world/world.css">
 <style>
-:root{--bg:var(--ground);--panel:var(--sheet);--fg:var(--ink);--mute:var(--ink-2);--line:var(--rule);--accent:var(--select);--accent-fg:var(--on-select);--warn:var(--ink-2);--bad:var(--dichroic);--ok:var(--ink);--chip:var(--field-2);--r:0}
+:root{--bg:var(--shelf);--panel:var(--box);--fg:var(--ink);--mute:var(--ink-2);--line:var(--rule);--accent:var(--primary);--accent-fg:var(--on-primary);--warn:var(--ink-2);--bad:var(--urgent);--ok:var(--ink);--chip:var(--box-2);--r:0}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 var(--font);padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 header{display:flex;align-items:center;gap:10px;padding:14px 16px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
-header h1{font-size:18px;margin:0;flex:1}header h1 span{color:var(--dichroic-ink)}
+header h1{font-size:18px;margin:0;flex:1}header h1 span{color:var(--shefa-ink)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--mute)}.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
 main{max-width:760px;margin:0 auto;padding:16px}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}
 nav button{flex:1;background:none;border:0;color:var(--mute);padding:12px 4px;font:inherit;font-size:12px;cursor:pointer}
 nav button b{display:block;font-size:20px;line-height:1.2}nav button.on{color:var(--accent);font-weight:600}
 section{display:none}section.on{display:block}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:0;padding:16px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:16px;margin-bottom:14px}
 h2{font-size:15px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
-input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:0;background:transparent;color:inherit;font:inherit}
-.btn{border:0;border-radius:0;padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
-.btn{border:1px solid var(--accent)}.btn.alt{background:transparent;color:var(--fg);border:1px solid var(--fg)}.btn.alt:hover{background:var(--chip)}.btn.red{background:var(--bad);color:var(--on-dichroic)}.btn.sm{padding:7px 12px;font-size:13px;border-radius:0}.btn:disabled{opacity:1;color:var(--ink-3);border-color:var(--z7);background:transparent;text-decoration:line-through}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:transparent;color:inherit;font:inherit}
+.btn{border:0;border-radius:var(--r-sm);padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
+.btn{border:1px solid var(--accent)}.btn.alt{background:transparent;color:var(--fg);border:1px solid var(--fg)}.btn.alt:hover{background:var(--chip)}.btn.red{background:var(--bad);color:var(--on-shefa)}.btn.sm{padding:7px 12px;font-size:13px;border-radius:var(--r-sm)}.btn:disabled{opacity:1;color:var(--ink-3);border-color:var(--rule-strong);background:transparent;text-decoration:line-through}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}
 .call{display:grid;place-items:center;text-align:center;padding:26px 16px}
-.orb{width:116px;height:116px;border-radius:0;outline:1px solid var(--ink);outline-offset:6px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
-.orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:var(--on-dichroic)}
+.orb{width:116px;height:116px;border-radius:var(--r-sm);outline:1px solid var(--ink);outline-offset:6px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
+.orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:var(--on-shefa)}
 @keyframes pulse{70%{box-shadow:0 0 0 26px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @media(prefers-reduced-motion:reduce){.orb.live{animation:none}}
 #state{margin-top:14px;font-weight:600}#hint{color:var(--mute);font-size:14px;margin-top:2px;min-height:1.4em}
 .chat{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;padding:4px 0}
-.msg{max-width:86%;padding:9px 12px;border-radius:0;background:var(--chip);word-wrap:break-word}
+.msg{max-width:86%;padding:9px 12px;border-radius:var(--r-sm);background:var(--chip);word-wrap:break-word}
 .msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-fg)}.msg small{display:block;opacity:.65;font-size:11px}
-.ring{background:var(--dichroic);color:var(--on-dichroic);border-radius:0;padding:14px 16px;margin-bottom:14px;display:none;gap:10px;align-items:center}
-.ring.on{display:flex}.ring b{flex:1}.ring .btn{background:var(--sheet);color:var(--ink)}
+.ring{background:var(--shefa);color:var(--on-shefa);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:14px;display:none;gap:10px;align-items:center}
+.ring.on{display:flex}.ring b{flex:1}.ring .btn{background:var(--box);color:var(--ink)}
 table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--mute);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-.tag{display:inline-block;padding:2px 8px;border-radius:0;background:var(--chip);font-size:12px}.tag.booked{background:color-mix(in srgb,var(--accent) 20%,transparent)}.tag.cancelled,.tag.no_show{background:color-mix(in srgb,var(--bad) 20%,transparent)}
+.tag{display:inline-block;padding:2px 8px;border-radius:var(--r-sm);background:var(--chip);font-size:12px}.tag.booked{background:color-mix(in srgb,var(--accent) 20%,transparent)}.tag.cancelled,.tag.no_show{background:color-mix(in srgb,var(--bad) 20%,transparent)}
 .doc{padding:10px 0;border-top:1px solid var(--line)}.doc:first-of-type{border-top:0}.doc small{color:var(--mute)}
 .empty{color:var(--mute);text-align:center;padding:18px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}.kv span:nth-child(odd){color:var(--mute)}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.note{color:var(--mute);font-size:14px;margin-top:8px;min-height:1.4em}
-#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:0;font-size:14px;display:none;z-index:9;max-width:90vw}
+#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:var(--r-sm);font-size:14px;display:none;z-index:9;max-width:90vw}
 
 /* Bangla has no case, and tracking breaks its conjuncts. */
 :lang(bn){letter-spacing:0!important}
@@ -51,7 +51,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 <body>
 <header><h1><span>SHEFA</span> console</h1><span id="hdot" class="dot" title="server health"></span></header>
 <main>
-<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:transparent;color:var(--on-dichroic);outline:1px solid var(--on-dichroic)">Decline</button></div>
+<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:transparent;color:var(--on-shefa);outline:1px solid var(--on-shefa)">Decline</button></div>
 
 <section id="talk" class="on">
   <div class="card call">

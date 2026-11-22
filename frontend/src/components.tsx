@@ -53,22 +53,20 @@ export function ErrorNote({ error, onRetry }: { error: ApiError; onRetry: () => 
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'quiet' | 'gone' | 'sel' | 'shefa' | 'live'
 
-/** A state mark. State is drawn (frame, hatch, crossed hatch, dotted, struck) AND said in words;
+/** A state mark: the legend's colour (red needs a person, amber waiting, green done, blue SHEFA) AND words;
  * the drawing never carries meaning alone. `info` reads as a plain settled frame. */
 export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   const cls = tone === 'info' ? 'ok' : tone === 'live' ? 'shefa mark-live' : tone
   return <span className={`mark mark-${cls}`}>{children}</span>
 }
 
-/** Hatch density for a share of places taken: one of four steps, or full. */
-export function hatchFor(booked: number, capacity: number): string {
-  if (capacity <= 0 || booked <= 0) return ''
-  const r = booked / capacity
-  return r >= 1 ? 'hatch-4' : r > 0.66 ? 'hatch-3' : r > 0.33 ? 'hatch-2' : 'hatch-1'
+/** A doctor's box colour: the same doctor wears the same colour on every screen. */
+export function docClass(id: number | undefined | null): string {
+  return id == null ? '' : `doc-c${Math.abs(id) % 6}`
 }
 
 /**
- * A sheet laid over the page, sliding in from the side like a tracing sheet over the record.
+ * A sheet laid over the page, sliding in from the side like a box pulled from the shelf.
  * It is a modal <dialog>: Esc and the close button leave, focus stays inside while it is open
  * and returns to where it was. The page under it stays visible.
  */

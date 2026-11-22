@@ -3,7 +3,7 @@ import { api, type Department, type Doctor } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
 import { languageName } from '../lib/labels'
-import { Empty, ErrorNote, PageHeader, Skeleton } from '../components'
+import { Empty, ErrorNote, PageHeader, Skeleton, docClass } from '../components'
 
 function matches(doc: Doctor, query: string): boolean {
   const q = query.trim().toLowerCase()
@@ -29,8 +29,8 @@ function DoctorCard({ doc }: { doc: Doctor }) {
   const fee = doc.fees?.new ?? doc.visit_fee
   const next = doc.next_available
   return (
-    <article className="doc">
-      <h3>
+    <article className={`doc ${docClass(doc.id)}`}>
+      <h3 className="doc-band">
         {t('doctor')} {pick(doc.name, doc.name_bn)}
       </h3>
       <p className="muted">

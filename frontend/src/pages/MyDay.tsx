@@ -7,9 +7,9 @@ import { Empty, ErrorNote, PageHeader, Pill, Skeleton, type Tone } from '../comp
 const TODAY = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date())
 
 const STATUS: Record<string, { key: Key; tone: Tone }> = {
-  booked: { key: 'statusBooked', tone: 'ok' },
-  completed: { key: 'statusCompleted', tone: 'sel' },
-  no_show: { key: 'statusNoShow', tone: 'quiet' },
+  booked: { key: 'statusBooked', tone: 'quiet' },
+  completed: { key: 'statusCompleted', tone: 'ok' },
+  no_show: { key: 'statusNoShow', tone: 'warn' },
   cancelled: { key: 'statusCancelled', tone: 'gone' },
 }
 

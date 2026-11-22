@@ -601,7 +601,7 @@ def build_shell(config: CollectorConfig, out: Path, api: str) -> int:
         for name in ("tokens.css", "fonts-lite.css"):
             shutil.copy2(world / name, out / "world" / name)
         for font in (world / "fonts").glob("*"):
-            if "wght" in font.name or font.name.startswith(("martian", "OFL")):
+            if font.name.startswith(("baloo", "OFL")):  # the light set: Baloo Da 2 only
                 shutil.copy2(font, out / "world" / "fonts" / font.name)
     (out / "config.js").write_text(
         f"// Written by `shefa collect shell`. Change the address here when the tunnel address changes.\n"
