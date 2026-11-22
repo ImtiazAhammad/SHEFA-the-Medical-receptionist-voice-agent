@@ -360,11 +360,12 @@ form.stack, .stack > form, .stack-narrow { max-width: 34rem; }
 .page-legend dd { margin: 0; }
 .page-legend .lg-done dt { background: var(--done); } .page-legend .lg-shefa dt { background: var(--shefa); }
 
-/* a doctor's phone: one patient fills the screen, the next is one swipe away */
+/* a doctor's phone: one patient fills the screen, the next is one swipe away (the page scrolls) */
 @media (max-width: 40rem) {
-  .myday-feed { scroll-snap-type: y mandatory; overflow-y: auto; max-height: calc(100dvh - 12rem); padding: 0; }
-  .myday-feed > li { scroll-snap-align: start; min-height: calc(100dvh - 13rem); flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--space-3); padding: var(--space-5); font-size: var(--step-1); }
-  .myday-feed > li .serial { font-size: var(--step-4); }
+  html:has(.myday-feed) { scroll-snap-type: y proximity; }
+  .myday-feed { padding: 0; background: transparent; box-shadow: none; display: grid; gap: var(--space-3); }
+  .myday-feed > li { scroll-snap-align: start; min-height: 60dvh; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--space-3); padding: var(--space-5); font-size: var(--step-1); background: var(--box); border-radius: var(--r); box-shadow: var(--shadow-box); border-top: 0.55rem solid var(--done); border-bottom: 0; }
+  .myday-feed > li .serial { font-size: var(--step-3); }
   .myday-feed > li .row-end { margin-inline-start: 0; }
 }
 @media (max-width: 52rem) {

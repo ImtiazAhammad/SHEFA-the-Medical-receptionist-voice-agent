@@ -65,7 +65,7 @@ export function MyDay() {
           const s = STATUS[a.status] ?? STATUS.booked
           return (
             <li key={a.appointment_id} className="row">
-              <strong className="num serial">{clock(a.start_time)}</strong>
+              <strong className="stamp serial">{clock(a.start_time)}</strong>
               <span>{a.patient_name ?? '-'}</span>
               <Pill tone={s.tone}>{t(s.key)}</Pill>
               {a.reason ? (

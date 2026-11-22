@@ -6,14 +6,15 @@
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
   width: 10rem; height: 10rem; border: 0; border-radius: 50%; cursor: pointer;
   background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 700;
-  box-shadow: 0 0 0 8px var(--done-wash), var(--shadow-lift);
+  box-shadow: var(--shadow-lift);
   transition: transform 0.15s var(--ease-out), background-color 0.15s;
 }
 .demo-orb:hover:not(:disabled) { background: var(--primary-hover); }
 .demo-orb:active:not(:disabled) { transform: scale(0.97); }
 .demo-orb:disabled { cursor: progress; background: var(--ink-3); }
-.demo-orb.live { background: var(--shefa); color: var(--on-shefa); box-shadow: 0 0 0 8px var(--shefa-wash), var(--shadow-lift); animation: demo-ring 1.8s ease-out infinite; }
-@keyframes demo-ring { 0% { box-shadow: 0 0 0 8px var(--shefa-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 18px transparent, var(--shadow-lift); } }
+.demo-orb.live { background: var(--shefa); color: var(--on-shefa); animation: demo-ring 1.8s ease-out infinite; }
+/* the ring only while SHEFA is on the call: it says the line is live */
+@keyframes demo-ring { 0% { box-shadow: 0 0 0 0 var(--shefa-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 18px transparent, var(--shadow-lift); } }
 .demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
 .demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; }
 .demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; }

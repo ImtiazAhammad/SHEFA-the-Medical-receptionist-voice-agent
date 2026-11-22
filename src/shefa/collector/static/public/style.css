@@ -119,11 +119,11 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .recbtn {
   width: 116px; height: 116px; border: 0; border-radius: 50%; background: var(--primary); color: var(--on-primary);
   display: grid; place-items: center; cursor: pointer; touch-action: manipulation;
-  box-shadow: 0 0 0 8px var(--done-wash), var(--shadow-lift);
+  box-shadow: var(--shadow-lift);
 }
 .recbtn:hover:not(:disabled) { background: var(--primary-hover); }
 .recbtn:disabled { background: var(--box-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; }
-.recbtn.on { background: var(--urgent); color: var(--on-urgent); box-shadow: 0 0 0 8px var(--urgent-wash), var(--shadow-lift); animation: rec 1.2s ease-in-out infinite; }
+.recbtn.on { background: var(--urgent); color: var(--on-urgent); animation: rec 1.2s ease-in-out infinite; }
 .reclabel { font-family: var(--font-display); font-weight: 700; text-align: center; }
 .count { font-family: var(--font-display); font-weight: 800; color: var(--urgent-ink); }
 .review { width: 100%; display: flex; flex-direction: column; gap: 10px; }
@@ -144,7 +144,8 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .toast { position: fixed; left: 12px; right: 12px; bottom: 80px; max-width: 520px; margin: 0 auto; background: var(--ink); color: var(--box); padding: 12px 14px; border-radius: var(--r); display: flex; gap: 10px; align-items: center; justify-content: space-between; z-index: 10; box-shadow: var(--shadow-lift); }
 .toast .chip { color: var(--ink); }
 
-@keyframes rec { 50% { box-shadow: 0 0 0 16px transparent, var(--shadow-lift); } }
+/* a ring only while recording: it says the microphone is live */
+@keyframes rec { 0% { box-shadow: 0 0 0 0 var(--urgent-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 16px transparent, var(--shadow-lift); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 .stack.wide { width: 100%; }
