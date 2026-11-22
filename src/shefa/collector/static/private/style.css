@@ -234,9 +234,6 @@ dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: fle
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .meter > i, .bar-row .track > i { transition: width .4s ease; }
-}
 @media print { .topbar, .tabs, button { display: none; } }
 
 textarea.plain { min-height: 5em; font-size: 1rem; line-height: 1.7; }
@@ -259,7 +256,7 @@ textarea.plain { min-height: 5em; font-size: 1rem; line-height: 1.7; }
 
 /* ---- voices (record page and admin tab) ---------------------------------------------------- */
 .page.narrow-wide { max-width: 760px; }
-.consent-text { font-size: 1.1rem; line-height: 1.85; background: var(--surface-2); border-radius: 0; padding: 12px 16px; border-inline-start: 4px solid var(--warn); }
+.consent-text { font-size: 1.1rem; line-height: 1.85; background: var(--surface-2); border-radius: 0; padding: 12px 16px; }
 .progress-line { margin-bottom: 6px; }
 .num-big { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
 .group-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-top: 8px; }
