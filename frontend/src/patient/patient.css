@@ -38,13 +38,15 @@
   width: 100%; text-align: start; display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0 1rem 0.85rem; border: 0; border-radius: var(--r); overflow: hidden;
   background: var(--box); color: var(--ink); cursor: pointer; box-shadow: var(--shadow-box);
-  border-top: 0.55rem solid var(--doc, var(--done));
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
 }
 .p-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
-.p-card strong { font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; margin-top: 0.65rem; color: var(--ink); }
+.p-card strong { margin: 0 -1rem 0.5rem; padding: 0.6rem 1rem; background: var(--doc, var(--done)); color: #fff; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; }
 .p-fee { margin-top: 0.3rem; font-weight: 700; }
-.p-picked { font-family: var(--font-display); font-weight: 700; margin: 0 0 0.5rem; }
+.p-picked { margin: 0 0 0.75rem; }
+.p-docname { display: inline-block; padding: 0.3rem 0.85rem; border-radius: var(--r-sm); background: var(--doc, var(--done)); color: #fff; font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; }
+.p-chosen { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; margin: 0.5rem 0 1.1rem; }
+.p-when { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
 
 .p-field { display: flex; flex-direction: column; gap: 0.3rem; margin: 0 0 1rem; }
 .p-field span { font-weight: 600; font-size: 0.95rem; }

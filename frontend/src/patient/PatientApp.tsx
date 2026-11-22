@@ -288,7 +288,7 @@ export default function PatientApp() {
 
         {view === 'time' && doctor ? (
           <section aria-labelledby="when">
-            <p className="p-picked">{t('withDr', { doctor: doctorName(doctor) })}</p>
+            <p className={`p-picked doc-c${Math.abs(doctor.id) % 6}`}><span className="p-docname">{doctorName(doctor)}</span></p>
             {days === null ? (
               <p className="p-muted" role="status">
                 {t('loading')}
@@ -341,6 +341,7 @@ export default function PatientApp() {
             t={t}
             doctor={doctor}
             doctorName={doctorName(doctor)}
+            doctorId={doctor.id}
             when={`${longDay(day)} · ${clock(time)}`}
             day={day}
             time={time}
@@ -409,6 +410,7 @@ function Details(props: {
   t: T
   doctor: PublicDoctor
   doctorName: string
+  doctorId: number
   when: string
   day: string
   time: string
@@ -457,10 +459,9 @@ function Details(props: {
   return (
     <form onSubmit={(e) => void submit(e)} aria-labelledby="details">
       <h2 id="details">{t('yourDetails')}</h2>
-      <div className="p-note">
-        <strong>{props.doctorName}</strong>
-        <br />
-        {props.when}
+      <div className={`p-chosen doc-c${Math.abs(props.doctorId) % 6}`}>
+        <span className="p-docname">{props.doctorName}</span>
+        <span className="p-when">{props.when}</span>
       </div>
       <label className="p-field">
         <span>{t('name')}</span>

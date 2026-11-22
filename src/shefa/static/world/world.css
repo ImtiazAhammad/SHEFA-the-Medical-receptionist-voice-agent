@@ -116,3 +116,6 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* a doctor's reversed name block, as printed on the box */
+.doc-name { display: inline-block; padding: 0.1rem 0.6rem; border-radius: var(--r-sm); background: var(--doc, var(--ink-2)); color: #fff; font-family: var(--font-display); font-weight: 700; line-height: 1.45; }

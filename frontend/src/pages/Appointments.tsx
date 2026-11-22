@@ -188,7 +188,7 @@ export function Appointments() {
                       <div className={a.serial_no ? 'muted small' : ''}>{clock(a.start_time)}</div>
                     </td>
                     <td data-label={t('doctor')}>
-                      <span className={`doc-chip ${docClass(a.doctor_id)}`}>{a.doctor_bn || a.doctor}</span>
+                      <span className={`doc-name ${docClass(a.doctor_id)}`}>{a.doctor_bn || a.doctor}</span>
                       {a.source === 'walkin' ? <div className="small"><Pill tone="quiet">{t('walkIn')}</Pill></div> : null}
                       {a.source === 'phone' || a.source === 'web' ? <div className="small"><Pill tone="shefa">{t('byShefa')}</Pill></div> : null}
                     </td>

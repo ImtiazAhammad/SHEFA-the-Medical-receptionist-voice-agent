@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Phone } from 'lucide-react'
 import { api, type Callback, type CallRow, type SessionLoad } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { Legend } from '../Shell'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
 import { Empty, ErrorNote, PageHeader, Pill, Skeleton, docClass, durationText } from '../components'
@@ -151,7 +152,7 @@ function Callbacks() {
         {items.length ? <span className="count-big">{items.length}</span> : null}
       </div>
       {list.error ? <ErrorNote error={list.error} onRetry={list.reload} /> : null}
-      {list.data && items.length === 0 ? <p className="muted">{t('noCallbacks')}</p> : null}
+      {list.data && items.length === 0 ? <p className="muted callbacks-none">{t('noCallbacks')}</p> : null}
       {items.length ? (
         <ul className="ledger">
           {items.map((c) => (
@@ -211,9 +212,10 @@ export function Live() {
   return (
     <>
       <PageHeader title={t('liveTitle')} />
+      <Callbacks />
       <DayLoad />
+      <Legend className="page-legend" />
       <div className="live-cols">
-        <Callbacks />
         <section aria-labelledby="active-h" aria-live="polite">
           <div className="section-head">
             <h2 id="active-h">{t('inProgress')}</h2>

@@ -31,7 +31,7 @@ function DoctorCard({ doc }: { doc: Doctor }) {
   return (
     <article className={`doc ${docClass(doc.id)}`}>
       <h3 className="doc-band">
-        {t('doctor')} {pick(doc.name, doc.name_bn)}
+        {pick(doc.name, doc.name_bn)}
       </h3>
       <p className="muted">
         {[doc.designation, doc.qualification].filter(Boolean).join(' · ')}

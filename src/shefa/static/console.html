@@ -19,14 +19,14 @@ nav button{flex:1;background:none;border:0;color:var(--mute);padding:12px 4px;fo
 nav button b{display:block;font-size:20px;line-height:1.2}nav button.on{color:var(--accent);font-weight:600}
 section{display:none}section.on{display:block}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:16px;margin-bottom:14px}
-h2{font-size:15px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+h2{font-size:17px;margin:0 0 10px;color:var(--fg);font-family:var(--font-display);font-weight:700}
 label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
 input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:transparent;color:inherit;font:inherit}
 .btn{border:0;border-radius:var(--r-sm);padding:14px 18px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
 .btn{border:1px solid var(--accent)}.btn.alt{background:transparent;color:var(--fg);border:1px solid var(--fg)}.btn.alt:hover{background:var(--chip)}.btn.red{background:var(--bad);color:var(--on-shefa)}.btn.sm{padding:7px 12px;font-size:13px;border-radius:var(--r-sm)}.btn:disabled{opacity:1;color:var(--ink-3);border-color:var(--rule-strong);background:transparent;text-decoration:line-through}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}
 .call{display:grid;place-items:center;text-align:center;padding:26px 16px}
-.orb{width:116px;height:116px;border-radius:var(--r-sm);outline:1px solid var(--ink);outline-offset:6px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
+.orb{width:116px;height:116px;border-radius:50%;box-shadow:0 0 0 8px var(--done-wash),var(--shadow-lift)!important;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:44px;border:0;cursor:pointer;box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}
 .orb.live{animation:pulse 1.6s infinite}.orb.red{background:var(--bad);color:var(--on-shefa)}
 @keyframes pulse{70%{box-shadow:0 0 0 26px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @media(prefers-reduced-motion:reduce){.orb.live{animation:none}}

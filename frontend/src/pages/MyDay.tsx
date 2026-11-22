@@ -60,7 +60,7 @@ export function MyDay() {
       ) : null}
       {list.loading && !list.data ? <Skeleton rows={4} /> : null}
       {list.data && rows.length === 0 ? <Empty title={t('noPatients')} /> : null}
-      <ul className="rows">
+      <ul className="rows myday-feed">
         {rows.map((a) => {
           const s = STATUS[a.status] ?? STATUS.booked
           return (

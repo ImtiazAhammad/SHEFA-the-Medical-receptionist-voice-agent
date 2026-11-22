@@ -1,4 +1,3 @@
-import type React from 'react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CalendarDays, ChartNoAxesColumn, ClipboardList, FileText, LogOut, Mic, PhoneCall, Radio, Settings2, Stethoscope, Users } from 'lucide-react'
@@ -20,6 +19,19 @@ export function Logo({ size = 30 }: { size?: number }) {
         </g>
       </svg>
     </span>
+  )
+}
+
+/** The colour legend: one colour, one meaning, everywhere. */
+export function Legend({ className }: { className: string }) {
+  const { t } = useI18n()
+  return (
+    <dl className={className} aria-label={t('legendTitle')}>
+      <div className="lg-urgent"><dt /><dd>{t('legendUrgent')}</dd></div>
+      <div className="lg-waiting"><dt /><dd>{t('legendWaiting')}</dd></div>
+      <div className="lg-done"><dt /><dd>{t('legendDone')}</dd></div>
+      <div className="lg-shefa"><dt /><dd>{t('legendShefa')}</dd></div>
+    </dl>
   )
 }
 
@@ -66,15 +78,15 @@ export function Shell() {
   const alert = useDeskAlert(can('records:read'))
   const [sound, setSoundState] = useState(soundOn)
   const items = [
-    { to: '/live', label: t('navLive'), icon: Radio, show: can('records:read'), hue: 'var(--urgent)' },
-    { to: '/overview', label: t('navOverview'), icon: ChartNoAxesColumn, show: can('overview:read'), hue: 'var(--doc-0)' },
-    { to: '/report', label: t('navReport'), icon: FileText, show: can('overview:read'), hue: 'var(--doc-4)' },
-    { to: '/calls', label: t('navCalls'), icon: PhoneCall, show: can('records:read'), hue: 'var(--shefa)' },
-    { to: '/appointments', label: t('navAppointments'), icon: CalendarDays, show: can('records:read'), hue: 'var(--doc-1)' },
-    { to: '/doctors', label: t('navDoctors'), icon: Stethoscope, show: can('records:read'), hue: 'var(--doc-2)' },
-    { to: '/setup', label: t('navSetup'), icon: Settings2, show: can('directory:write'), hue: 'var(--doc-3)' },
-    { to: '/staff', label: t('navStaff'), icon: Users, show: can('staff:manage'), hue: 'var(--doc-5)' },
-    { to: '/my-day', label: t('navMyDay'), icon: ClipboardList, show: can('doctor:self'), hue: 'var(--doc-1)' },
+    { to: '/live', label: t('navLive'), icon: Radio, show: can('records:read') },
+    { to: '/overview', label: t('navOverview'), icon: ChartNoAxesColumn, show: can('overview:read') },
+    { to: '/report', label: t('navReport'), icon: FileText, show: can('overview:read') },
+    { to: '/calls', label: t('navCalls'), icon: PhoneCall, show: can('records:read') },
+    { to: '/appointments', label: t('navAppointments'), icon: CalendarDays, show: can('records:read') },
+    { to: '/doctors', label: t('navDoctors'), icon: Stethoscope, show: can('records:read') },
+    { to: '/setup', label: t('navSetup'), icon: Settings2, show: can('directory:write') },
+    { to: '/staff', label: t('navStaff'), icon: Users, show: can('staff:manage') },
+    { to: '/my-day', label: t('navMyDay'), icon: ClipboardList, show: can('doctor:self') },
   ].filter((i) => i.show)
 
   return (
@@ -85,8 +97,8 @@ export function Shell() {
       <aside className="side">
         <Wordmark />
         <nav aria-label={t('navMain')}>
-          {items.map(({ to, label, icon: Icon, hue }) => (
-            <NavLink key={to} to={to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`} style={{ '--hue': hue } as React.CSSProperties}>
+          {items.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
               <span className="nav-icon" aria-hidden="true">
                 <Icon size={16} strokeWidth={2} />
               </span>
@@ -94,12 +106,7 @@ export function Shell() {
             </NavLink>
           ))}
         </nav>
-        <dl className="rail-legend" aria-label={t('legendTitle')}>
-          <div className="lg-urgent"><dt /><dd>{t('legendUrgent')}</dd></div>
-          <div className="lg-waiting"><dt /><dd>{t('legendWaiting')}</dd></div>
-          <div className="lg-done"><dt /><dd>{t('legendDone')}</dd></div>
-          <div className="lg-shefa"><dt /><dd>{t('legendShefa')}</dd></div>
-        </dl>
+        <Legend className="rail-legend" />
         <div className="side-foot">
           {can('calls:place') ? (
             <a className="nav-item" href="/console">

@@ -54,7 +54,7 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 /* Stat cards */
 .stats{display:grid;grid-template-columns:1fr;gap:0;margin-bottom:24px;border-top:2px solid var(--ink);max-width:720px}
 .stat-card{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:1px solid var(--border);padding:10px 4px}
-.stat-card .label{font-size:.75rem;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.stat-card .label{font-size:.75rem;color:var(--slate);font-weight:600}
 .stat-card .value{font-size:1.3rem;font-weight:500;color:var(--ink);font-family:var(--font-display)}
 .stat-card .value.teal{color:var(--teal)}
 .stat-card .value.coral{color:var(--coral)}
@@ -68,7 +68,7 @@ body{font-family:var(--font);background:var(--paper);color:var(--ink);line-heigh
 /* Table */
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
-th{text-align:left;padding:10px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;border-bottom:1px solid var(--border);background:var(--paper)}
+th{text-align:left;padding:10px 16px;font-size:.75rem;color:var(--slate);font-weight:600;border-bottom:1px solid var(--border);background:var(--paper)}
 td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.875rem}
 tr:hover{background:var(--box-2)}
 tr.selected{background:var(--box-2)}
@@ -89,9 +89,9 @@ tr.clickable{cursor:pointer}
 /* Conversation panel */
 .conversation{max-height:400px;overflow-y:auto;padding:16px 20px}
 .msg{margin-bottom:12px;display:flex;gap:10px}
-.msg-user .msg-role{color:var(--teal);font-weight:600;font-size:.75rem;text-transform:uppercase}
-.msg-assistant .msg-role{color:var(--shefa);font-weight:600;font-size:.75rem;text-transform:uppercase}
-.msg-tool .msg-role{color:var(--coral);font-weight:600;font-size:.75rem;text-transform:uppercase}
+.msg-user .msg-role{color:var(--teal);font-weight:600;font-size:.75rem;}
+.msg-assistant .msg-role{color:var(--shefa);font-weight:600;font-size:.75rem;}
+.msg-tool .msg-role{color:var(--coral);font-weight:600;font-size:.75rem;}
 .msg-content{font-size:.875rem;line-height:1.6;color:var(--ink)}
 .msg-tool .msg-content{background:var(--box-2);border:1px solid var(--rule-strong);border-radius:var(--r-sm);padding:8px 12px;font-family:var(--font-display);font-size:.8rem}
 .msg-meta{font-size:.7rem;color:var(--slate);margin-top:2px}
@@ -99,7 +99,7 @@ tr.clickable{cursor:pointer}
 
 /* Forms */
 .form-group{margin-bottom:16px}
-.form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--slate);margin-bottom:6px}
 .form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:.875rem;font-family:inherit;transition:border-color var(--dur-press) var(--ease-out)}
 .form-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--box-2)}
 
@@ -122,7 +122,7 @@ tr.clickable{cursor:pointer}
 /* Config grid */
 .config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
 .config-item{padding:12px 16px;background:var(--paper);border-radius:var(--r-sm);border:1px solid var(--border)}
-.config-item .config-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600}
+.config-item .config-label{font-size:.7rem;color:var(--slate);font-weight:600}
 .config-item .config-value{font-size:.9rem;font-weight:600;color:var(--ink);margin-top:4px;font-family:var(--font-display)}
 
 /* Tool cards */
