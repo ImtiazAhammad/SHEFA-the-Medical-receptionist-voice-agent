@@ -145,8 +145,8 @@ function deptName(departments: Department[], id: number) {
 function sessionsLine(sessions: Session[], t: (k: Key) => string) {
   if (!sessions.length) return t('noSessions')
   return WEEK.flatMap(([day, key]) =>
-    sessions.filter((s) => s.weekday === day).map((s) => `${t(key)} ${s.start_time}–${s.end_time}`),
-  ).join(' · ')
+    sessions.filter((s) => s.weekday === day).map((s) => `${t(key)} ${s.start_time}-${s.end_time}`),
+  ).join(', ')
 }
 
 function ClinicName({ clinic, onSaved, onError }: { clinic: Directory['clinic']; onSaved: () => void; onError: (e: unknown) => void }) {
@@ -201,7 +201,7 @@ function Departments({ departments, onSaved, onError }: { departments: Departmen
     <section className="card stack">
       <h2 className="section-title">{t('setupDepartments')}</h2>
       {departments.length ? (
-        <p>{departments.map((d) => d.name_bn || d.name_en).join(' · ')}</p>
+        <p>{departments.map((d) => d.name_bn || d.name_en).join(', ')}</p>
       ) : (
         <p className="muted">{t('noDepartments')}</p>
       )}
@@ -404,7 +404,7 @@ function DoctorEditor({
               {doctor.leaves.map((l) => (
                 <li key={l.id}>
                   {l.start_date}
-                  {l.end_date !== l.start_date ? ` – ${l.end_date}` : ''} {l.reason ? <span className="muted">({l.reason})</span> : null}{' '}
+                  {l.end_date !== l.start_date ? ` - ${l.end_date}` : ''} {l.reason ? <span className="muted">({l.reason})</span> : null}{' '}
                   <button type="button" className="btn btn-small" onClick={() => removeLeave(l.id)}>
                     {t('remove')}
                   </button>
@@ -443,7 +443,7 @@ function StrandedList({ rows, onDone }: { rows: Stranded[]; onDone: () => void }
       <ul className="plain">
         {rows.map((r) => (
           <li key={r.appointment_id}>
-            {r.date} {r.serial_no ? `#${r.serial_no}` : r.start_time} · {r.patient_name || '—'} · <a href={`tel:${r.phone}`}>{r.phone}</a>
+            {r.date} {r.serial_no ? `#${r.serial_no}` : r.start_time} · {r.patient_name || '-'}, <a href={`tel:${r.phone}`}>{r.phone}</a>
           </li>
         ))}
       </ul>
@@ -499,7 +499,7 @@ function WeekPreview({ sessions }: { sessions: Session[] }) {
                     key={i}
                     className={`week-block${clash ? ' is-clash' : ''}`}
                     style={{ left: at(toMin(s.start_time)), width: `${((toMin(s.end_time) - toMin(s.start_time)) / span) * 100}%` }}
-                    title={`${clock(s.start_time)} – ${clock(s.end_time)}${clash ? ` · ${t('overlap')}` : ''}`}
+                    title={`${clock(s.start_time)} - ${clock(s.end_time)}${clash ? ` · ${t('overlap')}` : ''}`}
                   />
                 )
               })}

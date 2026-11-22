@@ -108,7 +108,7 @@ export function Sheet({ label, onClose, children }: { label: string; onClose: ()
 }
 
 export function durationText(seconds: number | null, t: ReturnType<typeof useI18n>['t'], num: (n: number) => string) {
-  if (seconds == null) return '—'
+  if (seconds == null) return '-'
   const s = Math.round(seconds)
   return s >= 60 ? `${num(Math.floor(s / 60))} ${t('min')} ${num(s % 60)} ${t('sec')}` : `${num(s)} ${t('sec')}`
 }

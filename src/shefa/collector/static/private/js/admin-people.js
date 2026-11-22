@@ -218,7 +218,7 @@ function paintTeam() {
     const stats = byId.get(person.id) || {};
     const state = cerState(stats.seed_cer);
     const seedCell = el("td", { "data-label": t("col_seed") }, [
-      state === "none" ? "—" : num(stats.seed_cer, 2),
+      state === "none" ? "-" : num(stats.seed_cer, 2),
       state === "none" ? "" : ` (${t("seeds_n", { n: num(stats.seeds) })}) `,
       state === "high" ? el("span", { class: "chip bad", text: t("cer_high") }) : null,
     ]);
@@ -231,7 +231,7 @@ function paintTeam() {
     if (mine) actions.push(el("span", { class: "muted small", text: t("staff_is_you") }));
     body.append(el("tr", { class: person.active ? "" : "inactive" }, [
       el("td", { "data-label": t("col_name"), text: person.name }),
-      el("td", { "data-label": t("col_username") }, [person.username ? el("code", { text: person.username }) : el("span", { class: "muted", text: "—" })]),
+      el("td", { "data-label": t("col_username") }, [person.username ? el("code", { text: person.username }) : el("span", { class: "muted", text: "-" })]),
       el("td", { "data-label": t("col_role"), text: t(`role_${person.role}`) }),
       el("td", { "data-label": t("col_state") }, [stateChips(person)]),
       el("td", { "data-label": t("col_reviews"), text: num(stats.reviews) }),

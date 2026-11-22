@@ -24,7 +24,7 @@ export function t(key, vars) {
 
 /** Numbers in Bangla digits when the page is in Bangla (what the reviewers read naturally). */
 export function num(value, digits = 0) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
   try {
     return new Intl.NumberFormat(lang === "bn" ? "bn-BD" : "en", { maximumFractionDigits: digits, minimumFractionDigits: 0 }).format(Number(value));
   } catch {
@@ -33,7 +33,7 @@ export function num(value, digits = 0) {
 }
 
 export function dateTime(epochSeconds) {
-  if (!epochSeconds) return "—";
+  if (!epochSeconds) return "-";
   try {
     return new Intl.DateTimeFormat(lang === "bn" ? "bn-BD" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochSeconds * 1000));
   } catch {

@@ -52,7 +52,7 @@ export function Calls() {
                 <tr key={c.call_sid}>
                   <td className="num">
                     <Link to={encodeURIComponent(c.call_sid)}>
-                      {c.started_at ? date(c.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
+                      {c.started_at ? date(c.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '-'}
                     </Link>
                   </td>
                   <td>{c.direction === 'outbound' ? t('outbound') : t('inbound')}</td>
@@ -118,7 +118,7 @@ export function CallSheet({ back }: { back: string }) {
       {d ? (
         <>
           <p className="muted meta">
-            {d.started_at ? date(d.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : ''} ·{' '}
+            {d.started_at ? date(d.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : ''},{' '}
             {durationText(d.duration_seconds, t, num)}
             {d.disposition ? ` · ${dispositionLabel(d.disposition, lang)}` : ''}
           </p>
@@ -140,7 +140,7 @@ export function CallSheet({ back }: { back: string }) {
                 {d.earlier_calls.map((e) => (
                   <li key={e.call_sid}>
                     <Link to={`${prefix}${encodeURIComponent(e.call_sid)}`}>
-                      {e.started_at ? date(e.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '—'}
+                      {e.started_at ? date(e.started_at, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' }) : '-'}
                     </Link>{' '}
                     <span className="muted">{summaryText(e.summary, lang, fmt)?.text ?? dispositionLabel(e.disposition, lang)}</span>
                   </li>

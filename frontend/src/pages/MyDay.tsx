@@ -66,7 +66,7 @@ export function MyDay() {
           return (
             <li key={a.appointment_id} className="row">
               <strong className="num serial">{clock(a.start_time)}</strong>
-              <span>{a.patient_name ?? '—'}</span>
+              <span>{a.patient_name ?? '-'}</span>
               <Pill tone={s.tone}>{t(s.key)}</Pill>
               {a.reason ? (
                 <span className="muted">

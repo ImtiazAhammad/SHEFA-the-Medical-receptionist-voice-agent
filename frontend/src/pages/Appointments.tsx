@@ -193,7 +193,7 @@ export function Appointments() {
                       {a.source === 'phone' || a.source === 'web' ? <div className="small"><Pill tone="shefa">{t('byShefa')}</Pill></div> : null}
                     </td>
                     <td data-label={t('patient')}>
-                      {a.patient_name ?? '—'}
+                      {a.patient_name ?? '-'}
                       <div className="muted small">
                         {a.phone} · {t('reference')} {num(Number(a.appointment_id.replace(/\D/g, '')) || 0)}
                       </div>

@@ -48,7 +48,7 @@ export function summaryText(
     case 'booked': {
       const when = s.date && s.time ? `${f.day(String(s.date))} ${f.clock(String(s.time))}` : ''
       const who = s.patient ? `${s.patient}: ` : ''
-      const check = s.confirmed === false ? (bn ? ' — ডেস্কের নিশ্চিত করা বাকি।' : ' — the desk still needs to confirm.') : '.'
+      const check = s.confirmed === false ? (bn ? '। ডেস্কের নিশ্চিত করা বাকি।' : '. The desk still needs to confirm.') : '.'
       return {
         tone: s.confirmed === false ? 'warn' : 'ok',
         text: bn

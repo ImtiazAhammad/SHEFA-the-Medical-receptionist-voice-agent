@@ -32,7 +32,7 @@ const DISPOSITIONS: Record<string, [string, string]> = {
 }
 
 export function dispositionLabel(value: string | null, lang: Lang): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const pair = DISPOSITIONS[value]
   return pair ? pair[lang === 'bn' ? 1 : 0] : value
 }

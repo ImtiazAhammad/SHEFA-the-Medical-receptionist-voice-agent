@@ -162,7 +162,7 @@ function renderCandidates() {
     const flags = candidate.flags.map((flag) => el("span", { class: "chip warn", text: t(`flag_${flag}`) }));
     ui.candidates.append(el("div", { class: "candidate" }, [
       el("strong", { text: t("rv_adj_candidate", { n: num(index + 1) }) }),
-      el("div", { class: "text", lang: "bn", text: candidate.text || "—" }),
+      el("div", { class: "text", lang: "bn", text: candidate.text || "-" }),
       flags.length ? el("div", { class: "meta-chips" }, flags) : null,
       el("button", {
         type: "button", class: "primary",
@@ -278,7 +278,7 @@ function showResult(reply, rejected) {
   player.stop();
   ui.answer.hidden = true;
   ui.done.hidden = false;
-  ui.doneText.textContent = reply.text || (rejected ? t("rv_rejected_done") : "—");
+  ui.doneText.textContent = reply.text || (rejected ? t("rv_rejected_done") : "-");
   clear(ui.doneNotes);
   const notes = Array.isArray(reply.notes) ? reply.notes : [];
   for (const note of notes) {

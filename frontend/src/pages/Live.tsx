@@ -164,7 +164,7 @@ function Callbacks() {
                   {c.phone}
                 </a>
               ) : (
-                <span className="muted">—</span>
+                <span className="muted">-</span>
               )}
               <span className="muted">
                 {t('waiting', { when: date(c.created_at, { timeStyle: 'short', dateStyle: 'medium', timeZone: 'Asia/Dhaka' }) })}

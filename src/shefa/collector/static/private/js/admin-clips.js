@@ -31,7 +31,7 @@ function textCell(clip) {
   return el("td", { "data-label": t("col_text"), lang: "bn" }, [
     final ? el("div", {}, [el("span", { class: "chip good", text: t("text_final") }), ` ${final}`]) : null,
     draft ? el("div", { class: "muted" }, [el("span", { class: "chip", text: t("text_draft") }), ` ${draft}`]) : null,
-    !final && !draft ? "—" : null,
+    !final && !draft ? "-" : null,
   ]);
 }
 
@@ -95,7 +95,7 @@ export function renderClips() {
       el("td", { "data-label": t("col_when"), text: dateTime(clip.created_at) }),
       el("td", { "data-label": t("col_status") }, [el("span", { class: `chip ${clip.status === "rejected" ? "bad" : ""}`, text: labelFor("status", clip.status) })]),
       el("td", { "data-label": t("col_slot") }, [
-        clip.slot ? labelFor("slot", clip.slot) : "—",
+        clip.slot ? labelFor("slot", clip.slot) : "-",
         clip.kind ? el("div", { class: "muted small", text: labelFor("kind", clip.kind) }) : null,
       ]),
       el("td", { "data-label": t("col_split"), text: labelFor("split", clip.split) }),

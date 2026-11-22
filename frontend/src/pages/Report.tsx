@@ -49,7 +49,7 @@ export function Report() {
         <button type="button" className="btn no-print" onClick={() => window.print()}>{t('print')}</button>
       </PageHeader>
       <p className="muted meta">
-        {date(d.from, { dateStyle: 'medium' })} – {date(d.to, { dateStyle: 'medium' })} · {t('repDeskHours', { h: d.desk_hours.replace(/\d/g, (c) => num(Number(c))) })}
+        {date(d.from, { dateStyle: 'medium' })} - {date(d.to, { dateStyle: 'medium' })} · {t('repDeskHours', { h: d.desk_hours.replace(/\d/g, (c) => num(Number(c))) })}
       </p>
       <div className="tiles">
         {tiles.map(([key, value, sub]) => (

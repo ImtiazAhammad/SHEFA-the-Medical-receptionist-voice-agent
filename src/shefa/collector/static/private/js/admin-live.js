@@ -42,7 +42,7 @@ export function renderLive() {
       c.errors ? t("lv_errors", { n: num(c.errors) }) : "",
     ].filter(Boolean).join(" · ");
     const rows = c.turns_detail.map((turn) => el("tr", {}, [
-      el("td", { text: turn.said || "—" }),
+      el("td", { text: turn.said || "-" }),
       el("td", { text: turn.heard || t("lv_heard_nothing") }),
       el("td", { text: turn.reply + (turn.language && turn.language !== "bn" ? ` [${turn.language}]` : "") }),
       el("td", { text: [secs(turn.ms.stt_ms), secs(turn.ms.agent_ms), secs(turn.ms.voice_ms)].join(" / ") + (turn.error ? ` (${turn.error})` : "") }),

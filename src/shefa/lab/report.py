@@ -104,7 +104,7 @@ def _audio(results: list[ScenarioResult], out: Path) -> dict[tuple[str, int, str
 
 
 def _ms(value: float | None) -> str:
-    return "—" if value is None else f"{value / 1000:.2f} s"
+    return "-" if value is None else f"{value / 1000:.2f} s"
 
 
 # The page style lives in report.css so it can be edited as CSS.
