@@ -13,13 +13,10 @@ const LOW_CONFIDENCE = 0.6
 
 /** Day and clock words in the staff member's language, for the one-line call summary. */
 function useFormatters(): Formatters {
-  const { num, date } = useI18n()
+  const { date, clock } = useI18n()
   return {
     day: (iso) => date(iso, { dateStyle: 'medium', timeZone: 'Asia/Dhaka' }),
-    clock: (hhmm) => {
-      const [h, m] = hhmm.split(':').map(Number)
-      return `${num(h)}:${m < 10 ? num(0) : ''}${num(m)}`
-    },
+    clock,
   }
 }
 
