@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
-import { LangSwitch, Wordmark } from '../Shell'
+import { LangSwitch, StaffThemeSwitch, Wordmark } from '../Shell'
 
 export function SignIn() {
   const { signIn } = useAuth()
@@ -44,6 +44,7 @@ export function SignIn() {
       </div>
       <div className="signin-side">
       <div className="signin-top">
+        <StaffThemeSwitch />
         <LangSwitch />
       </div>
       <form className="signin-card" onSubmit={submit}>

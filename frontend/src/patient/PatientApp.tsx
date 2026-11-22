@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { api, ApiError } from '../lib/api'
 import { dictionaries, type PKey, type PLang } from './strings'
 import '@world/fonts-lite.css'
+import { ThemeSwitch } from '../lib/theme'
 import './patient.css'
 
 interface PublicDoctor {
@@ -214,9 +215,12 @@ export default function PatientApp() {
           </svg>
           SHEFA
         </span>
-        <button type="button" className="p-lang" onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}>
-          {t('language')}
-        </button>
+        <div className="p-prefs">
+          <ThemeSwitch labels={lang === 'bn' ? { group: 'থিম', auto: 'ডিভাইসের মতো', light: 'আলো', dark: 'অন্ধকার' } : { group: 'Theme', auto: 'Follow this device', light: 'Light', dark: 'Dark' }} />
+          <button type="button" className="p-lang" onClick={() => setLang(lang === 'bn' ? 'en' : 'bn')}>
+            {t('language')}
+          </button>
+        </div>
       </header>
 
       <main className="p-main" id="main">

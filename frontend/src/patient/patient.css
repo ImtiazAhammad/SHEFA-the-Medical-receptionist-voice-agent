@@ -80,3 +80,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .p-btn, .p-chips button, .p-times button { transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s; }
 }
+
+.p-prefs { display: flex; align-items: center; gap: 0.45rem; }
+.p-top .theme-switch { background: oklch(0 0 0 / 0.18); border-color: oklch(1 0 0 / 0.3); }
+.p-top .theme-switch button { color: var(--rail-ink); min-width: 2.2rem; min-height: 36px; padding: 0.2rem 0.5rem; }
+.p-top .theme-switch button[aria-pressed='true'] { background: var(--box); color: var(--ink); }

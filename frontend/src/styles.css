@@ -367,3 +367,20 @@ form.stack, .stack > form, .stack-narrow { max-width: 34rem; }
   .myday-feed > li .serial { font-size: var(--step-4); }
   .myday-feed > li .row-end { margin-inline-start: 0; }
 }
+@media (max-width: 52rem) {
+  .page-legend { display: grid; }
+  .load-axis .load-hour:first-of-type { transform: none; }
+}
+
+/* preferences in the rail: language and theme */
+.prefs { display: flex; flex-direction: column; gap: var(--space-2); }
+.theme-switch button { display: inline-grid; place-items: center; min-width: 2.4rem; }
+.side .theme-switch { display: flex; background: oklch(0 0 0 / 0.15); border-color: var(--rail-rule); }
+.side .theme-switch button { flex: 1; color: var(--rail-ink); }
+.side .theme-switch button[aria-pressed='true'] { background: var(--box); color: var(--ink); }
+.signin-top { gap: var(--space-2); }
+@media (max-width: 52rem) {
+  .prefs { flex-direction: row; }
+  .side .theme-switch { display: none; }
+  .side-foot .prefs .seg { flex: none; }
+}

@@ -4,6 +4,7 @@ import { CalendarDays, ChartNoAxesColumn, ClipboardList, FileText, LogOut, Mic, 
 import { useAuth } from './lib/auth'
 import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
+import { ThemeSwitch } from './lib/theme'
 
 /** SHEFA's mark: a capsule on a pharma-green box, half white, half SHEFA blue.
  * Drawn, not lettered, so it reads the same in Bangla and English. */
@@ -33,6 +34,11 @@ export function Legend({ className }: { className: string }) {
       <div className="lg-shefa"><dt /><dd>{t('legendShefa')}</dd></div>
     </dl>
   )
+}
+
+export function StaffThemeSwitch() {
+  const { t } = useI18n()
+  return <ThemeSwitch labels={{ group: t('theme'), auto: t('themeAuto'), light: t('themeLight'), dark: t('themeDark') }} />
 }
 
 export function Wordmark() {
@@ -120,7 +126,10 @@ export function Shell() {
               <span>{t('alertSound')}</span>
             </label>
           ) : null}
-          <LangSwitch />
+          <div className="prefs">
+            <LangSwitch />
+            <StaffThemeSwitch />
+          </div>
           <div className="who">
             <span className="who-name">{me?.name}</span>
             <button type="button" className="btn btn-quiet" onClick={() => void signOut()}>

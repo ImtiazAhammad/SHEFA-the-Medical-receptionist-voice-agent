@@ -251,6 +251,10 @@ const en = {
   legendWaiting: 'Waiting',
   legendDone: 'Done',
   legendShefa: 'SHEFA is on it',
+  theme: 'Theme',
+  themeAuto: 'Follow this device',
+  themeLight: 'Light',
+  themeDark: 'Dark',
 }
 
 export type Key = keyof typeof en
@@ -504,6 +508,10 @@ const bn: Record<Key, string> = {
   legendWaiting: 'অপেক্ষায়',
   legendDone: 'হয়ে গেছে',
   legendShefa: 'শেফা করছে',
+  theme: 'থিম',
+  themeAuto: 'ডিভাইসের মতো',
+  themeLight: 'আলো',
+  themeDark: 'অন্ধকার',
 }
 
 const dictionaries: Record<Lang, Record<Key, string>> = { en, bn }
