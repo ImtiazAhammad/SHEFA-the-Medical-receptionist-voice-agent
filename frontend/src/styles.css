@@ -185,7 +185,7 @@ section:not(.live-cols section) > .ledger { margin-top: var(--space-2); }
  * Transitions, not keyframes, so a close mid-entry turns back from where the box is. Closing adds
  * .is-closing for SHEET_EXIT_MS (components.tsx) before the route unmounts it. */
 .sheet { --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); }
-.sheet::backdrop { background: oklch(0.23 0.012 60 / 0.35); transition: opacity 0.24s var(--ease-out); }
+.sheet::backdrop { background: oklch(0.23 0.012 165 / 0.35); transition: opacity 0.24s var(--ease-out); }
 .sheet-body { position: relative; height: 100%; overflow-y: auto; padding: 0 clamp(1rem, 3vw, 2.25rem) var(--space-7); background: var(--box); box-shadow: var(--shadow-lift); border-start-start-radius: 16px; border-end-start-radius: 16px; transition: transform 0.24s var(--ease-drawer), opacity 0.24s var(--ease-out); }
 @starting-style {
   .sheet[open]::backdrop { opacity: 0; }

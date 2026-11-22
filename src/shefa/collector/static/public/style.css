@@ -143,7 +143,7 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .bar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--done); }
 .field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 
-.qbar { position: fixed; left: 0; right: 0; bottom: 0; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: var(--box); box-shadow: 0 -6px 20px -10px oklch(0.3 0.02 60 / 0.3); font-size: 0.9rem; display: flex; flex-direction: column; align-items: center; z-index: 5; }
+.qbar { position: fixed; left: 0; right: 0; bottom: 0; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: var(--box); box-shadow: 0 -6px 20px -10px oklch(0.3 0.02 165 / 0.3); font-size: 0.9rem; display: flex; flex-direction: column; align-items: center; z-index: 5; }
 .qmain { display: flex; gap: 6px; align-items: center; font-weight: 700; }
 .qwhy { color: var(--waiting-ink); font-size: 0.85rem; text-align: center; }
 .toast { position: fixed; left: 12px; right: 12px; bottom: 80px; max-width: 520px; margin: 0 auto; background: var(--ink); color: var(--box); padding: 12px 14px; border-radius: var(--r); display: flex; gap: 10px; align-items: center; justify-content: space-between; z-index: 10; box-shadow: var(--shadow-lift);

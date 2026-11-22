@@ -1,6 +1,7 @@
 /* SHEFA world tokens: the medicine shelf.
  *
- * A Bangladeshi pharmacy shelf, read as a working screen: bright white box board on a warm shelf,
+ * A Bangladeshi pharmacy shelf, read as a working screen: off-white box board on a shelf with the
+ * faintest cast of the rail's pharma green (never cream),
  * a deep pharma-green rail, solid colour label blocks with reversed bold type.
  *
  * One colour, one meaning, everywhere (the printed legend):
@@ -16,15 +17,15 @@
 
 :root {
   /* shelf and boxes */
-  --shelf: oklch(0.963 0.006 78);
-  --box: oklch(0.993 0.003 78);  /* never pure white */
-  --on-fill: oklch(0.985 0.004 80);  /* text on a doctor's box colour: off-white */
-  --box-2: oklch(0.975 0.005 78);
-  --ink: oklch(0.23 0.012 60);
-  --ink-2: oklch(0.41 0.012 60);
-  --ink-3: oklch(0.5 0.01 60);
-  --rule: oklch(0.895 0.007 70);
-  --rule-strong: oklch(0.79 0.01 70);
+  --shelf: oklch(0.963 0.006 165);
+  --box: oklch(0.993 0.003 165);  /* never pure white */
+  --on-fill: oklch(0.985 0.004 165);  /* text on a doctor's box colour: off-white */
+  --box-2: oklch(0.975 0.005 165);
+  --ink: oklch(0.23 0.012 165);
+  --ink-2: oklch(0.41 0.012 165);
+  --ink-3: oklch(0.5 0.01 165);
+  --rule: oklch(0.895 0.007 165);
+  --rule-strong: oklch(0.79 0.01 165);
 
   /* the rail: pharma green */
   --rail: oklch(0.35 0.075 162);
@@ -50,15 +51,16 @@
   --shefa-ink: oklch(0.47 0.17 262);
   --shefa-wash: oklch(0.955 0.03 262);
   --on-shefa: oklch(0.99 0.01 262);
-  --gone: oklch(0.62 0.01 70);
+  --gone: oklch(0.62 0.01 165);
 
-  /* doctors' box colours (white type on each passes AA) */
-  --doc-0: oklch(0.52 0.1 200);  /* teal */
-  --doc-1: oklch(0.5 0.17 350);  /* magenta */
-  --doc-2: oklch(0.47 0.14 300); /* violet */
-  --doc-3: oklch(0.47 0.08 55);  /* brown */
-  --doc-4: oklch(0.5 0.1 125);   /* olive */
-  --doc-5: oklch(0.5 0.1 230);   /* sky */
+  /* doctors' box colours: one lightness and strength, so no doctor shouts louder than another,
+     and none near the legend hues (red 27, amber 82, green 158, blue 262) */
+  --doc-0: oklch(0.5 0.1 195);   /* teal */
+  --doc-1: oklch(0.5 0.12 345);  /* rose */
+  --doc-2: oklch(0.5 0.12 300);  /* violet */
+  --doc-3: oklch(0.5 0.1 50);    /* copper */
+  --doc-4: oklch(0.5 0.1 115);   /* olive */
+  --doc-5: oklch(0.44 0.025 250); /* graphite: kept clear of SHEFA blue */
 
   --primary: var(--done);
   --primary-hover: oklch(0.44 0.11 158);
@@ -80,8 +82,8 @@
   --r-sm: 6px;
   --r: 10px;
   --r-pill: 999px;
-  --shadow-box: 0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18);
-  --shadow-lift: 0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28);
+  --shadow-box: 0 1px 2px oklch(0.3 0.02 165 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 165 / 0.18);
+  --shadow-lift: 0 2px 4px oklch(0.3 0.02 165 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 165 / 0.28);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -100,14 +102,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --shelf: oklch(0.2 0.008 60);
-    --box: oklch(0.25 0.009 60);
-    --box-2: oklch(0.23 0.009 60);
-    --ink: oklch(0.95 0.006 80);
-    --ink-2: oklch(0.8 0.01 80);
-    --ink-3: oklch(0.72 0.01 80);
-    --rule: oklch(0.33 0.01 60);
-    --rule-strong: oklch(0.45 0.01 60);
+    --shelf: oklch(0.2 0.008 165);
+    --box: oklch(0.25 0.009 165);
+    --box-2: oklch(0.23 0.009 165);
+    --ink: oklch(0.95 0.006 165);
+    --ink-2: oklch(0.8 0.01 165);
+    --ink-3: oklch(0.72 0.01 165);
+    --rule: oklch(0.33 0.01 165);
+    --rule-strong: oklch(0.45 0.01 165);
     --rail: oklch(0.24 0.045 162);
     --rail-hover: oklch(0.29 0.05 162);
     --rail-rule: oklch(0.32 0.04 162);
@@ -134,14 +136,14 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --shelf: oklch(0.2 0.008 60);
-  --box: oklch(0.25 0.009 60);
-  --box-2: oklch(0.23 0.009 60);
-  --ink: oklch(0.95 0.006 80);
-  --ink-2: oklch(0.8 0.01 80);
-  --ink-3: oklch(0.72 0.01 80);
-  --rule: oklch(0.33 0.01 60);
-  --rule-strong: oklch(0.45 0.01 60);
+  --shelf: oklch(0.2 0.008 165);
+  --box: oklch(0.25 0.009 165);
+  --box-2: oklch(0.23 0.009 165);
+  --ink: oklch(0.95 0.006 165);
+  --ink-2: oklch(0.8 0.01 165);
+  --ink-3: oklch(0.72 0.01 165);
+  --rule: oklch(0.33 0.01 165);
+  --rule-strong: oklch(0.45 0.01 165);
   --rail: oklch(0.24 0.045 162);
   --rail-hover: oklch(0.29 0.05 162);
   --rail-rule: oklch(0.32 0.04 162);

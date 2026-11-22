@@ -2,14 +2,14 @@
 name: SHEFA
 description: A Bangla voice receptionist for small clinics, set on a Bangladeshi medicine shelf.
 colors:
-  shelf: "oklch(0.963 0.006 78)"
-  box: "oklch(1 0 0)"
-  box-2: "oklch(0.975 0.005 78)"
-  ink: "oklch(0.23 0.012 60)"
-  ink-2: "oklch(0.41 0.012 60)"
-  ink-3: "oklch(0.5 0.01 60)"
-  rule: "oklch(0.895 0.007 70)"
-  rule-strong: "oklch(0.79 0.01 70)"
+  shelf: "oklch(0.962 0.006 165)"
+  box: "oklch(0.993 0.003 165)"
+  box-2: "oklch(0.975 0.005 165)"
+  ink: "oklch(0.23 0.012 165)"
+  ink-2: "oklch(0.41 0.012 165)"
+  ink-3: "oklch(0.5 0.01 165)"
+  rule: "oklch(0.895 0.007 165)"
+  rule-strong: "oklch(0.79 0.01 165)"
   rail: "oklch(0.35 0.075 162)"
   rail-hover: "oklch(0.4 0.08 162)"
   rail-rule: "oklch(0.43 0.07 162)"
@@ -32,12 +32,12 @@ colors:
   shefa-wash: "oklch(0.955 0.03 262)"
   on-shefa: "oklch(0.99 0.01 262)"
   focus: "oklch(0.52 0.17 262)"
-  doc-0: "oklch(0.52 0.1 200)"
-  doc-1: "oklch(0.5 0.17 350)"
-  doc-2: "oklch(0.47 0.14 300)"
-  doc-3: "oklch(0.47 0.08 55)"
-  doc-4: "oklch(0.5 0.1 125)"
-  doc-5: "oklch(0.5 0.1 230)"
+  doc-0: "oklch(0.5 0.1 195)"
+  doc-1: "oklch(0.5 0.12 345)"
+  doc-2: "oklch(0.5 0.12 300)"
+  doc-3: "oklch(0.5 0.1 50)"
+  doc-4: "oklch(0.5 0.1 115)"
+  doc-5: "oklch(0.44 0.025 250)"
 typography:
   display:
     fontFamily: "'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif"
@@ -164,7 +164,7 @@ components:
     padding: "1rem"
   doc-name:
     backgroundColor: "{colors.doc-0}"
-    textColor: "#ffffff"
+    textColor: "oklch(0.985 0.004 165)"
     rounded: "{rounded.sm}"
     padding: "0.1rem 0.6rem"
   rail:
@@ -184,14 +184,14 @@ components:
 
 **Creative North Star: "The Medicine Shelf"**
 
-SHEFA looks like a Bangladeshi pharmacy shelf, read as a working screen. Bright white box board sits on a warm off-white shelf. A deep pharma-green rail runs down the staff app and across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.
+SHEFA looks like a Bangladeshi pharmacy shelf, read as a working screen. Off-white box board sits on a shelf with the faintest cast of the rail's pharma green, never cream. A deep pharma-green rail runs down the staff app and across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.
 
 Status is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done, and green is also the colour of going ahead. SHEFA blue means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.
 
 The density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light shelf and an after-hours dark shelf, chosen by the device or by the viewer.
 
 **Key Characteristics:**
-- White boxes on a warm shelf; a pharma-green rail or top bar.
+- Off-white boxes on a faintly green-grey shelf; a pharma-green rail or top bar.
 - One colour, one meaning: urgent red, waiting amber, done green, SHEFA blue, gone grey, always with words.
 - Six doctor box colours that never collide with the legend hues.
 - Reversed name blocks and dashed batch stamps borrowed from medicine packaging.
@@ -200,7 +200,7 @@ The density is a working desk's, but friendly and local rather than austere. Ban
 
 ## Colors
 
-A warm, near-neutral shelf and box board, a deep pharma-green structural rail, a five-meaning status legend, and six doctor box colours that each get a meaning of their own.
+A near-neutral shelf and box board carrying a trace of the rail's green, a deep pharma-green structural rail, a five-meaning status legend, and six doctor box colours that each get a meaning of their own.
 
 ### Primary
 - **Settled Green** (done): the legend's "done, confirmed, seen" and the colour of going ahead. Primary buttons, the selected time slot, the patient's current step, checkbox accents and the receipt's top band all use it. In the frontmatter it appears once, as `done`; the code aliases it as `--primary`.
@@ -217,7 +217,7 @@ A warm, near-neutral shelf and box board, a deep pharma-green structural rail, a
 - **Gone**: cancelled, off or disabled renders as ink-3 text, struck through, with no dot. The tokens.css file declares a `--gone` value, but the build never reads it.
 
 ### Doctor box colours
-- **Teal, Magenta, Violet, Brown, Olive, Sky** (doc-0 to doc-5, in that order): each doctor's identity. Each colour appears as a solid name block, a colour band on the doctor's box, a session bar on the day axis, and a chip square. White type on every one passes AA. In code, a `.doc-cN` class sets a local `--doc` that every doctor-coloured element reads.
+- **Teal, Rose, Violet, Copper, Olive, Graphite** (doc-0 to doc-5, in that order): each doctor's identity, all at one lightness and strength so no doctor shouts louder than another; Graphite replaced a sky blue that read too close to SHEFA blue. Each colour appears as a solid name block, a colour band on the doctor's box, a session bar on the day axis, and a chip square. White type on every one passes AA. In code, a `.doc-cN` class sets a local `--doc` that every doctor-coloured element reads.
 
 ### Neutral
 - **Warm Shelf** (shelf): the page field behind every box.
@@ -269,8 +269,8 @@ Detail opens in a sheet: a box pulled off the shelf that slides in from the righ
 Depth is a printed box resting on a shelf: a short contact shadow plus a soft drop. Boxes carry the resting shadow. Anything pulled forward (the sheet, the desk alert, the sign-in card, the receipt, the active needs-a-person box, a hovered patient card) carries the lifted shadow. On the dark shelf, both shadows become plain black at higher opacity. Empty states lift nothing: they are a dashed outline on the bare shelf.
 
 ### Shadow Vocabulary
-- **Box on shelf** (`box-shadow: 0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18)`): every resting container, the active rail item, the pressed segment, button hover.
-- **Pulled forward** (`box-shadow: 0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28)`): sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb.
+- **Box on shelf** (`box-shadow: 0 1px 2px oklch(0.3 0.02 165 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 165 / 0.18)`): every resting container, the active rail item, the pressed segment, button hover.
+- **Pulled forward** (`box-shadow: 0 2px 4px oklch(0.3 0.02 165 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 165 / 0.28)`): sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb.
 
 ### Named Rules
 **The Live Ring Rule.** A ring only pulses while a call or a recording is live (the blue live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.

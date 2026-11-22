@@ -1,11 +1,11 @@
 /* The lab report, on SHEFA's medicine shelf. It is a single file opened offline, so the shelf
    colours are written out here and the Baloo Da 2 face is inlined by report.py. Red a problem,
    green a pass, blue SHEFA speaking. */
-:root{--bg:oklch(0.963 0.006 78);
-  --panel:#fff;
-  --fg:oklch(0.23 0.012 60);
-  --mute:oklch(0.41 0.012 60);
-  --line:oklch(0.895 0.007 70);
+:root{--bg:oklch(0.963 0.006 165);
+  --panel:oklch(0.993 0.003 165);
+  --fg:oklch(0.23 0.012 165);
+  --mute:oklch(0.41 0.012 165);
+  --line:oklch(0.895 0.007 165);
   --accent:oklch(0.47 0.17 262);
   --shefa:oklch(0.47 0.17 262);
   --shefa-wash:oklch(0.955 0.03 262);
@@ -13,14 +13,14 @@
   --ok-wash:oklch(0.955 0.035 158);
   --bad:oklch(0.55 0.2 27);
   --rail:oklch(0.35 0.075 162);
-  --soft:oklch(0.975 0.005 78);
-  --shadow:0 1px 2px oklch(0.3 0.02 60 / .07),0 6px 16px -8px oklch(0.3 0.02 60 / .18)}
+  --soft:oklch(0.975 0.005 165);
+  --shadow:0 1px 2px oklch(0.3 0.02 165 / .07),0 6px 16px -8px oklch(0.3 0.02 165 / .18)}
 @media(prefers-color-scheme:dark){
-:root{--bg:oklch(0.2 0.008 60);
-  --panel:oklch(0.25 0.009 60);
-  --fg:oklch(0.95 0.006 80);
-  --mute:oklch(0.8 0.01 80);
-  --line:oklch(0.33 0.01 60);
+:root{--bg:oklch(0.2 0.008 165);
+  --panel:oklch(0.25 0.009 165);
+  --fg:oklch(0.95 0.006 165);
+  --mute:oklch(0.8 0.01 165);
+  --line:oklch(0.33 0.01 165);
   --accent:oklch(0.78 0.11 262);
   --shefa:oklch(0.78 0.11 262);
   --shefa-wash:oklch(0.3 0.07 262);
@@ -28,14 +28,14 @@
   --ok-wash:oklch(0.29 0.05 158);
   --bad:oklch(0.62 0.19 27);
   --rail:oklch(0.24 0.045 162);
-  --soft:oklch(0.23 0.009 60);
+  --soft:oklch(0.23 0.009 165);
   --shadow:0 1px 2px oklch(0 0 0 / .35)}
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 "Baloo Da 2","Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif}
 ::selection{background:var(--shefa-wash)}
 main{max-width:860px;margin:0 auto;padding:0 16px 64px}
-h1{margin:0 -16px 0;padding:22px 16px 18px;font-size:30px;font-weight:800;line-height:1.1;background:var(--rail);color:#fff;border-radius:0 0 12px 12px}
+h1{margin:0 -16px 0;padding:22px 16px 18px;font-size:30px;font-weight:800;line-height:1.1;background:var(--rail);color:oklch(0.985 0.004 165);border-radius:0 0 12px 12px}
 h2{font-size:19px;font-weight:700;margin:0}
 .sub{color:var(--mute);margin:12px 0 20px}
 .grid{display:grid;grid-template-columns:1fr;margin:18px 0;padding:4px 0;background:var(--panel);border-radius:10px;box-shadow:var(--shadow)}
@@ -48,7 +48,7 @@ h2{font-size:19px;font-weight:700;margin:0}
 .head .tag{margin-left:auto}
 .tag{display:inline-block;padding:1px 11px;font-size:13px;font-weight:700;border-radius:999px;background:var(--ok-wash);color:var(--ok)}
 .tag.ok{}
-.tag.bad{background:var(--bad);color:#fff}
+.tag.bad{background:var(--bad);color:oklch(0.985 0.004 165)}
 .tests{color:var(--mute);margin:6px 0 10px}
 .msg{max-width:88%;margin:8px 0;padding:9px 12px;border-radius:14px 14px 14px 4px;background:var(--shefa-wash)}
 .msg small{display:block;font-size:11px;font-weight:700;color:var(--shefa)}

@@ -7,9 +7,9 @@
       "shelf": {
         "role": "neutral",
         "displayName": "Warm Shelf",
-        "canonical": "oklch(0.963 0.006 78)",
+        "canonical": "oklch(0.962 0.006 165)",
         "cssVar": "--shelf",
-        "dark": "oklch(0.2 0.008 60)",
+        "dark": "oklch(0.2 0.008 165)",
         "tonalRamp": [
           "oklch(0.15 0.006 78.0)",
           "oklch(0.26 0.006 78.0)",
@@ -24,9 +24,9 @@
       "box": {
         "role": "neutral",
         "displayName": "Box Board",
-        "canonical": "oklch(1 0 0)",
+        "canonical": "oklch(0.993 0.003 165)",
         "cssVar": "--box",
-        "dark": "oklch(0.25 0.009 60)",
+        "dark": "oklch(0.25 0.009 165)",
         "tonalRamp": [
           "oklch(0.15 0.0 0.0)",
           "oklch(0.26 0.0 0.0)",
@@ -41,9 +41,9 @@
       "box-2": {
         "role": "neutral",
         "displayName": "Box Board, shaded",
-        "canonical": "oklch(0.975 0.005 78)",
+        "canonical": "oklch(0.975 0.005 165)",
         "cssVar": "--box-2",
-        "dark": "oklch(0.23 0.009 60)",
+        "dark": "oklch(0.23 0.009 165)",
         "tonalRamp": [
           "oklch(0.15 0.005 78.0)",
           "oklch(0.26 0.005 78.0)",
@@ -58,9 +58,9 @@
       "ink": {
         "role": "neutral",
         "displayName": "Carton Ink",
-        "canonical": "oklch(0.23 0.012 60)",
+        "canonical": "oklch(0.23 0.012 165)",
         "cssVar": "--ink",
-        "dark": "oklch(0.95 0.006 80)",
+        "dark": "oklch(0.95 0.006 165)",
         "tonalRamp": [
           "oklch(0.15 0.012 60.0)",
           "oklch(0.26 0.012 60.0)",
@@ -75,9 +75,9 @@
       "ink-2": {
         "role": "neutral",
         "displayName": "Carton Ink, secondary",
-        "canonical": "oklch(0.41 0.012 60)",
+        "canonical": "oklch(0.41 0.012 165)",
         "cssVar": "--ink-2",
-        "dark": "oklch(0.8 0.01 80)",
+        "dark": "oklch(0.8 0.01 165)",
         "tonalRamp": [
           "oklch(0.15 0.012 60.0)",
           "oklch(0.26 0.012 60.0)",
@@ -92,9 +92,9 @@
       "ink-3": {
         "role": "neutral",
         "displayName": "Carton Ink, hint",
-        "canonical": "oklch(0.5 0.01 60)",
+        "canonical": "oklch(0.5 0.01 165)",
         "cssVar": "--ink-3",
-        "dark": "oklch(0.72 0.01 80)",
+        "dark": "oklch(0.72 0.01 165)",
         "tonalRamp": [
           "oklch(0.15 0.01 60.0)",
           "oklch(0.26 0.01 60.0)",
@@ -109,9 +109,9 @@
       "rule": {
         "role": "neutral",
         "displayName": "Fold Line",
-        "canonical": "oklch(0.895 0.007 70)",
+        "canonical": "oklch(0.895 0.007 165)",
         "cssVar": "--rule",
-        "dark": "oklch(0.33 0.01 60)",
+        "dark": "oklch(0.33 0.01 165)",
         "tonalRamp": [
           "oklch(0.15 0.007 70.0)",
           "oklch(0.26 0.007 70.0)",
@@ -126,9 +126,9 @@
       "rule-strong": {
         "role": "neutral",
         "displayName": "Fold Line, strong",
-        "canonical": "oklch(0.79 0.01 70)",
+        "canonical": "oklch(0.79 0.01 165)",
         "cssVar": "--rule-strong",
-        "dark": "oklch(0.45 0.01 60)",
+        "dark": "oklch(0.45 0.01 165)",
         "tonalRamp": [
           "oklch(0.15 0.01 70.0)",
           "oklch(0.26 0.01 70.0)",
@@ -523,9 +523,9 @@
       "doc-0": {
         "role": "doctor",
         "displayName": "Doctor Teal",
-        "canonical": "oklch(0.52 0.1 200)",
+        "canonical": "oklch(0.5 0.1 195)",
         "cssVar": "--doc-0",
-        "dark": "oklch(0.52 0.1 200)",
+        "dark": "oklch(0.5 0.1 195)",
         "tonalRamp": [
           "oklch(0.15 0.027 200.0)",
           "oklch(0.26 0.076 200.0)",
@@ -539,10 +539,10 @@
       },
       "doc-1": {
         "role": "doctor",
-        "displayName": "Doctor Magenta",
-        "canonical": "oklch(0.5 0.17 350)",
+        "displayName": "Doctor Rose",
+        "canonical": "oklch(0.5 0.12 345)",
         "cssVar": "--doc-1",
-        "dark": "oklch(0.5 0.17 350)",
+        "dark": "oklch(0.5 0.12 345)",
         "tonalRamp": [
           "oklch(0.15 0.027 350.0)",
           "oklch(0.26 0.076 350.0)",
@@ -557,9 +557,9 @@
       "doc-2": {
         "role": "doctor",
         "displayName": "Doctor Violet",
-        "canonical": "oklch(0.47 0.14 300)",
+        "canonical": "oklch(0.5 0.12 300)",
         "cssVar": "--doc-2",
-        "dark": "oklch(0.47 0.14 300)",
+        "dark": "oklch(0.5 0.12 300)",
         "tonalRamp": [
           "oklch(0.15 0.027 300.0)",
           "oklch(0.26 0.076 300.0)",
@@ -573,10 +573,10 @@
       },
       "doc-3": {
         "role": "doctor",
-        "displayName": "Doctor Brown",
-        "canonical": "oklch(0.47 0.08 55)",
+        "displayName": "Doctor Copper",
+        "canonical": "oklch(0.5 0.1 50)",
         "cssVar": "--doc-3",
-        "dark": "oklch(0.47 0.08 55)",
+        "dark": "oklch(0.5 0.1 50)",
         "tonalRamp": [
           "oklch(0.15 0.027 55.0)",
           "oklch(0.26 0.076 55.0)",
@@ -591,9 +591,9 @@
       "doc-4": {
         "role": "doctor",
         "displayName": "Doctor Olive",
-        "canonical": "oklch(0.5 0.1 125)",
+        "canonical": "oklch(0.5 0.1 115)",
         "cssVar": "--doc-4",
-        "dark": "oklch(0.5 0.1 125)",
+        "dark": "oklch(0.5 0.1 115)",
         "tonalRamp": [
           "oklch(0.15 0.027 125.0)",
           "oklch(0.26 0.076 125.0)",
@@ -607,10 +607,10 @@
       },
       "doc-5": {
         "role": "doctor",
-        "displayName": "Doctor Sky",
-        "canonical": "oklch(0.5 0.1 230)",
+        "displayName": "Doctor Graphite",
+        "canonical": "oklch(0.44 0.025 250)",
         "cssVar": "--doc-5",
-        "dark": "oklch(0.5 0.1 230)",
+        "dark": "oklch(0.44 0.025 250)",
         "tonalRamp": [
           "oklch(0.15 0.027 230.0)",
           "oklch(0.26 0.076 230.0)",
@@ -686,14 +686,14 @@
       {
         "name": "box",
         "cssVar": "--shadow-box",
-        "value": "0 1px 2px oklch(0.3 0.02 60 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 60 / 0.18)",
+        "value": "0 1px 2px oklch(0.3 0.02 165 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 165 / 0.18)",
         "dark": "0 1px 2px oklch(0 0 0 / 0.35)",
         "purpose": "A box resting on the shelf: every container, active rail item, pressed segment, button hover."
       },
       {
         "name": "lift",
         "cssVar": "--shadow-lift",
-        "value": "0 2px 4px oklch(0.3 0.02 60 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 60 / 0.28)",
+        "value": "0 2px 4px oklch(0.3 0.02 165 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 165 / 0.28)",
         "dark": "0 18px 40px -12px oklch(0 0 0 / 0.6)",
         "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb."
       }
