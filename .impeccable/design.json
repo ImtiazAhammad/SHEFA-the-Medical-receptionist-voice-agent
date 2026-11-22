@@ -1,0 +1,646 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-22T06:05:49.130743+00:00",
+  "title": "Design System: SHEFA",
+  "extensions": {
+    "colorMeta": {
+      "z0": {
+        "role": "neutral",
+        "displayName": "Darkroom Black",
+        "canonical": "oklch(0.17 0.006 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "ink (light); select; rule-strong; focus; rail (dark)"
+      },
+      "z1": {
+        "role": "neutral",
+        "displayName": "Rail Graphite",
+        "canonical": "oklch(0.235 0.007 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "rail (light); ground (dark)"
+      },
+      "z2": {
+        "role": "neutral",
+        "displayName": "Deep Slate Zone",
+        "canonical": "oklch(0.31 0.007 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "sheet and field-2 (dark); rail hover"
+      },
+      "z3": {
+        "role": "neutral",
+        "displayName": "Secondary Ink Zone",
+        "canonical": "oklch(0.39 0.007 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "ink-2 and hatch-ink (light); rule and rail-rule (dark)"
+      },
+      "z4": {
+        "role": "neutral",
+        "displayName": "Faint Ink Zone",
+        "canonical": "oklch(0.47 0.006 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "ink-3 (light)"
+      },
+      "z5": {
+        "role": "neutral",
+        "displayName": "Middle Grey Zone",
+        "canonical": "oklch(0.56 0.006 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "ramp step; used in hatch tones"
+      },
+      "z6": {
+        "role": "neutral",
+        "displayName": "Field Frame Zone",
+        "canonical": "oklch(0.65 0.005 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "input and chip frame at rest"
+      },
+      "z7": {
+        "role": "neutral",
+        "displayName": "Disabled Frame Zone",
+        "canonical": "oklch(0.745 0.005 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "disabled frame; ink-3 and hatch-ink (dark); second sheet edge"
+      },
+      "z8": {
+        "role": "neutral",
+        "displayName": "Hairline Zone",
+        "canonical": "oklch(0.845 0.004 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "rule (light); ink-2 and rule-strong (dark); button press"
+      },
+      "z9": {
+        "role": "neutral",
+        "displayName": "Well Zone",
+        "canonical": "oklch(0.925 0.003 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "field-2 (light); load tick; rail-ink"
+      },
+      "z10": {
+        "role": "neutral",
+        "displayName": "Exposure Paper",
+        "canonical": "oklch(0.982 0.002 260)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "ground (light); ink, select and focus (dark)"
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "Sheet White",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.17 0.006 260)",
+          "oklch(0.235 0.007 260)",
+          "oklch(0.39 0.007 260)",
+          "oklch(0.47 0.006 260)",
+          "oklch(0.65 0.005 260)",
+          "oklch(0.745 0.005 260)",
+          "oklch(0.845 0.004 260)",
+          "oklch(0.982 0.002 260)"
+        ],
+        "usage": "sheet (light): fields, marks, notes, the sliding sheet"
+      },
+      "dichroic": {
+        "role": "primary",
+        "displayName": "Dichroic Magenta",
+        "canonical": "oklch(0.54 0.215 352)",
+        "dark": "oklch(0.72 0.19 352)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 352)",
+          "oklch(0.3 0.12 352)",
+          "oklch(0.42 0.18 352)",
+          "oklch(0.5 0.2 352)",
+          "oklch(0.6 0.2 352)",
+          "oklch(0.72 0.17 352)",
+          "oklch(0.85 0.09 352)",
+          "oklch(0.955 0.03 352)"
+        ],
+        "usage": "SHEFA's voice and actions only"
+      },
+      "dichroic-ink": {
+        "role": "primary",
+        "displayName": "Dichroic Ink",
+        "canonical": "oklch(0.5 0.2 352)",
+        "dark": "oklch(0.78 0.16 352)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 352)",
+          "oklch(0.3 0.12 352)",
+          "oklch(0.42 0.18 352)",
+          "oklch(0.5 0.2 352)",
+          "oklch(0.6 0.2 352)",
+          "oklch(0.72 0.17 352)",
+          "oklch(0.85 0.09 352)",
+          "oklch(0.955 0.03 352)"
+        ],
+        "usage": "magenta as text; magenta button hover"
+      },
+      "on-dichroic": {
+        "role": "primary",
+        "displayName": "On Dichroic",
+        "canonical": "oklch(0.99 0.01 352)",
+        "dark": "oklch(0.17 0.02 352)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 352)",
+          "oklch(0.3 0.12 352)",
+          "oklch(0.42 0.18 352)",
+          "oklch(0.5 0.2 352)",
+          "oklch(0.6 0.2 352)",
+          "oklch(0.72 0.17 352)",
+          "oklch(0.85 0.09 352)",
+          "oklch(0.955 0.03 352)"
+        ],
+        "usage": "text on a magenta fill"
+      },
+      "dichroic-wash": {
+        "role": "primary",
+        "displayName": "Dichroic Wash",
+        "canonical": "oklch(0.955 0.03 352)",
+        "dark": "oklch(0.3 0.07 352)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 352)",
+          "oklch(0.3 0.12 352)",
+          "oklch(0.42 0.18 352)",
+          "oklch(0.5 0.2 352)",
+          "oklch(0.6 0.2 352)",
+          "oklch(0.72 0.17 352)",
+          "oklch(0.85 0.09 352)",
+          "oklch(0.955 0.03 352)"
+        ],
+        "usage": "row ground of a callback SHEFA raised"
+      }
+    },
+    "semanticRoles": {
+      "light": {
+        "ground": "z10",
+        "sheet": "white",
+        "field-2": "z9",
+        "ink": "z0",
+        "ink-2": "z3",
+        "ink-3": "z4",
+        "rule": "z8",
+        "rule-strong": "z0",
+        "hatch-ink": "z3",
+        "rail": "z1",
+        "rail-ink": "z9",
+        "rail-ink-2": "z7",
+        "rail-rule": "z3",
+        "select": "z0",
+        "on-select": "z10",
+        "focus": "z0"
+      },
+      "dark": {
+        "ground": "z1",
+        "sheet": "z2",
+        "field-2": "z2",
+        "ink": "z10",
+        "ink-2": "z8",
+        "ink-3": "z7",
+        "rule": "z3",
+        "rule-strong": "z8",
+        "hatch-ink": "z7",
+        "rail": "z0",
+        "rail-rule": "z2",
+        "select": "z10",
+        "on-select": "z0",
+        "focus": "z10"
+      },
+      "source": "src/shefa/static/world/tokens.css (prefers-color-scheme: dark, or :root[data-theme])"
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles over a 2px ink rule; English uppercase; font-stretch 78%. Public pages (fonts-lite) render at normal width."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Sheet titles; patient and volunteer h1."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section heads over a 1px ink rule; doctor names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text; line-height 1.6 Bangla, 1.5 English."
+      },
+      "label": {
+        "displayName": "Legend",
+        "purpose": "Label over a field or column, table heads, sheet-bar identity. Not a kicker above headings."
+      },
+      "label-en": {
+        "displayName": "Legend (English)",
+        "purpose": "English legend: tracked uppercase at 90% width."
+      },
+      "num": {
+        "displayName": "Quantity",
+        "purpose": "Serials, counts, times, references, measure values. Under :lang(bn) --font-num is Anek, not Martian."
+      }
+    },
+    "typeSteps": {
+      "step--2": "0.6875rem",
+      "step--1": "0.8125rem",
+      "step-0": "1rem",
+      "step-1": "1.1875rem",
+      "step-2": "1.4375rem",
+      "step-3": "2rem",
+      "step-4": "2.75rem",
+      "step-5": "4rem",
+      "condensed": "78%"
+    },
+    "fonts": [
+      {
+        "name": "fonts.css",
+        "families": [
+          "Anek (wght 100-800, wdth 75-125%)",
+          "Martian (Latin digits)"
+        ],
+        "used": "staff app, private admin, legacy pages"
+      },
+      {
+        "name": "fonts-lite.css",
+        "families": [
+          "Anek (wght only)",
+          "Martian"
+        ],
+        "used": "patient, demo, volunteer pages"
+      }
+    ],
+    "shadows": [
+      {
+        "name": "sheet-shadow",
+        "value": "-24px 0 48px -12px oklch(0.17 0.006 260 / 0.22), -1px 0 0 var(--z0)",
+        "dark": "-24px 0 48px -12px oklch(0 0 0 / 0.6), -1px 0 0 var(--z6)",
+        "purpose": "The sliding sheet only. The one elevation in the world."
+      },
+      {
+        "name": "focus-inset",
+        "value": "inset 0 0 0 1px var(--rule-strong)",
+        "purpose": "Doubles a focused field frame. A rule, not elevation."
+      },
+      {
+        "name": "shefa-turn-rule",
+        "value": "inset 3px 0 0 -2px var(--dichroic)",
+        "purpose": "1px magenta rule beside SHEFA's transcript turns."
+      }
+    ],
+    "materials": [
+      {
+        "name": "tracing-paper",
+        "value": "background: color-mix(in oklch, var(--sheet) 82%, transparent); backdrop-filter: blur(10px)",
+        "purpose": "Sheet body; opaque var(--sheet) with no blur at 52rem and below."
+      },
+      {
+        "name": "second-sheet",
+        "value": "border 1px var(--z7); color-mix(in oklch, var(--sheet) 70%, transparent); rotate(-0.8deg)",
+        "purpose": "The sheet beneath the sheet."
+      },
+      {
+        "name": "sheet-backdrop",
+        "value": "oklch(0.17 0.006 260 / 0.18)",
+        "purpose": "Dialog backdrop."
+      }
+    ],
+    "hatch": [
+      {
+        "name": "hatch-1",
+        "value": "repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 9px)",
+        "purpose": "Load up to a third."
+      },
+      {
+        "name": "hatch-2",
+        "value": "gap 6px",
+        "purpose": "Load to two thirds."
+      },
+      {
+        "name": "hatch-3",
+        "value": "gap 4px",
+        "purpose": "Load below full."
+      },
+      {
+        "name": "hatch-4",
+        "value": "gap 2.75px",
+        "purpose": "Full."
+      },
+      {
+        "name": "hatch-cross",
+        "value": "repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 6px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 6px)",
+        "purpose": "Conflict, failure, overlap."
+      },
+      {
+        "name": "hatch-shefa",
+        "value": "repeating-linear-gradient(135deg, var(--dichroic) 0 1.25px, transparent 1.25px 6px)",
+        "purpose": "SHEFA band: desk alert top band, receipt foot."
+      },
+      {
+        "name": "message-band",
+        "value": "background-size: 100% 7px; no-repeat; padding-top: calc(7px + 0.75rem)",
+        "purpose": "Hatch on a message box sits in a top band, never behind words."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Control state transitions, 0.15s on background and colour."
+      },
+      {
+        "name": "sheet-ease",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Sheet slide-in, 0.42s (second sheet 0.5s), translateX(104%) to 0. Settles, no overshoot."
+      },
+      {
+        "name": "live-pulse",
+        "value": "opacity 1 to 0.25, 1.6s ease-in-out infinite",
+        "purpose": "Live dot only."
+      },
+      {
+        "name": "skeleton-sweep",
+        "value": "faint z9 hatch sweeping, 1.6s linear",
+        "purpose": "Loading rows."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "all animation and transition to 0.001ms",
+        "purpose": "prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "52rem",
+        "purpose": "Rail to bottom bar; sheet opaque full-screen; load rows stack."
+      },
+      {
+        "name": "stack-table",
+        "value": "40rem",
+        "purpose": "Tables become stacked records."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default framed square button; hover fills field-2.",
+      "html": "<button class=\"ds-btn\">বাতিল</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:0.45rem; min-height:44px; padding:0.55rem 1rem; border:1px solid var(--rule-strong); border-radius:0; background:transparent; color:var(--ink); font:inherit; font-family:var(--font); font-weight:600; line-height:1.2; cursor:pointer; transition:background-color 0.15s var(--ease-out), color 0.15s var(--ease-out); } .ds-btn:hover { background:var(--field-2); } .ds-btn:active { background:var(--z8); } .ds-btn:focus-visible { outline:2px solid var(--focus); outline-offset:2px; } .ds-btn:disabled { color:var(--ink-3); border-color:var(--z7); text-decoration:line-through; cursor:not-allowed; background:transparent; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Deepest-zone fill for the one main action.",
+      "html": "<button class=\"ds-btn-primary\">সংরক্ষণ করুন</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; min-height:44px; padding:0.55rem 1rem; border:1px solid var(--select); border-radius:0; background:var(--select); color:var(--on-select); font:inherit; font-family:var(--font); font-weight:600; cursor:pointer; transition:background-color 0.15s var(--ease-out); } .ds-btn-primary:hover { background:var(--z2); } .ds-btn-primary:active { background:var(--z3); } .ds-btn-primary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }"
+    },
+    {
+      "name": "SHEFA Button",
+      "kind": "button",
+      "refersTo": "button-shefa",
+      "description": "Magenta fill, only for acting on what SHEFA raised.",
+      "html": "<button class=\"ds-btn-shefa\">দেখুন</button>",
+      "css": ".ds-btn-shefa { display:inline-flex; align-items:center; min-height:36px; padding:0.3rem 0.7rem; border:1px solid var(--dichroic); border-radius:0; background:var(--dichroic); color:var(--on-dichroic); font:inherit; font-family:var(--font); font-weight:600; cursor:pointer; transition:background-color 0.15s var(--ease-out); } .ds-btn-shefa:hover { background:var(--dichroic-ink); } .ds-btn-shefa:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Square field; focus doubles the frame; error is a double bottom rule.",
+      "html": "<label class=\"ds-field\"><span>ফোন নম্বর</span><input class=\"ds-input\" value=\"01711-000000\"></label>",
+      "css": ".ds-field { display:inline-grid; gap:0.2rem; font-family:var(--font); } .ds-field > span { font-size:0.8125rem; font-weight:600; color:var(--ink-2); } .ds-input { font:inherit; color:var(--ink); background:var(--sheet); border:1px solid var(--z6); border-radius:0; min-height:44px; padding:0.45rem 0.7rem; caret-color:var(--dichroic); } .ds-input:hover { border-color:var(--z3); } .ds-input:focus-visible { outline:0; border-color:var(--rule-strong); box-shadow:inset 0 0 0 1px var(--rule-strong); } .ds-input[aria-invalid='true'] { border-color:var(--ink); border-bottom:3px double var(--ink); }"
+    },
+    {
+      "name": "State Marks",
+      "kind": "chip",
+      "refersTo": "mark",
+      "description": "State drawn and said: settled frame, waiting hatched swatch, conflict crossed swatch, held dotted, cancelled struck, selected fill, SHEFA square, live dot.",
+      "html": "<span class=\"ds-mark\">শেষ</span> <span class=\"ds-mark ds-mark-warn\">অপেক্ষায়</span> <span class=\"ds-mark ds-mark-bad\">ঝামেলা</span> <span class=\"ds-mark ds-mark-quiet\">স্থগিত</span> <span class=\"ds-mark ds-mark-gone\">বাতিল</span> <span class=\"ds-mark ds-mark-sel\">বাছাই</span> <span class=\"ds-mark ds-mark-shefa\">শেফা বুক করেছে</span> <span class=\"ds-mark ds-mark-shefa ds-mark-live\">চলছে</span>",
+      "css": ".ds-mark { display:inline-flex; align-items:center; gap:0.4rem; min-height:1.6rem; padding:0.05rem 0.55rem; border:1px solid var(--rule-strong); background:var(--sheet); color:var(--ink); font-family:var(--font); font-size:0.8125rem; font-weight:600; line-height:1.2; white-space:nowrap; } .ds-mark-warn, .ds-mark-bad { padding-inline-start:0; } .ds-mark-warn::before, .ds-mark-bad::before { content:''; flex:none; align-self:stretch; width:1.1rem; margin-block:-0.05rem; border-inline-end:1px solid currentColor; } .ds-mark-warn::before { background:repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } .ds-mark-bad::before { background:repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px), repeating-linear-gradient(135deg, var(--ink) 0 1px, transparent 1px 4px); } .ds-mark-quiet { border-style:dotted; border-color:var(--ink-3); color:var(--ink-2); } .ds-mark-gone { border-color:var(--z7); color:var(--ink-3); text-decoration:line-through; } .ds-mark-sel { background:var(--select); color:var(--on-select); border-color:var(--select); } .ds-mark-shefa { border-color:var(--dichroic); color:var(--dichroic-ink); } .ds-mark-shefa::before { content:''; width:0.5rem; height:0.5rem; background:var(--dichroic); flex:none; } .ds-mark-live::before { border-radius:50%; animation:ds-pulse 1.6s ease-in-out infinite; } @keyframes ds-pulse { 50% { opacity:0.25; } }"
+    },
+    {
+      "name": "Segmented Choice",
+      "kind": "nav",
+      "refersTo": "seg-pressed",
+      "description": "Language or view switch; pressed segment takes the deepest zone.",
+      "html": "<div class=\"ds-seg\"><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
+      "css": ".ds-seg { display:inline-flex; border:1px solid var(--rule-strong); font-family:var(--font); } .ds-seg button { font:inherit; min-height:36px; padding:0.25rem 0.85rem; border:0; background:transparent; color:var(--ink); cursor:pointer; } .ds-seg button + button { border-inline-start:1px solid var(--rule-strong); } .ds-seg button:focus-visible { outline:2px solid var(--focus); outline-offset:2px; } .ds-seg button[aria-pressed='true'] { background:var(--select); color:var(--on-select); font-weight:600; }"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "nav-rail",
+      "description": "z1 rail; active item reverses to z10.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav-item ds-active\" href=\"#\">এখন</a><a class=\"ds-nav-item\" href=\"#\">কল</a><a class=\"ds-nav-item\" href=\"#\">ডাক্তার</a></nav>",
+      "css": ".ds-rail { display:flex; flex-direction:column; width:15.5rem; background:var(--rail); border-top:1px solid var(--rail-rule); font-family:var(--font); } .ds-nav-item { display:flex; align-items:center; min-height:44px; padding:0.55rem 1.5rem; border-bottom:1px solid var(--rail-rule); color:var(--rail-ink); text-decoration:none; font-weight:500; } .ds-nav-item:hover { background:var(--z2); } .ds-nav-item:focus-visible { outline:2px solid var(--z10); outline-offset:2px; } .ds-nav-item.ds-active { background:var(--z10); color:var(--z0); font-weight:650; }"
+    },
+    {
+      "name": "Ruled Measures",
+      "kind": "card",
+      "refersTo": "table-head",
+      "description": "Measures as a ruled table, never tiles.",
+      "html": "<dl class=\"ds-stats\"><div class=\"ds-stat\"><dt>কল</dt><dd>—</dd></div><div class=\"ds-stat\"><dt>শেফা বুক করেছে</dt><dd>—</dd></div></dl>",
+      "css": ".ds-stats { display:grid; max-width:52rem; margin:0; border-top:2px solid var(--ink); font-family:var(--font); } .ds-stat { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:0 1rem; padding:0.75rem 0.25rem; border-bottom:1px solid var(--rule); } .ds-stat dt { font-weight:600; } .ds-stat dd { margin:0; font-family:var(--font-num); font-size:1.4375rem; font-weight:500; line-height:1.1; text-align:end; font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Day Load Bar",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Signature: a session block at real duration, filled with hatch density for serials booked; count on an opaque chip.",
+      "html": "<div class=\"ds-load\"><span class=\"ds-load-name\">ডা. এ. করিম</span><div class=\"ds-load-track\"><div class=\"ds-load-block\" style=\"left:10%;width:55%\"><span class=\"ds-load-fill\" style=\"width:79%\"></span><span class=\"ds-load-count\">১৯/২৪</span></div><div class=\"ds-load-block ds-leave\" style=\"left:70%;width:28%\"><span class=\"ds-load-count\">ছুটিতে</span></div></div></div>",
+      "css": ".ds-load { display:grid; grid-template-columns:11rem minmax(0,1fr); gap:0.75rem; align-items:center; min-height:3.25rem; border-top:1px solid var(--ink); border-bottom:1px solid var(--rule); font-family:var(--font); } .ds-load-name { font-weight:600; } .ds-load-track { position:relative; height:2.4rem; } .ds-load-block { position:absolute; top:0.45rem; bottom:0.45rem; border:1px solid var(--ink); background:var(--sheet); overflow:hidden; display:flex; align-items:center; } .ds-load-fill { position:absolute; inset:0 auto 0 0; border-inline-end:1px solid var(--ink); background-image:repeating-linear-gradient(135deg, var(--hatch-ink) 0 1px, transparent 1px 4px); } .ds-load-count { position:relative; z-index:1; margin-inline-start:0.35rem; padding:0 0.3rem; background:var(--sheet); font-size:0.8125rem; line-height:1.4; } .ds-leave { border-style:dotted; border-color:var(--ink-3); color:var(--ink-2); }"
+    },
+    {
+      "name": "Note (warning band)",
+      "kind": "card",
+      "refersTo": "",
+      "description": "Framed message; hatch in a 7px top band, never behind words.",
+      "html": "<div class=\"ds-note ds-note-warn\">সময়সূচি এখনো যাচাই হয়নি।</div>",
+      "css": ".ds-note { padding:0.75rem 1rem; border:1px solid var(--ink); background:var(--sheet); color:var(--ink); font-family:var(--font); } .ds-note-warn { background-image:repeating-linear-gradient(135deg, var(--z6) 0 1px, transparent 1px 5px); background-size:100% 7px; background-repeat:no-repeat; padding-top:calc(7px + 0.75rem); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Exposure Record",
+    "overview": "**Creative North Star: \"The Exposure Record\"**\n\nSHEFA is drawn as a darkroom printer's exposure card: a ruled record of zones, densities and marks, read by people who need to know at a glance what is filling up, what clashes, and where the machine acted. Tone comes from a single eleven-step neutral zone ramp, faintly cool and never cream. Load and conflict are drawn, not coloured: a session fills with hatching that gets denser as its serials are taken, and two things that collide cross-hatch at ninety degrees. Every state is drawn and also said in words; the drawing never carries meaning on its own.\n\nOne dichroic magenta belongs to SHEFA's own voice and actions: a live call, a booking SHEFA made, a call SHEFA handed to a person, SHEFA's turns in a transcript. Everything else is zone. The world rejects the category default, which is white cards, a slate sidebar, one teal accent and KPI tiles. Data sits on the field in ruled ledgers and tables. Measures are ruled tables, and detail opens as a sheet of tracing paper over the list, so the list stays in place underneath.\n\nBangla is the primary language and is set first. English is the second view, and only English goes to tracked caps. The density is a working desk: hairline rows of 52px, 44px targets, and no ornament the record doesn't need.",
+    "keyCharacteristics": [
+      "Eleven neutral zones (z0 to z10) are the only tonal tokens. The dark theme reads the same ramp the other way round.",
+      "One magenta, reserved for SHEFA's voice and actions.",
+      "State vocabulary: selected is the deepest zone, waiting is hatched, conflict is cross-hatched, held back is a dotted outline, cancelled or disabled is struck through, and settled is a plain frame.",
+      "Square everywhere, with 1px hairlines and a 2px ink rule heading each page and table.",
+      "Anek for words (condensed for display), Martian Mono for Latin quantities, Anek for Bangla quantities.",
+      "The only elevation is the sliding sheet."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Magenta marks only what SHEFA did or needs: a live call, a booking SHEFA made, a hand-off to a person, SHEFA speaking. Never use it for navigation, selection, errors, danger or decoration. If a person did it, or nobody did, it is zone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Zone-Only Rule",
+        "body": "No other hue enters the world. There is no red for errors, no green for success and no amber for warnings. Severity is drawn with hatching, cross-hatching, dotted or struck rules, and weight, and it is always said in words.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reversed Ramp Rule",
+        "body": "Dark mode does not invent colours. It maps the same roles onto the ramp the other way round, chosen by the viewer's system or by `data-theme`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Bangla Quantity Rule",
+        "body": "Martian draws Latin digits only. Under `:lang(bn)`, `--font-num` swaps to Anek, so a Bangla serial or time never mixes two faces. Tables still right-align it with tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Part-of-Day Rule",
+        "body": "Bangla times read by part of the day, never AM or PM: \"সকাল ৯:০০\", দুপুর, বিকাল, সন্ধ্যা, রাত. This is one clock everywhere: axes, rows, call summaries and the patient page.",
+        "section": "typography"
+      },
+      {
+        "name": "The English-Only Caps Rule",
+        "body": "Tracked uppercase applies only to English labels, buttons, marks and Latin display. Bangla is never tracked or forced into a case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Light Fonts Rule",
+        "body": "Public pages (patient, demo, volunteer) load `fonts-lite.css`, which has no width axis. Their display type falls back to normal width, which the source calls the honest trade for about 290 KB less on a slow phone. The staff and admin pages load the full file.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tracing Paper Rule",
+        "body": "The sheet is blurred tracing paper: the sheet tone at 82% with a 10px backdrop blur, so the tone of the list shows through and its words do not. A second sheet sits beneath it at 70%, askew by -0.8deg, behind a z7 hairline. On a phone the sheet is fully opaque, with no blur.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Settle Rule",
+        "body": "The sheet slides in over 0.42s on `cubic-bezier(0.22, 1, 0.36, 1)`. It arrives with mass and settles with no overshoot or bounce.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Hatch Never Behind Words Rule",
+        "body": "Hatching never runs under text. On marks and chips it sits in a swatch cell (1.1rem wide, with a 1px divider) at the start. On messages it is a 7px band across the top of the box (6px on the desk alert and receipt). In a load bar, the count sits on an opaque sheet chip over the fill.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** draw every state and also say it in words: hatch density for load, cross-hatch for conflict, dotted for held back, struck for cancelled or disabled, and the deepest zone for selected.",
+      "**Do** take tone from the zone roles (ground, sheet, field-2, ink, ink-2, ink-3, rule, rule-strong) so dark mode reverses for free.",
+      "**Do** keep magenta to SHEFA's own actions and voice: a live dot, a swatch, a 1px rule, the needs-a-person alert.",
+      "**Do** put hatching in a swatch cell, a 7px top band or behind an opaque count chip, never under words.",
+      "**Do** set quantities in the num face with tabular figures, right-aligned in tables, and let `:lang(bn)` swap it to Anek.",
+      "**Do** write Bangla times by part of the day (\"সকাল ৯:০০\").",
+      "**Do** show measures as a ruled table with the label on the left and a right-aligned figure.",
+      "**Do** draw time to scale: a block's length is its real duration.",
+      "**Do** open detail as the sheet over the list, opaque on a phone.",
+      "**Do** keep targets at 44px by default and on every phone or public surface (50px on public forms). 36px is allowed only for small buttons and segments in dense desktop rows, and stacked tables restore 44px on a phone."
+    ],
+    "donts": [
+      "**Don't** use white rounded cards, a slate sidebar with one teal accent, or KPI number tiles.",
+      "**Don't** use magenta for navigation, selection, tabs, errors, danger, offline states or decoration.",
+      "**Don't** introduce any hue beyond the zone ramp and the one magenta. There is no red, green or amber state colour.",
+      "**Don't** round corners. Circles are only for motion indicators (the live dot, a loading spinner).",
+      "**Don't** add elevation shadows to anything but the sheet.",
+      "**Don't** run hatching behind text.",
+      "**Don't** fade a disabled control with opacity. Strike it and drop it to ink-3 and z7.",
+      "**Don't** track or uppercase Bangla.",
+      "**Don't** let the sheet bounce or overshoot.",
+      "**Don't** mix Martian and Anek inside one Bangla quantity."
+    ]
+  }
+}
