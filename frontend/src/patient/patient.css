@@ -5,10 +5,9 @@
 .patient { min-height: 100dvh; background: var(--shelf); color: var(--ink); font-size: 1.0625rem; padding-bottom: env(safe-area-inset-bottom); }
 .patient button, .patient input { font: inherit; }
 
-.p-top { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; padding: 0.6rem max(1rem, calc((100% - 40rem) / 2)); background: var(--rail); color: var(--rail-ink); }
+.p-top { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; padding: 0.6rem max(1rem, calc((100% - 40rem) / 2)); background: var(--rail); border-bottom: 1px solid var(--rail-rule); color: var(--rail-ink); }
 .p-brand { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; letter-spacing: 0.03em; }
-.p-brand svg rect:first-of-type { fill: oklch(1 0 0 / 0.14); }
-.p-lang { min-height: 44px; padding: 0.3rem 1rem; border-radius: var(--r-pill); border: 1px solid oklch(1 0 0 / 0.45); background: transparent; color: var(--rail-ink); cursor: pointer; font-weight: 600; }
+.p-lang { min-height: 44px; padding: 0.3rem 1rem; border-radius: var(--r-pill); border: 1px solid var(--rail-line); background: transparent; color: var(--rail-ink); cursor: pointer; font-weight: 600; }
 .p-lang:hover { background: var(--rail-hover); }
 .p-main { max-width: 40rem; margin: 0 auto; padding: 0 1rem 3rem; }
 .p-main h1 { font-family: var(--font-display); font-size: 2.15rem; font-weight: 800; line-height: 1.12; margin: 1.4rem 0 0.4rem; }
@@ -23,12 +22,12 @@
 .p-steps li { padding: 0.4rem 0.55rem; border-radius: var(--r-sm); background: var(--box); color: var(--ink-2); line-height: 1.25; box-shadow: var(--shadow-box); }
 .p-steps li span { display: block; font-family: var(--font-display); font-weight: 800; font-size: 0.95rem; }
 .p-steps li.on { background: var(--done-wash); color: var(--done-ink); }
-.p-steps li[aria-current='step'] { background: var(--done); color: var(--on-done); font-weight: 700; }
+.p-steps li[aria-current='step'] { background: var(--primary); color: var(--on-primary); font-weight: 700; }
 
 .p-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .p-chips button, .p-times button { min-height: 46px; padding: 0.4rem 1rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; font-weight: 600; }
 .p-chips button:hover, .p-times button:hover { border-color: var(--ink-2); }
-.p-chips button[aria-pressed='true'], .p-times button[aria-pressed='true'] { background: var(--done); color: var(--on-done); border-color: var(--done); }
+.p-chips button[aria-pressed='true'], .p-times button[aria-pressed='true'] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .p-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 0.45rem; }
 .p-times button { border-radius: var(--r-sm); font-variant-numeric: tabular-nums; }
 
@@ -91,6 +90,6 @@
 }
 
 .p-prefs { display: flex; align-items: center; gap: 0.45rem; }
-.p-top .theme-switch { background: oklch(0 0 0 / 0.18); border-color: oklch(1 0 0 / 0.3); }
+.p-top .theme-switch { background: var(--rail-tint); border-color: var(--rail-line); }
 .p-top .theme-switch button { color: var(--rail-ink); min-width: 2.2rem; min-height: 36px; padding: 0.2rem 0.5rem; }
 .p-top .theme-switch button[aria-pressed='true'] { background: var(--box); color: var(--ink); }

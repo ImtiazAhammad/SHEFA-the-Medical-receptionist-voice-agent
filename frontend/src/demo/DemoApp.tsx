@@ -141,11 +141,11 @@ export default function DemoApp() {
       <header className="p-top">
         <span className="p-brand">
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="var(--rail)" />
+            <rect width="32" height="32" rx="8" fill="var(--brand)" />
             <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="7.25" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
             <g transform="rotate(-38 16 16)">
               <rect x="6" y="11.5" width="20" height="9" rx="4.5" fill="#fff" />
-              <path d="M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z" fill="var(--shefa)" />
+              <path d="M16 11.5h5.5a4.5 4.5 0 0 1 0 9H16z" fill="#c9b8f4" />
             </g>
           </svg>
           {t.brand}

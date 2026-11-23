@@ -1,4 +1,4 @@
-/* SHEFA world tokens: the medicine shelf.
+/* SHEFA world tokens: Clinic Light (chosen 2026-11-23 from six rendered themes).
  *
  * A Bangladeshi pharmacy shelf, read as a working screen: off-white box board on a shelf with the
  * faintest cast of the rail's pharma green (never cream),
@@ -17,22 +17,22 @@
 
 :root {
   /* shelf and boxes */
-  --shelf: oklch(0.963 0.006 165);
-  --box: oklch(0.993 0.003 165);  /* never pure white */
-  --on-fill: oklch(0.985 0.004 165);  /* text on a doctor's box colour: off-white */
-  --box-2: oklch(0.975 0.005 165);
-  --ink: oklch(0.23 0.012 165);
-  --ink-2: oklch(0.41 0.012 165);
-  --ink-3: oklch(0.5 0.01 165);
-  --rule: oklch(0.895 0.007 165);
-  --rule-strong: oklch(0.79 0.01 165);
+  --shelf: oklch(0.975 0.004 250);
+  --box: oklch(0.995 0.002 250);  /* never pure white */
+  --on-fill: oklch(0.985 0.004 250);  /* text on a doctor's box colour: off-white */
+  --box-2: oklch(0.965 0.006 250);
+  --ink: oklch(0.24 0.02 260);
+  --ink-2: oklch(0.43 0.02 260);
+  --ink-3: oklch(0.52 0.015 260);
+  --rule: oklch(0.91 0.008 255);
+  --rule-strong: oklch(0.8 0.012 255);
 
   /* the rail: pharma green */
-  --rail: oklch(0.35 0.075 162);
-  --rail-hover: oklch(0.4 0.08 162);
-  --rail-rule: oklch(0.43 0.07 162);
-  --rail-ink: oklch(0.99 0.005 160);
-  --rail-ink-2: oklch(0.87 0.035 160);
+  --rail: oklch(0.99 0.003 250);
+  --rail-hover: oklch(0.955 0.008 250);
+  --rail-rule: oklch(0.91 0.008 255);
+  --rail-ink: oklch(0.24 0.02 260);
+  --rail-ink-2: oklch(0.45 0.02 260);
 
   /* the legend */
   --urgent: oklch(0.55 0.2 27);
@@ -47,10 +47,10 @@
   --done-ink: oklch(0.45 0.11 158);
   --done-wash: oklch(0.955 0.035 158);
   --on-done: oklch(0.99 0.01 158);
-  --shefa: oklch(0.52 0.17 262);
-  --shefa-ink: oklch(0.47 0.17 262);
-  --shefa-wash: oklch(0.955 0.03 262);
-  --on-shefa: oklch(0.99 0.01 262);
+  --shefa: oklch(0.52 0.15 300);
+  --shefa-ink: oklch(0.47 0.15 300);
+  --shefa-wash: oklch(0.96 0.025 300);
+  --on-shefa: oklch(0.99 0.01 300);
   --gone: oklch(0.62 0.01 165);
 
   /* doctors' box colours: one lightness and strength, so no doctor shouts louder than another,
@@ -62,10 +62,16 @@
   --doc-4: oklch(0.5 0.1 115);   /* olive */
   --doc-5: oklch(0.44 0.025 250); /* graphite: kept clear of SHEFA blue */
 
-  --primary: var(--done);
-  --primary-hover: oklch(0.44 0.11 158);
-  --on-primary: var(--on-done);
-  --focus: oklch(0.52 0.17 262);
+  --primary: oklch(0.5 0.17 265);
+  /* the light rail: tiles and lines on it, and the brand mark's colour */
+  --rail-tint: var(--box-2);
+  --rail-line: var(--rule-strong);
+  --primary-wash: oklch(0.955 0.03 265);
+  --brand: var(--primary);
+
+  --primary-hover: oklch(0.45 0.17 265);
+  --on-primary: oklch(0.99 0.005 265);
+  --focus: oklch(0.5 0.17 265);
 
   /* type */
   --font-display: 'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif;
@@ -82,8 +88,8 @@
   --r-sm: 6px;
   --r: 10px;
   --r-pill: 999px;
-  --shadow-box: 0 1px 2px oklch(0.3 0.02 165 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 165 / 0.18);
-  --shadow-lift: 0 2px 4px oklch(0.3 0.02 165 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 165 / 0.28);
+  --shadow-box: 0 1px 2px oklch(0.3 0.02 260 / 0.06), 0 4px 14px -6px oklch(0.3 0.02 260 / 0.12);
+  --shadow-lift: 0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24);
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -102,17 +108,24 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --shelf: oklch(0.2 0.008 165);
-    --box: oklch(0.25 0.009 165);
-    --box-2: oklch(0.23 0.009 165);
-    --ink: oklch(0.95 0.006 165);
-    --ink-2: oklch(0.8 0.01 165);
-    --ink-3: oklch(0.72 0.01 165);
-    --rule: oklch(0.33 0.01 165);
-    --rule-strong: oklch(0.45 0.01 165);
-    --rail: oklch(0.24 0.045 162);
-    --rail-hover: oklch(0.29 0.05 162);
-    --rail-rule: oklch(0.32 0.04 162);
+    --on-fill: oklch(0.985 0.004 250);
+    --rail-ink: oklch(0.95 0.008 240);
+    --rail-ink-2: oklch(0.75 0.02 245);
+    --primary: oklch(0.72 0.13 265);
+    --rail-tint: oklch(1 0 0 / 0.07);
+    --rail-line: oklch(1 0 0 / 0.16);
+    --primary-wash: oklch(0.3 0.06 265);
+    --shelf: oklch(0.19 0.02 255);
+    --box: oklch(0.235 0.022 255);
+    --box-2: oklch(0.27 0.022 255);
+    --ink: oklch(0.95 0.008 240);
+    --ink-2: oklch(0.8 0.015 245);
+    --ink-3: oklch(0.72 0.015 245);
+    --rule: oklch(0.32 0.02 255);
+    --rule-strong: oklch(0.42 0.02 255);
+    --rail: oklch(0.16 0.02 255);
+    --rail-hover: oklch(0.22 0.025 255);
+    --rail-rule: oklch(0.27 0.02 255);
     --urgent: oklch(0.62 0.19 27);
     --urgent-ink: oklch(0.76 0.14 27);
     --urgent-wash: oklch(0.3 0.07 27);
@@ -121,32 +134,39 @@
     --done: oklch(0.58 0.12 158);
     --done-ink: oklch(0.78 0.11 158);
     --done-wash: oklch(0.29 0.05 158);
-    --shefa: oklch(0.6 0.16 262);
-    --shefa-ink: oklch(0.78 0.11 262);
-    --shefa-wash: oklch(0.3 0.07 262);
-    --primary-hover: oklch(0.63 0.12 158);
+    --shefa: oklch(0.72 0.13 300);
+    --shefa-ink: oklch(0.8 0.1 300);
+    --shefa-wash: oklch(0.32 0.06 300);
+    --primary-hover: oklch(0.78 0.11 265);
     --on-done: oklch(0.18 0.03 158);
-    --on-primary: oklch(0.18 0.03 158);
-    --on-shefa: oklch(0.17 0.03 262);
+    --on-primary: oklch(0.18 0.03 265);
+    --on-shefa: oklch(0.17 0.03 300);
     --on-urgent: oklch(0.17 0.03 27);
-    --focus: oklch(0.75 0.12 262);
+    --focus: oklch(0.8 0.11 265);
     --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
     --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --shelf: oklch(0.2 0.008 165);
-  --box: oklch(0.25 0.009 165);
-  --box-2: oklch(0.23 0.009 165);
-  --ink: oklch(0.95 0.006 165);
-  --ink-2: oklch(0.8 0.01 165);
-  --ink-3: oklch(0.72 0.01 165);
-  --rule: oklch(0.33 0.01 165);
-  --rule-strong: oklch(0.45 0.01 165);
-  --rail: oklch(0.24 0.045 162);
-  --rail-hover: oklch(0.29 0.05 162);
-  --rail-rule: oklch(0.32 0.04 162);
+  --on-fill: oklch(0.985 0.004 250);
+  --rail-ink: oklch(0.95 0.008 240);
+  --rail-ink-2: oklch(0.75 0.02 245);
+  --primary: oklch(0.72 0.13 265);
+  --rail-tint: oklch(1 0 0 / 0.07);
+  --rail-line: oklch(1 0 0 / 0.16);
+  --primary-wash: oklch(0.3 0.06 265);
+  --shelf: oklch(0.19 0.02 255);
+  --box: oklch(0.235 0.022 255);
+  --box-2: oklch(0.27 0.022 255);
+  --ink: oklch(0.95 0.008 240);
+  --ink-2: oklch(0.8 0.015 245);
+  --ink-3: oklch(0.72 0.015 245);
+  --rule: oklch(0.32 0.02 255);
+  --rule-strong: oklch(0.42 0.02 255);
+  --rail: oklch(0.16 0.02 255);
+  --rail-hover: oklch(0.22 0.025 255);
+  --rail-rule: oklch(0.27 0.02 255);
   --urgent: oklch(0.62 0.19 27);
   --urgent-ink: oklch(0.76 0.14 27);
   --urgent-wash: oklch(0.3 0.07 27);
@@ -155,15 +175,15 @@
   --done: oklch(0.58 0.12 158);
   --done-ink: oklch(0.78 0.11 158);
   --done-wash: oklch(0.29 0.05 158);
-  --shefa: oklch(0.6 0.16 262);
-  --shefa-ink: oklch(0.78 0.11 262);
-  --shefa-wash: oklch(0.3 0.07 262);
-  --primary-hover: oklch(0.63 0.12 158);
+  --shefa: oklch(0.72 0.13 300);
+  --shefa-ink: oklch(0.8 0.1 300);
+  --shefa-wash: oklch(0.32 0.06 300);
+  --primary-hover: oklch(0.78 0.11 265);
   --on-done: oklch(0.18 0.03 158);
-  --on-primary: oklch(0.18 0.03 158);
-  --on-shefa: oklch(0.17 0.03 262);
+  --on-primary: oklch(0.18 0.03 265);
+  --on-shefa: oklch(0.17 0.03 300);
   --on-urgent: oklch(0.17 0.03 27);
-  --focus: oklch(0.75 0.12 262);
+  --focus: oklch(0.8 0.11 265);
   --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
   --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
 }
