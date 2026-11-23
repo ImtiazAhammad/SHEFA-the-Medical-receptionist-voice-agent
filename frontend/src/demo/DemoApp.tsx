@@ -3,7 +3,8 @@ import { Mic, PhoneOff, Send } from 'lucide-react'
 import { dictionaries, type DKey, type DLang } from './strings'
 import { VoiceCall, type VoiceEnd, type VoiceState } from './voice'
 import '@world/fonts-lite.css'
-import { ThemeSwitch } from '../lib/theme'
+import { VoiceRing } from 'voice-ring'
+import { ThemeSwitch, useReducedMotion, useShownTheme } from '../lib/theme'
 import '../patient/patient.css'
 import './demo.css'
 
@@ -47,6 +48,10 @@ export default function DemoApp() {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
+  // who the ring is following on a live call: SHEFA while its words play, otherwise the caller
+  const [agentTalking, setAgentTalking] = useState(false)
+  const shownTheme = useShownTheme()
+  const calm = useReducedMotion()
   const nextId = useRef(1)
   const call = useRef<VoiceCall | null>(null)
   const log = useRef<HTMLOListElement>(null)
@@ -88,6 +93,16 @@ export default function DemoApp() {
   }, [state, info])
 
   useEffect(() => () => call.current?.stop(), [])
+
+  // the ring's level is read straight from the call every frame; only the speaker needs React
+  useEffect(() => {
+    if (state !== 'live') return
+    const timer = window.setInterval(() => setAgentTalking(call.current?.agentSpeaking() ?? false), 120)
+    return () => {
+      window.clearInterval(timer)
+      setAgentTalking(false)
+    }
+  }, [state])
 
   async function toggleCall() {
     if (state !== 'idle') {
@@ -132,6 +147,7 @@ export default function DemoApp() {
   }
 
   const live = state === 'live'
+  const ringState = state === 'connecting' ? 'processing' : live ? (agentTalking ? 'speaking' : 'listening') : 'idle'
   const time = `${digits.format(Math.floor(secondsLeft / 60))}:${secondsLeft % 60 < 10 ? digits.format(0) : ''}${digits.format(secondsLeft % 60)}`
 
   if (info && !info.enabled) return null
@@ -163,7 +179,19 @@ export default function DemoApp() {
         <p className="demo-sample">{t.sample}</p>
 
         <section className="demo-call" aria-label={t.start}>
-          <button
+          <div className="demo-orb-wrap">
+            {/* the assistant's ring of light: decoration, so hidden from screen readers; the button
+                and the status line below carry everything it shows */}
+            <div className="demo-ring" aria-hidden="true">
+              <VoiceRing
+                size={272}
+                state={ringState}
+                level={() => call.current?.level() ?? 0}
+                theme={shownTheme}
+                paused={calm}
+              />
+            </div>
+            <button
             type="button"
             className={`demo-orb${live ? ' live' : ''}`}
             onClick={() => void toggleCall()}
@@ -172,7 +200,8 @@ export default function DemoApp() {
           >
             {live ? <PhoneOff size={34} aria-hidden="true" /> : <Mic size={34} aria-hidden="true" />}
             <span>{state === 'connecting' ? t.connecting : live ? t.hangUp : t.start}</span>
-          </button>
+            </button>
+          </div>
           <p className="demo-state" role="status">
             {live ? `${t.live} · ${t.timeLeft.replace('{time}', time)}` : notice ? t[notice] : ''}
           </p>

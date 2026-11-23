@@ -12,9 +12,15 @@
 .demo-orb:hover:not(:disabled) { background: var(--primary-hover); }
 .demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: scale(0.98); }
 .demo-orb:disabled { cursor: progress; background: var(--ink-3); }
-.demo-orb.live { background: var(--shefa); color: var(--on-shefa); animation: demo-ring 1.8s ease-out infinite; }
-/* the ring only while SHEFA is on the call: it says the line is live */
-@keyframes demo-ring { 0% { box-shadow: 0 0 0 0 var(--shefa-wash), var(--shadow-lift); } 60% { box-shadow: 0 0 0 18px transparent, var(--shadow-lift); } }
+.demo-orb.live { background: var(--shefa); color: var(--on-shefa); }
+.demo-orb.live:hover:not(:disabled) { background: var(--shefa-ink); }
+/* SHEFA's ring of light (voice-ring) stands behind the call button: it breathes while waiting,
+   turns while connecting, and bends with the caller's voice, then with SHEFA's as it answers.
+   The button stays the one thing to press. */
+.demo-orb-wrap { display: grid; place-items: center; width: 272px; height: 272px; max-width: 100%; }
+.demo-orb-wrap > * { grid-area: 1 / 1; }
+.demo-ring { display: grid; place-items: center; pointer-events: none; }
+.demo-orb-wrap .demo-orb { position: relative; width: 8.5rem; height: 8.5rem; }
 .demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
 .demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; }
 .demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; transition: background-color 0.15s, border-color 0.15s, transform 0.16s var(--ease-out); }
@@ -42,6 +48,5 @@
 .demo-safe { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 0.4rem; color: var(--ink-2); }
 .demo-foot { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.9rem; }
 @media (prefers-reduced-motion: reduce) {
-  .demo-orb.live { animation: none; }
   .demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: none; }
 }

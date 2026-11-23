@@ -23,6 +23,10 @@ export class VoiceCall {
   private agentUntil = 0
   private quietTimer: number | undefined
   private finished = false
+  // listening taps for the voice ring: the caller's microphone and SHEFA's voice as it plays
+  private heardIn: AnalyserNode | null = null
+  private heardOut: AnalyserNode | null = null
+  private wave: Float32Array<ArrayBuffer> | null = null
 
   private readonly h: VoiceHandlers
 
@@ -49,7 +53,12 @@ export class VoiceCall {
       const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }))
       await this.ctx.audioWorklet.addModule(url)
       this.node = new AudioWorkletNode(this.ctx, 'p')
-      this.ctx.createMediaStreamSource(this.mic).connect(this.node)
+      const micSource = this.ctx.createMediaStreamSource(this.mic)
+      micSource.connect(this.node)
+      this.heardIn = this.tap(micSource)
+      this.heardOut = this.ctx.createAnalyser()
+      this.heardOut.fftSize = 512
+      this.heardOut.connect(this.ctx.destination)
     } catch {
       return this.fail('failed')
     }
@@ -84,6 +93,32 @@ export class VoiceCall {
     this.cleanup('ended')
   }
 
+  /** Is SHEFA's voice playing right now (its words are scheduled ahead of the clock)? */
+  agentSpeaking(): boolean {
+    return !!this.ctx && this.ctx.currentTime < this.agentUntil
+  }
+
+  /** How loud the call is this frame, 0 to 1: SHEFA while it speaks, otherwise the caller. Read
+   * every animation frame by the voice ring, so it reuses one buffer and allocates nothing. */
+  level(): number {
+    const analyser = this.agentSpeaking() ? this.heardOut : this.heardIn
+    if (!analyser) return 0
+    if (!this.wave || this.wave.length !== analyser.fftSize) this.wave = new Float32Array(analyser.fftSize)
+    analyser.getFloatTimeDomainData(this.wave)
+    let sum = 0
+    for (const v of this.wave) sum += v * v
+    // speech RMS sits around 0.03 to 0.2; stretch it toward the ring's 0 to 1
+    return Math.min(1, Math.sqrt(sum / this.wave.length) * 4)
+  }
+
+  private tap(source: AudioNode): AnalyserNode | null {
+    if (!this.ctx) return null
+    const analyser = this.ctx.createAnalyser()
+    analyser.fftSize = 512
+    source.connect(analyser)
+    return analyser
+  }
+
   private play(buffer: ArrayBuffer): void {
     if (!this.ctx) return
     const samples = new Int16Array(buffer)
@@ -93,7 +128,7 @@ export class VoiceCall {
     audio.copyToChannel(floats, 0)
     const source = this.ctx.createBufferSource()
     source.buffer = audio
-    source.connect(this.ctx.destination)
+    source.connect(this.heardOut ?? this.ctx.destination)
     this.playAt = Math.max(this.playAt, this.ctx.currentTime + 0.05)
     source.start(this.playAt)
     this.playAt += audio.duration
@@ -131,6 +166,7 @@ export class VoiceCall {
     this.ctx = null
     this.node = null
     this.mic = null
+    this.heardIn = this.heardOut = null
     this.playAt = this.agentUntil = 0
     this.h.onState('idle')
     this.h.onEnd(why)

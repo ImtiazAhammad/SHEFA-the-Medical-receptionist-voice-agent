@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useSegPill } from './motion'
 import { Monitor, Moon, Sun } from 'lucide-react'
 
@@ -60,4 +60,42 @@ export function ThemeSwitch({ labels }: { labels: { group: string; auto: string;
       ))}
     </div>
   )
+}
+
+/** Subscribe to a media query; for drawing code that cannot read CSS (canvas). */
+function mediaStore(query: string) {
+  return {
+    subscribe(change: () => void) {
+      const list = window.matchMedia(query)
+      list.addEventListener('change', change)
+      return () => list.removeEventListener('change', change)
+    },
+    read: () => window.matchMedia(query).matches,
+  }
+}
+const darkDevice = mediaStore('(prefers-color-scheme: dark)')
+const calmDevice = mediaStore('(prefers-reduced-motion: reduce)')
+
+function subscribeRootTheme(change: () => void) {
+  const watch = new MutationObserver(change)
+  watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  const stopDevice = darkDevice.subscribe(change)
+  return () => {
+    watch.disconnect()
+    stopDevice()
+  }
+}
+
+/** The theme actually on screen, light or dark, after the switch and the device are both applied. */
+export function useShownTheme(): 'light' | 'dark' {
+  return useSyncExternalStore(subscribeRootTheme, () => {
+    const forced = document.documentElement.getAttribute('data-theme')
+    if (forced === 'light' || forced === 'dark') return forced
+    return darkDevice.read() ? 'dark' : 'light'
+  })
+}
+
+/** True when the viewer asked their device for less motion. */
+export function useReducedMotion(): boolean {
+  return useSyncExternalStore(calmDevice.subscribe, calmDevice.read)
 }
