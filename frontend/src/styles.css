@@ -12,7 +12,6 @@
   display: flex; flex-direction: column; gap: var(--space-5);
   padding: var(--space-5) var(--space-3) var(--space-4);
   background: var(--rail); color: var(--rail-ink); border-inline-end: 1px solid var(--rail-rule);
-  --focus: oklch(0.9 0.1 90);
 }
 .brand { display: flex; align-items: center; gap: 0.65rem; padding: 0 var(--space-2); color: var(--rail-ink); }
 .logo { display: inline-flex; flex: none; }
@@ -45,7 +44,7 @@
 .side .seg button { flex: 1; color: var(--rail-ink); }
 .side .seg button[aria-pressed='true'] { background: var(--box); color: var(--ink); }
 .sound-toggle { gap: 0.6rem; cursor: pointer; }
-.sound-toggle input { accent-color: oklch(0.8 0.12 158); }
+.sound-toggle input { accent-color: var(--primary); }
 .who { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .who-name { font-weight: 600; overflow-wrap: anywhere; font-size: var(--step--1); }
 .side .btn { color: var(--rail-ink); border-color: var(--rail-line); background: transparent; }

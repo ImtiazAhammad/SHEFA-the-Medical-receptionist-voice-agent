@@ -12,7 +12,7 @@
   --ok:oklch(0.45 0.11 158);
   --ok-wash:oklch(0.955 0.035 158);
   --bad:oklch(0.55 0.2 27);
-  --rail:oklch(0.35 0.075 162);
+  --rail:oklch(0.5 0.17 265);
   --soft:oklch(0.975 0.005 165);
   --shadow:0 1px 2px oklch(0.3 0.02 165 / .07),0 6px 16px -8px oklch(0.3 0.02 165 / .18)}
 @media(prefers-color-scheme:dark){
@@ -27,7 +27,7 @@
   --ok:oklch(0.78 0.11 158);
   --ok-wash:oklch(0.29 0.05 158);
   --bad:oklch(0.62 0.19 27);
-  --rail:oklch(0.24 0.045 162);
+  --rail:oklch(0.42 0.13 265);
   --soft:oklch(0.23 0.009 165);
   --shadow:0 1px 2px oklch(0 0 0 / .35)}
 }

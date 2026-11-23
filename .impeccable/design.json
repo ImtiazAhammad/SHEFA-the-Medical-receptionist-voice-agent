@@ -1,228 +1,350 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-22T00:00:00Z",
+  "generatedAt": "2026-11-23T00:00:00Z",
   "title": "Design System: SHEFA",
   "extensions": {
     "colorMeta": {
       "shelf": {
         "role": "neutral",
-        "displayName": "Warm Shelf",
-        "canonical": "oklch(0.962 0.006 165)",
+        "displayName": "Cool Field",
+        "canonical": "oklch(0.975 0.004 250)",
         "cssVar": "--shelf",
-        "dark": "oklch(0.2 0.008 165)",
+        "dark": "oklch(0.19 0.02 255)",
         "tonalRamp": [
-          "oklch(0.15 0.006 78.0)",
-          "oklch(0.26 0.006 78.0)",
-          "oklch(0.38 0.006 78.0)",
-          "oklch(0.50 0.006 78.0)",
-          "oklch(0.62 0.006 78.0)",
-          "oklch(0.74 0.006 78.0)",
-          "oklch(0.85 0.006 78.0)",
-          "oklch(0.95 0.006 78.0)"
+          "oklch(0.15 0.004 250.0)",
+          "oklch(0.26 0.004 250.0)",
+          "oklch(0.38 0.004 250.0)",
+          "oklch(0.50 0.004 250.0)",
+          "oklch(0.62 0.004 250.0)",
+          "oklch(0.74 0.004 250.0)",
+          "oklch(0.85 0.004 250.0)",
+          "oklch(0.95 0.004 250.0)"
         ]
       },
       "box": {
         "role": "neutral",
         "displayName": "Box Board",
-        "canonical": "oklch(0.993 0.003 165)",
+        "canonical": "oklch(0.995 0.002 250)",
         "cssVar": "--box",
-        "dark": "oklch(0.25 0.009 165)",
+        "dark": "oklch(0.235 0.022 255)",
         "tonalRamp": [
-          "oklch(0.15 0.0 0.0)",
-          "oklch(0.26 0.0 0.0)",
-          "oklch(0.38 0.0 0.0)",
-          "oklch(0.50 0.0 0.0)",
-          "oklch(0.62 0.0 0.0)",
-          "oklch(0.74 0.0 0.0)",
-          "oklch(0.85 0.0 0.0)",
-          "oklch(0.95 0.0 0.0)"
+          "oklch(0.15 0.002 250.0)",
+          "oklch(0.26 0.002 250.0)",
+          "oklch(0.38 0.002 250.0)",
+          "oklch(0.50 0.002 250.0)",
+          "oklch(0.62 0.002 250.0)",
+          "oklch(0.74 0.002 250.0)",
+          "oklch(0.85 0.002 250.0)",
+          "oklch(0.95 0.002 250.0)"
         ]
       },
       "box-2": {
         "role": "neutral",
         "displayName": "Box Board, shaded",
-        "canonical": "oklch(0.975 0.005 165)",
+        "canonical": "oklch(0.965 0.006 250)",
         "cssVar": "--box-2",
-        "dark": "oklch(0.23 0.009 165)",
+        "dark": "oklch(0.27 0.022 255)",
         "tonalRamp": [
-          "oklch(0.15 0.005 78.0)",
-          "oklch(0.26 0.005 78.0)",
-          "oklch(0.38 0.005 78.0)",
-          "oklch(0.50 0.005 78.0)",
-          "oklch(0.62 0.005 78.0)",
-          "oklch(0.74 0.005 78.0)",
-          "oklch(0.85 0.005 78.0)",
-          "oklch(0.95 0.005 78.0)"
+          "oklch(0.15 0.006 250.0)",
+          "oklch(0.26 0.006 250.0)",
+          "oklch(0.38 0.006 250.0)",
+          "oklch(0.50 0.006 250.0)",
+          "oklch(0.62 0.006 250.0)",
+          "oklch(0.74 0.006 250.0)",
+          "oklch(0.85 0.006 250.0)",
+          "oklch(0.95 0.006 250.0)"
         ]
       },
       "ink": {
         "role": "neutral",
-        "displayName": "Carton Ink",
-        "canonical": "oklch(0.23 0.012 165)",
+        "displayName": "Slate Ink",
+        "canonical": "oklch(0.24 0.02 260)",
         "cssVar": "--ink",
-        "dark": "oklch(0.95 0.006 165)",
+        "dark": "oklch(0.95 0.008 240)",
         "tonalRamp": [
-          "oklch(0.15 0.012 60.0)",
-          "oklch(0.26 0.012 60.0)",
-          "oklch(0.38 0.012 60.0)",
-          "oklch(0.50 0.012 60.0)",
-          "oklch(0.62 0.012 60.0)",
-          "oklch(0.74 0.012 60.0)",
-          "oklch(0.85 0.012 60.0)",
-          "oklch(0.95 0.012 60.0)"
+          "oklch(0.15 0.02 260.0)",
+          "oklch(0.26 0.02 260.0)",
+          "oklch(0.38 0.02 260.0)",
+          "oklch(0.50 0.02 260.0)",
+          "oklch(0.62 0.02 260.0)",
+          "oklch(0.74 0.02 260.0)",
+          "oklch(0.85 0.02 260.0)",
+          "oklch(0.95 0.02 260.0)"
         ]
       },
       "ink-2": {
         "role": "neutral",
-        "displayName": "Carton Ink, secondary",
-        "canonical": "oklch(0.41 0.012 165)",
+        "displayName": "Slate Ink, secondary",
+        "canonical": "oklch(0.43 0.02 260)",
         "cssVar": "--ink-2",
-        "dark": "oklch(0.8 0.01 165)",
+        "dark": "oklch(0.8 0.015 245)",
         "tonalRamp": [
-          "oklch(0.15 0.012 60.0)",
-          "oklch(0.26 0.012 60.0)",
-          "oklch(0.38 0.012 60.0)",
-          "oklch(0.50 0.012 60.0)",
-          "oklch(0.62 0.012 60.0)",
-          "oklch(0.74 0.012 60.0)",
-          "oklch(0.85 0.012 60.0)",
-          "oklch(0.95 0.012 60.0)"
+          "oklch(0.15 0.02 260.0)",
+          "oklch(0.26 0.02 260.0)",
+          "oklch(0.38 0.02 260.0)",
+          "oklch(0.50 0.02 260.0)",
+          "oklch(0.62 0.02 260.0)",
+          "oklch(0.74 0.02 260.0)",
+          "oklch(0.85 0.02 260.0)",
+          "oklch(0.95 0.02 260.0)"
         ]
       },
       "ink-3": {
         "role": "neutral",
-        "displayName": "Carton Ink, hint",
-        "canonical": "oklch(0.5 0.01 165)",
+        "displayName": "Slate Ink, hint",
+        "canonical": "oklch(0.52 0.015 260)",
         "cssVar": "--ink-3",
-        "dark": "oklch(0.72 0.01 165)",
+        "dark": "oklch(0.72 0.015 245)",
         "tonalRamp": [
-          "oklch(0.15 0.01 60.0)",
-          "oklch(0.26 0.01 60.0)",
-          "oklch(0.38 0.01 60.0)",
-          "oklch(0.50 0.01 60.0)",
-          "oklch(0.62 0.01 60.0)",
-          "oklch(0.74 0.01 60.0)",
-          "oklch(0.85 0.01 60.0)",
-          "oklch(0.95 0.01 60.0)"
+          "oklch(0.15 0.015 260.0)",
+          "oklch(0.26 0.015 260.0)",
+          "oklch(0.38 0.015 260.0)",
+          "oklch(0.50 0.015 260.0)",
+          "oklch(0.62 0.015 260.0)",
+          "oklch(0.74 0.015 260.0)",
+          "oklch(0.85 0.015 260.0)",
+          "oklch(0.95 0.015 260.0)"
         ]
       },
       "rule": {
         "role": "neutral",
         "displayName": "Fold Line",
-        "canonical": "oklch(0.895 0.007 165)",
+        "canonical": "oklch(0.91 0.008 255)",
         "cssVar": "--rule",
-        "dark": "oklch(0.33 0.01 165)",
+        "dark": "oklch(0.32 0.02 255)",
         "tonalRamp": [
-          "oklch(0.15 0.007 70.0)",
-          "oklch(0.26 0.007 70.0)",
-          "oklch(0.38 0.007 70.0)",
-          "oklch(0.50 0.007 70.0)",
-          "oklch(0.62 0.007 70.0)",
-          "oklch(0.74 0.007 70.0)",
-          "oklch(0.85 0.007 70.0)",
-          "oklch(0.95 0.007 70.0)"
+          "oklch(0.15 0.008 255.0)",
+          "oklch(0.26 0.008 255.0)",
+          "oklch(0.38 0.008 255.0)",
+          "oklch(0.50 0.008 255.0)",
+          "oklch(0.62 0.008 255.0)",
+          "oklch(0.74 0.008 255.0)",
+          "oklch(0.85 0.008 255.0)",
+          "oklch(0.95 0.008 255.0)"
         ]
       },
       "rule-strong": {
         "role": "neutral",
         "displayName": "Fold Line, strong",
-        "canonical": "oklch(0.79 0.01 165)",
+        "canonical": "oklch(0.8 0.012 255)",
         "cssVar": "--rule-strong",
-        "dark": "oklch(0.45 0.01 165)",
+        "dark": "oklch(0.42 0.02 255)",
         "tonalRamp": [
-          "oklch(0.15 0.01 70.0)",
-          "oklch(0.26 0.01 70.0)",
-          "oklch(0.38 0.01 70.0)",
-          "oklch(0.50 0.01 70.0)",
-          "oklch(0.62 0.01 70.0)",
-          "oklch(0.74 0.01 70.0)",
-          "oklch(0.85 0.01 70.0)",
-          "oklch(0.95 0.01 70.0)"
+          "oklch(0.15 0.012 255.0)",
+          "oklch(0.26 0.012 255.0)",
+          "oklch(0.38 0.012 255.0)",
+          "oklch(0.50 0.012 255.0)",
+          "oklch(0.62 0.012 255.0)",
+          "oklch(0.74 0.012 255.0)",
+          "oklch(0.85 0.012 255.0)",
+          "oklch(0.95 0.012 255.0)"
         ]
       },
       "rail": {
         "role": "neutral",
-        "displayName": "Pharma Green Rail",
-        "canonical": "oklch(0.35 0.075 162)",
+        "displayName": "Light Rail",
+        "canonical": "oklch(0.99 0.003 250)",
         "cssVar": "--rail",
-        "dark": "oklch(0.24 0.045 162)",
+        "dark": "oklch(0.16 0.02 255)",
         "tonalRamp": [
-          "oklch(0.15 0.027 162.0)",
-          "oklch(0.26 0.075 162.0)",
-          "oklch(0.38 0.075 162.0)",
-          "oklch(0.50 0.075 162.0)",
-          "oklch(0.62 0.075 162.0)",
-          "oklch(0.74 0.075 162.0)",
-          "oklch(0.85 0.072 162.0)",
-          "oklch(0.95 0.027 162.0)"
+          "oklch(0.15 0.003 250.0)",
+          "oklch(0.26 0.003 250.0)",
+          "oklch(0.38 0.003 250.0)",
+          "oklch(0.50 0.003 250.0)",
+          "oklch(0.62 0.003 250.0)",
+          "oklch(0.74 0.003 250.0)",
+          "oklch(0.85 0.003 250.0)",
+          "oklch(0.95 0.003 250.0)"
         ]
       },
       "rail-hover": {
         "role": "neutral",
         "displayName": "Rail, hover",
-        "canonical": "oklch(0.4 0.08 162)",
+        "canonical": "oklch(0.955 0.008 250)",
         "cssVar": "--rail-hover",
-        "dark": "oklch(0.29 0.05 162)",
+        "dark": "oklch(0.22 0.025 255)",
         "tonalRamp": [
-          "oklch(0.15 0.027 162.0)",
-          "oklch(0.26 0.076 162.0)",
-          "oklch(0.38 0.08 162.0)",
-          "oklch(0.50 0.08 162.0)",
-          "oklch(0.62 0.08 162.0)",
-          "oklch(0.74 0.08 162.0)",
-          "oklch(0.85 0.072 162.0)",
-          "oklch(0.95 0.027 162.0)"
+          "oklch(0.15 0.008 250.0)",
+          "oklch(0.26 0.008 250.0)",
+          "oklch(0.38 0.008 250.0)",
+          "oklch(0.50 0.008 250.0)",
+          "oklch(0.62 0.008 250.0)",
+          "oklch(0.74 0.008 250.0)",
+          "oklch(0.85 0.008 250.0)",
+          "oklch(0.95 0.008 250.0)"
         ]
       },
       "rail-rule": {
         "role": "neutral",
-        "displayName": "Rail divider",
-        "canonical": "oklch(0.43 0.07 162)",
+        "displayName": "Rail hairline",
+        "canonical": "oklch(0.91 0.008 255)",
         "cssVar": "--rail-rule",
-        "dark": "oklch(0.32 0.04 162)",
+        "dark": "oklch(0.27 0.02 255)",
         "tonalRamp": [
-          "oklch(0.15 0.027 162.0)",
-          "oklch(0.26 0.07 162.0)",
-          "oklch(0.38 0.07 162.0)",
-          "oklch(0.50 0.07 162.0)",
-          "oklch(0.62 0.07 162.0)",
-          "oklch(0.74 0.07 162.0)",
-          "oklch(0.85 0.07 162.0)",
-          "oklch(0.95 0.027 162.0)"
+          "oklch(0.15 0.008 255.0)",
+          "oklch(0.26 0.008 255.0)",
+          "oklch(0.38 0.008 255.0)",
+          "oklch(0.50 0.008 255.0)",
+          "oklch(0.62 0.008 255.0)",
+          "oklch(0.74 0.008 255.0)",
+          "oklch(0.85 0.008 255.0)",
+          "oklch(0.95 0.008 255.0)"
         ]
       },
       "rail-ink": {
         "role": "neutral",
         "displayName": "Rail ink",
-        "canonical": "oklch(0.99 0.005 160)",
+        "canonical": "oklch(0.24 0.02 260)",
         "cssVar": "--rail-ink",
-        "dark": "oklch(0.99 0.005 160)",
+        "dark": "oklch(0.95 0.008 240)",
         "tonalRamp": [
-          "oklch(0.15 0.005 160.0)",
-          "oklch(0.26 0.005 160.0)",
-          "oklch(0.38 0.005 160.0)",
-          "oklch(0.50 0.005 160.0)",
-          "oklch(0.62 0.005 160.0)",
-          "oklch(0.74 0.005 160.0)",
-          "oklch(0.85 0.005 160.0)",
-          "oklch(0.95 0.005 160.0)"
+          "oklch(0.15 0.02 260.0)",
+          "oklch(0.26 0.02 260.0)",
+          "oklch(0.38 0.02 260.0)",
+          "oklch(0.50 0.02 260.0)",
+          "oklch(0.62 0.02 260.0)",
+          "oklch(0.74 0.02 260.0)",
+          "oklch(0.85 0.02 260.0)",
+          "oklch(0.95 0.02 260.0)"
         ]
       },
       "rail-ink-2": {
         "role": "neutral",
         "displayName": "Rail ink, secondary",
-        "canonical": "oklch(0.87 0.035 160)",
+        "canonical": "oklch(0.45 0.02 260)",
         "cssVar": "--rail-ink-2",
-        "dark": "oklch(0.87 0.035 160)",
+        "dark": "oklch(0.75 0.02 245)",
         "tonalRamp": [
-          "oklch(0.15 0.027 160.0)",
-          "oklch(0.26 0.035 160.0)",
-          "oklch(0.38 0.035 160.0)",
-          "oklch(0.50 0.035 160.0)",
-          "oklch(0.62 0.035 160.0)",
-          "oklch(0.74 0.035 160.0)",
-          "oklch(0.85 0.035 160.0)",
-          "oklch(0.95 0.027 160.0)"
+          "oklch(0.15 0.02 260.0)",
+          "oklch(0.26 0.02 260.0)",
+          "oklch(0.38 0.02 260.0)",
+          "oklch(0.50 0.02 260.0)",
+          "oklch(0.62 0.02 260.0)",
+          "oklch(0.74 0.02 260.0)",
+          "oklch(0.85 0.02 260.0)",
+          "oklch(0.95 0.02 260.0)"
+        ]
+      },
+      "rail-tint": {
+        "role": "neutral",
+        "displayName": "Rail Tint",
+        "canonical": "oklch(0.965 0.006 250)",
+        "cssVar": "--rail-tint",
+        "dark": "oklch(1 0 0 / 0.07)",
+        "note": "Alias of --box-2 in light; translucent white in dark.",
+        "tonalRamp": [
+          "oklch(0.15 0.006 250.0)",
+          "oklch(0.26 0.006 250.0)",
+          "oklch(0.38 0.006 250.0)",
+          "oklch(0.50 0.006 250.0)",
+          "oklch(0.62 0.006 250.0)",
+          "oklch(0.74 0.006 250.0)",
+          "oklch(0.85 0.006 250.0)",
+          "oklch(0.95 0.006 250.0)"
+        ]
+      },
+      "rail-line": {
+        "role": "neutral",
+        "displayName": "Rail Line",
+        "canonical": "oklch(0.8 0.012 255)",
+        "cssVar": "--rail-line",
+        "dark": "oklch(1 0 0 / 0.16)",
+        "note": "Alias of --rule-strong in light; translucent white in dark.",
+        "tonalRamp": [
+          "oklch(0.15 0.012 255.0)",
+          "oklch(0.26 0.012 255.0)",
+          "oklch(0.38 0.012 255.0)",
+          "oklch(0.50 0.012 255.0)",
+          "oklch(0.62 0.012 255.0)",
+          "oklch(0.74 0.012 255.0)",
+          "oklch(0.85 0.012 255.0)",
+          "oklch(0.95 0.012 255.0)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Action Blue",
+        "canonical": "oklch(0.5 0.17 265)",
+        "cssVar": "--primary",
+        "dark": "oklch(0.72 0.13 265)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 265.0)",
+          "oklch(0.26 0.076 265.0)",
+          "oklch(0.38 0.129 265.0)",
+          "oklch(0.50 0.17 265.0)",
+          "oklch(0.62 0.17 265.0)",
+          "oklch(0.74 0.16 265.0)",
+          "oklch(0.85 0.1 265.0)",
+          "oklch(0.95 0.05 265.0)"
+        ]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "Action Blue, deep",
+        "canonical": "oklch(0.45 0.17 265)",
+        "cssVar": "--primary-hover",
+        "dark": "oklch(0.78 0.11 265)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 265.0)",
+          "oklch(0.26 0.076 265.0)",
+          "oklch(0.38 0.129 265.0)",
+          "oklch(0.50 0.17 265.0)",
+          "oklch(0.62 0.17 265.0)",
+          "oklch(0.74 0.16 265.0)",
+          "oklch(0.85 0.1 265.0)",
+          "oklch(0.95 0.05 265.0)"
+        ]
+      },
+      "primary-wash": {
+        "role": "primary",
+        "displayName": "Action Blue, wash",
+        "canonical": "oklch(0.955 0.03 265)",
+        "cssVar": "--primary-wash",
+        "dark": "oklch(0.3 0.06 265)",
+        "tonalRamp": [
+          "oklch(0.15 0.027 265.0)",
+          "oklch(0.26 0.03 265.0)",
+          "oklch(0.38 0.03 265.0)",
+          "oklch(0.50 0.03 265.0)",
+          "oklch(0.62 0.03 265.0)",
+          "oklch(0.74 0.03 265.0)",
+          "oklch(0.85 0.03 265.0)",
+          "oklch(0.95 0.03 265.0)"
+        ]
+      },
+      "on-primary": {
+        "role": "primary",
+        "displayName": "On Blue",
+        "canonical": "oklch(0.99 0.005 265)",
+        "cssVar": "--on-primary",
+        "dark": "oklch(0.18 0.03 265)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 265.0)",
+          "oklch(0.26 0.005 265.0)",
+          "oklch(0.38 0.005 265.0)",
+          "oklch(0.50 0.005 265.0)",
+          "oklch(0.62 0.005 265.0)",
+          "oklch(0.74 0.005 265.0)",
+          "oklch(0.85 0.005 265.0)",
+          "oklch(0.95 0.005 265.0)"
+        ]
+      },
+      "brand": {
+        "role": "primary",
+        "displayName": "Brand Blue",
+        "canonical": "oklch(0.5 0.17 265)",
+        "cssVar": "--brand",
+        "dark": "oklch(0.72 0.13 265)",
+        "note": "Alias of --primary.",
+        "tonalRamp": [
+          "oklch(0.15 0.027 265.0)",
+          "oklch(0.26 0.076 265.0)",
+          "oklch(0.38 0.129 265.0)",
+          "oklch(0.50 0.17 265.0)",
+          "oklch(0.62 0.17 265.0)",
+          "oklch(0.74 0.16 265.0)",
+          "oklch(0.85 0.1 265.0)",
+          "oklch(0.95 0.05 265.0)"
         ]
       },
       "urgent": {
@@ -345,8 +467,8 @@
         ]
       },
       "done": {
-        "role": "primary",
-        "displayName": "Settled Green (primary action)",
+        "role": "tertiary",
+        "displayName": "Settled Green",
         "canonical": "oklch(0.5 0.12 158)",
         "cssVar": "--done",
         "dark": "oklch(0.58 0.12 158)",
@@ -359,30 +481,10 @@
           "oklch(0.74 0.12 158.0)",
           "oklch(0.85 0.072 158.0)",
           "oklch(0.95 0.027 158.0)"
-        ],
-        "aliases": [
-          "--primary"
-        ]
-      },
-      "done-hover": {
-        "role": "primary",
-        "displayName": "Settled Green, deep",
-        "canonical": "oklch(0.44 0.11 158)",
-        "cssVar": "--primary-hover",
-        "dark": "oklch(0.63 0.12 158)",
-        "tonalRamp": [
-          "oklch(0.15 0.027 158.0)",
-          "oklch(0.26 0.076 158.0)",
-          "oklch(0.38 0.11 158.0)",
-          "oklch(0.50 0.11 158.0)",
-          "oklch(0.62 0.11 158.0)",
-          "oklch(0.74 0.11 158.0)",
-          "oklch(0.85 0.072 158.0)",
-          "oklch(0.95 0.027 158.0)"
         ]
       },
       "done-ink": {
-        "role": "primary",
+        "role": "tertiary",
         "displayName": "Settled Green, ink",
         "canonical": "oklch(0.45 0.11 158)",
         "cssVar": "--done-ink",
@@ -399,7 +501,7 @@
         ]
       },
       "done-wash": {
-        "role": "primary",
+        "role": "tertiary",
         "displayName": "Settled Green, wash",
         "canonical": "oklch(0.955 0.035 158)",
         "cssVar": "--done-wash",
@@ -416,7 +518,7 @@
         ]
       },
       "on-done": {
-        "role": "primary",
+        "role": "tertiary",
         "displayName": "On green",
         "canonical": "oklch(0.99 0.01 158)",
         "cssVar": "--on-done",
@@ -430,94 +532,91 @@
           "oklch(0.74 0.01 158.0)",
           "oklch(0.85 0.01 158.0)",
           "oklch(0.95 0.01 158.0)"
-        ],
-        "aliases": [
-          "--on-primary"
         ]
       },
       "shefa": {
         "role": "secondary",
-        "displayName": "SHEFA Blue",
-        "canonical": "oklch(0.52 0.17 262)",
+        "displayName": "SHEFA Violet",
+        "canonical": "oklch(0.52 0.15 300)",
         "cssVar": "--shefa",
-        "dark": "oklch(0.6 0.16 262)",
+        "dark": "oklch(0.72 0.13 300)",
         "tonalRamp": [
-          "oklch(0.15 0.027 262.0)",
-          "oklch(0.26 0.076 262.0)",
-          "oklch(0.38 0.129 262.0)",
-          "oklch(0.50 0.17 262.0)",
-          "oklch(0.62 0.17 262.0)",
-          "oklch(0.74 0.121 262.0)",
-          "oklch(0.85 0.072 262.0)",
-          "oklch(0.95 0.027 262.0)"
+          "oklch(0.15 0.027 300.0)",
+          "oklch(0.26 0.076 300.0)",
+          "oklch(0.38 0.129 300.0)",
+          "oklch(0.50 0.15 300.0)",
+          "oklch(0.62 0.15 300.0)",
+          "oklch(0.74 0.15 300.0)",
+          "oklch(0.85 0.1 300.0)",
+          "oklch(0.95 0.05 300.0)"
         ]
       },
       "shefa-ink": {
         "role": "secondary",
-        "displayName": "SHEFA Blue, ink and links",
-        "canonical": "oklch(0.47 0.17 262)",
+        "displayName": "SHEFA Violet, ink and links",
+        "canonical": "oklch(0.47 0.15 300)",
         "cssVar": "--shefa-ink",
-        "dark": "oklch(0.78 0.11 262)",
+        "dark": "oklch(0.8 0.1 300)",
         "tonalRamp": [
-          "oklch(0.15 0.027 262.0)",
-          "oklch(0.26 0.076 262.0)",
-          "oklch(0.38 0.129 262.0)",
-          "oklch(0.50 0.17 262.0)",
-          "oklch(0.62 0.17 262.0)",
-          "oklch(0.74 0.121 262.0)",
-          "oklch(0.85 0.072 262.0)",
-          "oklch(0.95 0.027 262.0)"
+          "oklch(0.15 0.027 300.0)",
+          "oklch(0.26 0.076 300.0)",
+          "oklch(0.38 0.129 300.0)",
+          "oklch(0.50 0.15 300.0)",
+          "oklch(0.62 0.15 300.0)",
+          "oklch(0.74 0.15 300.0)",
+          "oklch(0.85 0.1 300.0)",
+          "oklch(0.95 0.05 300.0)"
         ]
       },
       "shefa-wash": {
         "role": "secondary",
-        "displayName": "SHEFA Blue, wash",
-        "canonical": "oklch(0.955 0.03 262)",
+        "displayName": "SHEFA Violet, wash",
+        "canonical": "oklch(0.96 0.025 300)",
         "cssVar": "--shefa-wash",
-        "dark": "oklch(0.3 0.07 262)",
+        "dark": "oklch(0.32 0.06 300)",
         "tonalRamp": [
-          "oklch(0.15 0.027 262.0)",
-          "oklch(0.26 0.03 262.0)",
-          "oklch(0.38 0.03 262.0)",
-          "oklch(0.50 0.03 262.0)",
-          "oklch(0.62 0.03 262.0)",
-          "oklch(0.74 0.03 262.0)",
-          "oklch(0.85 0.03 262.0)",
-          "oklch(0.95 0.027 262.0)"
+          "oklch(0.15 0.025 300.0)",
+          "oklch(0.26 0.025 300.0)",
+          "oklch(0.38 0.025 300.0)",
+          "oklch(0.50 0.025 300.0)",
+          "oklch(0.62 0.025 300.0)",
+          "oklch(0.74 0.025 300.0)",
+          "oklch(0.85 0.025 300.0)",
+          "oklch(0.95 0.025 300.0)"
         ]
       },
       "on-shefa": {
         "role": "secondary",
-        "displayName": "On blue",
-        "canonical": "oklch(0.99 0.01 262)",
+        "displayName": "On violet",
+        "canonical": "oklch(0.99 0.01 300)",
         "cssVar": "--on-shefa",
-        "dark": "oklch(0.17 0.03 262)",
+        "dark": "oklch(0.17 0.03 300)",
         "tonalRamp": [
-          "oklch(0.15 0.01 262.0)",
-          "oklch(0.26 0.01 262.0)",
-          "oklch(0.38 0.01 262.0)",
-          "oklch(0.50 0.01 262.0)",
-          "oklch(0.62 0.01 262.0)",
-          "oklch(0.74 0.01 262.0)",
-          "oklch(0.85 0.01 262.0)",
-          "oklch(0.95 0.01 262.0)"
+          "oklch(0.15 0.01 300.0)",
+          "oklch(0.26 0.01 300.0)",
+          "oklch(0.38 0.01 300.0)",
+          "oklch(0.50 0.01 300.0)",
+          "oklch(0.62 0.01 300.0)",
+          "oklch(0.74 0.01 300.0)",
+          "oklch(0.85 0.01 300.0)",
+          "oklch(0.95 0.01 300.0)"
         ]
       },
       "focus": {
-        "role": "secondary",
+        "role": "primary",
         "displayName": "Focus Blue",
-        "canonical": "oklch(0.52 0.17 262)",
+        "canonical": "oklch(0.5 0.17 265)",
         "cssVar": "--focus",
-        "dark": "oklch(0.75 0.12 262)",
+        "dark": "oklch(0.8 0.11 265)",
         "tonalRamp": [
-          "oklch(0.15 0.027 262.0)",
-          "oklch(0.26 0.076 262.0)",
-          "oklch(0.38 0.129 262.0)",
-          "oklch(0.50 0.17 262.0)",
-          "oklch(0.62 0.17 262.0)",
-          "oklch(0.74 0.121 262.0)",
-          "oklch(0.85 0.072 262.0)",
-          "oklch(0.95 0.027 262.0)"
+          "oklch(0.15 0.027 265.0)",
+          "oklch(0.26 0.076 265.0)",
+          "oklch(0.38 0.129 265.0)",
+          "oklch(0.50 0.17 265.0)",
+          "oklch(0.62 0.17 265.0)",
+          "oklch(0.74 0.16 265.0)",
+          "oklch(0.85 0.1 265.0)",
+          "oklch(0.95 0.05 265.0)"
         ]
       },
       "doc-0": {
@@ -556,10 +655,10 @@
       },
       "doc-2": {
         "role": "doctor",
-        "displayName": "Doctor Violet",
-        "canonical": "oklch(0.5 0.12 300)",
+        "displayName": "Doctor Steel",
+        "canonical": "oklch(0.5 0.1 225)",
         "cssVar": "--doc-2",
-        "dark": "oklch(0.5 0.12 300)",
+        "dark": "oklch(0.5 0.1 225)",
         "tonalRamp": [
           "oklch(0.15 0.027 300.0)",
           "oklch(0.26 0.076 300.0)",
@@ -686,14 +785,14 @@
       {
         "name": "box",
         "cssVar": "--shadow-box",
-        "value": "0 1px 2px oklch(0.3 0.02 165 / 0.07), 0 6px 16px -8px oklch(0.3 0.02 165 / 0.18)",
+        "value": "0 1px 2px oklch(0.3 0.02 260 / 0.06), 0 4px 14px -6px oklch(0.3 0.02 260 / 0.12)",
         "dark": "0 1px 2px oklch(0 0 0 / 0.35)",
-        "purpose": "A box resting on the shelf: every container, active rail item, pressed segment, button hover."
+        "purpose": "A box resting on the shelf: every container, pressed segment, button hover."
       },
       {
         "name": "lift",
         "cssVar": "--shadow-lift",
-        "value": "0 2px 4px oklch(0.3 0.02 165 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 165 / 0.28)",
+        "value": "0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24)",
         "dark": "0 18px 40px -12px oklch(0 0 0 / 0.6)",
         "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb."
       }
@@ -747,7 +846,7 @@
       "leave": "Off or leave session: repeating-linear-gradient(-45deg, var(--box-2) 0 8px, var(--box) 8px 16px), dashed rule-strong frame, label struck through.",
       "fullSession": "box-shadow: 0 0 0 2px var(--box), 0 0 0 3.5px var(--doc).",
       "callbacksActive": "box-shadow: 0 0 0 2px var(--urgent), var(--shadow-lift); header band solid urgent.",
-      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash). On the rail --focus is oklch(0.9 0.1 90)."
+      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash)."
     }
   },
   "components": [
@@ -755,7 +854,7 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Going ahead: book, save, confirm. Settled green.",
+      "description": "Going ahead: book, save, confirm. Action blue.",
       "html": "<button class=\"ds-btn ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg> নিশ্চিত করুন</button>",
       "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);} .ds-btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary);} .ds-btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover);} .ds-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-btn:active{box-shadow:none;}"
     },
@@ -771,7 +870,7 @@
       "name": "SHEFA Button",
       "kind": "button",
       "refersTo": "button-shefa",
-      "description": "An action that hands work to SHEFA. SHEFA blue.",
+      "description": "An action that hands work to SHEFA. SHEFA violet.",
       "html": "<button class=\"ds-btn-shefa\">শেফাকে দিন</button>",
       "css": ".ds-btn-shefa{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);background:var(--shefa);border-color:var(--shefa);color:var(--on-shefa);} .ds-btn-shefa:hover{background:var(--shefa-ink);border-color:var(--shefa-ink);} .ds-btn-shefa:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
@@ -779,7 +878,7 @@
       "name": "Text Field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Box face, strong rule, 6px; focus turns the border blue with a SHEFA-wash halo.",
+      "description": "Box face, strong rule, 6px; focus turns the border blue with a violet SHEFA-wash halo.",
       "html": "<label class=\"ds-field\"><span>রোগীর নাম</span><input class=\"ds-input\" placeholder=\"নাম লিখুন\"></label>",
       "css": ".ds-field{display:inline-grid;gap:.2rem;} .ds-field>span{font-size:var(--step--1);font-weight:600;color:var(--ink-2);} .ds-input{font:inherit;color:var(--ink);background:var(--box);border:1px solid var(--rule-strong);border-radius:var(--r-sm);min-height:44px;padding:.45rem .75rem;} .ds-input:hover{border-color:var(--ink-3);} .ds-input:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px var(--shefa-wash);} .ds-input::placeholder{color:var(--ink-3);}"
     },
@@ -818,9 +917,9 @@
       "name": "Rail Navigation",
       "kind": "nav",
       "refersTo": "rail",
-      "description": "The pharma-green rail: Lucide icon tiles, the active item a white box, the legend at the foot.",
-      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav ds-active\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4.9 19.1C1 15.2 1 8.8 4.9 4.9\"/><path d=\"M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5\"/><path d=\"M19.1 4.9C23 8.8 23 15.1 19.1 19\"/></svg></span>এখন</a><a class=\"ds-nav\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M16 2v4\"/><path d=\"M8 2v4\"/><path d=\"M3 10h18\"/></svg></span>অ্যাপয়েন্টমেন্ট</a><dl class=\"ds-legend\"><div><dt style=\"background:var(--urgent)\"></dt><dd>মানুষ দরকার</dd></div><div><dt style=\"background:var(--waiting)\"></dt><dd>অপেক্ষায়</dd></div><div><dt style=\"background:oklch(0.7 0.13 158)\"></dt><dd>হয়ে গেছে</dd></div><div><dt style=\"background:oklch(0.7 0.14 262)\"></dt><dd>শেফা করছে</dd></div></dl></nav>",
-      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:16rem;padding:1rem .75rem;background:var(--rail);color:var(--rail-ink);border-radius:var(--r);--focus:oklch(0.9 0.1 90);} .ds-nav{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.35rem .5rem;border-radius:var(--r-sm);color:var(--rail-ink);text-decoration:none;font-weight:500;} .ds-nav:hover{background:var(--rail-hover);} .ds-nav:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-ic{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:7px;background:oklch(1 0 0 / .14);color:#fff;} .ds-active{background:var(--box);color:var(--ink);font-weight:700;box-shadow:var(--shadow-box);} .ds-active .ds-ic{background:var(--primary);} .ds-active:hover{background:var(--box);} .ds-legend{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .6rem;margin:1rem 0 0;padding:.75rem .5rem 0;border-top:1px solid var(--rail-rule);font-size:var(--step--2);color:var(--rail-ink-2);} .ds-legend div{display:flex;align-items:center;gap:.4rem;} .ds-legend dt{width:.7rem;height:.7rem;border-radius:50%;} .ds-legend dd{margin:0;}"
+      "description": "The light rail with a hairline edge: rail-tint icon tiles, the active item on the primary wash with a blue icon tile, the legend at the foot.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav ds-active\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4.9 19.1C1 15.2 1 8.8 4.9 4.9\"/><path d=\"M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5\"/><path d=\"M19.1 4.9C23 8.8 23 15.1 19.1 19\"/></svg></span>এখন</a><a class=\"ds-nav\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M16 2v4\"/><path d=\"M8 2v4\"/><path d=\"M3 10h18\"/></svg></span>অ্যাপয়েন্টমেন্ট</a><dl class=\"ds-legend\"><div><dt style=\"background:var(--urgent)\"></dt><dd>মানুষ দরকার</dd></div><div><dt style=\"background:var(--waiting)\"></dt><dd>অপেক্ষায়</dd></div><div><dt style=\"background:var(--done)\"></dt><dd>হয়ে গেছে</dd></div><div><dt style=\"background:var(--shefa)\"></dt><dd>শেফা করছে</dd></div></dl></nav>",
+      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:16rem;padding:1rem .75rem;background:var(--rail);color:var(--rail-ink);border:1px solid var(--rail-rule);border-radius:var(--r);} .ds-nav{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.35rem .5rem;border-radius:var(--r-sm);color:var(--rail-ink);text-decoration:none;font-weight:500;} .ds-nav:hover{background:var(--rail-hover);} .ds-nav:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-ic{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:7px;background:var(--rail-tint);color:var(--rail-ink-2);} .ds-active{background:var(--primary-wash);color:var(--ink);font-weight:700;} .ds-active .ds-ic{background:var(--primary);color:var(--on-primary);} .ds-active:hover{background:var(--primary-wash);} .ds-legend{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .6rem;margin:1rem 0 0;padding:.75rem .5rem 0;border-top:1px solid var(--rail-rule);font-size:var(--step--2);color:var(--rail-ink-2);} .ds-legend div{display:flex;align-items:center;gap:.4rem;} .ds-legend dt{width:.7rem;height:.7rem;border-radius:50%;} .ds-legend dd{margin:0;}"
     },
     {
       "name": "Today's Chambers Row",
@@ -832,30 +931,31 @@
     }
   ],
   "narrative": {
-    "northStar": "The Medicine Shelf",
-    "overview": "SHEFA looks like a Bangladeshi pharmacy shelf, read as a working screen. Bright white box board sits on a warm off-white shelf. A deep pharma-green rail runs down the staff app and across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.\n\nStatus is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done, and green is also the colour of going ahead. SHEFA blue means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.\n\nThe density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light shelf and an after-hours dark shelf, chosen by the device or by the viewer.",
+    "northStar": "Clinic Light",
+    "overview": "SHEFA looks like a bright clinic desk that carries the labels of a Bangladeshi medicine shelf. Off-white boxes sit on a cool near-white field with slate ink, never cream. A light rail with a hairline edge runs down the staff app, and a light bar with a hairline beneath runs across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.\n\nStatus is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done. SHEFA violet means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. One strong blue, outside the legend, is the colour of every action. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.\n\nThe density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light theme and a navy-graphite dark theme that keeps the same blue and violet, lightened, chosen by the device or by the viewer.",
     "keyCharacteristics": [
-      "White boxes on a warm shelf; a pharma-green rail or top bar.",
-      "One colour, one meaning: urgent red, waiting amber, done green, SHEFA blue, gone grey, always with words.",
-      "Six doctor box colours that never collide with the legend hues.",
+      "Off-white boxes on a cool near-white field; a light rail or top bar with a hairline.",
+      "One colour, one meaning: urgent red, waiting amber, done green, SHEFA violet, gone grey, always with words.",
+      "One strong blue for every action, kept apart from the legend.",
+      "Six doctor box colours, one per doctor, on every surface that names them.",
       "Reversed name blocks and dashed batch stamps borrowed from medicine packaging.",
       "Baloo Da 2 for names, headings and numbers that matter; Hind Siliguri for body and data.",
-      "Light and dark shelves, with a three-way theme switch (follow device, light, dark)."
+      "Light and navy-graphite dark themes, with a three-way theme switch (follow device, light, dark)."
     ],
     "rules": [
       {
         "name": "The One Colour, One Meaning Rule",
-        "body": "Each legend hue means one thing on every surface: red needs a person, amber waits, green is done or go, blue is SHEFA, grey struck through is gone. Never use a legend hue for decoration, and never let colour speak without a word beside it.",
+        "body": "Each legend hue means one thing on every surface: red needs a person, amber waits, green is done, violet is SHEFA, grey struck through is gone. Blue stands outside the legend: it is the one colour of action, and it never means done. Never use a legend hue for decoration, and never let colour speak without a word beside it.",
         "section": "colors"
       },
       {
         "name": "The Box Colour Rule",
-        "body": "Doctors wear only the six doc colours, which sit clear of the legend hues. A doctor's colour appears wherever that doctor does (name block, session bar, box band, chip). A clash overrides the doctor's colour with urgent red.",
+        "body": "Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) replaced a violet that shared SHEFA's hue, so no doctor colour now collides with the legend or the action blue. A doctor's colour appears wherever that doctor does (name block, session bar, box band, chip). A clash overrides the doctor's colour with urgent red.",
         "section": "colors"
       },
       {
         "name": "The Two Shelves Rule",
-        "body": "Every colour has a dark-shelf value (see the sidecar). The theme is chosen by `prefers-color-scheme`, unless `:root[data-theme]` forces light or dark. Surfaces read tokens and never hard-code a light value. On the dark shelf, text on a solid green, blue or red fill turns dark (the on-done, on-shefa and on-urgent values), so the fills keep their hue and stay legible.",
+        "body": "Every colour has a dark-theme value (see the sidecar). The theme is chosen by `prefers-color-scheme`, unless `:root[data-theme]` forces light or dark. Surfaces read tokens and never hard-code a light value. On the dark theme, text on a solid blue, green, violet or red fill turns dark (the on-primary, on-done, on-shefa and on-urgent values), so the fills keep their hue and stay legible.",
         "section": "colors"
       },
       {
@@ -870,22 +970,22 @@
       },
       {
         "name": "The Live Ring Rule",
-        "body": "A ring only pulses while a call or a recording is live (the blue live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.",
+        "body": "A ring only pulses while a call or a recording is live (the violet live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.",
         "section": "elevation"
       }
     ],
     "dos": [
       "**Do** put words beside every status colour; a mark is always a dot plus a label.",
       "**Do** give each doctor one of the six box colours and use it on every surface that names them.",
-      "**Do** use settled green for the primary action and SHEFA blue only for what SHEFA is doing or did.",
+      "**Do** use action blue for every primary action, settled green only for done, and SHEFA violet for what SHEFA is doing or did.",
       "**Do** print serials and references in the dashed batch stamp with tabular digits.",
       "**Do** keep corners on the scale: 6px controls, 10px boxes, pill for marks and chips.",
       "**Do** use Lucide icons (lucide-react in the app; Lucide paths copied into static sprites) at 16 to 20px with a 2px stroke.",
-      "**Do** read every colour from tokens so both shelves work, and keep tap targets at least 44px.",
+      "**Do** read every colour from tokens so both themes work, including rail-tint and rail-line for anything on the rail, and keep tap targets at least 44px.",
       "**Do** keep metadata lines to at most one middle dot."
     ],
     "donts": [
-      "**Don't** use a legend hue (red, amber, green, blue) as decoration or as a doctor's colour.",
+      "**Don't** use a legend hue (red, amber, green, violet) or action blue as decoration, or give a new doctor a legend hue.",
       "**Don't** pulse or glow a ring around anything at rest; a ring moves only while a call or recording is live.",
       "**Don't** put em or en dashes in visible text.",
       "**Don't** set body paragraphs or table data in Baloo Da 2 where Hind Siliguri is loaded.",

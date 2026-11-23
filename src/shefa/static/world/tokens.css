@@ -1,14 +1,14 @@
 /* SHEFA world tokens: Clinic Light (chosen 2026-11-23 from six rendered themes).
  *
- * A Bangladeshi pharmacy shelf, read as a working screen: off-white box board on a shelf with the
- * faintest cast of the rail's pharma green (never cream),
- * a deep pharma-green rail, solid colour label blocks with reversed bold type.
+ * Clinic Light: a cool near-white field, a light rail with a hairline, slate ink, one strong blue
+ * for every action, solid colour label blocks with reversed bold type for doctors.
  *
  * One colour, one meaning, everywhere (the printed legend):
  *   urgent  red    a caller who needs a person, a clash, an error
  *   waiting amber  not yet confirmed, pending, retrying
  *   done    green  confirmed, seen, settled; also the colour of going ahead (primary action)
- *   shefa   blue   what SHEFA itself is doing or did: a live call, a booking it made
+ *   shefa   violet what SHEFA itself is doing or did: a live call, a booking it made
+ * Blue (--primary) is not in the legend: it is the one colour of action.
  *   gone    grey   cancelled, off, disabled (always also struck or said)
  * Doctors wear their own box colours (--doc-0..5), chosen to stay clear of the legend hues.
  * Pages with their own class vocabulary (the voice-collection site) load this file alone;
@@ -27,7 +27,7 @@
   --rule: oklch(0.91 0.008 255);
   --rule-strong: oklch(0.8 0.012 255);
 
-  /* the rail: pharma green */
+  /* the rail: light, with a hairline */
   --rail: oklch(0.99 0.003 250);
   --rail-hover: oklch(0.955 0.008 250);
   --rail-rule: oklch(0.91 0.008 255);
@@ -54,13 +54,13 @@
   --gone: oklch(0.62 0.01 165);
 
   /* doctors' box colours: one lightness and strength, so no doctor shouts louder than another,
-     and none near the legend hues (red 27, amber 82, green 158, blue 262) */
+     and none near the legend or action hues (red 27, amber 82, green 158, action blue 265, SHEFA violet 300) */
   --doc-0: oklch(0.5 0.1 195);   /* teal */
   --doc-1: oklch(0.5 0.12 345);  /* rose */
-  --doc-2: oklch(0.5 0.12 300);  /* violet */
+  --doc-2: oklch(0.5 0.1 225);   /* steel: violet is SHEFA's */
   --doc-3: oklch(0.5 0.1 50);    /* copper */
   --doc-4: oklch(0.5 0.1 115);   /* olive */
-  --doc-5: oklch(0.44 0.025 250); /* graphite: kept clear of SHEFA blue */
+  --doc-5: oklch(0.44 0.025 250); /* graphite */
 
   --primary: oklch(0.5 0.17 265);
   /* the light rail: tiles and lines on it, and the brand mark's colour */

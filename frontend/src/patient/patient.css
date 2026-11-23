@@ -69,7 +69,7 @@
 .p-danger { color: var(--urgent-ink); }
 .p-danger:hover:not(:disabled) { background: var(--urgent-wash); border-color: var(--urgent); }
 .p-btn:disabled { color: var(--ink-3); background: var(--box-2); border-color: var(--rule); cursor: not-allowed; }
-.p-link { background: none; border: 0; padding: 0.5rem 0; color: var(--shefa-ink); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; min-height: 44px; }
+.p-link { background: none; border: 0; padding: 0.5rem 0; color: var(--primary); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; min-height: 44px; }
 .p-foot { margin: 1.75rem 0 0; }
 
 .p-note { padding: 0.8rem 1rem; border-radius: var(--r); background: var(--waiting-wash); margin: 0.8rem 0; }

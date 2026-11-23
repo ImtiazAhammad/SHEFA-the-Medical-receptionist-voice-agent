@@ -12,11 +12,11 @@ body {
   font-synthesis: none; -webkit-font-smoothing: antialiased;
 }
 :lang(en) { line-height: 1.5; }
-::selection { background: var(--shefa-wash); color: var(--ink); }
+::selection { background: var(--primary-wash); color: var(--ink); }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-input, textarea { caret-color: var(--shefa); }
+input, textarea { caret-color: var(--primary); }
 * { scrollbar-color: var(--rule-strong) transparent; scrollbar-width: thin; }
-a { color: var(--shefa-ink); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
+a { color: var(--primary); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
 a:hover { text-decoration-thickness: 2px; }
 h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); font-weight: 700; line-height: 1.2; }
 p { margin: 0 0 var(--space-2); text-wrap: pretty; }
@@ -64,7 +64,7 @@ input, select, textarea {
 }
 textarea { min-height: 6rem; line-height: 1.55; }
 input:hover, select:hover, textarea:hover { border-color: var(--ink-3); }
-input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--focus); box-shadow: 0 0 0 3px var(--shefa-wash); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--focus); box-shadow: 0 0 0 3px var(--primary-wash); }
 input[aria-invalid='true'], select[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--urgent); background: var(--urgent-wash); }
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
 input[type='checkbox'], input[type='radio'] { min-height: 0; width: 1.2rem; height: 1.2rem; accent-color: var(--primary); margin: 0; }
@@ -74,7 +74,7 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 .unit-field { display: inline-flex; align-items: stretch; border: 1px solid var(--rule-strong); border-radius: var(--r-sm); background: var(--box); overflow: hidden; }
 .unit-field input { border: 0; border-radius: 0; min-width: 0; }
 .unit-field > span { display: inline-flex; align-items: center; padding: 0 0.65rem; background: var(--box-2); border-inline-start: 1px solid var(--rule); color: var(--ink-2); font-size: var(--step--1); }
-.unit-field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px var(--shefa-wash); }
+.unit-field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px var(--primary-wash); }
 
 .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--r-sm); background: var(--box-2); border: 1px solid var(--rule); }
 .seg button { font: inherit; font-weight: 600; min-height: 34px; padding: 0.2rem 0.85rem; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
@@ -97,7 +97,7 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 .mark-gone { background: transparent; color: var(--ink-3); text-decoration: line-through; }
 .mark-gone::before { display: none; }
 .mark-sel { background: var(--ink); color: var(--box); }
-.mark-sel::before { background: var(--done); }
+.mark-sel::before { background: var(--primary-wash); }
 .mark-shefa { background: var(--shefa-wash); color: var(--shefa-ink); }
 .mark-live { background: var(--shefa); color: var(--on-shefa); }
 .mark-live::before { animation: live-pulse 1.6s ease-in-out infinite; }

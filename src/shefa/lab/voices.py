@@ -88,12 +88,12 @@ _PAGE = """<!doctype html><html lang="bn"><head><meta charset="utf-8">
 <style>
 :root{--bg:oklch(0.963 0.006 165);--panel:oklch(0.993 0.003 165);--fg:oklch(0.23 0.012 165);--mute:oklch(0.41 0.012 165);
 --line:oklch(0.895 0.007 165);--accent:oklch(0.5 0.12 158);--on-accent:oklch(0.985 0.004 165);
---rail:oklch(0.35 0.075 162);
+--rail:oklch(0.5 0.17 265);
 --shadow:0 1px 2px oklch(0.3 0.02 165 / .07),0 6px 16px -8px oklch(0.3 0.02 165 / .18)}
 @media(prefers-color-scheme:dark){:root{--bg:oklch(0.2 0.008 165);--panel:oklch(0.25 0.009 165);
 --fg:oklch(0.95 0.006 165);--mute:oklch(0.8 0.01 165);--line:oklch(0.33 0.01 165);
 --accent:oklch(0.58 0.12 158);
---rail:oklch(0.24 0.045 162);--shadow:0 1px 2px oklch(0 0 0 / .35)}}
+--rail:oklch(0.42 0.13 265);--shadow:0 1px 2px oklch(0 0 0 / .35)}}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:16px/1.6 "Baloo Da 2","Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif}
 main{max-width:820px;margin:0 auto;padding:0 16px 64px}
