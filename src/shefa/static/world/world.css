@@ -18,13 +18,13 @@ input, textarea { caret-color: var(--primary); }
 * { scrollbar-color: var(--rule-strong) transparent; scrollbar-width: thin; }
 a { color: var(--primary); text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
 a:hover { text-decoration-thickness: 2px; }
-h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); font-weight: 700; line-height: 1.2; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); font-weight: 600; line-height: 1.25; letter-spacing: -0.005em; }
 p { margin: 0 0 var(--space-2); text-wrap: pretty; }
 img, svg { max-width: 100%; }
 .num, table, time, .tabular { font-variant-numeric: tabular-nums; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.display { font-family: var(--font-display); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.display { font-family: var(--font-display); font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
 .legend { font-size: var(--step--1); font-weight: 600; color: var(--ink-2); line-height: 1.3; }
 :lang(en) .legend, .legend:lang(en) { font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.08em; }
 
@@ -86,9 +86,9 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
   min-height: 1.65rem; padding: 0.05rem 0.65rem;
   border-radius: var(--r-pill); border: 1px solid transparent;
   background: var(--box-2); color: var(--ink-2);
-  font-size: var(--step--1); font-weight: 600; line-height: 1.2; white-space: nowrap;
+  font-size: var(--step--1); font-weight: 500; line-height: 1.2; white-space: nowrap;
 }
-.mark::before { content: ''; flex: none; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+.mark::before { content: ''; flex: none; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor; }
 .mark-ok { background: var(--done-wash); color: var(--done-ink); }
 .mark-warn { background: var(--waiting-wash); color: var(--waiting-ink); }
 .mark-bad { background: var(--urgent); color: var(--on-urgent); }
@@ -107,13 +107,13 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 .doc-c0 { --doc: var(--doc-0); } .doc-c1 { --doc: var(--doc-1); } .doc-c2 { --doc: var(--doc-2); }
 .doc-c3 { --doc: var(--doc-3); } .doc-c4 { --doc: var(--doc-4); } .doc-c5 { --doc: var(--doc-5); }
 .doc-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
-.doc-chip::before { content: ''; flex: none; width: 0.75rem; height: 0.75rem; border-radius: 3px; background: var(--doc, var(--ink-3)); }
+.doc-chip::before { content: ''; flex: none; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--doc, var(--ink-3)); }
 
 /* the batch/expiry stamp: serials and references, printed like a box's MFG/EXP block */
 .stamp {
   display: inline-flex; align-items: baseline; gap: 0.35rem;
-  padding: 0.05rem 0.5rem; border: 1.5px dashed currentColor; border-radius: 4px;
-  font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.35;
+  padding: 0.05rem 0.45rem; border: 0; border-radius: 6px; background: var(--box-2); color: var(--ink-2);
+  font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.4;
 }
 .stamp small { font-family: var(--font); font-weight: 600; font-size: 0.7em; opacity: 0.8; }
 
@@ -131,4 +131,5 @@ select { appearance: none; padding-inline-end: 2rem; background-image: linear-gr
 .theme-changing *, .theme-changing *::before, .theme-changing *::after { transition: none !important; }
 
 /* a doctor's reversed name block, as printed on the box */
-.doc-name { display: inline-block; padding: 0.1rem 0.6rem; border-radius: var(--r-sm); background: var(--doc, var(--ink-2)); color: var(--on-fill); font-family: var(--font-display); font-weight: 700; line-height: 1.45; }
+.doc-name { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--ink); font-family: var(--font-display); font-weight: 600; line-height: 1.4; }
+.doc-name::before { content: ''; flex: none; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--doc, var(--ink-3)); }

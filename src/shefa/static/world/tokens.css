@@ -74,7 +74,8 @@
   --focus: oklch(0.5 0.17 265);
 
   /* type */
-  --font-display: 'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif;
+  --font-display: 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif;
+  --font-brand: 'Baloo Da 2', 'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif; /* the wordmark only */
   --font: 'Hind Siliguri', 'Baloo Da 2', 'Noto Sans Bengali', system-ui, sans-serif;
   --step--2: 0.75rem;
   --step--1: 0.875rem;
@@ -85,10 +86,10 @@
   --step-4: 2.5rem;
 
   /* shape and depth: a printed box on a shelf */
-  --r-sm: 6px;
-  --r: 10px;
+  --r-sm: 8px;
+  --r: 12px;
   --r-pill: 999px;
-  --shadow-box: 0 1px 2px oklch(0.3 0.02 260 / 0.06), 0 4px 14px -6px oklch(0.3 0.02 260 / 0.12);
+  --shadow-box: 0 0 0 1px var(--rule), 0 1px 2px oklch(0.3 0.02 260 / 0.04); /* a hairline, barely lifted */
   --shadow-lift: 0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24);
 
   --space-1: 0.25rem;
@@ -143,7 +144,7 @@
     --on-shefa: oklch(0.17 0.03 300);
     --on-urgent: oklch(0.17 0.03 27);
     --focus: oklch(0.8 0.11 265);
-    --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
+    --shadow-box: 0 0 0 1px var(--rule);
     --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
   }
 }
@@ -184,6 +185,6 @@
   --on-shefa: oklch(0.17 0.03 300);
   --on-urgent: oklch(0.17 0.03 27);
   --focus: oklch(0.8 0.11 265);
-  --shadow-box: 0 1px 2px oklch(0 0 0 / 0.35);
+  --shadow-box: 0 0 0 1px var(--rule);
   --shadow-lift: 0 18px 40px -12px oklch(0 0 0 / 0.6);
 }
