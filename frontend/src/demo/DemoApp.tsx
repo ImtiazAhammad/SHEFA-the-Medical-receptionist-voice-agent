@@ -4,6 +4,7 @@ import { dictionaries, type DKey, type DLang } from './strings'
 import { VoiceCall, type VoiceEnd, type VoiceState } from './voice'
 import '@world/fonts-lite.css'
 import { VoiceRing } from 'voice-ring'
+import { ThinkingOrb } from 'thinking-orbs'
 import { ThemeSwitch, useReducedMotion, useShownTheme } from '../lib/theme'
 import '../patient/patient.css'
 import './demo.css'
@@ -47,6 +48,9 @@ export default function DemoApp() {
   const [lines, setLines] = useState<Line[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  // a reply usually lands in about a second; only a slow one earns the composing orb, so a quick
+  // answer never flashes a loader (the orb's own rule: nothing under the wait it takes to notice)
+  const [slowReply, setSlowReply] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
   // who the ring is following on a live call: SHEFA while its words play, otherwise the caller
   const [agentTalking, setAgentTalking] = useState(false)
@@ -124,6 +128,7 @@ export default function DemoApp() {
     setSending(true)
     setNotice(null)
     add('user', message)
+    const slow = window.setTimeout(() => setSlowReply(true), 800)
     setDraft('')
     try {
       const response = await fetch('/api/v1/public/demo/chat', {
@@ -137,6 +142,8 @@ export default function DemoApp() {
     } catch {
       setNotice('chatError')
     } finally {
+      window.clearTimeout(slow)
+      setSlowReply(false)
       setSending(false)
     }
   }
@@ -231,6 +238,15 @@ export default function DemoApp() {
                   <p>{line.text}</p>
                 </li>
               ))}
+              {sending && slowReply ? (
+                <li className="demo-line demo-assistant demo-pending">
+                  <small>{t.agent}</small>
+                  <p>
+                    <ThinkingOrb state="composing" size={20} aria-hidden="true" />
+                    {t.writing}
+                  </p>
+                </li>
+              ) : null}
             </ol>
           )}
           <form className="demo-form" onSubmit={onSubmit}>

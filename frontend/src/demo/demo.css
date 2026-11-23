@@ -50,3 +50,7 @@
 @media (prefers-reduced-motion: reduce) {
   .demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: none; }
 }
+/* SHEFA writing a slow reply: a composing orb (thinking-orbs) and the words, faded in */
+.demo-pending p { display: flex; align-items: center; gap: 0.5rem; color: var(--ink-2); transition: opacity var(--dur-3) ease-out; }
+@starting-style { .demo-pending p { opacity: 0; } }
+.demo-pending canvas { flex: none; }

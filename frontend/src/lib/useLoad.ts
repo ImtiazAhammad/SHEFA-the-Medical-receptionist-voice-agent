@@ -10,8 +10,11 @@ export interface Loaded<T> {
   reload: () => void
 }
 
-/** Load once, then (optionally) keep fresh. Stops polling while the tab is hidden. */
-export function useLoad<T>(load: () => Promise<T>, deps: unknown[], pollMs = 0): Loaded<T> {
+/** Load once, then (optionally) keep fresh. Stops polling while the tab is hidden.
+ * When the inputs change the old data is dropped, so one record never shows another's details;
+ * `keep` holds it on screen until the new data lands instead, for views where the same figures
+ * simply move (the summary's period switch, whose values cross-blur into the new ones). */
+export function useLoad<T>(load: () => Promise<T>, deps: unknown[], pollMs = 0, keep = false): Loaded<T> {
   const { expire } = useAuth()
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<ApiError | null>(null)
@@ -39,7 +42,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[], pollMs = 0):
   )
 
   useEffect(() => {
-    setData(null)
+    if (!keep) setData(null)
     void run(false)
     if (!pollMs) return
     const id = setInterval(() => {
@@ -47,7 +50,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[], pollMs = 0):
     }, pollMs)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run, pollMs, ...deps])
+  }, [run, pollMs, keep, ...deps])
 
   return { data, error, loading, refreshedAt, reload: () => void run(false) }
 }

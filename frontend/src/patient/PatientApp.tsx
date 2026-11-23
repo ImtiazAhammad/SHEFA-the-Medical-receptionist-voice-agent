@@ -200,9 +200,16 @@ export default function PatientApp() {
     ['details', 'stepDetails'],
   ]
   const stepIndex = steps.findIndex(([v]) => v === view)
+  // which way the booking moved, so the next step slides in from that side (transitions.dev page
+  // side-by-side): forward from the right, back from the left, nothing on first load
+  const [moved, setMoved] = useState<{ view: View; dir: number }>({ view, dir: 0 })
+  if (moved.view !== view) {
+    const from = steps.findIndex(([v]) => v === moved.view)
+    setMoved({ view, dir: stepIndex < 0 || from < 0 ? 0 : stepIndex > from ? 1 : -1 })
+  }
 
   return (
-    <div className="patient">
+    <div className="patient" data-step-dir={moved.dir}>
       <header className="p-top">
         <span className="p-brand" aria-label="SHEFA">
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
@@ -261,7 +268,7 @@ export default function PatientApp() {
         ) : null}
 
         {clinic && view === 'doctor' ? (
-          <section aria-labelledby="who">
+          <section className="p-step" aria-labelledby="who">
             <h2 id="who">{t('chooseDoctor')}</h2>
             {departments.length > 1 ? (
               <div className="p-chips" role="group" aria-label={t('stepDoctor')}>
@@ -291,7 +298,7 @@ export default function PatientApp() {
         ) : null}
 
         {view === 'time' && doctor ? (
-          <section aria-labelledby="when">
+          <section className="p-step" aria-labelledby="when">
             <p className={`p-picked doc-c${Math.abs(doctor.id) % 6}`}><span className="p-docname">{doctorName(doctor)}</span></p>
             {days === null ? (
               <p className="p-muted" role="status">
@@ -341,28 +348,37 @@ export default function PatientApp() {
         ) : null}
 
         {view === 'details' && doctor ? (
-          <Details
-            t={t}
-            doctor={doctor}
-            doctorName={doctorName(doctor)}
-            doctorId={doctor.id}
-            when={`${longDay(day)} · ${clock(time)}`}
-            day={day}
-            time={time}
-            callbackOn={clinic?.callback ?? false}
-            onBack={() => setView('time')}
-            onSlotTaken={() => {
-              void chooseDoctor(doctor)
-            }}
-            onDone={(r) => {
-              setReceipt(r)
-              setView('done')
-            }}
-          />
+          <div className="p-step">
+            <Details
+              t={t}
+              doctor={doctor}
+              doctorName={doctorName(doctor)}
+              doctorId={doctor.id}
+              when={`${longDay(day)} · ${clock(time)}`}
+              day={day}
+              time={time}
+              callbackOn={clinic?.callback ?? false}
+              onBack={() => setView('time')}
+              onSlotTaken={() => {
+                void chooseDoctor(doctor)
+              }}
+              onDone={(r) => {
+                setReceipt(r)
+                setView('done')
+              }}
+            />
+          </div>
         ) : null}
 
         {view === 'done' && receipt ? (
           <section aria-labelledby="booked">
+            {/* the one moment a patient waits for: the tick draws itself in (transitions.dev
+                success check); the heading beside it says it in words */}
+            <span className="t-success-check p-tick" data-state="in" aria-hidden="true">
+              <svg viewBox="0 0 48 48" fill="none">
+                <path d="M14 25l7 7 13-15" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
             <h1 id="booked" ref={heading} tabIndex={-1}>
               {t('done')}
             </h1>

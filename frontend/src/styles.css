@@ -412,3 +412,48 @@ form.stack, .stack > form, .stack-narrow { max-width: 34rem; }
   .side .theme-switch { display: none; }
   .side-foot .prefs .seg { flex: none; }
 }
+
+/* ---------- transitions.dev: text swap soft (34), the summary figures on a period change ---------- */
+:root {
+  --text-soft-dur: 200ms;
+  --text-soft-blur: 2px;
+  --text-soft-ease: ease-in-out;
+  --text-soft-resize-dur: 240ms;
+  --text-soft-resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Both texts share one grid cell, so they cross-blur in place; the
+   cell's width eases between them. */
+.t-text-soft {
+  display: inline-grid;
+  justify-items: var(--text-soft-align, start);
+  transition: width var(--text-soft-resize-dur) var(--text-soft-resize-ease);
+}
+.t-text-soft > span {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition:
+    filter  var(--text-soft-dur) var(--text-soft-ease),
+    opacity var(--text-soft-dur) var(--text-soft-ease);
+}
+.t-text-soft-new {
+  opacity: 0;
+  filter: blur(var(--text-soft-blur));
+}
+.t-text-soft.is-swapping .t-text-soft-old {
+  opacity: 0;
+  filter: blur(var(--text-soft-blur));
+}
+.t-text-soft.is-swapping .t-text-soft-new {
+  opacity: 1;
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-text-soft,
+  .t-text-soft > span { transition: none !important; }
+}
+.stat dd .t-text-soft { --text-soft-align: end; }
+
+/* ---------- Libraries.dev thinking orb in the live-call pill ---------- */
+.mark-orb { gap: 0.3rem; padding-inline-start: 0.3rem; }
+.mark-orb::before { display: none; }
+.mark-orb canvas { flex: none; }

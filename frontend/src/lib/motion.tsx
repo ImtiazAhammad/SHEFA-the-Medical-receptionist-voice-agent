@@ -1,5 +1,8 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 
+// the text-swap-soft timings live in CSS (styles.css); read them so the cleanup matches
+const cssMs = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0
+
 /**
  * The sliding pill under a segmented switch (language, theme, report period). Timing from
  * transitions.dev's "tabs sliding": 250ms on the shared ease-out. The pill is placed from the
@@ -59,4 +62,51 @@ export function LiveCount({ value, className }: { value: number; className?: str
       </span>
     </span>
   )
+}
+
+/**
+ * A value that, when it changes in place (a summary figure after the period switch), cross-blurs
+ * from the old text to the new one in the same spot while its width eases: transitions.dev's
+ * "text swap soft". React never renders the span's children; the swap is done on the DOM so
+ * the two texts can share one cell for the moment of the change. The first render is instant.
+ */
+export function SoftText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current as (HTMLSpanElement & { softTimer?: number }) | null
+    if (!el) return
+    const prev = el.dataset.text
+    if (prev === undefined) {
+      el.dataset.text = text
+      el.textContent = text
+      return
+    }
+    if (prev === text) return
+    el.dataset.text = text
+    window.clearTimeout(el.softTimer)
+    const out = document.createElement('span')
+    out.className = 't-text-soft-old'
+    out.setAttribute('aria-hidden', 'true')
+    out.textContent = prev
+    const inn = document.createElement('span')
+    inn.className = 't-text-soft-new'
+    inn.textContent = text
+    const w0 = el.getBoundingClientRect().width
+    el.classList.remove('is-swapping')
+    el.replaceChildren(out, inn)
+    const w1 = inn.getBoundingClientRect().width
+    el.style.width = `${w0}px`
+    void el.offsetWidth // reflow, so every transition runs
+    el.classList.add('is-swapping')
+    el.style.width = `${w1}px`
+    el.softTimer = window.setTimeout(
+      () => {
+        el.classList.remove('is-swapping')
+        el.style.removeProperty('width')
+        el.textContent = text
+      },
+      Math.max(cssMs('--text-soft-dur'), cssMs('--text-soft-resize-dur')) + 40,
+    )
+  }, [text])
+  return <span ref={ref} className={`t-text-soft${className ? ` ${className}` : ''}`} />
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api, type Overview as OverviewData } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { useSegPill } from '../lib/motion'
+import { SoftText, useSegPill } from '../lib/motion'
 import { Empty, ErrorNote, PageHeader, Skeleton, durationText } from '../components'
 
 const PERIODS = [1, 7, 30]
@@ -11,7 +11,7 @@ export function Overview() {
   const { t, num } = useI18n()
   const [days, setDays] = useState(7)
   const pill = useSegPill<HTMLDivElement>(days)
-  const data = useLoad(() => api<OverviewData>(`/api/v1/overview?days=${days}`), [days], 30000)
+  const data = useLoad(() => api<OverviewData>(`/api/v1/overview?days=${days}`), [days], 30000, true)
   const o = data.data
   const d = o?.calls.dispositions ?? {}
   const rows: [string, number, string?][] = o
@@ -45,12 +45,12 @@ export function Overview() {
       {data.loading && !o ? <Skeleton rows={3} /> : null}
       {o && o.calls.calls === 0 && o.open_callbacks === 0 ? <Empty title={t('noCallsPeriod')} /> : null}
       {o ? (
-        <dl className="stats">
+        <dl className="stats" aria-busy={data.loading}>
           {rows.map(([label, value, extra]) => (
             <div key={label} className="stat">
               <dt>{label}</dt>
               <dd>
-                {num(value)}
+                <SoftText text={num(value)} />
                 {extra ? <span className="muted small"> {extra}</span> : null}
               </dd>
             </div>
@@ -58,7 +58,9 @@ export function Overview() {
           {o.calls.average_seconds != null ? (
             <div className="stat">
               <dt>{t('avgLength')}</dt>
-              <dd>{durationText(o.calls.average_seconds, t, num)}</dd>
+              <dd>
+                <SoftText text={durationText(o.calls.average_seconds, t, num)} />
+              </dd>
             </div>
           ) : null}
         </dl>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, WifiOff, X } from 'lucide-react'
+import { ThinkingOrb } from 'thinking-orbs'
 import { ApiError } from './lib/api'
 import { useI18n } from './lib/i18n'
 
@@ -56,7 +57,17 @@ export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'quiet' | 'gone' | 'sel' | '
 /** A state mark: the legend's colour (red needs a person, amber waiting, green done, blue SHEFA) AND words;
  * the drawing never carries meaning alone. `info` reads as a plain settled frame. */
 export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  const cls = tone === 'info' ? 'ok' : tone === 'live' ? 'shefa mark-live' : tone
+  // SHEFA on a live call: a small listening orb (thinking-orbs) in place of the dot. It is drawn
+  // from the page's theme, freezes to one frame with reduced motion, and pauses offscreen. The
+  // words beside it say the state, so the canvas is hidden from screen readers.
+  if (tone === 'live')
+    return (
+      <span className="mark mark-shefa mark-orb">
+        <ThinkingOrb state="listening" size={20} aria-hidden="true" />
+        {children}
+      </span>
+    )
+  const cls = tone === 'info' ? 'ok' : tone
   return <span className={`mark mark-${cls}`}>{children}</span>
 }
 
