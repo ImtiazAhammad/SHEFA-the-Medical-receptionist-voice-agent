@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-23T00:00:00Z",
+  "generatedAt": "2026-11-24T00:00:00Z",
   "title": "Design System: SHEFA",
   "extensions": {
     "colorMeta": {
@@ -725,7 +725,7 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Page titles and the sign-in statement (sign-in up to clamp(2.4rem, 5.5vw, 4.75rem)); 1.875rem on a phone."
+        "purpose": "Page titles at 1.75rem (1.5rem on a phone); the sign-in statement uses the display class (600, line-height 1.15) at clamp(2.4rem, 5.5vw, 4.75rem), 2.5rem on a phone."
       },
       "headline": {
         "displayName": "Headline",
@@ -733,11 +733,11 @@
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Box titles, empty-state titles, doctor band."
+        "purpose": "Box titles, doctor band."
       },
       "figure": {
         "displayName": "Figure",
-        "purpose": "Measures in overview and report, the big serial on a doctor's phone. Tabular."
+        "purpose": "Measures in overview and report, counts, the big serial on a doctor's phone. Tabular, 600."
       },
       "body": {
         "displayName": "Body",
@@ -745,7 +745,15 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Field labels, table heads, pills, hints; axis hours and legend at 0.75rem."
+        "purpose": "Field labels, table heads, hints; axis hours and legend at 0.75rem."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "The SHEFA wordmark only (Baloo Da 2, 800; শেফা at 600). Token --font-brand."
+      },
+      "mark": {
+        "displayName": "Mark",
+        "purpose": "Status marks: 0.875rem at 500."
       }
     },
     "typeSteps": {
@@ -759,25 +767,26 @@
     },
     "fonts": [
       {
-        "family": "Baloo Da 2",
-        "weights": "400 800 (variable)",
-        "license": "SIL OFL",
-        "role": "display: names, headings, buttons, stamps, figures",
-        "source": "src/shefa/static/world/fonts.css"
-      },
-      {
         "family": "Hind Siliguri",
         "weights": "400, 500, 600, 700",
         "license": "SIL OFL",
-        "role": "body and data",
+        "role": "display (--font-display, 600) and body (--font): headings, names, buttons, chips, figures, text and data",
+        "source": "src/shefa/static/world/fonts.css"
+      },
+      {
+        "family": "Baloo Da 2",
+        "weights": "400 800 (variable)",
+        "license": "SIL OFL",
+        "role": "brand (--font-brand): the SHEFA wordmark only",
         "source": "src/shefa/static/world/fonts.css"
       },
       {
         "set": "lite",
         "families": [
-          "Baloo Da 2"
+          "Hind Siliguri 400",
+          "Hind Siliguri 600"
         ],
-        "note": "Public patient, demo and volunteer pages; body falls through to Baloo.",
+        "note": "Public patient, demo and volunteer pages (about 190 KB); the wordmark falls back to Hind.",
         "source": "src/shefa/static/world/fonts-lite.css"
       }
     ],
@@ -785,16 +794,16 @@
       {
         "name": "box",
         "cssVar": "--shadow-box",
-        "value": "0 1px 2px oklch(0.3 0.02 260 / 0.06), 0 4px 14px -6px oklch(0.3 0.02 260 / 0.12)",
-        "dark": "0 1px 2px oklch(0 0 0 / 0.35)",
-        "purpose": "A box resting on the shelf: every container, pressed segment, button hover."
+        "value": "0 0 0 1px var(--rule), 0 1px 2px oklch(0.3 0.02 260 / 0.04)",
+        "dark": "0 0 0 1px var(--rule)",
+        "purpose": "A hairline box, barely lifted: every resting container, the chosen segment, button hover."
       },
       {
         "name": "lift",
         "cssVar": "--shadow-lift",
         "value": "0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24)",
         "dark": "0 18px 40px -12px oklch(0 0 0 / 0.6)",
-        "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, active callbacks box, demo orb."
+        "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, hovered patient card, demo orb."
       }
     ],
     "motion": [
@@ -843,10 +852,11 @@
       "darkValues": "colorMeta.<token>.dark and shadows[].dark"
     },
     "patterns": {
-      "leave": "Off or leave session: repeating-linear-gradient(-45deg, var(--box-2) 0 8px, var(--box) 8px 16px), dashed rule-strong frame, label struck through.",
-      "fullSession": "box-shadow: 0 0 0 2px var(--box), 0 0 0 3.5px var(--doc).",
-      "callbacksActive": "box-shadow: 0 0 0 2px var(--urgent), var(--shadow-lift); header band solid urgent.",
-      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash)."
+      "leave": "Session on leave: background none, border 1px dashed var(--rule-strong), label struck through in ink-2.",
+      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash).",
+      "sessionBar": "Pill bar 0.5rem tall, background color-mix(in oklch, var(--doc) 16%, var(--box)); fill in var(--doc); count above the bar as plain text; a full session adds the word \"full\" in ink-2, no ring.",
+      "callbacksActive": "Title in var(--urgent-ink); count a solid urgent pill; no header band, outline, glow or row wash.",
+      "doctorDot": "::before round dot, 0.55 to 0.6rem, background var(--doc); name in var(--ink) at 600."
     }
   },
   "components": [
@@ -878,7 +888,7 @@
       "name": "Text Field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Box face, strong rule, 6px; focus turns the border blue with a violet SHEFA-wash halo.",
+      "description": "Box face, strong rule, 8px; focus turns the border blue with a violet SHEFA-wash halo.",
       "html": "<label class=\"ds-field\"><span>রোগীর নাম</span><input class=\"ds-input\" placeholder=\"নাম লিখুন\"></label>",
       "css": ".ds-field{display:inline-grid;gap:.2rem;} .ds-field>span{font-size:var(--step--1);font-weight:600;color:var(--ink-2);} .ds-input{font:inherit;color:var(--ink);background:var(--box);border:1px solid var(--rule-strong);border-radius:var(--r-sm);min-height:44px;padding:.45rem .75rem;} .ds-input:hover{border-color:var(--ink-3);} .ds-input:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px var(--shefa-wash);} .ds-input::placeholder{color:var(--ink-3);}"
     },
@@ -886,7 +896,7 @@
       "name": "Segmented Control",
       "kind": "custom",
       "refersTo": "segmented",
-      "description": "Language and theme switches: a box-2 well, the chosen segment a lifted box face.",
+      "description": "Language and theme switches: a box-2 well, the chosen segment a hairline box face.",
       "html": "<div class=\"ds-seg\" role=\"group\"><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
       "css": ".ds-seg{display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-sm);background:var(--box-2);border:1px solid var(--rule);} .ds-seg button{font:inherit;font-weight:600;min-height:34px;padding:.2rem .85rem;border:0;border-radius:4px;background:transparent;color:var(--ink);cursor:pointer;} .ds-seg button[aria-pressed=\"true\"]{background:var(--box);box-shadow:var(--shadow-box);} .ds-seg button:hover{color:var(--ink);} .ds-seg button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
@@ -896,50 +906,51 @@
       "refersTo": "mark-done",
       "description": "The legend as pills: a dot plus words. Done, waiting, needs a person, SHEFA, live, gone.",
       "html": "<span class=\"ds-mark ds-ok\">নিশ্চিত</span> <span class=\"ds-mark ds-warn\">অপেক্ষায়</span> <span class=\"ds-mark ds-bad\">মানুষ দরকার</span> <span class=\"ds-mark ds-shefa\">শেফা বুক করেছে</span> <span class=\"ds-mark ds-live\">চলছে</span> <span class=\"ds-mark ds-gone\">বাতিল</span>",
-      "css": ".ds-mark{display:inline-flex;align-items:center;gap:.4rem;min-height:1.65rem;padding:.05rem .65rem;border-radius:var(--r-pill);border:1px solid transparent;background:var(--box-2);color:var(--ink-2);font-size:var(--step--1);font-weight:600;line-height:1.2;white-space:nowrap;} .ds-mark::before{content:\"\";flex:none;width:.5rem;height:.5rem;border-radius:50%;background:currentColor;} .ds-ok{background:var(--done-wash);color:var(--done-ink);} .ds-warn{background:var(--waiting-wash);color:var(--waiting-ink);} .ds-bad{background:var(--urgent);color:var(--on-urgent);} .ds-shefa{background:var(--shefa-wash);color:var(--shefa-ink);} .ds-live{background:var(--shefa);color:var(--on-shefa);} .ds-live::before{animation:ds-pulse 1.6s ease-in-out infinite;} @keyframes ds-pulse{50%{opacity:.25;}} .ds-gone{background:transparent;color:var(--ink-3);text-decoration:line-through;} .ds-gone::before{display:none;} @media (prefers-reduced-motion:reduce){.ds-live::before{animation:none;}}"
+      "css": ".ds-mark{display:inline-flex;align-items:center;gap:.4rem;min-height:1.65rem;padding:.05rem .65rem;border-radius:var(--r-pill);border:1px solid transparent;background:var(--box-2);color:var(--ink-2);font-size:var(--step--1);font-weight:500;line-height:1.2;white-space:nowrap;} .ds-mark::before{content:\"\";flex:none;width:.4rem;height:.4rem;border-radius:50%;background:currentColor;} .ds-ok{background:var(--done-wash);color:var(--done-ink);} .ds-warn{background:var(--waiting-wash);color:var(--waiting-ink);} .ds-bad{background:var(--urgent);color:var(--on-urgent);} .ds-shefa{background:var(--shefa-wash);color:var(--shefa-ink);} .ds-live{background:var(--shefa);color:var(--on-shefa);} .ds-live::before{animation:ds-pulse 1.6s ease-in-out infinite;} @keyframes ds-pulse{50%{opacity:.25;}} .ds-gone{background:transparent;color:var(--ink-3);text-decoration:line-through;} .ds-gone::before{display:none;} @media (prefers-reduced-motion:reduce){.ds-live::before{animation:none;}}"
     },
     {
-      "name": "Doctor Name Block",
+      "name": "Doctor Name",
       "kind": "custom",
       "refersTo": "doc-name",
-      "description": "A doctor's name reversed out of their box colour, as printed on the box.",
+      "description": "A doctor is a small dot in their colour, then the name in plain ink.",
       "html": "<span class=\"ds-doc-name\" style=\"--doc:var(--doc-1)\">ডা. এ. করিম</span> <span class=\"ds-doc-name\" style=\"--doc:var(--doc-2)\">ডা. এন. সুলতানা</span> <span class=\"ds-doc-chip\" style=\"--doc:var(--doc-3)\">ডা. আর. হোসেন</span>",
-      "css": ".ds-doc-name{display:inline-block;padding:.1rem .6rem;border-radius:var(--r-sm);background:var(--doc,var(--ink-2));color:#fff;font-family:var(--font-display);font-weight:700;line-height:1.45;} .ds-doc-chip{display:inline-flex;align-items:center;gap:.4rem;font-weight:600;} .ds-doc-chip::before{content:\"\";width:.75rem;height:.75rem;border-radius:3px;background:var(--doc,var(--ink-3));}"
+      "css": ".ds-doc-name{display:inline-flex;align-items:center;gap:.45rem;color:var(--ink);font-family:var(--font-display);font-weight:600;line-height:1.4;} .ds-doc-name::before{content:\"\";flex:none;width:.55rem;height:.55rem;border-radius:50%;background:var(--doc,var(--ink-3));} .ds-doc-chip{display:inline-flex;align-items:center;gap:.4rem;font-weight:600;} .ds-doc-chip::before{content:\"\";flex:none;width:.55rem;height:.55rem;border-radius:50%;background:var(--doc,var(--ink-3));}"
     },
     {
-      "name": "Batch Stamp",
+      "name": "Serial Chip",
       "kind": "custom",
-      "description": "Serials and references printed like a carton MFG/EXP block: dashed frame, tabular digits.",
-      "html": "<span class=\"ds-stamp\">১৯/২৪ <small>সিরিয়াল</small></span>",
-      "css": ".ds-stamp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.05rem .5rem;border:1.5px dashed currentColor;border-radius:4px;color:var(--ink);font-family:var(--font-display);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.35;} .ds-stamp small{font-family:var(--font);font-weight:600;font-size:.7em;opacity:.8;}"
+      "description": "Serials and references in a quiet grey chip with tabular digits; the patient's reference on a primary-wash chip.",
+      "html": "<span class=\"ds-stamp\">১৯/২৪ <small>সিরিয়াল</small></span> <span class=\"ds-ref\">SH-4821</span>",
+      "css": ".ds-stamp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.05rem .45rem;border:0;border-radius:6px;background:var(--box-2);color:var(--ink-2);font-family:var(--font-display);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.4;} .ds-stamp small{font-family:var(--font);font-weight:600;font-size:.7em;opacity:.8;} .ds-ref{display:inline-block;margin-inline-start:.75rem;padding:.1rem .7rem;border-radius:6px;background:var(--primary-wash);color:var(--ink);font-family:var(--font-display);font-size:1.6rem;font-weight:600;letter-spacing:.04em;line-height:1.2;font-variant-numeric:tabular-nums;}",
+      "refersTo": "stamp"
     },
     {
       "name": "Rail Navigation",
       "kind": "nav",
       "refersTo": "rail",
-      "description": "The light rail with a hairline edge: rail-tint icon tiles, the active item on the primary wash with a blue icon tile, the legend at the foot.",
+      "description": "The light rail with a hairline edge: bare icons, the active item on the primary wash with a primary-coloured icon, the legend at the foot.",
       "html": "<nav class=\"ds-rail\"><a class=\"ds-nav ds-active\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4.9 19.1C1 15.2 1 8.8 4.9 4.9\"/><path d=\"M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5\"/><path d=\"M19.1 4.9C23 8.8 23 15.1 19.1 19\"/></svg></span>এখন</a><a class=\"ds-nav\" href=\"#\"><span class=\"ds-ic\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M16 2v4\"/><path d=\"M8 2v4\"/><path d=\"M3 10h18\"/></svg></span>অ্যাপয়েন্টমেন্ট</a><dl class=\"ds-legend\"><div><dt style=\"background:var(--urgent)\"></dt><dd>মানুষ দরকার</dd></div><div><dt style=\"background:var(--waiting)\"></dt><dd>অপেক্ষায়</dd></div><div><dt style=\"background:var(--done)\"></dt><dd>হয়ে গেছে</dd></div><div><dt style=\"background:var(--shefa)\"></dt><dd>শেফা করছে</dd></div></dl></nav>",
-      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:16rem;padding:1rem .75rem;background:var(--rail);color:var(--rail-ink);border:1px solid var(--rail-rule);border-radius:var(--r);} .ds-nav{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.35rem .5rem;border-radius:var(--r-sm);color:var(--rail-ink);text-decoration:none;font-weight:500;} .ds-nav:hover{background:var(--rail-hover);} .ds-nav:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-ic{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:7px;background:var(--rail-tint);color:var(--rail-ink-2);} .ds-active{background:var(--primary-wash);color:var(--ink);font-weight:700;} .ds-active .ds-ic{background:var(--primary);color:var(--on-primary);} .ds-active:hover{background:var(--primary-wash);} .ds-legend{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .6rem;margin:1rem 0 0;padding:.75rem .5rem 0;border-top:1px solid var(--rail-rule);font-size:var(--step--2);color:var(--rail-ink-2);} .ds-legend div{display:flex;align-items:center;gap:.4rem;} .ds-legend dt{width:.7rem;height:.7rem;border-radius:50%;} .ds-legend dd{margin:0;}"
+      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:16rem;padding:1rem .75rem;background:var(--rail);color:var(--rail-ink);border:1px solid var(--rail-rule);border-radius:var(--r);} .ds-nav{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.35rem .5rem;border-radius:var(--r-sm);color:var(--rail-ink);text-decoration:none;font-weight:500;} .ds-nav:hover{background:var(--rail-hover);} .ds-nav:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-ic{display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;color:var(--rail-ink-2);} .ds-active{background:var(--primary-wash);color:var(--ink);font-weight:700;} .ds-active .ds-ic{color:var(--primary);} .ds-active:hover{background:var(--primary-wash);} .ds-legend{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .6rem;margin:1rem 0 0;padding:.75rem .5rem 0;border-top:1px solid var(--rail-rule);font-size:var(--step--2);color:var(--rail-ink-2);} .ds-legend div{display:flex;align-items:center;gap:.4rem;} .ds-legend dt{width:.7rem;height:.7rem;border-radius:50%;} .ds-legend dd{margin:0;}"
     },
     {
       "name": "Today's Chambers Row",
       "kind": "card",
       "refersTo": "box",
-      "description": "One doctor's session on the day axis: name block, a bar filling in the doctor's colour, booked/capacity in a stamp.",
-      "html": "<div class=\"ds-box\"><div class=\"ds-load\" style=\"--doc:var(--doc-1)\"><span class=\"ds-load-name\">ডা. এ. করিম</span><div class=\"ds-track\"><div class=\"ds-block\" style=\"left:2%;width:46%\"><div class=\"ds-fill\" style=\"width:79%\"></div><span class=\"ds-count\"><span class=\"ds-lstamp\">১৯/২৪</span></span></div></div></div></div>",
-      "css": ".ds-box{background:var(--box);border-radius:var(--r);box-shadow:var(--shadow-box);padding:1rem 1.5rem;} .ds-load{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:1rem;align-items:center;min-height:3.4rem;border-top:1px solid var(--rule);} .ds-load-name{padding:.35rem .7rem;border-radius:var(--r-sm);background:var(--doc);color:#fff;font-family:var(--font-display);font-weight:700;line-height:1.25;} .ds-track{position:relative;height:2.5rem;} .ds-block{position:absolute;top:.45rem;bottom:.45rem;border-radius:var(--r-sm);overflow:hidden;display:flex;align-items:center;background:color-mix(in oklch,var(--doc) 14%,var(--box));border:1.5px solid var(--doc);} .ds-fill{position:absolute;inset:0 auto 0 0;background:var(--doc);} .ds-count{position:relative;z-index:1;margin-inline-start:.35rem;} .ds-lstamp{display:inline-flex;padding:.05rem .5rem;border:1.5px dashed var(--doc);border-radius:4px;background:var(--box);color:var(--ink);font-family:var(--font-display);font-weight:700;font-variant-numeric:tabular-nums;font-size:var(--step--1);}"
+      "description": "One doctor's session on the day axis: the dotted name, a slim pill bar filling in the doctor's colour over a 16% tint, the count above it as plain text.",
+      "html": "<div class=\"ds-box\"><div class=\"ds-load\" style=\"--doc:var(--doc-1)\"><span class=\"ds-load-name\">ডা. এ. করিম</span><div class=\"ds-track\"><div class=\"ds-block\" style=\"left:2%;width:46%\"><div class=\"ds-fill\" style=\"width:79%\"></div><span class=\"ds-count\"><b>১৯/২৪</b> সিরিয়াল</span></div></div></div></div>",
+      "css": ".ds-box{background:var(--box);border-radius:var(--r);box-shadow:var(--shadow-box);padding:1rem 1.5rem;} .ds-load{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:1rem;align-items:center;min-height:3.6rem;border-top:1px solid var(--rule);} .ds-load-name{display:flex;align-items:center;gap:.5rem;color:var(--ink);font-family:var(--font-display);font-weight:600;line-height:1.3;} .ds-load-name::before{content:\"\";flex:none;width:.6rem;height:.6rem;border-radius:50%;background:var(--doc);} .ds-track{position:relative;height:2.5rem;} .ds-block{position:absolute;top:calc(50% + .45rem);height:.5rem;border-radius:var(--r-pill);background:color-mix(in oklch,var(--doc) 16%,var(--box));} .ds-fill{position:absolute;inset:0 auto 0 0;border-radius:inherit;background:var(--doc);} .ds-count{position:absolute;left:0;bottom:calc(100% + .3rem);font-size:var(--step--1);white-space:nowrap;color:var(--ink-2);} .ds-count b{font-family:var(--font-display);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}"
     }
   ],
   "narrative": {
     "northStar": "Clinic Light",
-    "overview": "SHEFA looks like a bright clinic desk that carries the labels of a Bangladeshi medicine shelf. Off-white boxes sit on a cool near-white field with slate ink, never cream. A light rail with a hairline edge runs down the staff app, and a light bar with a hairline beneath runs across the top of every public page. Solid colour label blocks carry reversed bold type, the way a medicine box prints its brand name. Serials and references are printed in a dashed batch stamp with tabular digits, like the MFG/EXP block on a carton. Every doctor wears their own box colour across the whole product, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.\n\nStatus is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done. SHEFA violet means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. One strong blue, outside the legend, is the colour of every action. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.\n\nThe density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is round and bold for names and the numbers that matter (Baloo Da 2) and plain and readable for everything else (Hind Siliguri). Corners are small, and boxes sit on the shelf with a soft shadow. The world has a light theme and a navy-graphite dark theme that keeps the same blue and violet, lightened, chosen by the device or by the viewer.",
+    "overview": "SHEFA looks like a bright clinic desk that carries the labels of a Bangladeshi medicine shelf. Off-white boxes sit on a cool near-white field with slate ink, never cream. A light rail with a hairline edge runs down the staff app, and a light bar with a hairline beneath runs across the top of every public page. Boxes are edged by a 1px hairline rather than a drop shadow. Serials and references sit in quiet grey chips with tabular digits. Every doctor wears their own box colour across the whole product, carried as a small colour dot beside their name and as the fill of their session bars, so the desk finds a doctor's sessions, list and patients by colour, the way a pharmacist reaches for the right box.\n\nStatus is a printed legend: one colour, one meaning, everywhere, and always with words beside the colour. Red means a caller needs a person, or there is a clash or an error. Amber means waiting. Green means done. SHEFA violet means SHEFA itself: a live call, a booking it made, its side of a transcript. Gone is grey and struck through. One strong blue, outside the legend, is the colour of every action. The legend sits at the foot of the rail on desktop and repeats on the page on a phone.\n\nThe density is a working desk's, but friendly and local rather than austere. Bangla comes first. Type is one family, Hind Siliguri: semibold (600) for headings, names and the numbers that matter, regular for everything else. The round Baloo Da 2 survives only in the SHEFA wordmark. Corners are soft (8px and 12px), and boxes sit on the shelf inside a hairline with a barely-there lift. The world has a light theme and a navy-graphite dark theme that keeps the same blue and violet, lightened, chosen by the device or by the viewer.",
     "keyCharacteristics": [
       "Off-white boxes on a cool near-white field; a light rail or top bar with a hairline.",
       "One colour, one meaning: urgent red, waiting amber, done green, SHEFA violet, gone grey, always with words.",
       "One strong blue for every action, kept apart from the legend.",
       "Six doctor box colours, one per doctor, on every surface that names them.",
-      "Reversed name blocks and dashed batch stamps borrowed from medicine packaging.",
-      "Baloo Da 2 for names, headings and numbers that matter; Hind Siliguri for body and data.",
+      "Hairline-edged boxes, a colour dot beside each doctor's name, and quiet grey chips for serials.",
+      "Hind Siliguri throughout, semibold for headings and figures; Baloo Da 2 for the SHEFA wordmark only.",
       "Light and navy-graphite dark themes, with a three-way theme switch (follow device, light, dark)."
     ],
     "rules": [
@@ -950,7 +961,7 @@
       },
       {
         "name": "The Box Colour Rule",
-        "body": "Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) replaced a violet that shared SHEFA's hue, so no doctor colour now collides with the legend or the action blue. A doctor's colour appears wherever that doctor does (name block, session bar, box band, chip). A clash overrides the doctor's colour with urgent red.",
+        "body": "Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) replaced a violet that shared SHEFA's hue, so no doctor colour now collides with the legend or the action blue. A doctor's colour appears wherever that doctor does (name dot, session bar fill, chip dot). A clash overrides the doctor's colour with urgent red.",
         "section": "colors"
       },
       {
@@ -959,8 +970,8 @@
         "section": "colors"
       },
       {
-        "name": "The Label Voice Rule",
-        "body": "Baloo Da 2 is for what the box shouts (names, headings, numbers that matter, buttons, stamps). Never set paragraphs or table data in it on staff surfaces, where Hind Siliguri is loaded.",
+        "name": "The Wordmark Rule",
+        "body": "Baloo Da 2 sets the SHEFA wordmark and nothing else. Headings, names, buttons, chips and figures are Hind Siliguri at 600; weight, not a second face, carries emphasis.",
         "section": "typography"
       },
       {
@@ -970,7 +981,7 @@
       },
       {
         "name": "The Live Ring Rule",
-        "body": "A ring only pulses while a call or a recording is live (the violet live orb, the dot in a live pill). Static outlines that mark a state are fine, such as the 2px urgent outline on a callbacks box with people waiting or the 2px doctor-colour outline on a full session. Decorative halos at rest are not.",
+        "body": "A ring only pulses while a call or a recording is live (the violet live orb, the dot in a live pill). Static strokes that mark a state are fine, such as the focus outline or the thin dashed outline of a session on leave. Decorative halos and glow rings at rest are not, and urgency is told by red words and a red count, not by a ring around the box.",
         "section": "elevation"
       }
     ],
@@ -978,8 +989,9 @@
       "**Do** put words beside every status colour; a mark is always a dot plus a label.",
       "**Do** give each doctor one of the six box colours and use it on every surface that names them.",
       "**Do** use action blue for every primary action, settled green only for done, and SHEFA violet for what SHEFA is doing or did.",
-      "**Do** print serials and references in the dashed batch stamp with tabular digits.",
-      "**Do** keep corners on the scale: 6px controls, 10px boxes, pill for marks and chips.",
+      "**Do** set serials and references in a quiet grey chip (box-2, ink-2, no border) with tabular digits.",
+      "**Do** keep corners on the scale: 8px controls, 12px boxes, pill for marks, chips and session bars.",
+      "**Do** mark a doctor with a small colour dot beside their name in ink, and edge boxes with the hairline, not a drop shadow.",
       "**Do** use Lucide icons (lucide-react in the app; Lucide paths copied into static sprites) at 16 to 20px with a 2px stroke.",
       "**Do** read every colour from tokens so both themes work, including rail-tint and rail-line for anything on the rail, and keep tap targets at least 44px.",
       "**Do** keep metadata lines to at most one middle dot."
@@ -988,7 +1000,8 @@
       "**Don't** use a legend hue (red, amber, green, violet) or action blue as decoration, or give a new doctor a legend hue.",
       "**Don't** pulse or glow a ring around anything at rest; a ring moves only while a call or recording is live.",
       "**Don't** put em or en dashes in visible text.",
-      "**Don't** set body paragraphs or table data in Baloo Da 2 where Hind Siliguri is loaded.",
+      "**Don't** use Baloo Da 2 for anything but the SHEFA wordmark.",
+      "**Don't** reverse type out of a solid doctor colour, or wrap a box in a coloured outline or header bar to make it urgent.",
       "**Don't** draw icons with text glyphs or emoji; use Lucide."
     ]
   }
