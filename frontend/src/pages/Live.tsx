@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { Legend } from '../Shell'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
+import { LiveCount } from '../lib/motion'
 import { Empty, ErrorNote, PageHeader, Pill, Skeleton, docClass, durationText } from '../components'
 
 export function CallStatus({ call }: { call: CallRow }) {
@@ -133,11 +134,16 @@ function Callbacks() {
   const { can } = useAuth()
   const list = useLoad(() => api<Callback[]>('/api/v1/callbacks'), [], 5000)
   const [busy, setBusy] = useState<number | null>(null)
+  // a resolved caller fades out of the list before the refresh removes them, so the row
+  // leaves rather than vanishing. Tied to the data it faded from: fresh data ends it.
+  const [leaving, setLeaving] = useState<{ id: number; from: unknown } | null>(null)
 
   async function resolve(id: number) {
     setBusy(id)
     try {
       await api(`/api/v1/callbacks/${id}/resolve`, { method: 'POST', body: JSON.stringify({}) })
+      setLeaving({ id, from: list.data })
+      await new Promise((r) => setTimeout(r, 180))
       list.reload()
     } finally {
       setBusy(null)
@@ -149,14 +155,14 @@ function Callbacks() {
     <section className={`callbacks${items.length ? ' has-items' : ''}`} aria-labelledby="cb-h" aria-live="polite">
       <div className="section-head">
         <h2 id="cb-h">{t('callbacksTitle')}</h2>
-        {items.length ? <span className="count-big">{items.length}</span> : null}
+        {items.length ? <LiveCount className="count-big" value={items.length} /> : null}
       </div>
       {list.error ? <ErrorNote error={list.error} onRetry={list.reload} /> : null}
       {list.data && items.length === 0 ? <p className="muted callbacks-none">{t('noCallbacks')}</p> : null}
       {items.length ? (
         <ul className="ledger">
           {items.map((c) => (
-            <li key={c.id} className="ledger-row is-urgent">
+            <li key={c.id} className={`ledger-row is-urgent${leaving?.id === c.id && leaving.from === list.data ? ' is-leaving' : ''}`}>
               <Pill tone="bad">{t('needsPersonShort')}</Pill>
               <Phone size={16} strokeWidth={1.75} aria-hidden="true" />
               {c.phone ? (
@@ -219,7 +225,7 @@ export function Live() {
         <section aria-labelledby="active-h" aria-live="polite">
           <div className="section-head">
             <h2 id="active-h">{t('inProgress')}</h2>
-            {active.length ? <span className="count-big count-shefa">{active.length}</span> : null}
+            {active.length ? <LiveCount className="count-big count-shefa" value={active.length} /> : null}
           </div>
           {calls.error ? <ErrorNote error={calls.error} onRetry={calls.reload} /> : null}
           {calls.loading && !calls.data ? <Skeleton rows={2} /> : null}

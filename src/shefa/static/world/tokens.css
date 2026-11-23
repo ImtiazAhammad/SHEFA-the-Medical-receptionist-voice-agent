@@ -101,6 +101,14 @@
   --space-7: 3rem;
   --tap: 44px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* motion durations, a scale like the spacing one (values after transitions.dev, capped at 300ms:
+     staff see these all day). 1 shake step, 2 press and colour, 3 content in and rows out,
+     4 the switch pill, 5 a count rolling over */
+  --dur-1: 80ms;
+  --dur-2: 150ms;
+  --dur-3: 200ms;
+  --dur-4: 250ms;
+  --dur-5: 300ms;
 
   color-scheme: light;
 }

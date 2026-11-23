@@ -5,6 +5,7 @@ import { useAuth } from './lib/auth'
 import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
 import { ThemeSwitch } from './lib/theme'
+import { useSegPill } from './lib/motion'
 
 /** SHEFA's mark: a capsule on a pharma-green box, half white, half SHEFA blue.
  * Drawn, not lettered, so it reads the same in Bangla and English. */
@@ -57,12 +58,14 @@ export function Wordmark() {
 
 export function LangSwitch() {
   const { lang, setLang, t } = useI18n()
+  const pill = useSegPill<HTMLDivElement>(lang)
   const options: [Lang, string][] = [
     ['bn', 'বাংলা'],
     ['en', 'English'],
   ]
   return (
-    <div className="seg" role="group" aria-label={t('language')}>
+    <div className="seg" role="group" aria-label={t('language')} ref={pill}>
+      <span className="seg-pill" aria-hidden="true" />
       {options.map(([code, label]) => (
         <button
           key={code}

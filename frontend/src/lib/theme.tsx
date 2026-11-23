@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSegPill } from './motion'
 import { Monitor, Moon, Sun } from 'lucide-react'
 
 export type Theme = 'auto' | 'light' | 'dark'
@@ -33,13 +34,15 @@ export function applyTheme(theme: Theme) {
 /** A three-way switch. Labels come from the page's own dictionary (staff app, patient, demo). */
 export function ThemeSwitch({ labels }: { labels: { group: string; auto: string; light: string; dark: string } }) {
   const [theme, setTheme] = useState<Theme>(readTheme)
+  const pill = useSegPill<HTMLDivElement>(theme)
   const options: [Theme, string, typeof Sun][] = [
     ['auto', labels.auto, Monitor],
     ['light', labels.light, Sun],
     ['dark', labels.dark, Moon],
   ]
   return (
-    <div className="seg theme-switch" role="group" aria-label={labels.group}>
+    <div className="seg theme-switch" role="group" aria-label={labels.group} ref={pill}>
+      <span className="seg-pill" aria-hidden="true" />
       {options.map(([value, label, Icon]) => (
         <button
           key={value}

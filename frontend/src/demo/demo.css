@@ -5,7 +5,7 @@
 .demo-orb {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
   width: 10rem; height: 10rem; border: 0; border-radius: 50%; cursor: pointer;
-  background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 700;
+  background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 600;
   box-shadow: var(--shadow-lift);
   transition: transform 0.16s var(--ease-out), background-color 0.15s;
 }
@@ -23,7 +23,7 @@
 .demo-chat { margin-top: 1.25rem; }
 .demo-log { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; max-height: 22rem; overflow-y: auto; }
 .demo-line { max-width: 86%; padding: 0.6rem 0.9rem; border-radius: 14px; background: var(--box); box-shadow: var(--shadow-box); }
-.demo-line small { color: var(--ink-2); font-size: 0.75rem; font-weight: 700; }
+.demo-line small { color: var(--ink-2); font-size: 0.75rem; font-weight: 600; }
 .demo-line p { margin: 0.1rem 0 0; line-height: 1.55; overflow-wrap: anywhere; }
 .demo-assistant { align-self: flex-start; background: var(--shefa-wash); border-end-start-radius: 4px; box-shadow: none; }
 .demo-assistant small { color: var(--shefa-ink); }

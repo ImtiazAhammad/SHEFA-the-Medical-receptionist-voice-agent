@@ -13,6 +13,8 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [offline, setOffline] = useState(false)
+  // each refusal shakes the card once; two alternating classes restart the animation
+  const [refusals, setRefusals] = useState(0)
 
   const ready = useToken ? token.trim() : username.trim() && password
 
@@ -24,6 +26,7 @@ export function SignIn() {
     try {
       const ok = await signIn(useToken ? { token: token.trim() } : { username: username.trim(), password })
       setFailed(!ok)
+      if (!ok) setRefusals((n) => n + 1)
     } catch {
       setOffline(true)
     } finally {
@@ -47,7 +50,7 @@ export function SignIn() {
         <StaffThemeSwitch />
         <LangSwitch />
       </div>
-      <form className="signin-card" onSubmit={submit}>
+      <form className={`signin-card${refusals ? ` is-refused-${refusals % 2}` : ''}`} onSubmit={submit}>
         <h1 className="display">{t('signIn')}</h1>
         {useToken ? (
           <>

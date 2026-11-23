@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, type Overview as OverviewData } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
+import { useSegPill } from '../lib/motion'
 import { Empty, ErrorNote, PageHeader, Skeleton, durationText } from '../components'
 
 const PERIODS = [1, 7, 30]
@@ -9,6 +10,7 @@ const PERIODS = [1, 7, 30]
 export function Overview() {
   const { t, num } = useI18n()
   const [days, setDays] = useState(7)
+  const pill = useSegPill<HTMLDivElement>(days)
   const data = useLoad(() => api<OverviewData>(`/api/v1/overview?days=${days}`), [days], 30000)
   const o = data.data
   const d = o?.calls.dispositions ?? {}
@@ -30,7 +32,8 @@ export function Overview() {
   return (
     <>
       <PageHeader title={t('overviewTitle')}>
-        <div className="seg" role="group" aria-label={t('lastDays', { n: '' })}>
+        <div className="seg" role="group" aria-label={t('lastDays', { n: '' })} ref={pill}>
+          <span className="seg-pill" aria-hidden="true" />
           {PERIODS.map((p) => (
             <button key={p} type="button" aria-pressed={days === p} onClick={() => setDays(p)}>
               {p === 1 ? t('today1') : t('lastDays', { n: num(p) })}

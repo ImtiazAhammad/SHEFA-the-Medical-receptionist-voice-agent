@@ -1,7 +1,7 @@
 /* SHEFA patient page, on the medicine shelf (static/world/world.css): friendly, local, warm.
- * Each doctor is a medicine box with their colour band; the steps fill in green as you go; the
- * receipt is a box label with the reference printed in a stamp. Built for a phone on a slow
- * connection: the light font set (Baloo Da 2 only). */
+ * Each doctor is a card with their colour dot; the steps fill in green as you go; the receipt
+ * carries the reference in a soft blue chip. Built for a phone on a slow connection: the light
+ * font set (Hind Siliguri 400 and 600). */
 .patient { min-height: 100dvh; background: var(--shelf); color: var(--ink); font-size: 1.0625rem; padding-bottom: env(safe-area-inset-bottom); }
 .patient button, .patient input { font: inherit; }
 
@@ -10,9 +10,9 @@
 .p-lang { min-height: 44px; padding: 0.3rem 1rem; border-radius: var(--r-pill); border: 1px solid var(--rail-line); background: transparent; color: var(--rail-ink); cursor: pointer; font-weight: 600; }
 .p-lang:hover { background: var(--rail-hover); }
 .p-main { max-width: 40rem; margin: 0 auto; padding: 0 1rem 3rem; }
-.p-main h1 { font-family: var(--font-display); font-size: 1.9rem; font-weight: 600; line-height: 1.2; margin: 1.4rem 0 0.4rem; }
+.p-main h1 { font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; line-height: 1.2; margin: 1.4rem 0 0.4rem; }
 .p-main h1:focus { outline: none; }
-.p-main h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; margin: 1.75rem 0 0.6rem; }
+.p-main h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; margin: 1.75rem 0 0.6rem; }
 .p-lead { color: var(--ink-2); margin: 0 0 1rem; }
 .p-muted { color: var(--ink-2); font-size: 0.95rem; }
 .p-emergency { margin: 1rem 0 0; padding: 0.65rem 0.95rem; border-radius: var(--r); background: var(--urgent); color: var(--on-urgent); font-weight: 700; }
@@ -22,7 +22,7 @@
 .p-steps li { padding: 0.4rem 0.55rem; border-radius: var(--r-sm); background: var(--box); color: var(--ink-2); line-height: 1.25; box-shadow: var(--shadow-box); }
 .p-steps li span { display: block; font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; }
 .p-steps li.on { background: var(--done-wash); color: var(--done-ink); }
-.p-steps li[aria-current='step'] { background: var(--primary); color: var(--on-primary); font-weight: 700; }
+.p-steps li[aria-current='step'] { background: var(--primary); color: var(--on-primary); }
 
 .p-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .p-chips button, .p-times button { min-height: 46px; padding: 0.4rem 1rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; font-weight: 600; }
@@ -41,16 +41,16 @@
 }
 /* the lift only for a pointer that hovers: on a phone a tap would leave the box raised */
 @media (hover: hover) and (pointer: fine) {
-  .p-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+  .p-card:hover { box-shadow: 0 0 0 1px var(--rule-strong); }
 }
 .p-card strong { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.85rem; color: var(--ink); font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
 .p-card strong::before { content: ''; flex: none; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--doc, var(--done)); }
-.p-fee { margin-top: 0.3rem; font-weight: 700; }
+.p-fee { margin-top: 0.3rem; font-weight: 600; }
 .p-picked { margin: 0 0 0.75rem; }
 .p-docname { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--ink); font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; }
 .p-docname::before { content: ''; flex: none; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--doc, var(--done)); }
 .p-chosen { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; margin: 0.5rem 0 1.1rem; }
-.p-when { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
+.p-when { font-family: var(--font-display); font-weight: 600; color: var(--ink); }
 
 .p-field { display: flex; flex-direction: column; gap: 0.3rem; margin: 0 0 1rem; }
 .p-field span { font-weight: 600; font-size: 0.95rem; }
@@ -61,9 +61,9 @@
 .p-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
 .p-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
-.p-btn { min-height: 50px; padding: 0.55rem 1.3rem; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); font-family: var(--font-display); font-weight: 700; cursor: pointer; }
+.p-btn { min-height: 50px; padding: 0.55rem 1.3rem; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); font-family: var(--font-display); font-weight: 600; cursor: pointer; }
 @media (hover: hover) and (pointer: fine) {
-  .p-btn:hover:not(:disabled) { border-color: var(--ink-2); box-shadow: var(--shadow-box); }
+  .p-btn:hover:not(:disabled) { border-color: var(--ink-3); background: var(--box-2); }
 }
 .p-btn:active:not(:disabled), .p-card:active, .p-times button:active, .p-chips button:active { transform: scale(0.98); }
 .p-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
@@ -81,7 +81,7 @@
 /* the receipt: a box label with the reference printed like a batch stamp */
 .p-receipt { padding: 1rem 1.2rem 1.2rem; border-radius: var(--r); background: var(--box); box-shadow: var(--shadow-lift); border-top: 0.55rem solid var(--done); margin: 1rem 0; }
 .p-receipt p { margin: 0.2rem 0; }
-.p-ref { display: inline-block; font-family: var(--font-display); font-size: 2.3rem; font-weight: 600; letter-spacing: 0.04em; line-height: 1.2; padding: 0.1rem 0.7rem; margin: 0.25rem 0 0.5rem !important; border: 0; background: var(--primary-wash); border-radius: 6px; color: var(--ink); }
+.p-ref { display: inline-block; font-family: var(--font-display); font-size: 2.3rem; font-weight: 600; letter-spacing: 0.04em; line-height: 1.2; padding: 0.1rem 0.7rem; margin: 0.25rem 0 0.5rem !important; border: 0; background: var(--primary-wash); border-radius: var(--r-sm); color: var(--ink); }
 .p-callback { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px dashed var(--rule-strong); }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -94,4 +94,4 @@
 .p-prefs { display: flex; align-items: center; gap: 0.45rem; }
 .p-top .theme-switch { background: var(--rail-tint); border-color: var(--rail-line); }
 .p-top .theme-switch button { color: var(--rail-ink); min-width: 2.2rem; min-height: 36px; padding: 0.2rem 0.5rem; }
-.p-top .theme-switch button[aria-pressed='true'] { background: var(--box); color: var(--ink); }
+.p-top .theme-switch button[aria-pressed='true'] { color: var(--ink); }
