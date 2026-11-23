@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-24T00:00:00Z",
+  "generatedAt": "2026-11-24T12:00:00Z",
   "title": "Design System: SHEFA",
   "extensions": {
     "colorMeta": {
@@ -626,14 +626,14 @@
         "cssVar": "--doc-0",
         "dark": "oklch(0.5 0.1 195)",
         "tonalRamp": [
-          "oklch(0.15 0.027 200.0)",
-          "oklch(0.26 0.076 200.0)",
-          "oklch(0.38 0.1 200.0)",
-          "oklch(0.50 0.1 200.0)",
-          "oklch(0.62 0.1 200.0)",
-          "oklch(0.74 0.1 200.0)",
-          "oklch(0.85 0.072 200.0)",
-          "oklch(0.95 0.027 200.0)"
+          "oklch(0.15 0.027 195.0)",
+          "oklch(0.26 0.076 195.0)",
+          "oklch(0.38 0.1 195.0)",
+          "oklch(0.50 0.1 195.0)",
+          "oklch(0.62 0.1 195.0)",
+          "oklch(0.74 0.1 195.0)",
+          "oklch(0.85 0.072 195.0)",
+          "oklch(0.95 0.027 195.0)"
         ]
       },
       "doc-1": {
@@ -643,14 +643,14 @@
         "cssVar": "--doc-1",
         "dark": "oklch(0.5 0.12 345)",
         "tonalRamp": [
-          "oklch(0.15 0.027 350.0)",
-          "oklch(0.26 0.076 350.0)",
-          "oklch(0.38 0.129 350.0)",
-          "oklch(0.50 0.17 350.0)",
-          "oklch(0.62 0.17 350.0)",
-          "oklch(0.74 0.121 350.0)",
-          "oklch(0.85 0.072 350.0)",
-          "oklch(0.95 0.027 350.0)"
+          "oklch(0.15 0.027 345.0)",
+          "oklch(0.26 0.076 345.0)",
+          "oklch(0.38 0.12 345.0)",
+          "oklch(0.50 0.12 345.0)",
+          "oklch(0.62 0.12 345.0)",
+          "oklch(0.74 0.12 345.0)",
+          "oklch(0.85 0.072 345.0)",
+          "oklch(0.95 0.027 345.0)"
         ]
       },
       "doc-2": {
@@ -660,14 +660,14 @@
         "cssVar": "--doc-2",
         "dark": "oklch(0.5 0.1 225)",
         "tonalRamp": [
-          "oklch(0.15 0.027 300.0)",
-          "oklch(0.26 0.076 300.0)",
-          "oklch(0.38 0.129 300.0)",
-          "oklch(0.50 0.14 300.0)",
-          "oklch(0.62 0.14 300.0)",
-          "oklch(0.74 0.121 300.0)",
-          "oklch(0.85 0.072 300.0)",
-          "oklch(0.95 0.027 300.0)"
+          "oklch(0.15 0.027 225.0)",
+          "oklch(0.26 0.076 225.0)",
+          "oklch(0.38 0.1 225.0)",
+          "oklch(0.50 0.1 225.0)",
+          "oklch(0.62 0.1 225.0)",
+          "oklch(0.74 0.1 225.0)",
+          "oklch(0.85 0.072 225.0)",
+          "oklch(0.95 0.027 225.0)"
         ]
       },
       "doc-3": {
@@ -677,14 +677,14 @@
         "cssVar": "--doc-3",
         "dark": "oklch(0.5 0.1 50)",
         "tonalRamp": [
-          "oklch(0.15 0.027 55.0)",
-          "oklch(0.26 0.076 55.0)",
-          "oklch(0.38 0.08 55.0)",
-          "oklch(0.50 0.08 55.0)",
-          "oklch(0.62 0.08 55.0)",
-          "oklch(0.74 0.08 55.0)",
-          "oklch(0.85 0.072 55.0)",
-          "oklch(0.95 0.027 55.0)"
+          "oklch(0.15 0.027 50.0)",
+          "oklch(0.26 0.076 50.0)",
+          "oklch(0.38 0.1 50.0)",
+          "oklch(0.50 0.1 50.0)",
+          "oklch(0.62 0.1 50.0)",
+          "oklch(0.74 0.1 50.0)",
+          "oklch(0.85 0.072 50.0)",
+          "oklch(0.95 0.027 50.0)"
         ]
       },
       "doc-4": {
@@ -694,14 +694,14 @@
         "cssVar": "--doc-4",
         "dark": "oklch(0.5 0.1 115)",
         "tonalRamp": [
-          "oklch(0.15 0.027 125.0)",
-          "oklch(0.26 0.076 125.0)",
-          "oklch(0.38 0.1 125.0)",
-          "oklch(0.50 0.1 125.0)",
-          "oklch(0.62 0.1 125.0)",
-          "oklch(0.74 0.1 125.0)",
-          "oklch(0.85 0.072 125.0)",
-          "oklch(0.95 0.027 125.0)"
+          "oklch(0.15 0.027 115.0)",
+          "oklch(0.26 0.076 115.0)",
+          "oklch(0.38 0.1 115.0)",
+          "oklch(0.50 0.1 115.0)",
+          "oklch(0.62 0.1 115.0)",
+          "oklch(0.74 0.1 115.0)",
+          "oklch(0.85 0.072 115.0)",
+          "oklch(0.95 0.027 115.0)"
         ]
       },
       "doc-5": {
@@ -711,14 +711,14 @@
         "cssVar": "--doc-5",
         "dark": "oklch(0.44 0.025 250)",
         "tonalRamp": [
-          "oklch(0.15 0.027 230.0)",
-          "oklch(0.26 0.076 230.0)",
-          "oklch(0.38 0.1 230.0)",
-          "oklch(0.50 0.1 230.0)",
-          "oklch(0.62 0.1 230.0)",
-          "oklch(0.74 0.1 230.0)",
-          "oklch(0.85 0.072 230.0)",
-          "oklch(0.95 0.027 230.0)"
+          "oklch(0.15 0.025 250.0)",
+          "oklch(0.26 0.025 250.0)",
+          "oklch(0.38 0.025 250.0)",
+          "oklch(0.50 0.025 250.0)",
+          "oklch(0.62 0.025 250.0)",
+          "oklch(0.74 0.025 250.0)",
+          "oklch(0.85 0.025 250.0)",
+          "oklch(0.95 0.025 250.0)"
         ]
       }
     },
@@ -796,22 +796,68 @@
         "cssVar": "--shadow-box",
         "value": "0 0 0 1px var(--rule), 0 1px 2px oklch(0.3 0.02 260 / 0.04)",
         "dark": "0 0 0 1px var(--rule)",
-        "purpose": "A hairline box, barely lifted: every resting container, the chosen segment, button hover."
+        "purpose": "A hairline box, barely lifted: every resting container and the chosen segment. Never a hover state."
       },
       {
         "name": "lift",
         "cssVar": "--shadow-lift",
         "value": "0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24)",
         "dark": "0 18px 40px -12px oklch(0 0 0 / 0.6)",
-        "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, hovered patient card, demo orb."
+        "purpose": "A box pulled forward: sheet, desk alert, sign-in card, receipt, demo orb. Nothing lifts on hover."
       }
     ],
     "motion": [
       {
+        "name": "dur-1",
+        "cssVar": "--dur-1",
+        "value": "80ms",
+        "purpose": "A shake step."
+      },
+      {
+        "name": "dur-2",
+        "cssVar": "--dur-2",
+        "value": "150ms",
+        "purpose": "Press, colour."
+      },
+      {
+        "name": "dur-3",
+        "cssVar": "--dur-3",
+        "value": "200ms",
+        "purpose": "Content arriving (fade-in via @starting-style), a row leaving (fade and 0.5rem drift)."
+      },
+      {
+        "name": "dur-4",
+        "cssVar": "--dur-4",
+        "value": "250ms",
+        "purpose": "The segmented-control pill sliding."
+      },
+      {
+        "name": "dur-5",
+        "cssVar": "--dur-5",
+        "value": "300ms",
+        "purpose": "A live count rolling over (LiveCount: from the direction of change, 0.04em blur)."
+      },
+      {
         "name": "ease-out",
         "cssVar": "--ease-out",
         "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "Control state transitions (0.15s), press scale 0.98 (0.16s), the sheet slide-out (0.16s), the desk alert and toast arrival (0.2s)."
+        "purpose": "The one curve for nearly everything: state transitions, press scale 0.98, content fade, row leave, count roll, seg pill, shake steps."
+      },
+      {
+        "name": "ease-drawer",
+        "cssVar": "--ease-drawer",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "The sheet slide-in (0.24s); no overshoot. Slide-out 0.16s on ease-out."
+      },
+      {
+        "name": "skeleton-breathe",
+        "value": "opacity 1 to 0.5, 1s ease-in-out infinite alternate",
+        "purpose": "Loading placeholders; never a sweeping gradient."
+      },
+      {
+        "name": "signin-refused",
+        "value": "280ms: translateX 6px, -6px, 2px (80/60/80/60ms steps)",
+        "purpose": "The sign-in card shakes once beside the red message."
       },
       {
         "name": "live-pulse",
@@ -824,13 +870,8 @@
         "purpose": "The demo orb while SHEFA is on the call; never at rest."
       },
       {
-        "name": "ease-drawer",
-        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
-        "purpose": "The sheet slide-in (0.24s); no overshoot."
-      },
-      {
         "name": "reduced-motion",
-        "value": "loops stop; transform transitions and press scale removed; colour and opacity transitions kept (the sheet fades instead of sliding)",
+        "value": "loops stop; nothing slides or scales; colour and opacity still fade; every animation ends on its visible state",
         "purpose": "prefers-reduced-motion: reduce."
       }
     ],
@@ -853,10 +894,11 @@
     },
     "patterns": {
       "leave": "Session on leave: background none, border 1px dashed var(--rule-strong), label struck through in ink-2.",
-      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--shefa-wash).",
+      "focus": "outline: 3px solid var(--focus); outline-offset: 2px. Inputs: border var(--focus) + 0 0 0 3px var(--primary-wash).",
       "sessionBar": "Pill bar 0.5rem tall, background color-mix(in oklch, var(--doc) 16%, var(--box)); fill in var(--doc); count above the bar as plain text; a full session adds the word \"full\" in ink-2, no ring.",
       "callbacksActive": "Title in var(--urgent-ink); count a solid urgent pill; no header band, outline, glow or row wash.",
-      "doctorDot": "::before round dot, 0.55 to 0.6rem, background var(--doc); name in var(--ink) at 600."
+      "doctorDot": "::before round dot, 0.55 to 0.6rem, background var(--doc); name in var(--ink) at 600.",
+      "hover": "A surface step, never a shadow: buttons shade to box-2 with an ink-3 stroke; a hovered patient card firms its hairline to rule-strong."
     }
   },
   "components": [
@@ -866,15 +908,15 @@
       "refersTo": "button-primary",
       "description": "Going ahead: book, save, confirm. Action blue.",
       "html": "<button class=\"ds-btn ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg> নিশ্চিত করুন</button>",
-      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);} .ds-btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary);} .ds-btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover);} .ds-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-btn:active{box-shadow:none;}"
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),transform .16s var(--ease-out);} .ds-btn:active{transform:scale(.98);} .ds-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} .ds-btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary);} .ds-btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover);}"
     },
     {
       "name": "Default Button",
       "kind": "button",
       "refersTo": "button",
-      "description": "Every ordinary action: a box-face button with a strong rule stroke.",
+      "description": "Every ordinary action: a box-face button with a strong rule stroke; hover is a surface step, not a shadow.",
       "html": "<button class=\"ds-btn-default\">হয়েছে: কল করেছি</button>",
-      "css": ".ds-btn-default{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);} .ds-btn-default:hover{border-color:var(--ink-2);box-shadow:var(--shadow-box);} .ds-btn-default:active{background:var(--box-2);box-shadow:none;} .ds-btn-default:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
+      "css": ".ds-btn-default{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),transform .16s var(--ease-out);} .ds-btn-default:hover{background:var(--box-2);border-color:var(--ink-3);} .ds-btn-default:active{background:var(--box-2);transform:scale(.98);} .ds-btn-default:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
     {
       "name": "SHEFA Button",
@@ -882,23 +924,23 @@
       "refersTo": "button-shefa",
       "description": "An action that hands work to SHEFA. SHEFA violet.",
       "html": "<button class=\"ds-btn-shefa\">শেফাকে দিন</button>",
-      "css": ".ds-btn-shefa{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--rule-strong);border-radius:var(--r-sm);background:var(--box);color:var(--ink);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color .15s var(--ease-out),border-color .15s var(--ease-out),box-shadow .15s var(--ease-out);background:var(--shefa);border-color:var(--shefa);color:var(--on-shefa);} .ds-btn-shefa:hover{background:var(--shefa-ink);border-color:var(--shefa-ink);} .ds-btn-shefa:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
+      "css": ".ds-btn-shefa{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;padding:.5rem 1.05rem;border:1px solid var(--shefa);border-radius:var(--r-sm);background:var(--shefa);color:var(--on-shefa);font:inherit;font-family:var(--font-display);font-weight:600;line-height:1.2;cursor:pointer;transition:background-color var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),transform .16s var(--ease-out);} .ds-btn-shefa:hover{background:var(--shefa-ink);border-color:var(--shefa-ink);} .ds-btn-shefa:active{transform:scale(.98);} .ds-btn-shefa:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
     },
     {
       "name": "Text Field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Box face, strong rule, 8px; focus turns the border blue with a violet SHEFA-wash halo.",
+      "description": "Box face, strong rule, 8px; focus turns the border blue with a 3px primary-wash halo.",
       "html": "<label class=\"ds-field\"><span>রোগীর নাম</span><input class=\"ds-input\" placeholder=\"নাম লিখুন\"></label>",
-      "css": ".ds-field{display:inline-grid;gap:.2rem;} .ds-field>span{font-size:var(--step--1);font-weight:600;color:var(--ink-2);} .ds-input{font:inherit;color:var(--ink);background:var(--box);border:1px solid var(--rule-strong);border-radius:var(--r-sm);min-height:44px;padding:.45rem .75rem;} .ds-input:hover{border-color:var(--ink-3);} .ds-input:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px var(--shefa-wash);} .ds-input::placeholder{color:var(--ink-3);}"
+      "css": ".ds-field{display:inline-grid;gap:.2rem;} .ds-field>span{font-size:var(--step--1);font-weight:600;color:var(--ink-2);} .ds-input{font:inherit;color:var(--ink);background:var(--box);border:1px solid var(--rule-strong);border-radius:var(--r-sm);min-height:44px;padding:.45rem .75rem;} .ds-input:hover{border-color:var(--ink-3);} .ds-input:focus-visible{outline:0;border-color:var(--focus);box-shadow:0 0 0 3px var(--primary-wash);caret-color:var(--primary);} .ds-input::placeholder{color:var(--ink-3);}"
     },
     {
       "name": "Segmented Control",
       "kind": "custom",
       "refersTo": "segmented",
-      "description": "Language and theme switches: a box-2 well, the chosen segment a hairline box face.",
-      "html": "<div class=\"ds-seg\" role=\"group\"><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
-      "css": ".ds-seg{display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-sm);background:var(--box-2);border:1px solid var(--rule);} .ds-seg button{font:inherit;font-weight:600;min-height:34px;padding:.2rem .85rem;border:0;border-radius:4px;background:transparent;color:var(--ink);cursor:pointer;} .ds-seg button[aria-pressed=\"true\"]{background:var(--box);box-shadow:var(--shadow-box);} .ds-seg button:hover{color:var(--ink);} .ds-seg button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;}"
+      "description": "Language, theme and period switches: a box-2 well; a hairline box-face pill slides under the chosen button over 250ms (decoration; buttons keep aria-pressed).",
+      "html": "<div class=\"ds-seg\" role=\"group\"><span class=\"ds-seg-pill\" aria-hidden=\"true\"></span><button aria-pressed=\"true\">বাংলা</button><button aria-pressed=\"false\">English</button></div>",
+      "css": ".ds-seg{position:relative;isolation:isolate;display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-sm);background:var(--box-2);border:1px solid var(--rule);} .ds-seg-pill{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 4px);z-index:-1;pointer-events:none;border-radius:calc(var(--r-sm) - 3px);background:var(--box);box-shadow:var(--shadow-box);transition:transform var(--dur-4) var(--ease-out),width var(--dur-4) var(--ease-out);} .ds-seg:has(button:last-of-type[aria-pressed=\"true\"]) .ds-seg-pill{transform:translateX(calc(100% + 2px));} .ds-seg button{flex:1;font:inherit;font-weight:600;min-height:34px;padding:.2rem .85rem;border:0;border-radius:4px;background:transparent;color:var(--ink-2);cursor:pointer;transition:color var(--dur-4) var(--ease-out);} .ds-seg button[aria-pressed=\"true\"]{color:var(--ink);} .ds-seg button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;} @media (prefers-reduced-motion:reduce){.ds-seg-pill{transition:none;}}"
     },
     {
       "name": "Status Marks",
@@ -921,7 +963,7 @@
       "kind": "custom",
       "description": "Serials and references in a quiet grey chip with tabular digits; the patient's reference on a primary-wash chip.",
       "html": "<span class=\"ds-stamp\">১৯/২৪ <small>সিরিয়াল</small></span> <span class=\"ds-ref\">SH-4821</span>",
-      "css": ".ds-stamp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.05rem .45rem;border:0;border-radius:6px;background:var(--box-2);color:var(--ink-2);font-family:var(--font-display);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.4;} .ds-stamp small{font-family:var(--font);font-weight:600;font-size:.7em;opacity:.8;} .ds-ref{display:inline-block;margin-inline-start:.75rem;padding:.1rem .7rem;border-radius:6px;background:var(--primary-wash);color:var(--ink);font-family:var(--font-display);font-size:1.6rem;font-weight:600;letter-spacing:.04em;line-height:1.2;font-variant-numeric:tabular-nums;}",
+      "css": ".ds-stamp{display:inline-flex;align-items:baseline;gap:.35rem;padding:.05rem .45rem;border:0;border-radius:var(--r-sm);background:var(--box-2);color:var(--ink-2);font-family:var(--font-display);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.4;} .ds-stamp small{font-family:var(--font);font-weight:600;font-size:.7em;opacity:.8;} .ds-ref{display:inline-block;margin-inline-start:.75rem;padding:.1rem .7rem;border-radius:var(--r-sm);background:var(--primary-wash);color:var(--ink);font-family:var(--font-display);font-size:1.6rem;font-weight:600;letter-spacing:.04em;line-height:1.2;font-variant-numeric:tabular-nums;}",
       "refersTo": "stamp"
     },
     {
@@ -961,7 +1003,7 @@
       },
       {
         "name": "The Box Colour Rule",
-        "body": "Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) replaced a violet that shared SHEFA's hue, so no doctor colour now collides with the legend or the action blue. A doctor's colour appears wherever that doctor does (name dot, session bar fill, chip dot). A clash overrides the doctor's colour with urgent red.",
+        "body": "Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) sits where a violet once was, so no doctor shares SHEFA's hue. A doctor's colour appears wherever that doctor does (name dot, session bar fill, chip dot). A clash overrides the doctor's colour with urgent red.",
         "section": "colors"
       },
       {

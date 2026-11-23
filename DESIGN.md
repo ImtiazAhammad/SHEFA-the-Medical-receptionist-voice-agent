@@ -226,7 +226,7 @@ The density is a working desk's, but friendly and local rather than austere. Ban
 A cool near-white field and box board with slate ink, a light rail edged by a hairline, one strong blue for action, a five-meaning status legend, and six doctor box colours that each get a meaning of their own.
 
 ### Primary
-- **Action Blue** (primary): the colour of every action. Primary buttons, the active nav item's icon, the patient's current step and chosen day and time, the demo's step numbers and resting orb, checkbox and radio accents, and the skip link. It is not a legend colour and never means done.
+- **Action Blue** (primary): the colour of every action. Primary buttons, the active nav item's icon, the patient's current step and chosen day and time, the demo's step numbers and resting orb, checkbox and radio accents, the skip link, links, text selection, the input caret and the focus halo (primary-wash). It is not a legend colour and never means done.
 - **Action Blue, deep** (primary-hover): the hover state for primary actions.
 - **Action Blue, wash** (primary-wash): the active nav row on the rail, and the chip behind the patient's booking reference on the receipt.
 - **On Blue** (on-primary): text and icons on a solid blue fill.
@@ -234,7 +234,7 @@ A cool near-white field and box board with slate ink, a light rail edged by a ha
 - **Focus Blue** (focus): the 3px focus outline, in the action hue, lighter on the dark theme.
 
 ### Secondary
-- **SHEFA Violet** (shefa, shefa-ink, shefa-wash, on-shefa): what SHEFA itself is doing or did. The live-call pill, the live demo orb, the "now" line on the day axis, the in-progress count and the SHEFA bar in the source report. Its wash is the background of SHEFA's transcript turns. The build also reads violet for links (shefa-ink), text selection, the input caret and the input focus halo, so a focused input has a blue border inside a violet halo.
+- **SHEFA Violet** (shefa, shefa-ink, shefa-wash, on-shefa): what SHEFA itself is doing or did. The live-call pill, the live demo orb, the "now" line on the day axis, the in-progress count and the SHEFA bar in the source report. Its wash is the background of SHEFA's transcript turns.
 
 ### Tertiary: the legend
 - **Needs-a-Person Red** (urgent, urgent-ink, urgent-wash, on-urgent): a caller who needs a person, a clash in the week preview, an error, the emergency notice. A solid red fill is reserved for the loudest cases: the needs-a-person count, the desk alert, the "needs a person" pill. When callers wait, the needs-a-person box's title turns urgent ink; the box itself takes no red band, ring or row wash. Errors in a field use the wash with an urgent border.
@@ -243,7 +243,7 @@ A cool near-white field and box board with slate ink, a light rail edged by a ha
 - **Gone**: cancelled, off or disabled renders as ink-3 text, struck through, with no dot. The tokens.css file declares a `--gone` value, but the build never reads it.
 
 ### Doctor box colours
-- **Teal, Rose, Steel, Copper, Olive, Graphite** (doc-0 to doc-5, in that order): each doctor's identity, all at one lightness and strength so no doctor shouts louder than another; Graphite replaced a sky blue that read too close to the blue SHEFA once wore. Violet (doc-2) now shares SHEFA's hue (see the Box Colour Rule). Each colour appears as a small round dot before the doctor's name (in ink), the fill of their session bars on the day axis, and a round chip dot in dense lists; no type is reversed out of a doctor colour. In code, a `.doc-cN` class sets a local `--doc` that every doctor-coloured element reads.
+- **Teal, Rose, Steel, Copper, Olive, Graphite** (doc-0 to doc-5, in that order): each doctor's identity, all at one lightness and strength so no doctor shouts louder than another; Graphite replaced a sky blue that read too close to the blue SHEFA once wore. Steel (doc-2) took the place of a violet that shared SHEFA's hue (see the Box Colour Rule). Each colour appears as a small round dot before the doctor's name (in ink), the fill of their session bars on the day axis, and a round chip dot in dense lists; no type is reversed out of a doctor colour. In code, a `.doc-cN` class sets a local `--doc` that every doctor-coloured element reads.
 
 ### Neutral
 - **Cool Field** (shelf): the page field behind every box.
@@ -257,7 +257,7 @@ A cool near-white field and box board with slate ink, a light rail edged by a ha
 ### Named Rules
 **The One Colour, One Meaning Rule.** Each legend hue means one thing on every surface: red needs a person, amber waits, green is done, violet is SHEFA, grey struck through is gone. Blue stands outside the legend: it is the one colour of action, and it never means done. Never use a legend hue for decoration, and never let colour speak without a word beside it.
 
-**The Box Colour Rule.** Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) replaced a violet that shared SHEFA's hue, so no doctor colour now collides with the legend or the action blue. A doctor's colour appears wherever that doctor does (name dot, session bar fill, chip dot). A clash overrides the doctor's colour with urgent red.
+**The Box Colour Rule.** Doctors wear only the six doc colours, meant to sit clear of the legend hues. Steel (doc-2) sits where a violet once was, so no doctor shares SHEFA's hue. A doctor's colour appears wherever that doctor does (name dot, session bar fill, chip dot). A clash overrides the doctor's colour with urgent red.
 
 **The Two Shelves Rule.** Every colour has a dark-theme value (see the sidecar). The theme is chosen by `prefers-color-scheme`, unless `:root[data-theme]` forces light or dark. Surfaces read tokens and never hard-code a light value. On the dark theme, text on a solid blue, green, violet or red fill turns dark (the on-primary, on-done, on-shefa and on-urgent values), so the fills keep their hue and stay legible.
 
@@ -293,13 +293,23 @@ At 52rem and below, the rail becomes a top bar and the nav moves to a fixed bott
 
 Detail opens in a sheet: a box pulled off the shelf that slides in from the right, up to 46rem wide, with a 16px leading radius. It slides in over 0.24s on the drawer curve `cubic-bezier(0.32, 0.72, 0, 1)` (no overshoot) and back out over 0.16s when closed with the pointer; Esc closes it at once. The backdrop fades with it.
 
+### Motion
+
+Motion explains a change; it never decorates. Durations are a scale like the spacing one, after transitions.dev and capped at 300ms because staff see them all day: `--dur-1` 80ms (a shake step), `--dur-2` 150ms (press, colour), `--dur-3` 200ms (content arriving, a row leaving), `--dur-4` 250ms (the switch pill), `--dur-5` 300ms (a count rolling over). One curve for nearly everything: `--ease-out`, `cubic-bezier(0.22, 1, 0.36, 1)`; the sheet keeps its drawer curve.
+
+- **Loading:** skeleton rows breathe (opacity 1 to 0.5 over 1s, alternating), never a sweeping gradient, which repaints every frame on a desk PC. The real content (ledgers, tables, stats, doctor grid, today's chambers, the My Day feed) fades in over 200ms where the skeleton stood, through `@starting-style` on the container, so rows a poll adds do not each animate.
+- **A live count changes** (callers waiting, calls in progress): the new figure rolls in from the direction of change, up when it grows, with a 0.04em blur, over 300ms (`LiveCount`). Never on first render, never when a poll returns the same figure.
+- **A caller is resolved:** the row fades and drifts 0.5rem toward the end over 200ms, then the list refreshes; it leaves rather than vanishing.
+- **Sign-in refused:** the card shakes once, 6px, -6px, 2px over 280ms, alongside the red message.
+- **Reduced motion:** loops stop, nothing slides or scales, colour and opacity still fade; every animation ends on its visible state.
+
 ## Elevation & Depth
 
-Boxes are nearly flat: a 1px hairline ring in the rule colour with a barely-there contact lift, so they read as edged rather than raised. Only what is pulled forward (the sheet, the desk alert, the sign-in card, the receipt, a hovered patient card, the demo orb) carries a real drop shadow. On the dark theme the resting box is the hairline alone, and the lifted shadow becomes plain black at higher opacity. Empty states lift nothing: they are a dashed outline on the bare shelf.
+Boxes are nearly flat: a 1px hairline ring in the rule colour with a barely-there contact lift, so they read as edged rather than raised. Only what is pulled forward (the sheet, the desk alert, the sign-in card, the receipt, the demo orb) carries a real drop shadow. On the dark theme the resting box is the hairline alone, and the lifted shadow becomes plain black at higher opacity. Empty states lift nothing: they are a dashed outline on the bare shelf.
 
 ### Shadow Vocabulary
-- **Hairline box** (`box-shadow: 0 0 0 1px var(--rule), 0 1px 2px oklch(0.3 0.02 260 / 0.04)`; dark: `0 0 0 1px var(--rule)`): every resting container, the chosen segment, button hover.
-- **Pulled forward** (`box-shadow: 0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24)`): sheet, desk alert, sign-in card, receipt, hovered patient card, demo orb.
+- **Hairline box** (`box-shadow: 0 0 0 1px var(--rule), 0 1px 2px oklch(0.3 0.02 260 / 0.04)`; dark: `0 0 0 1px var(--rule)`): every resting container and the chosen segment.
+- **Pulled forward** (`box-shadow: 0 2px 4px oklch(0.3 0.02 260 / 0.08), 0 18px 40px -12px oklch(0.3 0.02 260 / 0.24)`): sheet, desk alert, sign-in card, receipt, demo orb. A hovered patient card only firms its hairline to rule-strong; nothing lifts on hover.
 
 ### Named Rules
 **The Live Ring Rule.** A ring only pulses while a call or a recording is live (the violet live orb, the dot in a live pill). Static strokes that mark a state are fine, such as the focus outline or the thin dashed outline of a session on leave. Decorative halos and glow rings at rest are not, and urgency is told by red words and a red count, not by a ring around the box.
@@ -313,7 +323,7 @@ Soft, modern corners: 8px for controls and week-preview bars; 12px for boxes, no
 ### Buttons
 Plainly labelled, set in Hind Siliguri at 600.
 - **Shape:** gently rounded (8px), at least 44px tall, padding 0.5rem 1.05rem; Lucide icons at 16px inline, with a 0.45rem gap.
-- **Default:** box face, strong rule stroke, ink text. On hover (pointer devices only), the stroke darkens to ink-2 and the button gains the hairline box shadow. When pressed, it drops to box-2 with no shadow and scales to 0.98, easing back over 0.16s. Every pressable control uses the same 0.98.
+- **Default:** box face, strong rule stroke, ink text. On hover (pointer devices only), hover is a surface step, never a shadow: the face shades to box-2 and the stroke firms to ink-3. When pressed, it drops to box-2 and scales to 0.98, easing back over 0.16s. Every pressable control uses the same 0.98.
 - **Primary:** action-blue fill with on-primary text; on hover, deep blue. Used for going ahead (book, save, confirm).
 - **SHEFA:** violet fill, for actions that hand work to SHEFA.
 - **Urgent:** red fill, for the needs-a-person action. **Danger** is a default button with urgent ink that turns to an urgent wash on hover.
@@ -344,12 +354,12 @@ A quiet grey chip: box-2 background, ink-2 text, no border, small rounded corner
 
 ### Inputs / Fields
 - **Style:** box face, 1px strong rule stroke, 8px corners, at least 44px tall (50px on patient pages). Labels sit above in 0.875rem at 600, in ink-2. A unit field prints its unit in a box-2 cell beside the input.
-- **Focus:** the border turns focus blue, with a 3px SHEFA-wash (violet) halo.
+- **Focus:** the border turns focus blue, with a 3px primary-wash halo.
 - **Error:** urgent border on an urgent wash; the message sits below in urgent ink at 600.
 - **Select:** a drawn chevron, no native arrow. Checkboxes and radios are accent blue.
 
 ### Segmented control
-A box-2 well with a 3px inset. The chosen segment is a box face with the hairline box shadow. On the rail, the well takes rail-tint with a rail-line stroke, and the chosen segment is a box face. It is used for language (বাংলা / English) and the three-way theme switch (follow device, light, dark; Lucide Monitor, Sun and Moon at 16px). The theme choice is remembered per device under `shefa.theme` and applied before first paint.
+A box-2 well with a 3px inset. The chosen segment is a box-face pill with the hairline box shadow that slides under the chosen button (`.seg-pill`, placed by `useSegPill` in lib/motion.tsx) over 250ms on the ease-out; buttons keep `aria-pressed` and the pill is decoration. On the rail, the well takes rail-tint with a rail-line stroke. Also used for the summary page's period (today, 7 days, 30 days). It is used for language (বাংলা / English) and the three-way theme switch (follow device, light, dark; Lucide Monitor, Sun and Moon at 16px). The theme choice is remembered per device under `shefa.theme` and applied before first paint.
 
 ### Navigation
 - **Rail (desktop):** a 16rem light column with a hairline edge. At the top is the capsule logo (a white and lavender (#c9b8f4) capsule tilted on a brand-blue tile; the favicons match) with the SHEFA wordmark in Baloo Da 2 at 800 and শেফা beside it at 600. Nav items are 44px rows, each with a bare Lucide icon in rail-ink-2 (no tile). On hover the row turns rail-hover. The active item takes the primary wash, ink text at 700, and a primary-coloured icon. The legend sits at the rail's foot, then preferences, then the signed-in user.

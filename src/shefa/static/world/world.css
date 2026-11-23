@@ -33,15 +33,17 @@ img, svg { max-width: 100%; }
   display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
   min-height: var(--tap); padding: 0.5rem 1.05rem;
   border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
-  background: var(--box); color: var(--ink);
+  background: var(--btn-face, var(--box)); color: var(--ink);
   font: inherit; font-family: var(--font-display); font-weight: 600; line-height: 1.2;
   text-decoration: none; cursor: pointer;
   transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.16s var(--ease-out);
 }
 /* the lift is for a pointer that hovers; on a phone a tap would leave it stuck on */
-/* hover is a surface step, not a shadow: the box darkens a shade and its edge firms up */
+/* hover is a surface step, not a shadow: the box darkens a shade and its edge firms up. The step
+   goes through --btn-face, which only the default face reads, so any button that sets its own
+   background (the filled variants, the desk alert, the legacy pages) keeps it on hover. */
 @media (hover: hover) and (pointer: fine) {
-  .btn:hover:not(:disabled) { border-color: var(--ink-3); background: var(--box-2); }
+  .btn:hover:not(:disabled) { border-color: var(--ink-3); --btn-face: var(--box-2); }
 }
 /* press: one value product-wide. 0.98, not 0.97: block buttons and cards are wide, and scale is proportional */
 .btn:active:not(:disabled) { background: var(--box-2); box-shadow: none; transform: scale(0.98); }
