@@ -4,6 +4,7 @@
 import { h, icon, add, clear, fill } from "./dom.js";
 import { T, setT, t } from "./i18n.js";
 import { record, micErrorKey } from "./recorder.js";
+import { orbs } from "./orbs.js";
 
 /**
  * opts.maxS     longest clip in seconds (we stop a little before the server's limit)
@@ -13,6 +14,9 @@ import { record, micErrorKey } from "./recorder.js";
  * opts.onDone   (result) => void, used when review is false
  * opts.onLevel  (0..1) => void, optional: the meter's level, for a voice ring that follows it
  * opts.onPhase  (phase) => void, optional: idle, rec, sending or review, as it changes
+ * opts.ring     true: SHEFA's voice ring stands behind the record button and becomes it (the button
+ *               turns into a clear circle over the ring once it has drawn); the returned voice(state)
+ *               shows 'speaking' while the other side's line plays
  */
 export function createCapture(opts) {
   const limit = Math.max(2, opts.maxS - 0.5);
@@ -25,7 +29,30 @@ export function createCapture(opts) {
   const err = h("p", { class: "warn", role: "alert", hidden: true });
   const review = h("div", { class: "review", hidden: true });
   const el = h("div", { class: "capture" }, meter, btn, label, err, review);
-  const level = (v) => { bar.style.transform = `scaleX(${v.toFixed(2)})`; if (opts.onLevel) opts.onLevel(v); };
+
+  // ---- the ring (opts.ring): decoration over the real button. If the orbs module never loads,
+  // the button, meter and everything else are exactly as without it.
+  let ring = null, ringState = "idle", voiceState = null, micLevel = 0;
+  const presence = h("div", { class: "live-ring", "aria-hidden": "true" });
+  const ringLevel = () => {
+    if (!el.isConnected) { queueMicrotask(dropRing); return 0; } // the card moved on: let it go
+    if (ringState === "listening") return micLevel;
+    if (ringState === "speaking") { const n = performance.now(); return 0.3 + 0.2 * Math.abs(Math.sin(n / 160) * Math.sin(n / 410)); }
+    return 0;
+  };
+  function ringTo(state) { if (state === ringState) return; ringState = state; try { if (ring) ring.set({ state }); } catch { /* decoration */ } }
+  function dropRing() { try { if (ring) ring.destroy(); } catch { /* gone */ } ring = null; presence.classList.remove("on"); }
+  if (opts.ring) {
+    const wrap = h("div", { class: "ring-wrap" });
+    btn.before(wrap);
+    wrap.append(presence, btn);
+    orbs().then((m) => {
+      if (!m || !el.isConnected) return;
+      try { ring = m.mountRing(presence, { size: 168, state: ringState, level: ringLevel, hoverBend: true }); presence.classList.add("on"); } catch { ring = null; }
+    });
+  }
+  const ringFromPhase = () => ringTo(phase === "rec" ? "listening" : phase === "sending" ? "processing" : voiceState || "idle");
+  const level = (v) => { bar.style.transform = `scaleX(${v.toFixed(2)})`; micLevel = v; if (opts.onLevel) opts.onLevel(v); };
 
   function paint() {
     btn.disabled = !enabled || phase === "sending" || phase === "review";
@@ -38,6 +65,8 @@ export function createCapture(opts) {
     meter.hidden = phase === "review" || phase === "sending";
     setT(label, phase === "sending" ? "rec_sending" : phase === "rec" ? "rec_stop" : enabled ? "rec_tap" : "rec_wait");
     label.hidden = phase === "review";
+    el.dataset.phase = phase;
+    if (opts.ring) ringFromPhase();
     if (opts.onPhase) opts.onPhase(phase);
   }
 
@@ -135,6 +164,7 @@ export function createCapture(opts) {
     error: (key, params) => showError(key, params),
     text: (msg) => { err.hidden = false; err.textContent = msg; },
     busy: () => phase !== "idle",
-    destroy() { reset(); },
+    voice(state) { voiceState = state || null; if (opts.ring) ringFromPhase(); },
+    destroy() { reset(); dropRing(); },
   };
 }

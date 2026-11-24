@@ -180,7 +180,7 @@ function micCheck(next) {
     const result = h("p", { class: "result", role: "status" });
     const go3 = h("button", { type: "button", class: "btn primary big", hidden: true, onclick: next }, icon("check"), T("mc_next"));
     const cap = createCapture({
-      review: false, maxS: 8, minS: 0.4,
+      ring: true, review: false, maxS: 8, minS: 0.4,
       onDone: (r) => {
         const loud = r.peak >= 0.03;
         const noisy = loud && r.floor > 0.04; // only truly loud surroundings: pauses are the only place noise can be measured

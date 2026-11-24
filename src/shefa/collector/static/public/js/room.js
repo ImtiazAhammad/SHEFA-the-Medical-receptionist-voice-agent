@@ -189,6 +189,7 @@ export function runRoom(view, { code, onFinish, onSolo }) {
     let choice = node.choices.length === 1 ? node.choices[0] : null;
     if (room.role === "caller" && room.picked && room.picked.node === nodeId) choice = room.picked.choice;
     cap = createCapture({
+      ring: true,
       maxS: (node.cap_s || S.cfg.max_clip_s) + 0.4, minS: S.cfg.min_clip_s,
       onAccept: async (res) => {
         const person = me();

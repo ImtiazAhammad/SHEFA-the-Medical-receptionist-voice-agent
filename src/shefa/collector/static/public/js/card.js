@@ -184,6 +184,7 @@ export function runCards(view, { first, onFinish, onPass }) {
       bubble.classList.toggle("speaking", state === "speaking");
       cue.className = "turncue " + state;
       fill(cue, state === "speaking" ? T("desk_speaking") : state === "tap" ? T("desk_tap") : final ? T("call_ending") : T("your_turn"));
+      if (cap) cap.voice(state === "speaking" ? "speaking" : null); // the ring swells while the desk speaks
     };
     const ready = () => { if (heard) return; heard = true; setCue("turn"); sync(); if (final) setTimeout(() => !dead && nid === id && callDone(), 1200); };
 
@@ -258,6 +259,7 @@ export function runCards(view, { first, onFinish, onPass }) {
     paintHint();
 
     cap = createCapture({
+      ring: true,
       maxS: (node.cap_s || S.cfg.max_clip_s) + 0.4, minS: S.cfg.min_clip_s,
       onAccept: async (res) => {
         stopSound();

@@ -219,3 +219,6 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .capture:has(.live-ring.on) .meter { display: none; }
 @media (prefers-reduced-motion: reduce) { .ring-wrap:has(.recbtn:active) .live-ring { transform: none; } }
 .orb-hold { display: grid; place-items: center; min-height: 64px; }
+
+/* scripted cards: while the person listens back to their take, the ring steps aside */
+.capture[data-phase="review"] .ring-wrap { display: none; }
