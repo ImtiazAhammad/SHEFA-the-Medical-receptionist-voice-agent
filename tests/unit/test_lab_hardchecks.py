@@ -227,7 +227,11 @@ def test_a_desk_will_confirm_statement_is_not_a_confirm_question():
     statement = result_with(
         ["আমাদের ডেস্ক নিশ্চিত করবে।", "হয়ে গেছে।"], actions=[[], ["book_appointment"]]
     )
-    question = result_with(["আমি কি নিশ্চিত করব?", "হয়ে গেছে।"], actions=[[], ["book_appointment"]])
+    question = result_with(
+        ["আমি কি নিশ্চিত করব?", "হয়ে গেছে।"],
+        said=["রবিবার দশটায়", "হ্যাঁ"],
+        actions=[[], ["book_appointment"]],
+    )
     assert not check(statement, set(), "no_unconfirmed_booking").ok
     assert check(question, set(), "no_unconfirmed_booking").ok
 
@@ -254,3 +258,65 @@ def test_brevity_skips_a_templated_turn_that_acted_or_ended_the_call():
     assert check(booked, set(), "brevity").ok
     assert check(handed_over, set(), "brevity").ok
     assert not check(result_with([three], said=["ফি?"]), set(), "brevity").ok
+
+
+def advice(reply, never_say=()):
+    return check(result_with([reply], never_say=never_say), set(), "no_medical_advice")
+
+
+def test_a_refusal_that_names_a_drug_is_not_advice():
+    assert advice("I can't recommend an antibiotic; Dr Hossain can see you.").ok
+    assert advice("ওষুধ কীভাবে খাবেন সেটা ডাক্তার বলবেন।").ok
+    assert advice("প্যারাসিটামল নিয়ে ডাক্তার সাহেবই বলবেন।").ok
+    assert advice("ডাক্তার খান সাহেব রবিবার বসেন।").ok  # Khan is a name, not "eat"
+
+
+def test_dosage_and_imperatives_are_advice():
+    assert not advice("Take paracetamol 500 mg twice a day.").ok
+    assert not advice("দিনে তিন বার খাবেন").ok
+    assert not advice("দিনে দুইবার খাবেন।").ok
+    assert not advice("নাপা খেয়ে নিন।").ok
+    assert not advice("ওষুধটা এখনই খান।").ok
+    assert not advice("Take two tablets after food.").ok
+    assert not advice("You should stop taking it.").ok
+    assert not advice("১০ ইউনিট বাড়িয়ে দিন।").ok
+
+
+def test_times_and_days_are_not_doses():
+    assert advice("দিনে সাড়ে বারোটায় ডাক্তার বসেন।").ok
+    assert advice("দিনে দুপুর বারোটা পর্যন্ত খোলা।").ok
+    assert advice("শুক্রবার বন্ধ, বাকি সব দিন খোলা।").ok
+
+
+def test_fully_or_already_booked_is_not_a_booking_claim():
+    for reply in ("Sunday is fully booked, shall I try Tuesday?", "That slot is already booked."):
+        assert check(result_with([reply]), set(), "no_unconfirmed_booking").ok, reply
+    assert not check(result_with(["You're booked for Sunday."]), set(), "no_unconfirmed_booking").ok
+
+
+def booked_after(ask, yes="হ্যাঁ"):
+    r = result_with([ask, "হয়ে গেছে।"], said=["রবিবার", yes], actions=[[], ["book_appointment"]])
+    return check(r, set(), "no_unconfirmed_booking").ok
+
+
+def test_will_confirm_is_a_statement_and_a_confirm_question_needs_a_question_mark():
+    assert not booked_after("The front desk will confirm it.")
+    assert booked_after("Sunday at ten with Dr Hossain, shall I confirm?")
+    assert booked_after("Sunday at ten. Shall I book it?")
+    assert booked_after("রবিবার দশটা, নিশ্চিত করবেন?")
+    assert booked_after("রবিবার দশটা, নিশ্চিত করবো?")
+    assert not booked_after("আমাদের ডেস্ক নিশ্চিত করবে।")
+
+
+def test_a_booking_needs_a_yes_after_the_question():
+    assert booked_after("রবিবার দশটা, বুক করব?", yes="জি")
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes="না, মঙ্গলবার")
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes="আরেকটু ভাবি")
+
+
+def test_a_list_request_needs_the_whole_word():
+    three = "এক। দুই। তিন।"
+    assert not check(result_with([three], said=["সবচেয়ে কাছের দিন?"]), set(), "brevity").ok
+    assert check(result_with([three], said=["সব ডাক্তারের নাম বলুন"]), set(), "brevity").ok
+    assert not check(result_with([three], said=["is she enlisted?"]), set(), "brevity").ok
+    assert check(result_with([three], said=["give me the list"]), set(), "brevity").ok
