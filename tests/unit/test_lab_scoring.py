@@ -520,3 +520,21 @@ class TestScoreCommand:
 
     def test_compare_with_an_unreadable_file_is_exit_2(self, tmp_path, capsys):
         assert cli.main(["lab", "compare", str(tmp_path / "x"), str(tmp_path / "y")]) == 2
+
+
+def test_the_transcript_shows_what_the_caller_said_and_what_shefa_heard():
+    from shefa.lab.runner import ScenarioResult, TurnRecord
+    from shefa.lab.scenarios import Scenario
+
+    result = ScenarioResult(
+        Scenario(id="m", title="t", tests="t"),
+        turns=[
+            TurnRecord(said="রবিবার দশটায়", heard="রবিবার দশটায়", reply="ঠিক আছে?", state="active",
+                       language="bn", greeting="জি, বলুন।"),
+            TurnRecord(said="হ্যাঁ, রহমান", heard="হ্যাঁ, রমজান", reply="জি।", state="active",
+                       language="bn"),
+        ],
+    )
+    lines = scoring.transcript_of(result)
+    assert lines[1] == ("patient", "রবিবার দশটায়")  # heard as said: shown once
+    assert lines[3] == ("patient", "said: হ্যাঁ, রহমান  (SHEFA heard: হ্যাঁ, রমজান)")

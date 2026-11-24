@@ -1061,7 +1061,14 @@ async def _bakeoff(scenarios: list[Any], args: argparse.Namespace) -> int:
     finally:
         await registry.reset()
     rows, winner = result["rows"], result["winner"]
-    print(f"\n{bakeoff.table(rows, winner, result['tts_first_ms'], result['budget_ms'])}")
+    text = bakeoff.table(
+        rows,
+        winner,
+        result["tts_first_ms"],
+        result["budget_ms"],
+        gpu_baseline_mb=result.get("gpu_baseline_mb"),
+    )
+    print(f"\n{text}")
     print(f"Bake-off: {result['path']}")
     return 0 if any(row["status"] == "ok" for row in rows) else 1  # nothing was scored
 

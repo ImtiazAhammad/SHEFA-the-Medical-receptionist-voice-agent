@@ -314,3 +314,34 @@ def test_compare_warns_when_the_judge_caller_tags_or_speech_differ():
 def test_grounded_is_labelled_as_a_digits_only_check():
     assert "grounded (digits only)" in summary(made())
     assert "grounded (digits only)" in compare(made(), made())
+
+
+def _git(monkeypatch, status_out, fail_status=False):
+    import subprocess
+
+    from shefa.lab import scorecard
+
+    seen = []
+
+    def run(cmd, **kwargs):
+        seen.append(cmd)
+        if cmd[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="abc1234\n", stderr="")
+        if fail_status:
+            raise subprocess.CalledProcessError(1, cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=status_out, stderr="")
+
+    monkeypatch.setattr(scorecard.subprocess, "run", run)
+    return scorecard._git_commit(), seen
+
+
+def test_git_commit_is_marked_dirty_when_tracked_files_changed(monkeypatch):
+    commit, seen = _git(monkeypatch, " M src/shefa/lab/scorecard.py\n")
+    assert commit == "abc1234-dirty"
+    status = next(cmd for cmd in seen if "status" in cmd)
+    assert "--porcelain" in status and "--untracked-files=no" in status
+
+
+def test_git_commit_is_clean_without_changes_or_when_status_fails(monkeypatch):
+    assert _git(monkeypatch, "")[0] == "abc1234"
+    assert _git(monkeypatch, "", fail_status=True)[0] == "abc1234"

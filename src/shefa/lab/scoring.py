@@ -67,12 +67,19 @@ def select_scenarios(args: Any) -> list[Scenario]:
 
 
 def transcript_of(result: ScenarioResult) -> list[tuple[str, str]]:
-    """The call as the judge reads it: the greeting, then each line the caller and agent said."""
+    """The call as the judge reads it: the greeting, then each line the caller and agent said.
+
+    When SHEFA misheard a line, the caller's line shows both ("said: ...  (SHEFA heard: ...)"),
+    so the judge can see whether the reply recovered from the mishearing.
+    """
     lines: list[tuple[str, str]] = []
     for turn in result.turns:
         if turn.greeting:
             lines.append(("agent", turn.greeting))
-        lines += [("patient", turn.said), ("agent", turn.reply)]
+        caller = turn.said
+        if turn.heard and turn.heard != turn.said:
+            caller = f"said: {turn.said}  (SHEFA heard: {turn.heard})"
+        lines += [("patient", caller), ("agent", turn.reply)]
     return lines
 
 

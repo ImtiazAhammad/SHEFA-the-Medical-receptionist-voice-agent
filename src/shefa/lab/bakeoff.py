@@ -502,10 +502,21 @@ def _cell(value: float | None, digits: int = 0) -> str:
     return "-" if value is None else f"{value:.{digits}f}"
 
 
+def _delta(value: float | None, baseline: float | None) -> str:
+    return "-" if value is None or baseline is None else f"{value - baseline:+.0f}"
+
+
 def table(
-    rows: list[dict], winner: str | None, tts_first_ms: float | None, budget_ms: float
+    rows: list[dict],
+    winner: str | None,
+    tts_first_ms: float | None,
+    budget_ms: float,
+    gpu_baseline_mb: float | None = None,
 ) -> str:
-    """The comparison as text: one line per model, the reason for each non-ok row, the winner."""
+    """The comparison as text: one line per model, the reason for each non-ok row, the winner.
+
+    `GPU +MB` is each model's memory reading less the reading before the first candidate,
+    so other programs on the card do not count."""
     header = (
         "model",
         "status",
@@ -513,6 +524,7 @@ def table(
         "p95 ms",
         "margin",
         "GPU MB",
+        "GPU +MB",
         "n",
         "hard",
         "task",
@@ -528,6 +540,7 @@ def table(
             _cell(row.get("first_sentence_p95_ms")),
             _cell(row.get("margin_ms")),
             _cell(row.get("gpu_mb")),
+            _delta(row.get("gpu_mb"), gpu_baseline_mb),
             _cell(row.get("n")),
             _cell(row.get("hard_pass"), 3),
             _cell(row.get("task_pass"), 3),

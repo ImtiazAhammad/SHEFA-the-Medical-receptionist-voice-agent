@@ -385,3 +385,13 @@ async def test_streamed_requests_without_extra_body_send_no_extra_fields(call):
     async for _ in getattr(llm, call)(_MESSAGES):
         pass
     assert "think" not in bodies[0] and "reasoning_effort" not in bodies[0]
+
+
+@pytest.mark.parametrize("call", ["generate_events", "generate_stream"])
+async def test_an_empty_extra_body_sends_no_extra_fields(call):
+    llm, bodies = _wire_llm({})
+    async for _ in getattr(llm, call)(_MESSAGES):
+        pass
+    assert set(bodies[0]) <= {"model", "messages", "stream", "temperature", "max_tokens",
+                              "stream_options", "tools", "tool_choice"}
+    assert "think" not in bodies[0] and "extra_body" not in bodies[0]

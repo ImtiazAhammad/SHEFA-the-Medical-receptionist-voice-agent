@@ -840,6 +840,47 @@ class TestBakeoffCommand:
         assert seen["models"] == ["m"] and [s.id for s in seen["scenarios"]] == ["a"]
 
 
+    def test_a_run_where_a_model_was_scored_exits_0(self, tmp_path, monkeypatch, capsys):
+        from shefa.models.registry import registry
+
+        path = self._scenarios(tmp_path)
+
+        async def fake_bake(models, args, **kwargs):
+            row = {
+                "model": "m",
+                "status": "ok",
+                "message": None,
+                "first_sentence_p50_ms": 1.0,
+                "first_sentence_p95_ms": 2.0,
+                "margin_ms": 10.0,
+                "gpu_mb": 9500,
+                "hard_pass": 1.0,
+                "task_pass": 0.9,
+                "full_pass": 0.9,
+                "n": 10,
+                "judged_mean": 4.0,
+                "bangla_purity": 1.0,
+            }
+            return {
+                "rows": [row],
+                "winner": "m",
+                "tts_first_ms": 400.0,
+                "budget_ms": 1200,
+                "gpu_baseline_mb": 8000,
+                "path": "x.json",
+            }
+
+        async def reset():
+            return None
+
+        monkeypatch.setattr(bakeoff, "bake", fake_bake)
+        monkeypatch.setattr(registry, "reset", reset)
+        argv = ["lab", "bakeoff", "m", "--scenarios", str(path), "--out", str(tmp_path)]
+        assert cli.main([*argv, "--mishear", "0"]) == 0
+        out = capsys.readouterr().out
+        assert "Winner: m" in out and "+1500" in out  # the GPU delta over the baseline
+
+
 async def test_rounds_from_the_options_reach_the_probe(monkeypatch, tmp_path, probes):
     monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
     await run_bakeoff(["a"], args_stub(tmp_path, rounds=25), scorer=fake_scorer)
@@ -935,39 +976,6 @@ async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
     assert data["complete"] is True and len(data["rows"]) == 2 and str(final) == result["path"]
     assert [r["status"] for r in data["rows"]] == ["ok", "ok"]
 
-    def test_a_run_where_a_model_was_scored_exits_0(self, tmp_path, monkeypatch):
-        from shefa.models.registry import registry
-
-        path = self._scenarios(tmp_path)
-
-        async def fake_bake(models, args, **kwargs):
-            row = {
-                "model": "m",
-                "status": "ok",
-                "message": None,
-                "first_sentence_p50_ms": 1.0,
-                "first_sentence_p95_ms": 2.0,
-                "margin_ms": 10.0,
-                "gpu_mb": None,
-                "hard_pass": 1.0,
-                "judged_mean": 4.0,
-                "bangla_purity": 1.0,
-            }
-            return {
-                "rows": [row],
-                "winner": "m",
-                "tts_first_ms": 400.0,
-                "budget_ms": 1200,
-                "path": "x.json",
-            }
-
-        async def reset():
-            return None
-
-        monkeypatch.setattr(bakeoff, "bake", fake_bake)
-        monkeypatch.setattr(registry, "reset", reset)
-        argv = ["lab", "bakeoff", "m", "--scenarios", str(path), "--out", str(tmp_path)]
-        assert cli.main([*argv, "--mishear", "0"]) == 0
 
 
 def _ok_row(model, full, judged=4.0, hard=1.0, task=None, n=25, p95=300.0):
@@ -1031,3 +1039,13 @@ async def test_the_json_says_which_server_the_latency_was_measured_on(
     result = await bakeoff.bake(["a"], args_stub(tmp_path), scorer=fake_scorer, tts_timer=tts)
     saved = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
     assert saved["latency_server"] == "ollama" and result["latency_server"] == "ollama"
+
+
+def test_table_shows_each_models_gpu_delta_over_the_baseline():
+    rows = [_ok_row("a", full=0.9), {**_ok_row("b", full=0.5), "gpu_mb": None}]
+    text = bakeoff.table(rows, "a", 400.0, 1200, gpu_baseline_mb=6500)
+    assert "GPU +MB" in text.splitlines()[0]
+    a_line = next(line for line in text.splitlines() if line.startswith("a "))
+    assert "+2500" in a_line  # 9000 - 6500
+    assert "+" not in next(line for line in text.splitlines() if line.startswith("b "))
+    assert "+2500" not in bakeoff.table(rows, "a", 400.0, 1200)  # no baseline, no delta

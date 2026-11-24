@@ -52,18 +52,30 @@ def _percentile(values: Sequence[float], pct: float) -> float | None:
 
 
 def _git_commit() -> str | None:
-    try:
-        done = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+    """The short commit the run was made from, with "-dirty" when tracked files differ from
+    it (untracked files, such as the bench's own output, do not count)."""
+
+    def git(*command: str) -> str:
+        return subprocess.run(
+            ["git", *command],
             cwd=Path(__file__).parent,
             capture_output=True,
             text=True,
             timeout=10,
             check=True,
-        )
+        ).stdout.strip()
+
+    try:
+        commit = git("rev-parse", "--short", "HEAD")
     except (OSError, subprocess.SubprocessError):
         return None
-    return done.stdout.strip() or None
+    if not commit:
+        return None
+    try:
+        dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    except (OSError, subprocess.SubprocessError):
+        dirty = False
+    return f"{commit}-dirty" if dirty else commit
 
 
 def _checks(result: ScenarioResult) -> list[CheckResult]:
