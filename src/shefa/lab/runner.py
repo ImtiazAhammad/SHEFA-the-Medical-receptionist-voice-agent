@@ -16,6 +16,7 @@ emergency handoff as a phone call. Optional layers make it closer to a call:
 from __future__ import annotations
 
 import contextlib
+import random
 import re
 import time
 import unicodedata
@@ -26,6 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from shefa.audio import mulaw8k_to_s16le_16k_mono, s16le_16k_mono_to_mulaw8k
+from shefa.lab.mishear import Confusions
+from shefa.lab.mishear import mishear as mishear_text
 from shefa.models.tts.routed import script_language
 
 if TYPE_CHECKING:
@@ -220,6 +223,9 @@ class Lab:
         patient_llm: Any = None,
         today: date | None = None,
         clock: Any = time.perf_counter,
+        mishear: Confusions | None = None,
+        mishear_rate: float = 0.0,
+        seed: int = 0,
     ) -> None:
         self.clinic_file = Path(clinic_file)
         self.work_dir = Path(work_dir)
@@ -228,6 +234,9 @@ class Lab:
         self.patient_llm = patient_llm
         self.today = today or date.today()
         self.clock = clock
+        self.mishear = mishear or Confusions({}, 0.0)
+        self.mishear_rate = mishear_rate
+        self.rng = random.Random(seed)
 
     # --- audio ---------------------------------------------------------------------
     async def speak(self, text: str, language: str) -> tuple[bytes, float | None]:
@@ -343,6 +352,9 @@ class Lab:
             record.wer = word_error_rate(said, record.heard)
         elif self.voice is not None:
             record.patient_audio, _ = await self.speak(said, scenario.language)
+        if (self.voice is None or self.stt is None) and self.mishear_rate > 0:
+            record.heard = mishear_text(said, self.mishear, self.mishear_rate, self.rng)
+            record.wer = word_error_rate(said, record.heard)
         started = self.clock()
         turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
         record.llm_ms = (self.clock() - started) * 1000
