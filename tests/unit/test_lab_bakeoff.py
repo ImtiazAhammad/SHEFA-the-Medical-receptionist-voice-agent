@@ -85,7 +85,7 @@ def fake_available(names: set[str]):
 def probes(monkeypatch):
     """No server, no card: the probes, the model client and the unloader are faked."""
     calls = SimpleNamespace(
-        unloaded=[], built=[], gpu=itertools.chain([8000], itertools.repeat(9000))
+        unloaded=[], built=[], rounds=[], gpu=itertools.chain([8000], itertools.repeat(9000))
     )
     llm = SlowFirstChunkLLM(0)
 
@@ -93,8 +93,9 @@ def probes(monkeypatch):
         calls.built.append((model, base_url))
         return llm
 
-    async def latency(llm, prompts, concurrency=3, rounds=4):
-        return {"p50_ms": 300.0, "p95_ms": 500.0}
+    async def latency(llm, prompts, concurrency=3, rounds=10):
+        calls.rounds.append(rounds)
+        return {"p50_ms": 300.0, "p95_ms": 500.0, "samples": 3 * rounds}
 
     async def unload(model, base="http://localhost:11434"):
         calls.unloaded.append(model)
@@ -240,14 +241,17 @@ async def test_the_time_is_to_the_first_text_and_the_reply_is_then_read_to_its_e
     assert llm.completed == 1 and llm.in_flight == 0  # nothing left half-open
 
 
-async def test_the_no_thinking_switch_is_sent_with_every_probe():
-    off = {"think": False, "reasoning_effort": "none"}
-    llm = SlowFirstChunkLLM(delay_s=0, extra_body=off)
+async def test_the_probe_adds_no_overrides_of_its_own():
+    """The client applies its own extra fields; passing them again would send them twice."""
+    llm = SlowFirstChunkLLM(delay_s=0, extra_body={"think": False})
     await first_token_latency(llm, [[{"role": "user", "content": "x"}]], concurrency=2, rounds=1)
-    assert llm.kwargs == [{"extra_body": off}] * 2
-    plain = SlowFirstChunkLLM(delay_s=0)
-    await first_token_latency(plain, [[{"role": "user", "content": "x"}]], concurrency=1, rounds=1)
-    assert plain.kwargs == [{}]
+    assert llm.kwargs == [{}, {}]
+
+
+async def test_the_default_is_ten_rounds_of_three_for_thirty_samples():
+    llm = SlowFirstChunkLLM(delay_s=0)
+    out = await first_token_latency(llm, [[{"role": "user", "content": "x"}]])
+    assert out["samples"] == 30 and llm.max_in_flight == 3
 
 
 async def test_a_reply_with_no_text_is_an_error():
@@ -260,7 +264,7 @@ async def test_a_reply_with_no_text_is_an_error():
 
 
 async def test_the_probe_reaches_the_real_client_with_think_off(monkeypatch):
-    """The real adapter: its streaming call forwards the per-call `extra_body` to the server."""
+    """The real adapter sends its `extra_body` on the streamed request the probe makes."""
     from shefa.lab.models import NO_THINKING, ollama_llm
 
     sent = []
@@ -401,6 +405,8 @@ async def test_row_carries_latency_memory_quality_and_scorecard_path(monkeypatch
         "message": None,
         "first_token_p50_ms": 300.0,
         "first_token_p95_ms": 500.0,
+        "first_token_samples": 30,
+        "margin_ms": None,
         "gpu_mb": 8000,
         "hard_pass": 0.9,
         "judged_mean": 4.1,
@@ -445,7 +451,7 @@ async def test_a_model_whose_scoring_raises_gets_an_error_row_and_the_run_contin
 async def test_a_failing_latency_probe_is_an_error_row(monkeypatch, tmp_path, probes):
     monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
 
-    async def broken(llm, prompts, concurrency=3, rounds=4):
+    async def broken(llm, prompts, concurrency=3, rounds=10):
         raise httpx.ConnectError("refused")
 
     monkeypatch.setattr(bakeoff, "first_token_latency", broken)
@@ -519,7 +525,9 @@ def test_table_lists_every_row_and_the_winner():
     assert "No winner: no model finished" in bakeoff.table(rows[1:], None, 400.0, 1200)
     ok = [rows[0]]
     assert "voice's first-sentence time was not measured" in bakeoff.table(ok, None, None, 1200)
-    assert "fits within 1200 ms" in bakeoff.table(ok, None, 900.0, 1200)
+    inconclusive = bakeoff.table(ok, None, 900.0, 1200)
+    assert "fits within 1200 ms" in inconclusive
+    assert "No winner (inconclusive: re-run or raise --rounds)" in inconclusive
 
 
 async def test_bake_picks_the_winner_with_the_voice_time_and_saves_json(
@@ -653,6 +661,7 @@ class TestBakeoffCommand:
         )
         assert args.tags == "bakeoff" and args.out == "data/bench" and args.mishear == 0.15
         assert args.base_url == args.side_base_url == "http://localhost:11434/v1"
+        assert args.rounds == 10
 
     def test_the_side_server_is_separate_from_the_candidates(self):
         args = cli.build_parser().parse_args(
@@ -681,6 +690,10 @@ class TestBakeoffCommand:
         assert cli.main(["lab", "bakeoff", "m", "--scenarios", str(path)]) == 2
         err = capsys.readouterr().err
         assert "bakeoff" in err and "--tags" in err
+
+    def test_rounds_must_be_positive(self, capsys):
+        assert cli.main(["lab", "bakeoff", "m", "--rounds", "0"]) == 2
+        assert "--rounds" in capsys.readouterr().err
 
     def test_a_bad_mishear_rate_is_exit_2(self, tmp_path, capsys):
         assert cli.main(["lab", "bakeoff", "m", "--mishear", "2"]) == 2
@@ -750,6 +763,135 @@ class TestBakeoffCommand:
             ]
         )
         out = capsys.readouterr().out
-        assert code == 0 and resets
+        assert code == 1 and resets  # no model was scored
         assert "not in Ollama" in out and "No winner" in out and "bakeoff-x.json" in out
         assert seen["models"] == ["m"] and [s.id for s in seen["scenarios"]] == ["a"]
+
+
+async def test_rounds_from_the_options_reach_the_probe(monkeypatch, tmp_path, probes):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
+    await run_bakeoff(["a"], args_stub(tmp_path, rounds=25), scorer=fake_scorer)
+    await run_bakeoff(["a"], args_stub(tmp_path), scorer=fake_scorer)
+    assert probes.rounds == [25, 10]
+
+
+async def test_unloading_says_which_models(monkeypatch, tmp_path, probes, capsys):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
+    await run_bakeoff(["a"], args_stub(tmp_path), scorer=fake_scorer)
+    assert "unloading a, caller, judge from Ollama" in capsys.readouterr().out
+
+
+async def test_bake_records_samples_and_margin_per_measured_row(monkeypatch, tmp_path, probes):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a", "b"}))
+    p95 = {"a": 500.0, "b": 900.0}
+
+    async def latency(llm, prompts, concurrency=3, rounds=10):
+        return {"p50_ms": 1.0, "p95_ms": p95[probes.built[-1][0]], "samples": 30}
+
+    monkeypatch.setattr(bakeoff, "first_token_latency", latency)
+
+    async def tts():
+        return 400.0
+
+    result = await bakeoff.bake(
+        ["a", "b", "c"], args_stub(tmp_path), scorer=fake_scorer, tts_timer=tts
+    )
+    a, b, c = result["rows"]
+    assert (a["first_token_samples"], a["margin_ms"]) == (30, 300.0)  # 1200 - (500 + 400)
+    assert b["margin_ms"] == -100.0  # over budget by 100 ms
+    assert c["margin_ms"] is None and c["status"] == "unavailable"
+    assert result["winner"] == "a" and result["complete"] is True and result["rounds"] == 10
+
+
+class Interrupt(BaseException):
+    """Stands in for Ctrl-C, which is not an Exception."""
+
+
+async def test_the_json_is_written_after_each_row_and_survives_an_interrupt(
+    monkeypatch, tmp_path, probes
+):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a", "b"}))
+
+    async def scorer(model, args, **kwargs):
+        if model == "b":
+            raise Interrupt
+        return {**CARD, "meta": {"model": model}}
+
+    async def tts():
+        return 400.0
+
+    with pytest.raises(Interrupt):
+        await bakeoff.bake(
+            ["a", "b"],
+            args_stub(tmp_path, with_voice=True),
+            scorer=scorer,
+            tts_timer=tts,
+            voice_loader=_noop,
+        )
+    [saved] = tmp_path.glob("bakeoff-*.json")
+    data = json.loads(saved.read_text(encoding="utf-8"))
+    assert data["complete"] is False
+    assert [r["model"] for r in data["rows"]] == ["a"] and data["rows"][0]["status"] == "ok"
+    assert data["winner"] == "a"  # the winner so far
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+async def _noop():
+    return None
+
+
+async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
+    monkeypatch, tmp_path, probes
+):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a", "b"}))
+    seen = []
+
+    async def scorer(model, args, **kwargs):
+        [saved] = tmp_path.glob("bakeoff-*.json") if model == "b" else [None]
+        if saved:
+            seen.append(json.loads(saved.read_text(encoding="utf-8")))
+        return {**CARD, "meta": {"model": model}}
+
+    async def tts():
+        return 400.0
+
+    result = await bakeoff.bake(["a", "b"], args_stub(tmp_path), scorer=scorer, tts_timer=tts)
+    assert len(seen) == 1 and [r["model"] for r in seen[0]["rows"]] == ["a"]
+    assert seen[0]["complete"] is False and seen[0]["winner"] is None  # voice not timed yet
+    [final] = tmp_path.glob("bakeoff-*.json")
+    data = json.loads(final.read_text(encoding="utf-8"))
+    assert data["complete"] is True and len(data["rows"]) == 2 and str(final) == result["path"]
+
+    def test_a_run_where_a_model_was_scored_exits_0(self, tmp_path, monkeypatch):
+        from shefa.models.registry import registry
+
+        path = self._scenarios(tmp_path)
+
+        async def fake_bake(models, args, **kwargs):
+            row = {
+                "model": "m",
+                "status": "ok",
+                "message": None,
+                "first_token_p50_ms": 1.0,
+                "first_token_p95_ms": 2.0,
+                "margin_ms": 10.0,
+                "gpu_mb": None,
+                "hard_pass": 1.0,
+                "judged_mean": 4.0,
+                "bangla_purity": 1.0,
+            }
+            return {
+                "rows": [row],
+                "winner": "m",
+                "tts_first_ms": 400.0,
+                "budget_ms": 1200,
+                "path": "x.json",
+            }
+
+        async def reset():
+            return None
+
+        monkeypatch.setattr(bakeoff, "bake", fake_bake)
+        monkeypatch.setattr(registry, "reset", reset)
+        argv = ["lab", "bakeoff", "m", "--scenarios", str(path), "--out", str(tmp_path)]
+        assert cli.main([*argv, "--mishear", "0"]) == 0

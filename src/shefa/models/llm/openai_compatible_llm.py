@@ -136,6 +136,7 @@ class OpenAICompatibleLLM(BaseLLM):
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             stream=True,
+            **({"extra_body": self._extra_body} if self._extra_body else {}),
         )
         async for chunk in response:
             delta = chunk.choices[0].delta if chunk.choices else None
@@ -155,6 +156,7 @@ class OpenAICompatibleLLM(BaseLLM):
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             stream=True,
+            **({"extra_body": self._extra_body} if self._extra_body else {}),
             **overrides,
         )
 

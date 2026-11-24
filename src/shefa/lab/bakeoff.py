@@ -34,6 +34,7 @@ from shefa.lab.scoring import run_scorecard
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+ROUNDS = 10  # x 3 at once = 30 samples, so the p95 is not just the slowest one
 BUDGET_MS = 1200.0  # first token (p95) + the voice's first sentence, from the caller's silence
 DEFAULT_TAGS = "bakeoff"
 TTS_SENTENCE = "জি, বলুন, কীভাবে সাহায্য করতে পারি?"
@@ -129,14 +130,12 @@ async def _first_chunk_ms(llm: Any, messages: list[dict[str, str]]) -> float:
 
     Reading on keeps the stream from being abandoned half-open, which would leave the server
     generating and slow the next request. Streams go through `generate_events`, the call the
-    pipeline makes, with the model client's own extra fields (the no-thinking switch) passed
-    along, since the streaming call does not send them by itself.
+    pipeline makes, so the probe sees what a call sees (the client sends its no-thinking
+    switch on streamed requests too).
     """
-    extra = getattr(llm, "extra_body", None)
-    options = {"extra_body": extra} if extra else {}
     started = time.perf_counter()
     first: float | None = None
-    async with contextlib.aclosing(llm.generate_events(messages, **options)) as stream:
+    async with contextlib.aclosing(llm.generate_events(messages)) as stream:
         async for event in stream:
             if first is None and event.text:
                 first = (time.perf_counter() - started) * 1000
@@ -146,13 +145,12 @@ async def _first_chunk_ms(llm: Any, messages: list[dict[str, str]]) -> float:
 
 
 async def first_token_latency(
-    llm: Any, prompts: list[list[dict[str, str]]], concurrency: int = 3, rounds: int = 4
+    llm: Any, prompts: list[list[dict[str, str]]], concurrency: int = 3, rounds: int = ROUNDS
 ) -> dict[str, Any]:
     """Time from sending a request to its first streamed text, `concurrency` at a time.
 
     `rounds` batches of `concurrency` requests, prompts taken in turn; a round ends when
-    all its replies have finished. Returns `p50_ms`, `p95_ms` (nearest rank: with few
-    samples the p95 is the slowest one) and `samples`.
+    all its replies have finished. Returns `p50_ms`, `p95_ms` (nearest rank) and `samples`.
     """
     if not prompts:
         raise ValueError("first_token_latency needs at least one prompt")
@@ -247,6 +245,8 @@ def _blank_row(model: str) -> dict[str, Any]:
         "message": None,
         "first_token_p50_ms": None,
         "first_token_p95_ms": None,
+        "first_token_samples": None,
+        "margin_ms": None,
         "gpu_mb": None,
         "hard_pass": None,
         "judged_mean": None,
@@ -265,6 +265,7 @@ async def _unload_after(model: str, args: Any, root: str) -> None:
             for n in (getattr(args, "caller_model", None), getattr(args, "judge_model", None))
             if n and n not in names
         ]
+    print(f"  unloading {', '.join(names)} from Ollama")
     for name in names:
         await unload_model(name, root)
 
@@ -275,18 +276,21 @@ async def run_bakeoff(
     scorer: Callable[..., Awaitable[dict[str, Any]]] = run_scorecard,
     *,
     scenarios: list[Any] | None = None,
+    on_row: Callable[[list[dict[str, Any]]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """One row per model, in order: availability, warm-up, latency, memory, then the scorecard.
 
     A model Ollama does not have gets `status: "unavailable"`; one whose probe or scoring
     raises gets `status: "error"` and the message (what was measured before stays in the
     row); neither stops the others. `args.base_url` is the candidates' server and
-    `args.out` is where each scorecard is saved. The saved label and table files are not
-    checked here: `shefa lab bakeoff` checks them once before any model runs
-    (`scoring.validate_files`).
+    `args.out` is where each scorecard is saved and `args.rounds` the probe's rounds.
+    `on_row` is called with the rows so far after each model is done. The saved label and
+    table files are not checked here: `shefa lab bakeoff` checks them once before any model
+    runs (`scoring.validate_files`).
     """
     base_url = getattr(args, "base_url", None) or OLLAMA_URL
     root = _ollama_root(base_url)
+    rounds = int(getattr(args, "rounds", None) or ROUNDS)
     rows: list[dict[str, Any]] = []
     for number, model in enumerate(models, 1):
         print(f"\n[{number}/{len(models)}] {model}")
@@ -298,14 +302,17 @@ async def run_bakeoff(
                 message=f"not found in Ollama at {root} (is it running, is the model pulled?)",
             )
             print(f"  skipped: {row['message']}")
+            if on_row is not None:
+                on_row(rows)
             continue
         llm = ollama_llm(model, base_url=base_url)
         try:
             print("  loading and timing the first token ...")
             await _first_chunk_ms(llm, LATENCY_PROMPTS[0])  # loading from disk is not latency
-            latency = await first_token_latency(llm, LATENCY_PROMPTS)
+            latency = await first_token_latency(llm, LATENCY_PROMPTS, rounds=rounds)
             row["first_token_p50_ms"] = latency["p50_ms"]
             row["first_token_p95_ms"] = latency["p95_ms"]
+            row["first_token_samples"] = latency["samples"]
             row["gpu_mb"] = await asyncio.to_thread(gpu_memory_mb)
             card = await scorer(model, args, scenarios=scenarios, agent_llm=llm)
             row["hard_pass"] = card["hard"]["pass_rate"]
@@ -320,6 +327,8 @@ async def run_bakeoff(
             with contextlib.suppress(Exception):
                 await llm.close()
             await _unload_after(model, args, root)
+        if on_row is not None:
+            on_row(rows)
     return rows
 
 
@@ -346,7 +355,6 @@ async def bake(
     """
     started = datetime.now().isoformat(timespec="seconds")
     baseline = await asyncio.to_thread(gpu_memory_mb)
-    tts_first_ms: float | None = None
 
     async def time_voice(load: bool) -> float | None:
         try:
@@ -360,27 +368,51 @@ async def bake(
             )
             return None
 
-    with_voice = bool(getattr(args, "with_voice", False))
-    if with_voice:
-        tts_first_ms = await time_voice(load=True)
-    rows = await run_bakeoff(models, args, scorer, scenarios=scenarios)
-    if not with_voice and any(row["status"] == "ok" for row in rows):
-        tts_first_ms = await time_voice(load=False)
-    winner = pick_winner(rows, tts_first_ms, BUDGET_MS)
-    result: dict[str, Any] = {
-        "started": started,
-        "tags": getattr(args, "tags", "") or "",
-        "models": list(models),
-        "with_voice": with_voice,
-        "budget_ms": BUDGET_MS,
-        "tts_first_ms": tts_first_ms,
-        "gpu_baseline_mb": baseline,
-        "winner": winner,
-        "rows": rows,
-    }
     path = Path(args.out) / f"bakeoff-{_stamp()}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    state: dict[str, Any] = {"tts": None}
+
+    def snapshot(rows: list[dict[str, Any]], complete: bool) -> dict[str, Any]:
+        """Margins and the winner on the rows so far, written over the same file."""
+        tts = state["tts"]
+        for row in rows:
+            p95 = row.get("first_token_p95_ms")
+            measured = row.get("status") == "ok" and p95 is not None and tts is not None
+            # budget left once the voice has spoken its first sentence; negative: over budget
+            row["margin_ms"] = BUDGET_MS - (p95 + tts) if measured else None
+        result: dict[str, Any] = {
+            "started": started,
+            "tags": getattr(args, "tags", "") or "",
+            "models": list(models),
+            "with_voice": with_voice,
+            "rounds": int(getattr(args, "rounds", None) or ROUNDS),
+            "budget_ms": BUDGET_MS,
+            "tts_first_ms": tts,
+            "gpu_baseline_mb": baseline,
+            "winner": pick_winner(rows, tts, BUDGET_MS),
+            "complete": complete,
+            "rows": rows,
+        }
+        scratch = path.with_suffix(
+            ".json.tmp"
+        )  # replaced whole, so an interrupt never leaves half a file
+        scratch.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        scratch.replace(path)
+        return result
+
+    with_voice = bool(getattr(args, "with_voice", False))
+    if with_voice:
+        state["tts"] = await time_voice(load=True)
+    rows = await run_bakeoff(
+        models,
+        args,
+        scorer,
+        scenarios=scenarios,
+        on_row=lambda so_far: snapshot(so_far, complete=False),
+    )
+    if not with_voice and any(row["status"] == "ok" for row in rows):
+        state["tts"] = await time_voice(load=False)
+    result = snapshot(rows, complete=True)
     return {**result, "path": str(path)}
 
 
@@ -392,13 +424,24 @@ def table(
     rows: list[dict], winner: str | None, tts_first_ms: float | None, budget_ms: float
 ) -> str:
     """The comparison as text: one line per model, the reason for each non-ok row, the winner."""
-    header = ("model", "status", "p50 ms", "p95 ms", "GPU MB", "hard pass", "judged", "Bangla")
+    header = (
+        "model",
+        "status",
+        "p50 ms",
+        "p95 ms",
+        "margin",
+        "GPU MB",
+        "hard pass",
+        "judged",
+        "Bangla",
+    )
     body = [
         (
             row["model"],
             row["status"],
             _cell(row.get("first_token_p50_ms")),
             _cell(row.get("first_token_p95_ms")),
+            _cell(row.get("margin_ms")),
             _cell(row.get("gpu_mb")),
             _cell(row.get("hard_pass"), 3),
             _cell(row.get("judged_mean"), 2),
@@ -434,7 +477,8 @@ def table(
         out.append("No winner: the voice's first-sentence time was not measured.")
     else:
         out.append(
-            f"No winner: no model's first-token p95 plus the voice's first sentence "
-            f"({tts_first_ms:.0f} ms) fits within {budget_ms:.0f} ms."
+            "No winner (inconclusive: re-run or raise --rounds): no model's first-token p95 "
+            f"plus the voice's first sentence ({tts_first_ms:.0f} ms) fits within "
+            f"{budget_ms:.0f} ms."
         )
     return "\n".join(out)

@@ -286,10 +286,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lab_bakeoff.add_argument("models", nargs="+", metavar="MODEL", help="Ollama model names")
     _add_bench_options(lab_bakeoff, tags_default="bakeoff")
+    from shefa.lab.models import OLLAMA_URL
+
     lab_bakeoff.add_argument(
-        "--base-url",
-        default="http://localhost:11434/v1",
-        help="the Ollama server the candidates run on",
+        "--base-url", default=OLLAMA_URL, help="the Ollama server the candidates run on"
+    )
+    lab_bakeoff.add_argument(
+        "--rounds",
+        type=int,
+        default=10,
+        help="first-token timing rounds per model, 3 requests at once each (more: steadier p95)",
     )
     lab_bakeoff.add_argument(
         "--with-voice",
@@ -1013,6 +1019,9 @@ def _run_bakeoff(args: argparse.Namespace) -> int:
     if not 0.0 <= args.mishear <= 1.0:
         print("--mishear is a share of words between 0 and 1", file=sys.stderr)
         return 2
+    if args.rounds < 1:
+        print("--rounds must be at least 1", file=sys.stderr)
+        return 2
     try:
         scenarios = select_scenarios(args)
     except ValueError as error:
@@ -1042,7 +1051,7 @@ async def _bakeoff(scenarios: list[Any], args: argparse.Namespace) -> int:
     rows, winner = result["rows"], result["winner"]
     print(f"\n{bakeoff.table(rows, winner, result['tts_first_ms'], result['budget_ms'])}")
     print(f"Bake-off: {result['path']}")
-    return 0
+    return 0 if any(row["status"] == "ok" for row in rows) else 1  # nothing was scored
 
 
 def _run_compare(args: argparse.Namespace) -> int:
