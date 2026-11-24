@@ -255,6 +255,51 @@ async def test_a_corrupt_confusions_file_fails_before_any_model_is_called(tmp_pa
     assert judge.calls == 0
 
 
+async def test_caller_and_judge_are_built_on_the_side_server_the_agent_is_not(
+    tmp_path, monkeypatch
+):
+    built = []
+
+    def fake_ollama(model, base_url="default", temperature=None):
+        built.append((model, base_url, temperature))
+        return TextLLM("[END]") if temperature == 0.7 else TextLLM(json.dumps(GOOD))
+
+    monkeypatch.setattr(scoring, "ollama_llm", fake_ollama)
+    args = make_args(tmp_path, side_base_url="http://localhost:8001/v1")
+    await scoring.run_scorecard("m", args, agent_llm=AgentLLM(), today=date(2026, 11, 4))
+    assert ("c", "http://localhost:8001/v1", 0.7) in built
+    assert ("j", "http://localhost:8001/v1", 0.0) in built
+
+
+async def test_the_side_server_defaults_to_ollama(tmp_path, monkeypatch):
+    built = []
+
+    def fake_ollama(model, base_url="default", temperature=None):
+        built.append(base_url)
+        return TextLLM("[END]") if temperature == 0.7 else TextLLM(json.dumps(GOOD))
+
+    monkeypatch.setattr(scoring, "ollama_llm", fake_ollama)
+    await scoring.run_scorecard(
+        "m", make_args(tmp_path), agent_llm=AgentLLM(), today=date(2026, 11, 4)
+    )
+    assert built == ["http://localhost:11434/v1"] * 2
+
+
+def test_validate_files_finds_the_same_bad_files_without_running_anything(tmp_path):
+    out = tmp_path / "bench"
+    out.mkdir()
+    scoring.validate_files(make_args(tmp_path))
+    (out / "human_labels.json").write_text("{oops")
+    with pytest.raises(ValueError, match="human_labels.json"):
+        scoring.validate_files(make_args(tmp_path))
+    (out / "human_labels.json").unlink()
+    (out / "confusions.json").write_text("{oops")
+    with pytest.raises(ValueError, match="confusions.json"):
+        scoring.validate_files(make_args(tmp_path, mishear=0.15))
+    scoring.validate_files(make_args(tmp_path, mishear=0.15, speech=True))  # not replayed
+    scoring.validate_files(make_args(tmp_path, mishear=0.0))
+
+
 async def test_progress_lines_go_through_the_callback(tmp_path):
     lines = []
     args = make_args(tmp_path)
@@ -372,6 +417,13 @@ class TestScoreCommand:
         assert args.seed == 7 and args.out == "data/bench" and args.speech is False
         assert args.scenarios is None and args.judge_model == args.caller_model
         assert args.caller_model == "hf.co/unsloth/gemma-3-12b-it-GGUF:Q4_K_M"
+        assert args.side_base_url == "http://localhost:11434/v1"
+
+    def test_side_base_url_can_point_at_another_server(self):
+        args = cli.build_parser().parse_args(
+            ["lab", "score", "--side-base-url", "http://localhost:8001/v1"]
+        )
+        assert args.side_base_url == "http://localhost:8001/v1"
 
     def test_compare_takes_two_files(self):
         args = cli.build_parser().parse_args(["lab", "compare", "a.json", "b.json"])

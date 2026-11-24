@@ -3,7 +3,8 @@
 `run_scorecard` is shared by `shefa lab score` (one model) and the bake-off (many models),
 so both score a model the same way. It reads these fields from `args`: `scenarios` (paths
 or None for the defaults), `tags`, `judge_model`, `caller_model`, `mishear`, `seed`,
-`speech`, `out`, and optionally `clinic`.
+`speech`, `out`, and optionally `clinic` and `side_base_url` (the OpenAI-compatible server
+the caller and judge run on; default Ollama).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import yaml
 from shefa.lab import judge as lab_judge
 from shefa.lab import scorecard
 from shefa.lab.mishear import Confusions
-from shefa.lab.models import ollama_llm
+from shefa.lab.models import OLLAMA_URL, ollama_llm
 from shefa.lab.runner import Lab
 from shefa.lab.scenarios import Scenario, load_scenarios, select
 
@@ -125,6 +126,17 @@ def _human_labels(args: Any) -> dict[str, dict[str, int]] | None:
     return human
 
 
+def validate_files(args: Any) -> None:
+    """ValueError if the saved label or table file in `args.out` is unreadable.
+
+    The check `run_scorecard` makes before it calls a model, for a caller (the bake-off)
+    that wants to fail before the first of several runs rather than during one.
+    """
+    _human_labels(args)
+    if not args.speech and float(args.mishear) > 0:
+        _confusions(args)
+
+
 async def _judge_all(
     judge_llm: Any, results: list[ScenarioResult]
 ) -> dict[str, lab_judge.JudgeScore | None]:
@@ -188,7 +200,11 @@ async def run_scorecard(
     def build(given: Any, name: str, temperature: float) -> Any:
         if given is not None:
             return given
-        built = ollama_llm(name, temperature=temperature)
+        built = ollama_llm(
+            name,
+            base_url=getattr(args, "side_base_url", None) or OLLAMA_URL,
+            temperature=temperature,
+        )
         owned.append(built)
         return built
 

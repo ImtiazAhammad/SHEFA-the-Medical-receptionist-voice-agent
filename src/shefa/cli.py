@@ -128,6 +128,46 @@ BENCH_TEXTS = [
 ]
 
 
+def _add_bench_options(parser: argparse.ArgumentParser, tags_default: str) -> None:
+    """The options `lab score` and `lab bakeoff` share: which cases, who plays and judges."""
+    from shefa.lab.models import DEFAULT_SIDE_MODEL, OLLAMA_URL
+
+    parser.add_argument(
+        "--scenarios",
+        nargs="+",
+        default=None,
+        metavar="PATH",
+        help="scenario files (default: configs/lab/bench/*.yaml and configs/lab/scenarios.yaml)",
+    )
+    parser.add_argument(
+        "--tags",
+        default=tags_default,
+        help="comma-separated tags, caller types or goals to keep",
+    )
+    parser.add_argument("--judge-model", default=DEFAULT_SIDE_MODEL)
+    parser.add_argument("--caller-model", default=DEFAULT_SIDE_MODEL)
+    parser.add_argument(
+        "--side-base-url",
+        default=OLLAMA_URL,
+        help="the OpenAI-compatible server the caller and judge run on (default: Ollama)",
+    )
+    parser.add_argument(
+        "--mishear",
+        type=float,
+        default=0.15,
+        help="share of words the caller is misheard on, 0 to 1 (0 turns it off)",
+    )
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--speech",
+        action="store_true",
+        help="speak the caller's lines over a simulated phone line and transcribe them "
+        "(real speech recognition replaces --mishear)",
+    )
+    parser.add_argument("--out", default="data/bench", help="folder for scorecards and tables")
+    parser.add_argument("--clinic", default="configs/clinic.example.yaml")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="shefa",
@@ -233,41 +273,29 @@ def build_parser() -> argparse.ArgumentParser:
     lab_voices.add_argument("--out", default="voice-test")
     for command in (lab_run, lab_list):
         command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
-    from shefa.lab.models import DEFAULT_SIDE_MODEL
-
     lab_score = lab_sub.add_parser(
         "score", help="run the bench against a local model, judge every call, save a scorecard"
     )
-    lab_score.add_argument(
-        "--scenarios",
-        nargs="+",
-        default=None,
-        metavar="PATH",
-        help="scenario files (default: configs/lab/bench/*.yaml and configs/lab/scenarios.yaml)",
-    )
-    lab_score.add_argument(
-        "--tags", default="", help="comma-separated tags, caller types or goals to keep"
-    )
+    _add_bench_options(lab_score, tags_default="")
     lab_score.add_argument(
         "--model", default=None, help="an Ollama model to test (default: the configured model)"
     )
-    lab_score.add_argument("--judge-model", default=DEFAULT_SIDE_MODEL)
-    lab_score.add_argument("--caller-model", default=DEFAULT_SIDE_MODEL)
-    lab_score.add_argument(
-        "--mishear",
-        type=float,
-        default=0.15,
-        help="share of words the caller is misheard on, 0 to 1 (0 turns it off)",
+    lab_bakeoff = lab_sub.add_parser(
+        "bakeoff",
+        help="score several Ollama models, time their first token, weigh their memory, pick one",
     )
-    lab_score.add_argument("--seed", type=int, default=7)
-    lab_score.add_argument(
-        "--speech",
+    lab_bakeoff.add_argument("models", nargs="+", metavar="MODEL", help="Ollama model names")
+    _add_bench_options(lab_bakeoff, tags_default="bakeoff")
+    lab_bakeoff.add_argument(
+        "--base-url",
+        default="http://localhost:11434/v1",
+        help="the Ollama server the candidates run on",
+    )
+    lab_bakeoff.add_argument(
+        "--with-voice",
         action="store_true",
-        help="speak the caller's lines over a simulated phone line and transcribe them "
-        "(real speech recognition replaces --mishear)",
+        help="load speech recognition and the voice first, so the memory readings include them",
     )
-    lab_score.add_argument("--out", default="data/bench", help="folder for scorecards and tables")
-    lab_score.add_argument("--clinic", default="configs/clinic.example.yaml")
     lab_compare = lab_sub.add_parser("compare", help="compare two scorecards")
     lab_compare.add_argument("a", help="the first scorecard (JSON)")
     lab_compare.add_argument("b", help="the second scorecard (JSON)")
@@ -922,10 +950,12 @@ def run_lab(args: argparse.Namespace) -> int:
         return run_voice_test(args)
     if args.lab_command == "score":
         return _run_score(args)
+    if args.lab_command == "bakeoff":
+        return _run_bakeoff(args)
     if args.lab_command == "compare":
         return _run_compare(args)
     if args.lab_command not in {"run", "list"}:
-        print("usage: shefa lab {run,list,voices,score,compare}", file=sys.stderr)
+        print("usage: shefa lab {run,list,voices,score,bakeoff,compare}", file=sys.stderr)
         return 2
     try:
         scenarios = load_scenarios(args.scenarios)
@@ -974,6 +1004,44 @@ async def _score(scenarios: list[Any], args: argparse.Namespace) -> int:
         await registry.reset()
     print(f"\n{scorecard.summary(card)}")
     print(f"Scorecard: {scorecard.save(card, Path(args.out))}")
+    return 0
+
+
+def _run_bakeoff(args: argparse.Namespace) -> int:
+    from shefa.lab.scoring import select_scenarios, validate_files
+
+    if not 0.0 <= args.mishear <= 1.0:
+        print("--mishear is a share of words between 0 and 1", file=sys.stderr)
+        return 2
+    try:
+        scenarios = select_scenarios(args)
+    except ValueError as error:
+        hint = (
+            " Pass --tags or --scenarios to choose other cases."
+            if str(error).startswith("No scenario matches")
+            else ""
+        )
+        print(f"{error}.{hint}" if hint else str(error), file=sys.stderr)
+        return 2
+    try:
+        validate_files(args)  # once, here: not after the first model has been scored
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_bakeoff(scenarios, args))
+
+
+async def _bakeoff(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab import bakeoff
+    from shefa.models.registry import registry
+
+    try:
+        result = await bakeoff.bake(args.models, args, scenarios=scenarios)
+    finally:
+        await registry.reset()
+    rows, winner = result["rows"], result["winner"]
+    print(f"\n{bakeoff.table(rows, winner, result['tts_first_ms'], result['budget_ms'])}")
+    print(f"Bake-off: {result['path']}")
     return 0
 
 
