@@ -46,16 +46,24 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 
 /* Bangla has no case, and tracking breaks its conjuncts. */
 :lang(bn){letter-spacing:0!important}
+/* SHEFA's orbs (world/orbs/shefa-orbs.js, Libraries.dev voice-ring and thinking-orbs), loaded when
+   first shown. The ring stands behind the call button and follows the call: it breathes while
+   waiting, turns while connecting, bends with your voice and then with the agent's. */
+.orb-wrap{display:grid;place-items:center;width:220px;height:220px;max-width:100%}.orb-wrap>*{grid-area:1/1}
+.orb-ring{pointer-events:none;display:grid;place-items:center}
+.orb-wrap.has-ring .orb.live{animation:none}
+.orb-mini{display:inline-flex;flex:none;width:20px;height:20px;vertical-align:-4px}
+.msg.pending{display:flex;align-items:center;gap:8px;color:var(--mute)}
 </style>
 </head>
 <body>
 <header><h1><span>SHEFA</span> console</h1><span id="hdot" class="dot" title="server health"></span></header>
 <main>
-<div id="ring" class="ring"><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:transparent;color:var(--on-shefa);outline:1px solid var(--on-shefa)">Decline</button></div>
+<div id="ring" class="ring"><span class="orb-mini" id="ringorb" aria-hidden="true"></span><b id="ringlabel">Incoming call</b><button class="btn sm" id="answer">Answer</button><button class="btn sm alt" id="decline" style="background:transparent;color:var(--on-shefa);outline:1px solid var(--on-shefa)">Decline</button></div>
 
 <section id="talk" class="on">
   <div class="card call">
-    <button id="orb" class="orb" aria-label="Call the agent"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg></button>
+    <div class="orb-wrap" id="orbwrap"><div class="orb-ring" id="orbring" aria-hidden="true"></div><button id="orb" class="orb" aria-label="Call the agent"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg></button></div>
     <div id="state">Tap to call the agent</div>
     <div id="hint">Speak Bangla or English. Allow the microphone when asked.</div>
   </div>
@@ -128,6 +136,17 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button,section').forEach(e=>e.classList.remove('on'));
   b.classList.add('on');$(b.dataset.tab).classList.add('on');({today:loadAppts,calls:loadCalls,clinic:loadDir,status:loadStatus}[b.dataset.tab]||(()=>{}))()});
 
+/* ---------- SHEFA's orbs: decoration only. If the module cannot load, nothing else changes. ---------- */
+let orbsMod=null;
+function orbs(){return orbsMod??=import('/static/world/orbs/shefa-orbs.js?v=1').catch(()=>{orbsMod=null;return null})}
+const onViolet=()=>matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark'; // ink that reads on the violet banner
+let ring=null,heardIn=null,heardOut=null,wave=null,talkTimer=0;
+function callLevel(){const a=ctx&&ctx.currentTime<agentUntil?heardOut:heardIn;if(!a)return 0;
+  if(!wave||wave.length!==a.fftSize)wave=new Float32Array(a.fftSize);a.getFloatTimeDomainData(wave);let s=0;for(const v of wave)s+=v*v;
+  return Math.min(1,Math.sqrt(s/wave.length)*4)} // speech RMS ~0.03-0.2, stretched toward 0..1
+orbs().then(m=>{if(!m)return;try{ring=m.mountRing($('orbring'),{size:220,state:'idle',level:callLevel});$('orbwrap').classList.add('has-ring')}catch{}});
+function ringState(s){try{ring&&ring.set({state:s})}catch{}}
+
 /* ---------- voice call ---------- */
 let ws=null,ctx=null,micStream=null,node=null,playAt=0,agentUntil=0,callUuid='';
 $('phone').value=store.get('phone');$('phone').onchange=()=>store.set('phone',$('phone').value.trim());
@@ -143,12 +162,16 @@ async function startCall(uuid){
   if(!navigator.mediaDevices?.getUserMedia){setState('Microphone unavailable','Open this page over https (or localhost).');return}
   try{micStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}})}
   catch{setState('Microphone blocked','Allow microphone access in the browser and try again.');return}
+  ringState('processing');
   ctx=new (window.AudioContext||window.webkitAudioContext)();await ctx.resume();
   const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));await ctx.audioWorklet.addModule(url);
-  node=new AudioWorkletNode(ctx,'p');ctx.createMediaStreamSource(micStream).connect(node);
+  node=new AudioWorkletNode(ctx,'p');const micSrc=ctx.createMediaStreamSource(micStream);micSrc.connect(node);
+  // listening taps for the ring: the microphone, and the agent's voice on its way to the speakers
+  heardIn=ctx.createAnalyser();heardIn.fftSize=512;micSrc.connect(heardIn);
+  heardOut=ctx.createAnalyser();heardOut.fftSize=512;heardOut.connect(ctx.destination);
   const q=new URLSearchParams();if(uuid)q.set('uuid',uuid);if($('phone').value.trim())q.set('phone',$('phone').value.trim());
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/call?'+q);ws.binaryType='arraybuffer';
-  ws.onopen=()=>{$('orb').classList.add('live','red');$('orb').innerHTML=ICON_STOP;setState('Connected','Speak now. Pause when you finish a sentence.')};
+  ws.onopen=()=>{clearInterval(talkTimer);talkTimer=setInterval(()=>ringState(ctx&&ctx.currentTime<agentUntil?'speaking':'listening'),120);$('orb').classList.add('live','red');$('orb').innerHTML=ICON_STOP;setState('Connected','Speak now. Pause when you finish a sentence.')};
   ws.onmessage=e=>{if(typeof e.data==='string'){const m=JSON.parse(e.data);if(m.type==='turn')addMsg(m.role,m.text);else if(m.type==='hangup')hangupWhenQuiet();return}play(e.data)};
   ws.onclose=ev=>{endCall(ev.code===4401?'Not allowed. Sign in again.':'Call ended')};
   node.port.onmessage=e=>{if(ws?.readyState!==1)return;
@@ -156,16 +179,17 @@ async function startCall(uuid){
     if(ctx.currentTime<agentUntil)ws.send(new Int16Array(e.data.byteLength/2).buffer);else ws.send(e.data)};
 }
 function play(buf){const s=new Int16Array(buf),f=new Float32Array(s.length);for(let i=0;i<s.length;i++)f[i]=s[i]/32768;
-  const b=ctx.createBuffer(1,f.length,16000);b.copyToChannel(f,0);const src=ctx.createBufferSource();src.buffer=b;src.connect(ctx.destination);
+  const b=ctx.createBuffer(1,f.length,16000);b.copyToChannel(f,0);const src=ctx.createBufferSource();src.buffer=b;src.connect(heardOut||ctx.destination);
   playAt=Math.max(playAt,ctx.currentTime+0.05);src.start(playAt);playAt+=b.duration;agentUntil=playAt}
 // The agent ended the call (handover, goodbye): hang up once its last words have played out.
 function hangupWhenQuiet(){const t=setInterval(()=>{if(!ctx||ctx.currentTime>=agentUntil){clearInterval(t);endCall('The agent ended the call')}},200)}
-function endCall(msg){try{ws&&ws.close()}catch{}ws=null;node&&node.disconnect();micStream?.getTracks().forEach(t=>t.stop());ctx?.close();ctx=null;node=null;playAt=agentUntil=0;
+function endCall(msg){clearInterval(talkTimer);ringState('idle');heardIn=heardOut=null;try{ws&&ws.close()}catch{}ws=null;node&&node.disconnect();micStream?.getTracks().forEach(t=>t.stop());ctx?.close();ctx=null;node=null;playAt=agentUntil=0;
   $('orb').classList.remove('live','red');$('orb').innerHTML=ICON_PHONE;setState(msg||'Call ended','Tap to call again.')}
 $('orb').onclick=()=>ws?endCall('Call ended'):startCall('');
 $('ringme').onclick=async()=>{try{await api('/api/v1/calls/ring',{method:'POST',body:JSON.stringify({phone:$('phone').value.trim()})});toast('The agent is calling you…');pollRing()}catch(e){toast(e.message)}};
 let ringTimer=null;async function pollRing(){try{const r=await api('/api/v1/calls/ringing');const el=$('ring');
-  if(r.length&&!ws){callUuid=r[0].call_uuid;$('ringlabel').textContent=''+(r[0].label||'SHEFA')+' is calling';el.classList.add('on')}else el.classList.remove('on')}catch{}}
+  if(r.length&&!ws){callUuid=r[0].call_uuid;$('ringlabel').textContent=''+(r[0].label||'SHEFA')+' is calling';el.classList.add('on');ringingOrb()}else el.classList.remove('on')}catch{}}
+let ringOrb=null;function ringingOrb(){if(ringOrb)return;ringOrb='loading';orbs().then(m=>{if(!m){ringOrb=null;return}try{ringOrb=m.mountOrb($('ringorb'),{state:'connecting',size:20,theme:onViolet()})}catch{ringOrb=null}})}
 $('answer').onclick=()=>{$('ring').classList.remove('on');document.querySelector('[data-tab=talk]').click();startCall(callUuid)};
 $('decline').onclick=async()=>{$('ring').classList.remove('on');try{await api('/api/v1/calls/ringing/'+callUuid+'/decline',{method:'POST'})}catch{}};
 setInterval(pollRing,2500);pollRing();
@@ -176,13 +200,16 @@ async function sendText(text){text=text.trim();if(!text||chatBusy)return;
   if(ws){toast('End the call first, then type.');return}
   if(!chatId){chatId='chat-'+Math.random().toString(36).slice(2,10);clearChat()}
   const mine=addMsg('user',text);$('chatin').value='';chatBusy=true;$('chatsend').disabled=true;$('chatnote').textContent='The agent is replying…';
+  // a slow reply earns a composing orb in the agent's place; a quick one never flashes it
+  let pending=null;const slow=setTimeout(()=>{pending=document.createElement('div');pending.className='msg pending';pending.innerHTML='<span class="orb-mini" aria-hidden="true"></span><span>Writing a reply…</span>';$('chat').append(pending);$('chat').scrollTop=$('chat').scrollHeight;
+    orbs().then(m=>{if(m&&pending&&pending.isConnected){try{m.mountOrb(pending.firstChild,{state:'composing',size:20})}catch{}}})},800);
   try{const q=new URLSearchParams({message:text,call_sid:chatId});const ph=$('phone').value.trim();if(ph)q.set('phone',ph);
     const r=await api('/api/v1/chat?'+q,{method:'POST'});
     if(r.greeting)addMsg('agent',r.greeting,mine);if(r.reply)addMsg('agent',r.reply);
     if(r.state!=='active'){$('chatnote').textContent='Handed to the front desk, as a call would be. Type again to start a new chat.';chatId=''}
     else $('chatnote').textContent=''}
   catch(e){mine.remove();$('chatin').value=text;$('chatnote').textContent=e.message}
-  chatBusy=false;$('chatsend').disabled=false;$('chatin').focus()}
+  clearTimeout(slow);pending&&pending.remove();chatBusy=false;$('chatsend').disabled=false;$('chatin').focus()}
 $('chatform').onsubmit=e=>{e.preventDefault();sendText($('chatin').value)};
 document.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>sendText(b.dataset.say));
 $('newchat').onclick=()=>{chatId='';clearChat();$('chatnote').textContent=''};

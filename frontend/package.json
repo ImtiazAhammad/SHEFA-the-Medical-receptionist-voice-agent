@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:orbs": "vite build --config vite.orbs.config.ts && node scripts/orbs-licenses.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.70.0",
