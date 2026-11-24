@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from shefa.lab.judge import JudgeScore
-    from shefa.lab.runner import ScenarioResult
+    from shefa.lab.runner import CheckResult, ScenarioResult
 
 # The seven pass/fail gates of `hardchecks.hard_checks`. `result.checks` also holds the lab's
 # older scenario checks; those are reported per scenario but are not part of the hard rate.
@@ -65,15 +66,36 @@ def _git_commit() -> str | None:
     return done.stdout.strip() or None
 
 
+def _checks(result: ScenarioResult) -> list[CheckResult]:
+    """Every check recorded for a scenario: its own and its turns'."""
+    return [*result.checks, *(c for t in result.turns for c in t.checks)]
+
+
 def _hard(results: list[ScenarioResult]) -> dict[str, Any]:
-    present = [{c.name: c.ok for c in r.checks if c.name in HARD_CHECKS} for r in results]
-    clean = [all(found.values()) for found in present]
-    by_check: dict[str, float] = {}
-    for name in HARD_CHECKS:
-        outcomes = [found[name] for found in present if name in found]
-        if outcomes:
-            by_check[name] = sum(outcomes) / len(outcomes)
-    return {"pass_rate": _mean([float(ok) for ok in clean]), "by_check": by_check}
+    """A scenario passes only if it has no error and every hard check is present and ok;
+    a check that is missing counts as failed, so a model cannot pass by not being checked."""
+    outcomes: list[dict[str, bool]] = []
+    for r in results:
+        recorded = _checks(r)
+        outcomes.append(
+            {
+                name: any(c.name == name for c in recorded)
+                and all(c.ok for c in recorded if c.name == name)
+                for name in HARD_CHECKS
+            }
+        )
+    clean = [
+        r.error is None and all(found.values()) for r, found in zip(results, outcomes, strict=True)
+    ]
+    return {
+        "pass_rate": _mean([float(ok) for ok in clean]),
+        "errors": sum(1 for r in results if r.error is not None),
+        "by_check": {
+            name: sum(found[name] for found in outcomes) / len(outcomes)
+            for name in HARD_CHECKS
+            if outcomes
+        },
+    }
 
 
 def _usable(judged: dict[str, JudgeScore | None], scenario_id: str) -> JudgeScore | None:
@@ -122,8 +144,7 @@ def _bangla_purity(results: list[ScenarioResult]) -> float | None:
 
 
 def _failed(result: ScenarioResult) -> list[str]:
-    every = [*result.checks, *(c for t in result.turns for c in t.checks)]
-    names = [c.name for c in every if not c.ok]
+    names = [c.name for c in _checks(result) if not c.ok]
     return ["error", *names] if result.error is not None else names
 
 
@@ -155,11 +176,16 @@ def build(
     }
 
 
+def _stamp() -> str:
+    now = datetime.now()
+    return f"{now:%Y%m%d-%H%M%S}{now.microsecond // 1000:03d}"
+
+
 def save(card: dict[str, Any], out_dir: Path) -> Path:
-    """Write `scorecard-<model>-<YYYYmmdd-HHMMSS>.json` into `out_dir` and return its path."""
+    """Write `scorecard-<model>-<YYYYmmdd-HHMMSSmmm>.json` into `out_dir` and return its path."""
     model = str(card.get("meta", {}).get("model") or "unknown")
-    safe = model.replace("/", "_").replace(":", "_")
-    path = Path(out_dir) / f"scorecard-{safe}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", model)
+    path = Path(out_dir) / f"scorecard-{safe}-{_stamp()}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(card, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -173,8 +199,10 @@ def _headlines(card: dict[str, Any]) -> list[tuple[str, float | None, int]]:
     """(label, value, decimals) for each headline number."""
     return [
         ("hard pass rate", card["hard"]["pass_rate"], 3),
+        ("hard errors", float(card["hard"]["errors"]), 0),
         ("judged mean", card["judged"]["mean"], 2),
         ("p95 latency ms", card["latency"]["p95_ms"], 0),
+        ("first audio p95 ms", card["latency"]["first_audio_p95_ms"], 0),
         ("bangla purity", card["bangla_purity"], 3),
         ("missing judgments", float(card["judged"]["missing"]), 0),
     ]
@@ -196,11 +224,15 @@ def _row(label: str, a: float | None, b: float | None, digits: int) -> str:
 def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
     """Headline numbers, then each hard check and judged dimension, as a, b and b - a."""
     a_meta, b_meta = a.get("meta", {}), b.get("meta", {})
-    lines = [
-        f"a: {a_meta.get('model', '?')}",
-        f"b: {b_meta.get('model', '?')}",
-        f"{'':<26}{'a':>10}{'b':>10}{'b - a':>10}",
+    lines = [f"a: {a_meta.get('model', '?')}", f"b: {b_meta.get('model', '?')}"]
+    unlike = [
+        key for key in ("case_count", "seed", "mishear_rate") if a_meta.get(key) != b_meta.get(key)
     ]
+    if unlike:
+        lines.append(
+            f"WARNING: runs differ in {', '.join(unlike)}; the numbers are not like for like"
+        )
+    lines.append(f"{'':<26}{'a':>10}{'b':>10}{'b - a':>10}")
     for (label, av, digits), (_, bv, _) in zip(_headlines(a), _headlines(b), strict=True):
         lines.append(_row(label, av, bv, digits))
     checks = [

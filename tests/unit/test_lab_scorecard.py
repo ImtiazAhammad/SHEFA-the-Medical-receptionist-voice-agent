@@ -7,7 +7,7 @@ import json
 from shefa.lab.judge import JudgeScore
 from shefa.lab.runner import CheckResult, ScenarioResult, TurnRecord
 from shefa.lab.scenarios import Scenario
-from shefa.lab.scorecard import build, compare, save, summary
+from shefa.lab.scorecard import HARD_CHECKS, build, compare, save, summary
 
 
 def turn(reply="ঠিক আছে", language="bn", llm_ms=100.0, first_audio_ms=None):
@@ -26,14 +26,19 @@ def scenario(sid, caller_type="ordinary", goal="booking"):
     return Scenario(id=sid, title=sid, tests="t", caller_type=caller_type, goal=goal)
 
 
+def all_hard(failed=()):
+    return [CheckResult(name, name not in failed) for name in HARD_CHECKS]
+
+
 def passing(sid, caller_type="ordinary", goal="booking", turns=None):
-    checks = [CheckResult("grounded", True), CheckResult("brevity", True)]
-    return ScenarioResult(scenario(sid, caller_type, goal), turns=turns or [turn()], checks=checks)
+    return ScenarioResult(
+        scenario(sid, caller_type, goal), turns=turns or [turn()], checks=all_hard()
+    )
 
 
 def failing(sid, caller_type, failed, goal="booking"):
-    checks = [CheckResult("grounded", failed != "grounded"), CheckResult("brevity", True)]
-    if failed not in {"grounded", "brevity"}:
+    checks = all_hard([failed] if failed in HARD_CHECKS else [])
+    if failed not in HARD_CHECKS:
         checks.append(CheckResult(failed, False))
     return ScenarioResult(scenario(sid, caller_type, goal), turns=[turn()], checks=checks)
 
@@ -47,6 +52,7 @@ def test_build_counts_hard_and_judged():
     assert card["hard"]["pass_rate"] == 0.5
     assert card["hard"]["by_check"]["grounded"] == 0.5
     assert card["hard"]["by_check"]["brevity"] == 1.0
+    assert card["hard"]["errors"] == 0
     assert card["judged"]["by_caller_type"]["angry"] == 3.0
     assert card["judged"]["by_caller_type"]["quiet"] is None
     assert card["judged"]["missing"] == 1
@@ -62,6 +68,7 @@ def test_older_scenario_checks_do_not_count_as_hard():
     card = build([result], {}, {})
     assert card["hard"]["pass_rate"] == 1.0
     assert "booked_something" not in card["hard"]["by_check"]
+    assert set(card["hard"]["by_check"]) == set(HARD_CHECKS)
     assert card["scenarios"]["a"]["passed"] is False
     assert card["scenarios"]["a"]["failed"] == ["booked_something"]
     assert card["judged"]["missing"] == 1
@@ -152,7 +159,14 @@ def made():
 def test_summary_is_a_short_table():
     text = summary(made())
     assert "gemma" in text
-    for label in ("hard pass", "judged mean", "p95 latency", "bangla purity", "missing"):
+    for label in (
+        "hard pass",
+        "hard errors",
+        "judged mean",
+        "p95 latency",
+        "bangla purity",
+        "missing",
+    ):
         assert label in text.lower()
     assert len(text.splitlines()) <= 12
 
@@ -175,4 +189,79 @@ def test_compare_handles_missing_numbers():
     b = made()
     b["judged"]["mean"] = None
     text = compare(a, b)
-    assert "-" in text  # no crash on None
+    row = next(line for line in text.splitlines() if line.startswith("judged mean"))
+    assert row.split() == ["judged", "mean", "4.00", "-", "-"]
+
+
+def test_errored_scenario_fails_hard_and_is_counted():
+    result = passing("a")
+    result.error = "boom"
+    card = build([result, passing("b")], {}, {})
+    assert card["hard"]["pass_rate"] == 0.5
+    assert card["hard"]["errors"] == 1
+    assert card["scenarios"]["a"]["passed"] is False
+    assert card["scenarios"]["a"]["failed"][0] == "error"
+    assert card["hard"]["by_check"]["grounded"] == 1.0  # its checks did run and pass
+
+
+def test_scenario_with_no_hard_checks_fails_hard():
+    bare = ScenarioResult(scenario("a"), turns=[turn()])
+    card = build([bare, passing("b")], {}, {})
+    assert card["hard"]["pass_rate"] == 0.5
+    assert card["hard"]["errors"] == 0
+    assert all(rate == 0.5 for rate in card["hard"]["by_check"].values())
+
+
+def test_missing_check_counts_as_failure_of_that_check():
+    partial = ScenarioResult(
+        scenario("a"), turns=[turn()], checks=[c for c in all_hard() if c.name != "privacy"]
+    )
+    card = build([partial, passing("b")], {}, {})
+    assert card["hard"]["by_check"]["privacy"] == 0.5
+    assert card["hard"]["by_check"]["grounded"] == 1.0
+    assert card["hard"]["pass_rate"] == 0.5
+
+
+def test_turn_level_check_failures_are_collected():
+    result = passing("a")
+    result.turns[0].checks.append(CheckResult("brevity", False))
+    other = passing("b")
+    other.turns[0].checks.append(CheckResult("no_leak", False))
+    card = build([result, other], {}, {})
+    assert card["scenarios"]["a"]["failed"] == ["brevity"]
+    assert card["scenarios"]["b"]["failed"] == ["no_leak"]
+    assert card["hard"]["by_check"]["brevity"] == 0.5
+    assert card["hard"]["pass_rate"] == 0.5
+
+
+def test_empty_run_has_no_hard_rates():
+    card = build([], {}, {})
+    assert card["hard"] == {"pass_rate": None, "errors": 0, "by_check": {}}
+
+
+def test_compare_warns_when_runs_are_not_alike():
+    a, b = made(), made()
+    a["meta"].update(seed=1, mishear_rate=0.1)
+    b["meta"].update(seed=2, mishear_rate=0.1, case_count=5)
+    text = compare(a, b)
+    warning = next(line for line in text.splitlines() if line.startswith("WARNING"))
+    assert "case_count" in warning and "seed" in warning and "mishear_rate" not in warning
+    assert not any(line.startswith("WARNING") for line in compare(a, a).splitlines())
+
+
+def test_compare_includes_errors_and_first_audio():
+    a, b = made(), made()
+    b["hard"]["errors"] = 2
+    b["latency"]["first_audio_p95_ms"] = 300.0
+    text = compare(a, b)
+    assert (
+        next(row for row in text.splitlines() if row.startswith("hard errors")).split()[-1] == "+2"
+    )
+    assert any(row.startswith("first audio p95 ms") for row in text.splitlines())
+
+
+def test_save_model_name_is_made_filename_safe(tmp_path):
+    p = save({"meta": {"model": "a b/c:d*é"}}, tmp_path)
+    assert p.name.startswith("scorecard-a_b_c_d__-")
+    first = save({"meta": {"model": "m"}}, tmp_path)
+    assert len(first.stem.rsplit("-", 1)[1]) == 9  # HHMMSS + 3-digit milliseconds
