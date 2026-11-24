@@ -1,9 +1,10 @@
 """`shefa lab bakeoff`: several local models, one rule, one winner.
 
 Each candidate is scored like `shefa lab score` scores a model (`run_scorecard`), and also
-timed (time to the first streamed text with several requests at once) and weighed (graphics
-memory in use while it is loaded). The winner is the best model that is fast enough: first
-token plus the voice's first sentence must fit the budget (the plan's Global Constraints),
+timed (time to its first complete sentence, on the product's own system prompt, with several
+requests at once) and weighed (graphics memory in use while it is loaded). The winner is the
+best model that is fast enough: its first sentence plus the voice speaking that sentence must
+fit the budget (the plan's Global Constraints),
 then the full pass rate (hard checks and the caller's task both passed) decides, then the
 judged mean.
 
@@ -36,27 +37,51 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 ROUNDS = 10  # x 3 at once = 30 samples, so the p95 is not just the slowest one
-BUDGET_MS = 1200.0  # first token (p95) + the voice's first sentence, from the caller's silence
+BUDGET_MS = 1200.0  # first sentence (p95) + the voice speaking it, from the caller's silence
 DEFAULT_TAGS = "bakeoff"
 TTS_SENTENCE = "জি, বলুন, কীভাবে সাহায্য করতে পারি?"
 TTS_RUNS = 3
 
-# What the probe asks: a receptionist's brief, then the kind of line a caller says. Shorter
-# than the shipped prompt, so it understates the cost of reading a long prompt.
-_PROBE_SYSTEM = (
-    "You are the front-desk voice of a clinic. Answer in the caller's language "
-    "(Bangla or English), in at most two short sentences, warm and plain. "
-    "Never give medical advice. If you do not know, say so and offer to take a message."
+LATENCY_SERVER = "ollama"  # where the candidates are timed; recorded in the bake-off's JSON
+DEFAULT_CLINIC = "configs/clinic.example.yaml"
+# The kind of line a caller says, with its language; each is asked under the product's own
+# system prompt and clinic directory (`probe_prompts`), so the probe reads what a call reads.
+PROBE_LINES: tuple[tuple[str, str], ...] = (
+    ("bn", "আমি ডাক্তার দেখাতে চাই, কাল কি সিরিয়াল পাওয়া যাবে?"),
+    ("en", "Do you have a cardiologist, and what are the visiting hours?"),
+    ("bn", "আমার বাবার বুকে ব্যথা, এখন কী করব?"),
+    ("bn", "ডাক্তার রহমানের ফি কত?"),
 )
-LATENCY_PROMPTS: list[list[dict[str, str]]] = [
-    [{"role": "system", "content": _PROBE_SYSTEM}, {"role": "user", "content": text}]
-    for text in (
-        "আমি ডাক্তার দেখাতে চাই, কাল কি সিরিয়াল পাওয়া যাবে?",
-        "Do you have a cardiologist, and what are the visiting hours?",
-        "আমার বাবার বুকে ব্যথা, এখন কী করব?",
-        "ডাক্তার রহমানের ফি কত?",
-    )
-]
+
+
+def probe_prompts(clinic_file: str | Path, work_dir: str | Path) -> list[list[dict[str, str]]]:
+    """The latency probe's requests: the product's system prompt (`shefa.prompts`) with the
+    clinic's directory brief, then one caller line. The clinic is loaded into a throw-away
+    database in `work_dir`, never the clinic's own."""
+    from shefa.clinic import ClinicStore
+    from shefa.clinic.brief import directory_brief
+    from shefa.clinic.loader import import_directory_file
+    from shefa.prompts import system_prompt
+
+    work = Path(work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    path = work / "probe-clinic.db"
+    for leftover in work.glob("probe-clinic.db*"):
+        leftover.unlink()
+    store = ClinicStore(path)
+    try:
+        import_directory_file(store, clinic_file)
+        systems = {
+            lang: system_prompt(lang, None, directory_brief(store, lang)) for lang in ("bn", "en")
+        }
+    finally:
+        store.close()
+        for leftover in work.glob("probe-clinic.db*"):
+            leftover.unlink()
+    return [
+        [{"role": "system", "content": systems[lang]}, {"role": "user", "content": line}]
+        for lang, line in PROBE_LINES
+    ]
 
 
 def _ollama_root(base_url: str) -> str:
@@ -126,42 +151,52 @@ def gpu_memory_mb() -> int | None:
     return sum(values) if values else None
 
 
-async def _first_chunk_ms(llm: Any, messages: list[dict[str, str]]) -> float:
-    """Ms from sending `messages` to the first streamed text; the reply is then read to its end.
+async def _first_sentence_ms(llm: Any, messages: list[dict[str, str]]) -> float:
+    """Ms from sending `messages` to the first complete sentence of the streamed reply (as the
+    pipeline splits it for the voice, `split_complete_sentences`), or to the end of the stream
+    when no sentence ends before it; the reply is then read to its end.
 
-    Reading on keeps the stream from being abandoned half-open, which would leave the server
-    generating and slow the next request. Streams go through `generate_events`, the call the
-    pipeline makes, so the probe sees what a call sees (the client sends its no-thinking
-    switch on streamed requests too).
+    The voice cannot start before a sentence is whole, so this, not the first token, is what
+    the caller waits for. Reading on keeps the stream from being abandoned half-open, which
+    would leave the server generating and slow the next request. Streams go through
+    `generate_events`, the call the pipeline makes, so the probe sees what a call sees (the
+    client sends its no-thinking switch on streamed requests too).
     """
+    from shefa.pipeline.voice_pipeline import split_complete_sentences
+
     started = time.perf_counter()
     first: float | None = None
+    text = ""
     async with contextlib.aclosing(llm.generate_events(messages)) as stream:
         async for event in stream:
             if first is None and event.text:
-                first = (time.perf_counter() - started) * 1000
+                text += event.text
+                if split_complete_sentences(text)[0]:
+                    first = (time.perf_counter() - started) * 1000
+        if first is None and text.strip():
+            first = (time.perf_counter() - started) * 1000  # the whole reply was one sentence
     if first is None:
         raise RuntimeError("the model sent no text")
     return first
 
 
-async def first_token_latency(
+async def first_sentence_latency(
     llm: Any, prompts: list[list[dict[str, str]]], concurrency: int = 3, rounds: int = ROUNDS
 ) -> dict[str, Any]:
-    """Time from sending a request to its first streamed text, `concurrency` at a time.
+    """Time from sending a request to its first complete sentence, `concurrency` at a time.
 
     `rounds` batches of `concurrency` requests, prompts taken in turn; a round ends when
     all its replies have finished. Returns `p50_ms`, `p95_ms` (nearest rank) and `samples`.
     """
     if not prompts:
-        raise ValueError("first_token_latency needs at least one prompt")
+        raise ValueError("first_sentence_latency needs at least one prompt")
     times: list[float] = []
     for round_number in range(rounds):
         try:
             async with asyncio.TaskGroup() as group:
                 tasks = [
                     group.create_task(
-                        _first_chunk_ms(
+                        _first_sentence_ms(
                             llm, prompts[(round_number * concurrency + n) % len(prompts)]
                         )
                     )
@@ -215,7 +250,7 @@ def ranked(
 ) -> list[dict]:
     """The eligible rows, best first.
 
-    Eligible: status "ok" and `first_token_p95_ms + tts_first_ms <= budget_ms`. They rank by
+    Eligible: status "ok" and `first_sentence_p95_ms + tts_first_ms <= budget_ms`. They rank by
     the full pass rate (hard checks and the task both passed), then the judged mean (a
     missing number ranks last); a full tie keeps the order the models were listed in. Empty
     when the voice's time is unknown.
@@ -226,8 +261,8 @@ def ranked(
         row
         for row in rows
         if row.get("status") == "ok"
-        and row.get("first_token_p95_ms") is not None
-        and row["first_token_p95_ms"] + tts_first_ms <= budget_ms
+        and row.get("first_sentence_p95_ms") is not None
+        and row["first_sentence_p95_ms"] + tts_first_ms <= budget_ms
     ]
 
     def quality(row: dict) -> tuple[float, float]:
@@ -240,7 +275,7 @@ def ranked(
 def pick_winner(
     rows: list[dict], tts_first_ms: float | None, budget_ms: float = BUDGET_MS
 ) -> str | None:
-    """The best model whose first-token p95 plus the voice's first sentence fits the budget
+    """The best model whose first-sentence p95 plus the voice's first sentence fits the budget
     (see `ranked`); None when nothing is eligible, or when the voice's time is unknown."""
     best = ranked(rows, tts_first_ms, budget_ms)
     return best[0]["model"] if best else None
@@ -260,9 +295,9 @@ def _blank_row(model: str) -> dict[str, Any]:
         "model": model,
         "status": "error",
         "message": None,
-        "first_token_p50_ms": None,
-        "first_token_p95_ms": None,
-        "first_token_samples": None,
+        "first_sentence_p50_ms": None,
+        "first_sentence_p95_ms": None,
+        "first_sentence_samples": None,
         "margin_ms": None,
         "gpu_mb": None,
         "hard_pass": None,
@@ -311,6 +346,9 @@ async def run_bakeoff(
     base_url = getattr(args, "base_url", None) or OLLAMA_URL
     root = _ollama_root(base_url)
     rounds = int(getattr(args, "rounds", None) or ROUNDS)
+    prompts = probe_prompts(
+        getattr(args, "clinic", None) or DEFAULT_CLINIC, Path(args.out) / ".work"
+    )
     rows: list[dict[str, Any]] = []
     for number, model in enumerate(models, 1):
         print(f"\n[{number}/{len(models)}] {model}")
@@ -327,12 +365,12 @@ async def run_bakeoff(
             continue
         llm = ollama_llm(model, base_url=base_url)
         try:
-            print("  loading and timing the first token ...")
-            await _first_chunk_ms(llm, LATENCY_PROMPTS[0])  # loading from disk is not latency
-            latency = await first_token_latency(llm, LATENCY_PROMPTS, rounds=rounds)
-            row["first_token_p50_ms"] = latency["p50_ms"]
-            row["first_token_p95_ms"] = latency["p95_ms"]
-            row["first_token_samples"] = latency["samples"]
+            print("  loading and timing the first sentence ...")
+            await _first_sentence_ms(llm, prompts[0])  # loading from disk is not latency
+            latency = await first_sentence_latency(llm, prompts, rounds=rounds)
+            row["first_sentence_p50_ms"] = latency["p50_ms"]
+            row["first_sentence_p95_ms"] = latency["p95_ms"]
+            row["first_sentence_samples"] = latency["samples"]
             row["gpu_mb"] = await asyncio.to_thread(gpu_memory_mb)
             card = await scorer(model, args, scenarios=scenarios, agent_llm=llm)
             row["hard_pass"] = card["hard"]["pass_rate"]
@@ -399,7 +437,7 @@ async def bake(
         """Margins and the winner on the rows so far, written over the same file."""
         tts = state["tts"]
         for row in rows:
-            p95 = row.get("first_token_p95_ms")
+            p95 = row.get("first_sentence_p95_ms")
             measured = row.get("status") == "ok" and p95 is not None and tts is not None
             # budget left once the voice has spoken its first sentence; negative: over budget
             row["margin_ms"] = BUDGET_MS - (p95 + tts) if measured else None
@@ -410,6 +448,7 @@ async def bake(
             "with_voice": with_voice,
             "rounds": int(getattr(args, "rounds", None) or ROUNDS),
             "budget_ms": BUDGET_MS,
+            "latency_server": LATENCY_SERVER,
             "tts_first_ms": tts,
             "gpu_baseline_mb": baseline,
             "winner": pick_winner(rows, tts, BUDGET_MS),
@@ -465,8 +504,8 @@ def table(
         (
             row["model"],
             row["status"],
-            _cell(row.get("first_token_p50_ms")),
-            _cell(row.get("first_token_p95_ms")),
+            _cell(row.get("first_sentence_p50_ms")),
+            _cell(row.get("first_sentence_p95_ms")),
             _cell(row.get("margin_ms")),
             _cell(row.get("gpu_mb")),
             _cell(row.get("n")),
@@ -496,7 +535,7 @@ def table(
     if winner is not None:
         best = next(row for row in rows if row["model"] == winner)
         out.append(
-            f"Winner: {winner} (first token p95 {best['first_token_p95_ms']:.0f} ms + voice "
+            f"Winner: {winner} (first sentence p95 {best['first_sentence_p95_ms']:.0f} ms + voice "
             f"{tts_first_ms:.0f} ms, within {budget_ms:.0f} ms; full pass "
             f"{_cell(best.get('full_pass'), 3)} of {_cell(best.get('n'))}, hard "
             f"{_cell(best.get('hard_pass'), 3)}, judged {_cell(best.get('judged_mean'), 2)})"
@@ -512,7 +551,7 @@ def table(
         out.append("No winner: the voice's first-sentence time was not measured.")
     else:
         out.append(
-            "No winner (inconclusive: re-run or raise --rounds): no model's first-token p95 "
+            "No winner (inconclusive: re-run or raise --rounds): no model's first-sentence p95 "
             f"plus the voice's first sentence ({tts_first_ms:.0f} ms) fits within "
             f"{budget_ms:.0f} ms."
         )

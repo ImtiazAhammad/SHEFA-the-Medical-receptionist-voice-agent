@@ -15,7 +15,7 @@ import pytest
 from shefa import cli
 from shefa.lab import bakeoff
 from shefa.lab.bakeoff import (
-    first_token_latency,
+    first_sentence_latency,
     gpu_memory_mb,
     model_available,
     pick_winner,
@@ -53,7 +53,9 @@ class SlowFirstChunkLLM:
             await asyncio.sleep(self.delay_s)
             yield StreamEvent(text="জি")
             await asyncio.sleep(self.delay_s)
-            yield StreamEvent(text=", বলুন।")
+            yield StreamEvent(text=", বলুন।")  # the first sentence is complete here
+            await asyncio.sleep(self.delay_s)
+            yield StreamEvent(text=" আর কিছু?")
             self.completed += 1
         finally:
             self.in_flight -= 1
@@ -97,14 +99,20 @@ def probes(monkeypatch):
 
     async def latency(llm, prompts, concurrency=3, rounds=10):
         calls.rounds.append(rounds)
+        calls.prompts = prompts
         return {"p50_ms": 300.0, "p95_ms": 500.0, "samples": 3 * rounds}
 
     async def unload(model, base="http://localhost:11434"):
         calls.unloaded.append(model)
         return True
 
+    async def warm(llm, messages):
+        calls.warmed = messages
+        return 900.0
+
     monkeypatch.setattr(bakeoff, "ollama_llm", build)
-    monkeypatch.setattr(bakeoff, "first_token_latency", latency)
+    monkeypatch.setattr(bakeoff, "first_sentence_latency", latency)
+    monkeypatch.setattr(bakeoff, "_first_sentence_ms", warm)
     monkeypatch.setattr(bakeoff, "unload_model", unload)
     monkeypatch.setattr(bakeoff, "gpu_memory_mb", lambda: next(calls.gpu))
     calls.llm = llm
@@ -120,21 +128,21 @@ def test_pick_winner_respects_budget_then_quality():
         {
             "model": "fast",
             "status": "ok",
-            "first_token_p95_ms": 400,
+            "first_sentence_p95_ms": 400,
             "full_pass": 0.80,
             "judged_mean": 3.9,
         },
         {
             "model": "best",
             "status": "ok",
-            "first_token_p95_ms": 700,
+            "first_sentence_p95_ms": 700,
             "full_pass": 0.90,
             "judged_mean": 3.5,
         },
         {
             "model": "slow",
             "status": "ok",
-            "first_token_p95_ms": 1500,
+            "first_sentence_p95_ms": 1500,
             "full_pass": 1.0,
             "judged_mean": 4.8,
         },
@@ -147,7 +155,7 @@ def test_pick_winner_none_when_all_too_slow():
     row = {
         "model": "s",
         "status": "ok",
-        "first_token_p95_ms": 2000,
+        "first_sentence_p95_ms": 2000,
         "full_pass": 1,
         "judged_mean": 5,
     }
@@ -159,14 +167,14 @@ def test_pick_winner_ties_on_full_pass_go_to_judged_mean():
         {
             "model": "a",
             "status": "ok",
-            "first_token_p95_ms": 300,
+            "first_sentence_p95_ms": 300,
             "full_pass": 0.9,
             "judged_mean": 3.0,
         },
         {
             "model": "b",
             "status": "ok",
-            "first_token_p95_ms": 300,
+            "first_sentence_p95_ms": 300,
             "full_pass": 0.9,
             "judged_mean": 4.0,
         },
@@ -178,14 +186,14 @@ def test_pick_winner_budget_is_inclusive_and_error_rows_never_win():
     at_budget = {
         "model": "edge",
         "status": "ok",
-        "first_token_p95_ms": 800,
+        "first_sentence_p95_ms": 800,
         "full_pass": 0.5,
         "judged_mean": 2,
     }
     errored = {
         "model": "err",
         "status": "error",
-        "first_token_p95_ms": 100,
+        "first_sentence_p95_ms": 100,
         "full_pass": 1.0,
         "judged_mean": 5,
     }
@@ -198,14 +206,14 @@ def test_pick_winner_unmeasured_quality_loses_to_measured():
         {
             "model": "blank",
             "status": "ok",
-            "first_token_p95_ms": 300,
+            "first_sentence_p95_ms": 300,
             "full_pass": None,
             "judged_mean": None,
         },
         {
             "model": "real",
             "status": "ok",
-            "first_token_p95_ms": 300,
+            "first_sentence_p95_ms": 300,
             "full_pass": 0.1,
             "judged_mean": 1.0,
         },
@@ -217,7 +225,7 @@ def test_pick_winner_none_without_a_voice_time_or_rows():
     row = {
         "model": "m",
         "status": "ok",
-        "first_token_p95_ms": 100,
+        "first_sentence_p95_ms": 100,
         "full_pass": 1,
         "judged_mean": 5,
     }
@@ -225,35 +233,69 @@ def test_pick_winner_none_without_a_voice_time_or_rows():
     assert pick_winner([], 400) is None
 
 
-async def test_first_token_latency_runs_concurrently():
+async def test_first_sentence_latency_runs_concurrently():
     llm = SlowFirstChunkLLM(delay_s=0.05)
-    out = await first_token_latency(
+    out = await first_sentence_latency(
         llm, [[{"role": "user", "content": "x"}]], concurrency=3, rounds=2
     )
     assert out["p95_ms"] >= 49 and llm.max_in_flight == 3
     assert out["samples"] == 6 and llm.in_flight == 0
 
 
-async def test_the_time_is_to_the_first_text_and_the_reply_is_then_read_to_its_end():
+async def test_the_time_is_to_the_first_sentence_and_the_reply_is_then_read_to_its_end():
     llm = SlowFirstChunkLLM(delay_s=0.05)
-    out = await first_token_latency(
+    out = await first_sentence_latency(
         llm, [[{"role": "user", "content": "x"}]], concurrency=1, rounds=1
     )
-    assert 49 <= out["p50_ms"] < 90  # not the 100 ms the whole reply took
+    # not the 50 ms of the first word, nor the 150 ms the whole reply took
+    assert 99 <= out["p50_ms"] < 140
     assert llm.completed == 1 and llm.in_flight == 0  # nothing left half-open
 
 
 async def test_the_probe_adds_no_overrides_of_its_own():
     """The client applies its own extra fields; passing them again would send them twice."""
     llm = SlowFirstChunkLLM(delay_s=0, extra_body={"think": False})
-    await first_token_latency(llm, [[{"role": "user", "content": "x"}]], concurrency=2, rounds=1)
+    await first_sentence_latency(llm, [[{"role": "user", "content": "x"}]], concurrency=2, rounds=1)
     assert llm.kwargs == [{}, {}]
 
 
 async def test_the_default_is_ten_rounds_of_three_for_thirty_samples():
     llm = SlowFirstChunkLLM(delay_s=0)
-    out = await first_token_latency(llm, [[{"role": "user", "content": "x"}]])
+    out = await first_sentence_latency(llm, [[{"role": "user", "content": "x"}]])
     assert out["samples"] == 30 and llm.max_in_flight == 3
+
+
+async def test_a_reply_with_no_sentence_end_is_timed_to_the_end_of_the_stream():
+    class Unpunctuated(SlowFirstChunkLLM):
+        async def generate_events(self, messages, tools=None, **kwargs):
+            await asyncio.sleep(0.03)
+            yield StreamEvent(text="জি")
+            await asyncio.sleep(0.03)
+            yield StreamEvent(text=" বলুন")
+
+    out = await first_sentence_latency(Unpunctuated(), [[{"role": "user", "content": "x"}]], 1, 1)
+    assert out["p50_ms"] >= 59
+
+
+def test_the_probe_asks_with_the_products_own_prompt_and_the_clinics_directory(tmp_path):
+    from shefa.clinic import ClinicStore
+    from shefa.clinic.brief import directory_brief
+    from shefa.clinic.loader import import_directory_file
+    from shefa.prompts import system_prompt
+
+    prompts = bakeoff.probe_prompts("configs/clinic.example.yaml", tmp_path)
+    store = ClinicStore(tmp_path / "check.db")
+    import_directory_file(store, "configs/clinic.example.yaml")
+    bn = system_prompt("bn", None, directory_brief(store, "bn"))
+    en = system_prompt("en", None, directory_brief(store, "en"))
+    store.close()
+    assert len(prompts) >= 4
+    for messages in prompts:
+        system, caller = messages
+        assert system["role"] == "system" and caller["role"] == "user" and caller["content"]
+        assert system["content"] in (bn, en)
+    assert {m[0]["content"] for m in prompts} == {bn, en}
+    assert "Hossain" in en
 
 
 async def test_a_reply_with_no_text_is_an_error():
@@ -262,7 +304,7 @@ async def test_a_reply_with_no_text_is_an_error():
             yield StreamEvent(text="")
 
     with pytest.raises(RuntimeError, match="no text"):
-        await first_token_latency(Silent(), [[{"role": "user", "content": "x"}]], 1, 1)
+        await first_sentence_latency(Silent(), [[{"role": "user", "content": "x"}]], 1, 1)
 
 
 async def test_the_probe_reaches_the_real_client_with_think_off(monkeypatch):
@@ -286,14 +328,14 @@ async def test_the_probe_reaches_the_real_client_with_think_off(monkeypatch):
 
     llm = ollama_llm("m")
     monkeypatch.setattr(llm._client.chat.completions, "create", create)
-    await bakeoff._first_chunk_ms(llm, [{"role": "user", "content": "x"}])
+    await bakeoff._first_sentence_ms(llm, [{"role": "user", "content": "x"}])
     assert sent[0]["extra_body"] == NO_THINKING and sent[0]["stream"] is True
     await llm.close()
 
 
-async def test_first_token_latency_without_prompts_is_an_error():
+async def test_first_sentence_latency_without_prompts_is_an_error():
     with pytest.raises(ValueError, match="prompt"):
-        await first_token_latency(SlowFirstChunkLLM(), [], concurrency=1, rounds=1)
+        await first_sentence_latency(SlowFirstChunkLLM(), [], concurrency=1, rounds=1)
 
 
 def test_gpu_memory_sums_cards(monkeypatch):
@@ -405,9 +447,9 @@ async def test_row_carries_latency_memory_quality_and_scorecard_path(monkeypatch
         "model": "a",
         "status": "ok",
         "message": None,
-        "first_token_p50_ms": 300.0,
-        "first_token_p95_ms": 500.0,
-        "first_token_samples": 30,
+        "first_sentence_p50_ms": 300.0,
+        "first_sentence_p95_ms": 500.0,
+        "first_sentence_samples": 30,
         "margin_ms": None,
         "gpu_mb": 8000,
         "hard_pass": 0.9,
@@ -450,7 +492,7 @@ async def test_a_model_whose_scoring_raises_gets_an_error_row_and_the_run_contin
     rows = await run_bakeoff(["a", "b"], args_stub(tmp_path), scorer=scorer)
     assert [r["status"] for r in rows] == ["error", "ok"]
     assert "out of memory" in rows[0]["message"] and rows[0]["scorecard"] is None
-    assert rows[0]["first_token_p95_ms"] == 500.0  # what was measured before the failure stays
+    assert rows[0]["first_sentence_p95_ms"] == 500.0  # what was measured before the failure stays
 
 
 async def test_a_failing_latency_probe_is_an_error_row(monkeypatch, tmp_path, probes):
@@ -459,7 +501,7 @@ async def test_a_failing_latency_probe_is_an_error_row(monkeypatch, tmp_path, pr
     async def broken(llm, prompts, concurrency=3, rounds=10):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(bakeoff, "first_token_latency", broken)
+    monkeypatch.setattr(bakeoff, "first_sentence_latency", broken)
     [row] = await run_bakeoff(["a"], args_stub(tmp_path), scorer=fake_scorer)
     assert row["status"] == "error" and "ConnectError" in row["message"]
     assert probes.llm.closed
@@ -503,8 +545,8 @@ def test_table_lists_every_row_and_the_winner():
         {
             "model": "a",
             "status": "ok",
-            "first_token_p50_ms": 310.0,
-            "first_token_p95_ms": 480.0,
+            "first_sentence_p50_ms": 310.0,
+            "first_sentence_p95_ms": 480.0,
             "gpu_mb": 8000,
             "hard_pass": 0.9,
             "judged_mean": 4.1,
@@ -515,8 +557,8 @@ def test_table_lists_every_row_and_the_winner():
             "model": "b",
             "status": "unavailable",
             "message": "not in Ollama",
-            "first_token_p50_ms": None,
-            "first_token_p95_ms": None,
+            "first_sentence_p50_ms": None,
+            "first_sentence_p95_ms": None,
             "gpu_mb": None,
             "hard_pass": None,
             "judged_mean": None,
@@ -733,8 +775,8 @@ class TestBakeoffCommand:
                     "model": "m",
                     "status": "unavailable",
                     "message": "not in Ollama",
-                    "first_token_p50_ms": None,
-                    "first_token_p95_ms": None,
+                    "first_sentence_p50_ms": None,
+                    "first_sentence_p95_ms": None,
                     "gpu_mb": None,
                     "hard_pass": None,
                     "judged_mean": None,
@@ -793,7 +835,7 @@ async def test_bake_records_samples_and_margin_per_measured_row(monkeypatch, tmp
     async def latency(llm, prompts, concurrency=3, rounds=10):
         return {"p50_ms": 1.0, "p95_ms": p95[probes.built[-1][0]], "samples": 30}
 
-    monkeypatch.setattr(bakeoff, "first_token_latency", latency)
+    monkeypatch.setattr(bakeoff, "first_sentence_latency", latency)
 
     async def tts():
         return 400.0
@@ -802,7 +844,7 @@ async def test_bake_records_samples_and_margin_per_measured_row(monkeypatch, tmp
         ["a", "b", "c"], args_stub(tmp_path), scorer=fake_scorer, tts_timer=tts
     )
     a, b, c = result["rows"]
-    assert (a["first_token_samples"], a["margin_ms"]) == (30, 300.0)  # 1200 - (500 + 400)
+    assert (a["first_sentence_samples"], a["margin_ms"]) == (30, 300.0)  # 1200 - (500 + 400)
     assert b["margin_ms"] == -100.0  # over budget by 100 ms
     assert c["margin_ms"] is None and c["status"] == "unavailable"
     assert result["winner"] == "a" and result["complete"] is True and result["rounds"] == 10
@@ -878,8 +920,8 @@ async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
                 "model": "m",
                 "status": "ok",
                 "message": None,
-                "first_token_p50_ms": 1.0,
-                "first_token_p95_ms": 2.0,
+                "first_sentence_p50_ms": 1.0,
+                "first_sentence_p95_ms": 2.0,
                 "margin_ms": 10.0,
                 "gpu_mb": None,
                 "hard_pass": 1.0,
@@ -908,8 +950,8 @@ def _ok_row(model, full, judged=4.0, hard=1.0, task=None, n=25, p95=300.0):
         "model": model,
         "status": "ok",
         "message": None,
-        "first_token_p50_ms": p95 - 50,
-        "first_token_p95_ms": p95,
+        "first_sentence_p50_ms": p95 - 50,
+        "first_sentence_p95_ms": p95,
         "margin_ms": 0.0,
         "gpu_mb": 9000,
         "hard_pass": hard,
@@ -944,3 +986,23 @@ def test_a_winner_within_one_case_of_the_runner_up_says_to_rerun_the_top_two():
     assert "within one case" not in bakeoff.table(clear, "a", 400.0, 1200)
     alone = [_ok_row("a", full=0.92)]
     assert "within one case" not in bakeoff.table(alone, "a", 400.0, 1200)
+
+
+async def test_the_candidates_are_timed_on_the_products_prompt(monkeypatch, tmp_path, probes):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
+    await run_bakeoff(["a"], args_stub(tmp_path), scorer=fake_scorer)
+    assert probes.prompts == bakeoff.probe_prompts("configs/clinic.example.yaml", tmp_path)
+    assert probes.warmed == probes.prompts[0]
+
+
+async def test_the_json_says_which_server_the_latency_was_measured_on(
+    monkeypatch, tmp_path, probes
+):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
+
+    async def tts():
+        return 400.0
+
+    result = await bakeoff.bake(["a"], args_stub(tmp_path), scorer=fake_scorer, tts_timer=tts)
+    saved = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    assert saved["latency_server"] == "ollama" and result["latency_server"] == "ollama"

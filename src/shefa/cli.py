@@ -282,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lab_bakeoff = lab_sub.add_parser(
         "bakeoff",
-        help="score several Ollama models, time their first token, weigh their memory, pick one",
+        help="score several Ollama models, time their first sentence, weigh their memory, pick one",
     )
     lab_bakeoff.add_argument("models", nargs="+", metavar="MODEL", help="Ollama model names")
     _add_bench_options(lab_bakeoff, tags_default="bakeoff")
@@ -295,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--rounds",
         type=int,
         default=10,
-        help="first-token timing rounds per model, 3 requests at once each (more: steadier p95)",
+        help="first-sentence timing rounds per model, 3 requests at once each (more: steadier p95)",
     )
     lab_bakeoff.add_argument(
         "--with-voice",
