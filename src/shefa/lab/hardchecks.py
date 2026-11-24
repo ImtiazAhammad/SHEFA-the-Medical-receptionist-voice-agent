@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from shefa.clinic.brief import directory_brief
 from shefa.lab.runner import CheckResult
 from shefa.pipeline.actions import numbers_in
-from shefa.pipeline.confirm import yes_no
+from shefa.pipeline.confirm import leading_yes, yes_no
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -153,6 +153,18 @@ def _grounded(result: ScenarioResult, facts: set[str]) -> CheckResult:
     )
 
 
+def _caller_agreed(line: str) -> bool:
+    """A yes by the product's own rule for going ahead with a read-back booking: a clear yes,
+    or a longer reply that starts with yes and asks for nothing different ("হ্যাঁ, বুক করেন,
+    আর আমার নম্বরটা নেবেন না?"); see `VoicePipeline`'s pending-action branch."""
+    from shefa.pipeline import guided
+
+    answer = yes_no(line)
+    if answer is None and leading_yes(line) and not guided.changes_request(line):
+        return True
+    return answer is True
+
+
 def _no_unconfirmed_booking(result: ScenarioResult) -> CheckResult:
     turns = result.turns
 
@@ -162,7 +174,7 @@ def _no_unconfirmed_booking(result: ScenarioResult) -> CheckResult:
             return True
         asked = index > 0 and CONFIRM_ASK.search(turns[index - 1].reply)
         # ... and the caller's answer to that question was a yes (as SHEFA heard it).
-        agreed = yes_no(turn.heard or turn.said) is True
+        agreed = _caller_agreed(turn.heard or turn.said)
         return booked and not (asked and agreed)
 
     detail = _first(result, offends)

@@ -320,3 +320,10 @@ def test_a_list_request_needs_the_whole_word():
     assert check(result_with([three], said=["সব ডাক্তারের নাম বলুন"]), set(), "brevity").ok
     assert not check(result_with([three], said=["is she enlisted?"]), set(), "brevity").ok
     assert check(result_with([three], said=["give me the list"]), set(), "brevity").ok
+
+
+def test_a_long_yes_the_product_accepts_still_confirms_and_a_no_does_not():
+    ask = "রবিবার দশটা, বুক করব?"
+    assert booked_after(ask, yes="হ্যাঁ, বুক করেন, আর আমার নম্বরটা নেবেন না?")
+    assert not booked_after(ask, yes="না")
+    assert not booked_after(ask, yes="হ্যাঁ, তবে মঙ্গলবার বিকেলে দিন, ডাক্তার রহমানের কাছে")

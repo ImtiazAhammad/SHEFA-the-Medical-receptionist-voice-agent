@@ -20,7 +20,7 @@
 - Hard-check names, exactly: `grounded`, `no_unconfirmed_booking`, `no_medical_advice`, `privacy`, `emergency_first_turn`, `not_pushed_to_book`, `brevity`.
 - Judge dimensions, exactly: `warmth`, `feelings_first`, `no_repetition`, `phone_clarity`, `natural_bangla`, `tactful_limits`, `recovers_mishearing`; each an integer 1 to 5.
 - Caller types: `angry, anxious, talkative, quiet, confused_elderly, rushed, rude, off_topic, code_switching, ordinary`. Goals: `information, booking, change, lookup, emergency, medical_advice, about_shefa, unknown_answer`.
-- Winner rule: a model is eligible when `first_token_p95_ms + tts_first_sentence_ms <= 1200`; eligible models rank by hard-check pass rate, then judged mean.
+- Winner rule: a model is eligible when `first_sentence_p95_ms + tts_first_sentence_ms <= 1200`; eligible models rank by full pass rate (hard checks and the task both passed; ruling C1), then judged mean.
 
 ## Review Focus
 
@@ -319,11 +319,11 @@ def test_lab_score_parses_arguments():
 **Interfaces:**
 - Consumes: `ollama_llm`, `Registry.use_llm`, `build/save` (Task 5), the `lab score` runner (Task 6) as a function `async score(models...)`; refactor `_run_score`'s body into `async run_scorecard(model: str, args) -> dict` in `bakeoff.py` so both commands share it.
 - Produces:
-  - `async first_token_latency(llm, prompts: list[list[dict]], concurrency: int = 3, rounds: int = 4) -> dict` (`p50_ms`, `p95_ms` from start to the first streamed chunk, `concurrency` requests in flight at once).
+  - `async first_sentence_latency(llm, prompts: list[list[dict]], concurrency: int = 3, rounds: int = 4) -> dict` (`p50_ms`, `p95_ms` from start to the first complete sentence of the stream, `concurrency` requests in flight at once).
   - `gpu_memory_mb() -> int | None` (`nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits`, None when unavailable).
   - `async model_available(model: str, base: str = "http://localhost:11434") -> bool` (`/api/tags` lists it).
   - `pick_winner(rows: list[dict], tts_first_ms: float, budget_ms: float = 1200) -> str | None` (the Global Constraints rule).
-  - `async run_bakeoff(models: list[str], args, scorer=run_scorecard) -> list[dict]`: one row per model, in order (`model, status, first_token_p50_ms, first_token_p95_ms, gpu_mb, hard_pass, judged_mean, bangla_purity, scorecard`); a model whose scoring raises gets `status: "error"` with the message.
+  - `async run_bakeoff(models: list[str], args, scorer=run_scorecard) -> list[dict]`: one row per model, in order (`model, status, first_sentence_p50_ms, first_sentence_p95_ms, gpu_mb, hard_pass, judged_mean, bangla_purity, scorecard`); a model whose scoring raises gets `status: "error"` with the message.
   - `shefa lab bakeoff MODEL [MODEL ...] [--with-voice] [--tags ...] [...lab score options]`: per model: availability (unavailable models get a row with `status: "unavailable"`); warm the model; latency probe; memory reading (with `--with-voice`, the recognition and voice models are loaded first through the registry, so the reading includes them); the scorecard; then a table and `data/bench/bakeoff-<timestamp>.json` with all rows, the TTS first-sentence time measured once, and the winner.
 
 - [ ] **Step 1: Write the failing tests**
@@ -331,19 +331,19 @@ def test_lab_score_parses_arguments():
 ```python
 def test_pick_winner_respects_budget_then_quality():
     rows = [
-        {"model": "fast", "status": "ok", "first_token_p95_ms": 400, "hard_pass": 0.80, "judged_mean": 3.9},
-        {"model": "best", "status": "ok", "first_token_p95_ms": 700, "hard_pass": 0.90, "judged_mean": 3.5},
-        {"model": "slow", "status": "ok", "first_token_p95_ms": 1500, "hard_pass": 1.0, "judged_mean": 4.8},
+        {"model": "fast", "status": "ok", "first_sentence_p95_ms": 400, "hard_pass": 0.80, "judged_mean": 3.9},
+        {"model": "best", "status": "ok", "first_sentence_p95_ms": 700, "hard_pass": 0.90, "judged_mean": 3.5},
+        {"model": "slow", "status": "ok", "first_sentence_p95_ms": 1500, "hard_pass": 1.0, "judged_mean": 4.8},
         {"model": "gone", "status": "unavailable"},
     ]
     assert pick_winner(rows, tts_first_ms=400) == "best"
 
 def test_pick_winner_none_when_all_too_slow():
-    assert pick_winner([{"model": "s", "status": "ok", "first_token_p95_ms": 2000, "hard_pass": 1, "judged_mean": 5}], 400) is None
+    assert pick_winner([{"model": "s", "status": "ok", "first_sentence_p95_ms": 2000, "hard_pass": 1, "judged_mean": 5}], 400) is None
 
-async def test_first_token_latency_runs_concurrently():
+async def test_first_sentence_latency_runs_concurrently():
     llm = SlowFirstChunkLLM(delay_s=0.05)
-    out = await first_token_latency(llm, [[{"role": "user", "content": "x"}]], concurrency=3, rounds=2)
+    out = await first_sentence_latency(llm, [[{"role": "user", "content": "x"}]], concurrency=3, rounds=2)
     assert out["p95_ms"] >= 50 and llm.max_in_flight == 3
 
 async def test_unavailable_model_is_reported_not_fatal(monkeypatch):

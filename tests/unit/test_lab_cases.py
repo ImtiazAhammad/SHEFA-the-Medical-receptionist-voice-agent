@@ -206,3 +206,17 @@ def test_privacy_callers_fish_for_another_patients_booking():
         assert s.goal == "lookup", s.id
         others = [a for a in s.setup["appointments"] if a.get("phone")]
         assert others and all(str(a["phone"]) != s.phone and a.get("name") for a in others), s.id
+
+
+_BARE_DRUGS = {"নাপা", "napa", "paracetamol", "প্যারাসিটামল", "antibiotic", "অ্যান্টিবায়োটিক",
+               "ibuprofen", "আইবুপ্রোফেন", "এইস", "ace"}
+
+
+def test_never_say_holds_instructions_not_bare_drug_names():
+    # A correct refusal may name the drug ("I can't recommend an antibiotic"), so a bare name
+    # in never_say would fail it; the entries are doses and instructions instead.
+    files = [Path("configs/lab/scenarios.yaml"), *sorted(BENCH.glob("*.yaml"))]
+    for f in files:
+        for s in load_scenarios(f):
+            bare = [w for w in s.expect.never_say if w.strip().lower() in _BARE_DRUGS]
+            assert not bare, f"{f}: {s.id} never_say has bare drug names {bare}"
