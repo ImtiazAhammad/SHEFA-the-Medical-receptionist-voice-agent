@@ -24,12 +24,77 @@ from shefa.lab.runner import (
     turn_checks,
     word_error_rate,
 )
-from shefa.lab.scenarios import Expect, Scenario, fill, load_scenarios, parse_scenarios, resolve_day
+from shefa.lab.scenarios import (
+    CALLER_TYPES,
+    GOALS,
+    Expect,
+    Scenario,
+    fill,
+    load_scenarios,
+    parse_scenarios,
+    resolve_day,
+    select,
+)
 from shefa.models.base import Language, StreamEvent, STTResult
 
 WEDNESDAY = date(2026, 11, 4)
 SHIPPED = Path(__file__).resolve().parents[2] / "configs" / "lab" / "scenarios.yaml"
 CLINIC = Path(__file__).resolve().parents[2] / "configs" / "clinic.example.yaml"
+
+
+class TestScenarioMetadata:
+    def test_scenario_defaults_caller_type_and_goal(self):
+        [s] = parse_scenarios([{"id": "a", "title": "t", "tests": "x", "turns": ["hi"]}])
+        assert (s.caller_type, s.goal, s.tags) == ("ordinary", "booking", [])
+
+    def test_unknown_caller_type_is_rejected(self):
+        with pytest.raises(ValueError, match="caller_type"):
+            parse_scenarios([
+                {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "caller_type": "grumpy"}
+            ])
+
+    def test_unknown_goal_is_rejected(self):
+        with pytest.raises(ValueError, match="goal.*'refund'"):
+            parse_scenarios([
+                {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "goal": "refund"}
+            ])
+
+    def test_every_allowed_value_parses(self):
+        raw = [
+            {
+                "id": f"{c}-{g}", "title": "t", "tests": "x", "turns": ["hi"],
+                "caller_type": c, "goal": g,
+            }
+            for c in CALLER_TYPES
+            for g in GOALS
+        ]
+        assert len(parse_scenarios(raw)) == len(CALLER_TYPES) * len(GOALS)
+
+    def test_metadata_survives_filling_dates(self):
+        [s] = parse_scenarios([{
+            "id": "a", "title": "t", "tests": "x", "turns": ["hi"],
+            "caller_type": "rushed", "goal": "change", "tags": ["kb", "mid"],
+        }])
+        filled = s.filled(WEDNESDAY)
+        assert (filled.caller_type, filled.goal, filled.tags) == ("rushed", "change", ["kb", "mid"])
+
+    def test_the_shipped_scenarios_still_load_with_defaults(self):
+        shipped = load_scenarios(SHIPPED)
+        assert shipped
+        assert all(s.caller_type in CALLER_TYPES and s.goal in GOALS for s in shipped)
+
+    def test_select_by_tag_caller_type_or_goal(self):
+        s = parse_scenarios([
+            {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "caller_type": "angry"},
+            {
+                "id": "b", "title": "t", "tests": "x", "turns": ["hi"],
+                "goal": "information", "tags": ["kb"],
+            },
+        ])
+        assert [x.id for x in select(s, {"angry"})] == ["a"]
+        assert [x.id for x in select(s, {"kb"})] == ["b"]
+        assert [x.id for x in select(s, {"information"})] == ["b"]
+        assert [x.id for x in select(s, set())] == ["a", "b"]
 
 
 class TestScenarios:
