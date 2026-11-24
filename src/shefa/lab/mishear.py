@@ -64,7 +64,7 @@ class Confusions:
         """
         try:
             uri = f"file:{quote(str(Path(path).resolve()))}?mode=ro"
-            con = sqlite3.connect(uri, uri=True)
+            con = sqlite3.connect(uri, uri=True, timeout=0.5)
             try:
                 rows = con.execute(_PAIRS_SQL).fetchall()
             finally:
@@ -96,8 +96,9 @@ def mishear(text: str, table: Confusions, rate: float, rng: random.Random) -> st
     """
     if rate <= 0:
         return text
+    words = text.split()
     out: list[str] = []
-    for word in text.split():
+    for word in words:
         if _DIGIT.search(word):
             out.append(word)
         elif word in table.subs and rng.random() < rate:
@@ -106,4 +107,5 @@ def mishear(text: str, table: Confusions, rate: float, rng: random.Random) -> st
             continue
         else:
             out.append(word)
-    return " ".join(out)
+    # A line never vanishes entirely: the first word is kept, so the agent still hears a caller.
+    return " ".join(out or words[:1])

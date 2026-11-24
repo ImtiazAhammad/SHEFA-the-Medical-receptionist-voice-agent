@@ -5,8 +5,10 @@ from __future__ import annotations
 import random
 import re
 import sqlite3
+import time
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +16,7 @@ from shefa.config.settings import settings
 from shefa.lab.mishear import Confusions, mishear
 from shefa.lab.runner import Lab, word_error_rate
 from shefa.lab.scenarios import Scenario
+from shefa.models.base import StreamEvent
 
 CLINIC = Path(__file__).resolve().parents[2] / "configs" / "clinic.example.yaml"
 DIGIT = re.compile(r"[0-9০-৯]")
@@ -49,6 +52,11 @@ def test_digits_are_never_dropped_even_when_everything_else_is():
     assert out.split() == ["01711", "৪৫", "b2"]
 
 
+def test_a_line_is_never_dropped_entirely():
+    out = mishear("ক খ গ", Confusions({}, 1.0), 1.0, random.Random(1))
+    assert out == "ক"
+
+
 def test_same_seed_same_mishearing():
     c = Confusions({"ক": ["খ", "গ"], "চ": ["ছ"]}, 0.3)
     text = "ক চ ক চ ক চ ক চ ক চ"
@@ -74,6 +82,21 @@ def test_db_without_a_clips_table_gives_empty_table(tmp_path):
     con.commit()
     con.close()
     assert Confusions.from_collector_db(db) == Confusions({}, 0.0)
+
+
+def test_a_database_locked_by_another_writer_gives_an_empty_table_quickly(tmp_path):
+    db = _clips_db(tmp_path, [("ক খ", "ক গ", None)])
+    writer = sqlite3.connect(db, isolation_level=None)
+    writer.execute("begin exclusive")
+    try:
+        started = time.monotonic()
+        table = Confusions.from_collector_db(db)
+        elapsed = time.monotonic() - started
+    finally:
+        writer.execute("rollback")
+        writer.close()
+    assert table == Confusions({}, 0.0)
+    assert elapsed < 3
 
 
 def _clips_db(tmp_path, rows, name="c.db"):
@@ -121,8 +144,14 @@ class TestLabHook:
         from shefa.models.registry import registry
 
         class Llm:
-            async def stream_chat(self, *args, **kwargs):  # pragma: no cover - never reached
-                raise AssertionError("the greeting turn should not call the model")
+            async def generate(self, messages, tools=None, **kwargs):
+                return SimpleNamespace(text="{}")
+
+            async def generate_events(self, messages, tools=None, **kwargs):
+                yield StreamEvent(text="জি, আর কিছু লাগবে?")
+
+            async def close(self):
+                pass
 
         monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
         monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0)
@@ -162,3 +191,19 @@ class TestLabHook:
             result = await lab.run(self.SCENARIO)
             heard.append([t.heard for t in result.turns])
         assert heard[0] == heard[1]
+
+    async def test_a_scenario_hears_the_same_alone_or_after_another_on_the_same_lab(self, make_lab):
+        table = Confusions({"ক": ["খ", "গ", "ঘ", "ঙ"]}, 0.0)
+        line = " ".join(["ক"] * 24)
+        other = Scenario(id="other", title="t", tests="t", phone="01711000002", turns=[line] * 3)
+        target = Scenario(id="target", title="t", tests="t", phone="01711000001", turns=[line] * 2)
+
+        alone = await make_lab(mishear=table, mishear_rate=0.5, seed=3).run(target)
+        shared = make_lab(mishear=table, mishear_rate=0.5, seed=3)
+        await shared.run(other)
+        after = await shared.run(target)
+
+        assert alone.error is None and after.error is None, (alone.error, after.error)
+        heard = [t.heard for t in alone.turns]
+        assert [t.heard for t in after.turns] == heard
+        assert len(set(heard)) == 2 and all(h != line for h in heard)  # real, varying mangling

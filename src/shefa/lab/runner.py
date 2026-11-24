@@ -236,7 +236,7 @@ class Lab:
         self.clock = clock
         self.mishear = mishear or Confusions({}, 0.0)
         self.mishear_rate = mishear_rate
-        self.rng = random.Random(seed)
+        self.seed = seed
 
     # --- audio ---------------------------------------------------------------------
     async def speak(self, text: str, language: str) -> tuple[bytes, float | None]:
@@ -318,6 +318,9 @@ class Lab:
         call_sid = f"lab-{scenario.id}"
         transcript: list[tuple[str, str]] = []
         scripted = list(scenario.turns)
+        # One generator per scenario, so what a scenario "hears" depends only on the seed and
+        # its id, never on how many draws earlier scenarios or another model's replies used.
+        rng = random.Random(f"{self.seed}:{scenario.id}")
         try:
             while len(result.turns) < max(scenario.max_turns, len(scenario.turns)):
                 if scripted:
@@ -328,7 +331,7 @@ class Lab:
                         break
                 else:
                     break
-                await self._turn(pipeline, call_sid, scenario, said, result, transcript)
+                await self._turn(pipeline, call_sid, scenario, said, result, transcript, rng)
                 if result.turns[-1].state != "active":
                     break
         except Exception as error:  # noqa: BLE001 - one broken scenario never stops the rest
@@ -342,7 +345,9 @@ class Lab:
         result.checks = scenario_checks(scenario, result)
         return result
 
-    async def _turn(self, pipeline, call_sid, scenario, said, result, transcript) -> None:
+    async def _turn(
+        self, pipeline, call_sid, scenario, said, result, transcript, rng: random.Random
+    ) -> None:
         record = TurnRecord(said=said, heard=said, reply="", state="active",
                             language=scenario.language)
         if self.voice is not None and self.stt is not None:
@@ -353,7 +358,7 @@ class Lab:
         elif self.voice is not None:
             record.patient_audio, _ = await self.speak(said, scenario.language)
         if (self.voice is None or self.stt is None) and self.mishear_rate > 0:
-            record.heard = mishear_text(said, self.mishear, self.mishear_rate, self.rng)
+            record.heard = mishear_text(said, self.mishear, self.mishear_rate, rng)
             record.wer = word_error_rate(said, record.heard)
         started = self.clock()
         turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
