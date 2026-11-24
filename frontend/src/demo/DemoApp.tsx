@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Mic, PhoneOff, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { dictionaries, type DKey, type DLang } from './strings'
 import { VoiceCall, type VoiceEnd, type VoiceState } from './voice'
 import '@world/fonts-lite.css'
@@ -215,6 +215,7 @@ export default function DemoApp() {
                 level={() => call.current?.level() ?? 0}
                 theme={shownTheme}
                 paused={calm}
+                hoverBend
               />
             </div>
             <button
@@ -224,7 +225,6 @@ export default function DemoApp() {
             disabled={state === 'connecting'}
             aria-pressed={live}
           >
-            {live ? <PhoneOff size={34} aria-hidden="true" /> : <Mic size={34} aria-hidden="true" />}
             <span>{state === 'connecting' ? t.connecting : live ? t.hangUp : t.start}</span>
             </button>
           </div>

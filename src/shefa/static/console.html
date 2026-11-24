@@ -52,6 +52,16 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 .orb-wrap{display:grid;place-items:center;width:220px;height:220px;max-width:100%}.orb-wrap>*{grid-area:1/1}
 .orb-ring{pointer-events:none;display:grid;place-items:center}
 .orb-wrap.has-ring .orb.live{animation:none}
+/* With the ring drawn, the ring IS the call button: the button stays (keyboard, screen readers,
+   the click) but is a clear circle over the ring, with no fill and no icon. Without the ring
+   (the module did not load) the solid button above is the fallback. */
+.orb-wrap.has-ring .orb{width:150px;height:150px;background:transparent!important;color:inherit;box-shadow:none!important;border-radius:50%;transition:transform .16s var(--ease-out)}
+.orb-wrap.has-ring .orb svg{display:none}
+.orb-wrap.has-ring .orb:active{transform:scale(.97)}
+.orb-wrap.has-ring .orb:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
+.orb-wrap.has-ring .orb-ring{transition:transform .16s var(--ease-out)}
+.orb-wrap.has-ring:has(.orb:active) .orb-ring{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.orb-wrap.has-ring .orb:active,.orb-wrap.has-ring:has(.orb:active) .orb-ring{transform:none}}
 .orb-mini{display:inline-flex;flex:none;width:20px;height:20px;vertical-align:-4px}
 .msg.pending{display:flex;align-items:center;gap:8px;color:var(--mute)}
 </style>
@@ -64,7 +74,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 <section id="talk" class="on">
   <div class="card call">
     <div class="orb-wrap" id="orbwrap"><div class="orb-ring" id="orbring" aria-hidden="true"></div><button id="orb" class="orb" aria-label="Call the agent"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg></button></div>
-    <div id="state">Tap to call the agent</div>
+    <div id="state">Tap the ring to call the agent</div>
     <div id="hint">Speak Bangla or English. Allow the microphone when asked.</div>
   </div>
   <div class="card">
@@ -138,13 +148,13 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 
 /* ---------- SHEFA's orbs: decoration only. If the module cannot load, nothing else changes. ---------- */
 let orbsMod=null;
-function orbs(){return orbsMod??=import('/static/world/orbs/shefa-orbs.js?v=1').catch(()=>{orbsMod=null;return null})}
+function orbs(){return orbsMod??=import('/static/world/orbs/shefa-orbs.js?v=2').catch(()=>{orbsMod=null;return null})}
 const onViolet=()=>matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark'; // ink that reads on the violet banner
 let ring=null,heardIn=null,heardOut=null,wave=null,talkTimer=0;
 function callLevel(){const a=ctx&&ctx.currentTime<agentUntil?heardOut:heardIn;if(!a)return 0;
   if(!wave||wave.length!==a.fftSize)wave=new Float32Array(a.fftSize);a.getFloatTimeDomainData(wave);let s=0;for(const v of wave)s+=v*v;
   return Math.min(1,Math.sqrt(s/wave.length)*4)} // speech RMS ~0.03-0.2, stretched toward 0..1
-orbs().then(m=>{if(!m)return;try{ring=m.mountRing($('orbring'),{size:220,state:'idle',level:callLevel});$('orbwrap').classList.add('has-ring')}catch{}});
+orbs().then(m=>{if(!m)return;try{ring=m.mountRing($('orbring'),{size:220,state:'idle',level:callLevel,hoverBend:true});$('orbwrap').classList.add('has-ring')}catch{}});
 function ringState(s){try{ring&&ring.set({state:s})}catch{}}
 
 /* ---------- voice call ---------- */
@@ -171,7 +181,7 @@ async function startCall(uuid){
   heardOut=ctx.createAnalyser();heardOut.fftSize=512;heardOut.connect(ctx.destination);
   const q=new URLSearchParams();if(uuid)q.set('uuid',uuid);if($('phone').value.trim())q.set('phone',$('phone').value.trim());
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/call?'+q);ws.binaryType='arraybuffer';
-  ws.onopen=()=>{clearInterval(talkTimer);talkTimer=setInterval(()=>ringState(ctx&&ctx.currentTime<agentUntil?'speaking':'listening'),120);$('orb').classList.add('live','red');$('orb').innerHTML=ICON_STOP;setState('Connected','Speak now. Pause when you finish a sentence.')};
+  ws.onopen=()=>{clearInterval(talkTimer);talkTimer=setInterval(()=>ringState(ctx&&ctx.currentTime<agentUntil?'speaking':'listening'),120);$('orb').classList.add('live','red');$('orb').setAttribute('aria-label','End the call');$('orb').innerHTML=ICON_STOP;setState('Connected','Speak now. Pause when you finish a sentence. Tap again to end.')};
   ws.onmessage=e=>{if(typeof e.data==='string'){const m=JSON.parse(e.data);if(m.type==='turn')addMsg(m.role,m.text);else if(m.type==='hangup')hangupWhenQuiet();return}play(e.data)};
   ws.onclose=ev=>{endCall(ev.code===4401?'Not allowed. Sign in again.':'Call ended')};
   node.port.onmessage=e=>{if(ws?.readyState!==1)return;
@@ -184,7 +194,7 @@ function play(buf){const s=new Int16Array(buf),f=new Float32Array(s.length);for(
 // The agent ended the call (handover, goodbye): hang up once its last words have played out.
 function hangupWhenQuiet(){const t=setInterval(()=>{if(!ctx||ctx.currentTime>=agentUntil){clearInterval(t);endCall('The agent ended the call')}},200)}
 function endCall(msg){clearInterval(talkTimer);ringState('idle');heardIn=heardOut=null;try{ws&&ws.close()}catch{}ws=null;node&&node.disconnect();micStream?.getTracks().forEach(t=>t.stop());ctx?.close();ctx=null;node=null;playAt=agentUntil=0;
-  $('orb').classList.remove('live','red');$('orb').innerHTML=ICON_PHONE;setState(msg||'Call ended','Tap to call again.')}
+  $('orb').classList.remove('live','red');$('orb').setAttribute('aria-label','Call the agent');$('orb').innerHTML=ICON_PHONE;setState(msg||'Call ended','Tap to call again.')}
 $('orb').onclick=()=>ws?endCall('Call ended'):startCall('');
 $('ringme').onclick=async()=>{try{await api('/api/v1/calls/ring',{method:'POST',body:JSON.stringify({phone:$('phone').value.trim()})});toast('The agent is calling you…');pollRing()}catch(e){toast(e.message)}};
 let ringTimer=null;async function pollRing(){try{const r=await api('/api/v1/calls/ringing');const el=$('ring');

@@ -35,13 +35,16 @@ export function mountOrb(el: HTMLElement, opts: { state?: OrbState; size?: 20 | 
   }
 }
 
-export function mountRing(el: HTMLElement, opts: { size?: number; state?: RingState; level?: () => number } = {}) {
+export function mountRing(el: HTMLElement, opts: { size?: number; state?: RingState; level?: () => number; hoverBend?: boolean } = {}) {
   const root = createRoot(el)
   let state: RingState = opts.state ?? 'idle'
   const size = opts.size ?? 220
   const level = opts.level ?? (() => 0)
   // the ring has no motion setting of its own beyond its hover bend; reduced motion pauses it
-  const draw = () => root.render(<VoiceRing size={size} state={state} level={level} paused={calm()} />)
+  // hoverBend: when the ring is itself the button, it bends toward a nearing cursor while it
+  // waits (desktop pointers only; the library turns it off with reduced motion)
+  const hoverBend = opts.hoverBend ?? false
+  const draw = () => root.render(<VoiceRing size={size} state={state} level={level} paused={calm()} hoverBend={hoverBend} />)
   draw()
   return {
     set(next: { state?: RingState }) {

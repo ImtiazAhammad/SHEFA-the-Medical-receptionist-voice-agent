@@ -4,6 +4,6 @@
 // exactly as before, and nothing here ever throws.
 let mod = null;
 export function orbs() {
-  if (!mod) mod = import("../world/orbs/shefa-orbs.js?v=1").catch(() => { mod = null; return null; });
+  if (!mod) mod = import("../world/orbs/shefa-orbs.js?v=2").catch(() => { mod = null; return null; });
   return mod;
 }

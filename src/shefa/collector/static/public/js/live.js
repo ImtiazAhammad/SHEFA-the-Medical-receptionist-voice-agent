@@ -27,8 +27,9 @@ export function runLive(view, { onFinish, onScripted }) {
 
   function say(key, params) { fill(cue, T(key, params)); }
 
-  // SHEFA's voice ring above the turn cue (decoration; the cue says everything in words). It
-  // follows the call: processing while the clip is sent and SHEFA thinks, a gentle speech-like
+  // SHEFA's voice ring, which is also the talk button: it stands behind the recorder's own button,
+  // which turns into a clear circle over it once the ring has drawn (the button keeps the tap, the
+  // keyboard and its label; without the ring it is the solid button as before). It follows the call: processing while the clip is sent and SHEFA thinks, a gentle speech-like
   // swell while SHEFA's answer plays (its audio path is left alone), the volunteer's own level
   // from the recorder's meter while they talk, and resting while it is their turn.
   const presence = h("div", { class: "live-ring", "aria-hidden": "true" });
@@ -42,7 +43,7 @@ export function runLive(view, { onFinish, onScripted }) {
   function mountRing() {
     orbs().then((m) => {
       if (!m || dead || ring || !presence.isConnected) return;
-      try { ring = m.mountRing(presence, { size: 150, state: ringState, level: ringLevel }); presence.classList.add("on"); } catch { ring = null; }
+      try { ring = m.mountRing(presence, { size: 168, state: ringState, level: ringLevel, hoverBend: true }); presence.classList.add("on"); } catch { ring = null; }
     });
   }
   function dropOrbs() {
@@ -146,7 +147,12 @@ export function runLive(view, { onFinish, onScripted }) {
       onPhase: (phase) => { if (phase === "rec") ringTo("listening"); else if (ringState === "listening") ringTo("idle"); },
     });
     cap.enable(false);
-    fill(view, h("div", { class: "stack" }, situation, log, presence, cue, warn, listenBtn, cap.el, hang));
+    // the ring goes behind the recorder's button, in one grid cell
+    const recBtn = cap.el.querySelector(".recbtn");
+    const ringWrap = h("div", { class: "ring-wrap" });
+    recBtn.before(ringWrap);
+    ringWrap.append(presence, recBtn);
+    fill(view, h("div", { class: "stack" }, situation, log, cue, warn, listenBtn, cap.el, hang));
     mountRing();
     bubble("shefa", call.greeting);
     speak(call.audio, yourTurn);

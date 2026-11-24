@@ -200,8 +200,22 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .live-turn .small { font-size: 0.8rem; margin: 2px 0 0; }
 .cue { font-weight: 600; margin: 0; }
 
-/* SHEFA's orbs (world/orbs, loaded on first use): the voice ring above the live call's turn cue,
-   and a connecting orb while a live call starts. Neither takes space until it has drawn. */
-.live-ring { display: none; place-items: center; height: 150px; pointer-events: none; }
+/* SHEFA's orbs (world/orbs, loaded on first use). In a live call the voice ring IS the talk
+   button: it stands behind the recorder's button, which becomes a clear circle over it, with no
+   fill and no icon; the level meter steps aside because the ring shows the voice. Until the ring
+   has drawn (or if it never does) the solid button and the meter are exactly as before. A
+   connecting orb shows while a live call starts. */
+.live-ring { display: none; place-items: center; pointer-events: none; }
 .live-ring.on { display: grid; }
+.ring-wrap { display: grid; place-items: center; }
+.ring-wrap > * { grid-area: 1 / 1; }
+.ring-wrap:has(.live-ring.on) { width: 168px; height: 168px; }
+.ring-wrap:has(.live-ring.on) .recbtn { width: 124px; height: 124px; background: transparent; color: transparent; box-shadow: none; animation: none; }
+.ring-wrap:has(.live-ring.on) .recbtn > * { display: none; }
+.ring-wrap:has(.live-ring.on) .recbtn:disabled { background: transparent; cursor: default; }
+.ring-wrap:has(.live-ring.on) .recbtn:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.ring-wrap .live-ring { transition: transform 0.16s var(--ease-out); }
+.ring-wrap:has(.recbtn:active:not(:disabled)) .live-ring { transform: scale(0.97); }
+.capture:has(.live-ring.on) .meter { display: none; }
+@media (prefers-reduced-motion: reduce) { .ring-wrap:has(.recbtn:active) .live-ring { transform: none; } }
 .orb-hold { display: grid; place-items: center; min-height: 64px; }

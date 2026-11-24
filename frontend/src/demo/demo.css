@@ -1,26 +1,28 @@
-/* SHEFA demo page: the patient page's shelf with one big call button. A live call is SHEFA
- * talking, so it takes SHEFA's blue; the transcript reads like a chat. */
+/* SHEFA demo page: the patient page's shelf with SHEFA's ring of light as the call button; the
+ * transcript reads like a chat. */
 .demo .demo-sample { font-size: 0.9rem; color: var(--ink-2); background: var(--waiting-wash); border-radius: var(--r); padding: 0.6rem 0.85rem; margin: 0 0 1.25rem; }
 .demo-call { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.5rem 0 0.75rem; }
 .demo-orb {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
   width: 10rem; height: 10rem; border: 0; border-radius: 50%; cursor: pointer;
-  background: var(--primary); color: var(--on-primary); font: inherit; font-family: var(--font-display); font-weight: 600;
-  box-shadow: var(--shadow-lift);
-  transition: transform 0.16s var(--ease-out), background-color 0.15s;
+  background: transparent; color: var(--ink-2); font: inherit; font-family: var(--font-display); font-weight: 600; font-size: 0.95rem;
+  transition: transform 0.16s var(--ease-out), color 0.15s;
 }
-.demo-orb:hover:not(:disabled) { background: var(--primary-hover); }
+.demo-orb:hover:not(:disabled) { color: var(--ink); }
 .demo-orb:active:not(:disabled), .demo-chips button:active:not(:disabled), .demo-row button:active:not(:disabled) { transform: scale(0.98); }
-.demo-orb:disabled { cursor: progress; background: var(--ink-3); }
-.demo-orb.live { background: var(--shefa); color: var(--on-shefa); }
-.demo-orb.live:hover:not(:disabled) { background: var(--shefa-ink); }
-/* SHEFA's ring of light (voice-ring) stands behind the call button: it breathes while waiting,
-   turns while connecting, and bends with the caller's voice, then with SHEFA's as it answers.
-   The button stays the one thing to press. */
+.demo-orb:disabled { cursor: progress; }
+.demo-orb.live { color: var(--shefa-ink); }
+.demo-orb:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+/* The ring of light (voice-ring) IS the call button: the <button> is a clear circle over it
+   with only a quiet label in the middle, no fill and no icon. It breathes while waiting, turns
+   while connecting, and bends with the caller's voice, then with SHEFA's as it answers. */
 .demo-orb-wrap { display: grid; place-items: center; width: 272px; height: 272px; max-width: 100%; }
 .demo-orb-wrap > * { grid-area: 1 / 1; }
 .demo-ring { display: grid; place-items: center; pointer-events: none; }
-.demo-orb-wrap .demo-orb { position: relative; width: 8.5rem; height: 8.5rem; }
+.demo-orb-wrap .demo-orb { position: relative; width: 9.5rem; height: 9.5rem; }
+.demo-ring { transition: transform 0.16s var(--ease-out); }
+.demo-orb-wrap:has(.demo-orb:active:not(:disabled)) .demo-ring { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .demo-orb-wrap:has(.demo-orb:active) .demo-ring { transform: none; } }
 .demo-state { min-height: 1.5rem; margin: 0; text-align: center; color: var(--ink-2); }
 .demo-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; }
 .demo-chips button { min-height: 44px; padding: 0.45rem 0.95rem; border-radius: var(--r-pill); border: 1px solid var(--rule-strong); background: var(--box); color: var(--ink); cursor: pointer; text-align: start; font: inherit; transition: background-color 0.15s, border-color 0.15s, transform 0.16s var(--ease-out); }
