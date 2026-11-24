@@ -233,6 +233,44 @@ def build_parser() -> argparse.ArgumentParser:
     lab_voices.add_argument("--out", default="voice-test")
     for command in (lab_run, lab_list):
         command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
+    from shefa.lab.models import DEFAULT_SIDE_MODEL
+
+    lab_score = lab_sub.add_parser(
+        "score", help="run the bench against a local model, judge every call, save a scorecard"
+    )
+    lab_score.add_argument(
+        "--scenarios",
+        nargs="+",
+        default=None,
+        metavar="PATH",
+        help="scenario files (default: configs/lab/bench/*.yaml and configs/lab/scenarios.yaml)",
+    )
+    lab_score.add_argument(
+        "--tags", default="", help="comma-separated tags, caller types or goals to keep"
+    )
+    lab_score.add_argument(
+        "--model", default=None, help="an Ollama model to test (default: the configured model)"
+    )
+    lab_score.add_argument("--judge-model", default=DEFAULT_SIDE_MODEL)
+    lab_score.add_argument("--caller-model", default=DEFAULT_SIDE_MODEL)
+    lab_score.add_argument(
+        "--mishear",
+        type=float,
+        default=0.15,
+        help="share of words the caller is misheard on, 0 to 1 (0 turns it off)",
+    )
+    lab_score.add_argument("--seed", type=int, default=7)
+    lab_score.add_argument(
+        "--speech",
+        action="store_true",
+        help="speak the caller's lines over a simulated phone line and transcribe them "
+        "(real speech recognition replaces --mishear)",
+    )
+    lab_score.add_argument("--out", default="data/bench", help="folder for scorecards and tables")
+    lab_score.add_argument("--clinic", default="configs/clinic.example.yaml")
+    lab_compare = lab_sub.add_parser("compare", help="compare two scorecards")
+    lab_compare.add_argument("a", help="the first scorecard (JSON)")
+    lab_compare.add_argument("b", help="the second scorecard (JSON)")
     lab_run.add_argument("--only", default="", help="comma-separated scenario ids")
     lab_run.add_argument("--out", default="lab-report", help="folder for report.html + audio")
     lab_run.add_argument("--clinic", default="configs/clinic.example.yaml")
@@ -882,8 +920,12 @@ def run_lab(args: argparse.Namespace) -> int:
 
     if args.lab_command == "voices":
         return run_voice_test(args)
+    if args.lab_command == "score":
+        return _run_score(args)
+    if args.lab_command == "compare":
+        return _run_compare(args)
     if args.lab_command not in {"run", "list"}:
-        print("usage: shefa lab {run,list,voices}", file=sys.stderr)
+        print("usage: shefa lab {run,list,voices,score,compare}", file=sys.stderr)
         return 2
     try:
         scenarios = load_scenarios(args.scenarios)
@@ -902,6 +944,48 @@ def run_lab(args: argparse.Namespace) -> int:
         return 2
     chosen = [s for s in scenarios if not wanted or s.id in wanted]
     return asyncio.run(_run_lab(chosen, args))
+
+
+def _run_score(args: argparse.Namespace) -> int:
+    from shefa.lab.scoring import select_scenarios
+
+    if not 0.0 <= args.mishear <= 1.0:
+        print("--mishear is a share of words between 0 and 1", file=sys.stderr)
+        return 2
+    try:
+        scenarios = select_scenarios(args)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_score(scenarios, args))
+
+
+async def _score(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab import scorecard
+    from shefa.lab.scoring import run_scorecard
+    from shefa.models.registry import registry
+
+    try:
+        card = await run_scorecard(args.model, args, scenarios=scenarios)
+    finally:
+        await registry.reset()
+    print(f"\n{scorecard.summary(card)}")
+    print(f"Scorecard: {scorecard.save(card, Path(args.out))}")
+    return 0
+
+
+def _run_compare(args: argparse.Namespace) -> int:
+    import json
+
+    from shefa.lab import scorecard
+
+    try:
+        cards = [json.loads(Path(path).read_text(encoding="utf-8")) for path in (args.a, args.b)]
+        print(scorecard.compare(*cards))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f"Cannot compare {args.a} and {args.b}: {error}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def run_voice_test(args: argparse.Namespace) -> int:

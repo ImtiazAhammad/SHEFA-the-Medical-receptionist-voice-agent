@@ -49,6 +49,11 @@ class OpenAICompatibleLLM(BaseLLM):
             base_url=base_url, api_key=key, timeout=timeout_s, max_retries=0
         )
 
+    @property
+    def extra_body(self) -> dict[str, Any] | None:
+        """The extra fields sent with every request, or None."""
+        return self._extra_body
+
     def _convert_tools(self, tools: list[ToolDefinition] | None) -> list[dict[str, Any]] | None:
         if not tools:
             return None
