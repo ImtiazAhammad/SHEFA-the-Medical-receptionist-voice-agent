@@ -98,10 +98,10 @@ the same way. Measured per model: hard-check pass rate, judged score, Bangla pur
 at the 95th percentile with three concurrent calls, and graphics memory with recognition and the voice
 loaded. The winner is the best quality whose first audio stays within 1.2 s at p95.
 
-**Output:** `shefa bench run [--model M] [--cases tag]` prints and saves a scorecard (JSON plus a short
+**Output:** `shefa lab score [--model M] [--tags tag]` (and `shefa lab bakeoff`, `shefa lab compare`; `shefa bench` was already the voice benchmark) prints and saves a scorecard (JSON plus a short
 text summary) under `data/bench/`; the console lists scorecards and compares two.
 
-The existing `scripts/bench_dialogue.py` router cases become one case group.
+The lab's existing scenarios (`configs/lab/scenarios.yaml`) are the regression group; the single-sentence router cases in `scripts/bench_dialogue.py` test the router the new brain replaces and stay a separate script.
 
 ## 5. The conversation brain
 
