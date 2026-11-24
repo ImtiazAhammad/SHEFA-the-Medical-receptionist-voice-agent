@@ -1,0 +1,225 @@
+"""The scorecard: one bench run reduced to the numbers every change is compared on.
+
+`build` takes the scenario results and the judge's scores and returns a plain dict (so it
+saves as JSON and two cards compare field by field). Rates and means that have nothing to
+average are `None`, never zero: a missing judgment is counted in `judged.missing`, and
+an empty group is not a perfect or a terrible one.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from shefa.lab.judge import DIMENSIONS
+from shefa.lab.runner import latin_share
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from shefa.lab.judge import JudgeScore
+    from shefa.lab.runner import ScenarioResult
+
+# The seven pass/fail gates of `hardchecks.hard_checks`. `result.checks` also holds the lab's
+# older scenario checks; those are reported per scenario but are not part of the hard rate.
+HARD_CHECKS: tuple[str, ...] = (
+    "grounded",
+    "no_unconfirmed_booking",
+    "no_medical_advice",
+    "privacy",
+    "emergency_first_turn",
+    "not_pushed_to_book",
+    "brevity",
+)
+
+
+def _mean(values: Sequence[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _percentile(values: Sequence[float], pct: float) -> float | None:
+    """Nearest-rank percentile of `values`; None when there are none."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(1, math.ceil(pct / 100 * len(ordered)))
+    return ordered[rank - 1]
+
+
+def _git_commit() -> str | None:
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() or None
+
+
+def _hard(results: list[ScenarioResult]) -> dict[str, Any]:
+    present = [{c.name: c.ok for c in r.checks if c.name in HARD_CHECKS} for r in results]
+    clean = [all(found.values()) for found in present]
+    by_check: dict[str, float] = {}
+    for name in HARD_CHECKS:
+        outcomes = [found[name] for found in present if name in found]
+        if outcomes:
+            by_check[name] = sum(outcomes) / len(outcomes)
+    return {"pass_rate": _mean([float(ok) for ok in clean]), "by_check": by_check}
+
+
+def _usable(judged: dict[str, JudgeScore | None], scenario_id: str) -> JudgeScore | None:
+    score = judged.get(scenario_id)
+    return score if score is not None and score.mean is not None else None
+
+
+def _judged(results: list[ScenarioResult], judged: dict[str, JudgeScore | None]) -> dict[str, Any]:
+    rows = [(r, _usable(judged, r.scenario.id)) for r in results]
+    scored = [(r, s) for r, s in rows if s is not None]
+
+    def by(attribute: str) -> dict[str, float | None]:
+        groups: dict[str, list[float]] = {}
+        for r in results:
+            groups.setdefault(getattr(r.scenario, attribute), [])
+        for r, s in scored:
+            groups[getattr(r.scenario, attribute)].append(s.mean)  # type: ignore[arg-type]
+        return {name: _mean(means) for name, means in groups.items()}
+
+    return {
+        "mean": _mean([s.mean for _, s in scored]),  # type: ignore[misc]
+        "by_dimension": {
+            name: _mean([s.scores[name] for _, s in scored if name in s.scores])
+            for name in DIMENSIONS
+        },
+        "by_caller_type": by("caller_type"),
+        "by_goal": by("goal"),
+        "missing": len(rows) - len(scored),
+    }
+
+
+def _latency(results: list[ScenarioResult]) -> dict[str, float | None]:
+    turns = [t for r in results for t in r.turns]
+    llm = [t.llm_ms for t in turns]
+    first_audio = [t.first_audio_ms for t in turns if t.first_audio_ms is not None]
+    return {
+        "p50_ms": _percentile(llm, 50),
+        "p95_ms": _percentile(llm, 95),
+        "first_audio_p95_ms": _percentile(first_audio, 95),
+    }
+
+
+def _bangla_purity(results: list[ScenarioResult]) -> float | None:
+    replies = [t.reply for r in results for t in r.turns if t.language == "bn" and t.reply.strip()]
+    return _mean([1 - latin_share(reply) for reply in replies])
+
+
+def _failed(result: ScenarioResult) -> list[str]:
+    every = [*result.checks, *(c for t in result.turns for c in t.checks)]
+    names = [c.name for c in every if not c.ok]
+    return ["error", *names] if result.error is not None else names
+
+
+def build(
+    results: list[ScenarioResult], judged: dict[str, JudgeScore | None], meta: dict[str, Any]
+) -> dict[str, Any]:
+    """The scorecard for one run. `meta` is the caller's (model, judge model, mishear rate,
+    seed, started); `case_count`, `finished` and `git_commit` are filled in when absent."""
+    filled = dict(meta)
+    filled.setdefault("case_count", len(results))
+    filled.setdefault("finished", datetime.now().isoformat(timespec="seconds"))
+    if "git_commit" not in filled:
+        filled["git_commit"] = _git_commit()
+    scenarios: dict[str, Any] = {}
+    for r in results:
+        score = _usable(judged, r.scenario.id)
+        scenarios[r.scenario.id] = {
+            "passed": r.passed,
+            "failed": _failed(r),
+            "judge_mean": score.mean if score else None,
+        }
+    return {
+        "meta": filled,
+        "hard": _hard(results),
+        "judged": _judged(results, judged),
+        "latency": _latency(results),
+        "bangla_purity": _bangla_purity(results),
+        "scenarios": scenarios,
+    }
+
+
+def save(card: dict[str, Any], out_dir: Path) -> Path:
+    """Write `scorecard-<model>-<YYYYmmdd-HHMMSS>.json` into `out_dir` and return its path."""
+    model = str(card.get("meta", {}).get("model") or "unknown")
+    safe = model.replace("/", "_").replace(":", "_")
+    path = Path(out_dir) / f"scorecard-{safe}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(card, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def _num(value: float | None, digits: int = 3) -> str:
+    return "-" if value is None else f"{value:.{digits}f}"
+
+
+def _headlines(card: dict[str, Any]) -> list[tuple[str, float | None, int]]:
+    """(label, value, decimals) for each headline number."""
+    return [
+        ("hard pass rate", card["hard"]["pass_rate"], 3),
+        ("judged mean", card["judged"]["mean"], 2),
+        ("p95 latency ms", card["latency"]["p95_ms"], 0),
+        ("bangla purity", card["bangla_purity"], 3),
+        ("missing judgments", float(card["judged"]["missing"]), 0),
+    ]
+
+
+def summary(card: dict[str, Any]) -> str:
+    """A short fixed-width table of the headline numbers."""
+    meta = card.get("meta", {})
+    lines = [f"scorecard  {meta.get('model', '?')}  ({meta.get('case_count', '?')} cases)"]
+    lines += [f"{label:<20}{_num(value, digits):>10}" for label, value, digits in _headlines(card)]
+    return "\n".join(lines)
+
+
+def _row(label: str, a: float | None, b: float | None, digits: int) -> str:
+    diff = "-" if a is None or b is None else f"{b - a:+.{digits}f}"
+    return f"{label:<26}{_num(a, digits):>10}{_num(b, digits):>10}{diff:>10}"
+
+
+def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
+    """Headline numbers, then each hard check and judged dimension, as a, b and b - a."""
+    a_meta, b_meta = a.get("meta", {}), b.get("meta", {})
+    lines = [
+        f"a: {a_meta.get('model', '?')}",
+        f"b: {b_meta.get('model', '?')}",
+        f"{'':<26}{'a':>10}{'b':>10}{'b - a':>10}",
+    ]
+    for (label, av, digits), (_, bv, _) in zip(_headlines(a), _headlines(b), strict=True):
+        lines.append(_row(label, av, bv, digits))
+    checks = [
+        *a["hard"]["by_check"],
+        *(n for n in b["hard"]["by_check"] if n not in a["hard"]["by_check"]),
+    ]
+    for name in checks:
+        lines.append(
+            _row(
+                f"check {name}", a["hard"]["by_check"].get(name), b["hard"]["by_check"].get(name), 3
+            )
+        )
+    for name in DIMENSIONS:
+        lines.append(
+            _row(
+                f"dim {name}",
+                a["judged"]["by_dimension"].get(name),
+                b["judged"]["by_dimension"].get(name),
+                2,
+            )
+        )
+    return "\n".join(lines)
