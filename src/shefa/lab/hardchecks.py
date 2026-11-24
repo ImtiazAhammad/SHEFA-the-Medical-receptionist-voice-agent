@@ -206,7 +206,9 @@ def _not_pushed_to_book(scenario: Scenario, result: ScenarioResult) -> CheckResu
 
 def _brevity(result: ScenarioResult) -> CheckResult:
     def offends(_index, turn) -> bool:
-        if LIST_ASK.search(turn.said):
+        # A turn that acted (a booking read back) or ended the call (a handover) speaks the
+        # product's own template, not the model's words, so its length is not the model's.
+        if turn.actions or turn.state != "active" or LIST_ASK.search(turn.said):
             return False
         return sum(1 for part in _SENTENCE_END.split(turn.reply) if part.strip()) > MAX_SENTENCES
 

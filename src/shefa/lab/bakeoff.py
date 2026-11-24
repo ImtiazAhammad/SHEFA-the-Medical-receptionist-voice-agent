@@ -4,7 +4,8 @@ Each candidate is scored like `shefa lab score` scores a model (`run_scorecard`)
 timed (time to the first streamed text with several requests at once) and weighed (graphics
 memory in use while it is loaded). The winner is the best model that is fast enough: first
 token plus the voice's first sentence must fit the budget (the plan's Global Constraints),
-then the hard-check pass rate decides, then the judged mean.
+then the full pass rate (hard checks and the caller's task both passed) decides, then the
+judged mean.
 
 The candidates run on Ollama, one at a time: after each one Ollama is asked to unload it
 (and the caller and judge, when they run on that same server), so the memory reading of the
@@ -209,18 +210,18 @@ async def load_voice() -> None:
     await registry.get_tts()
 
 
-def pick_winner(
+def ranked(
     rows: list[dict], tts_first_ms: float | None, budget_ms: float = BUDGET_MS
-) -> str | None:
-    """The best model whose first-token p95 plus the voice's first sentence fits the budget.
+) -> list[dict]:
+    """The eligible rows, best first.
 
-    Eligible: status "ok" and `first_token_p95_ms + tts_first_ms <= budget_ms`. Among those,
-    the highest hard-check pass rate, then the highest judged mean (a missing number ranks
-    last); a full tie goes to the model listed first. None when nothing is eligible, or when
-    the voice's time is unknown.
+    Eligible: status "ok" and `first_token_p95_ms + tts_first_ms <= budget_ms`. They rank by
+    the full pass rate (hard checks and the task both passed), then the judged mean (a
+    missing number ranks last); a full tie keeps the order the models were listed in. Empty
+    when the voice's time is unknown.
     """
     if tts_first_ms is None:
-        return None
+        return []
     eligible = [
         row
         for row in rows
@@ -228,14 +229,30 @@ def pick_winner(
         and row.get("first_token_p95_ms") is not None
         and row["first_token_p95_ms"] + tts_first_ms <= budget_ms
     ]
-    if not eligible:
-        return None
 
     def quality(row: dict) -> tuple[float, float]:
-        hard, judged = row.get("hard_pass"), row.get("judged_mean")
-        return (-1.0 if hard is None else hard, -1.0 if judged is None else judged)
+        full, judged = row.get("full_pass"), row.get("judged_mean")
+        return (-1.0 if full is None else full, -1.0 if judged is None else judged)
 
-    return max(eligible, key=quality)["model"]  # max keeps the first of equals
+    return sorted(eligible, key=quality, reverse=True)  # sorted is stable: equals keep order
+
+
+def pick_winner(
+    rows: list[dict], tts_first_ms: float | None, budget_ms: float = BUDGET_MS
+) -> str | None:
+    """The best model whose first-token p95 plus the voice's first sentence fits the budget
+    (see `ranked`); None when nothing is eligible, or when the voice's time is unknown."""
+    best = ranked(rows, tts_first_ms, budget_ms)
+    return best[0]["model"] if best else None
+
+
+def within_one_case(winner: dict, runner_up: dict) -> bool:
+    """Whether the winner's full pass beats the runner-up's by at most one case of `n`:
+    noise, not a result. Counted in whole cases, so float rounding cannot tip it."""
+    a, b, n = winner.get("full_pass"), runner_up.get("full_pass"), winner.get("n")
+    if a is None or b is None or not n:
+        return False
+    return round((a - b) * n) <= 1
 
 
 def _blank_row(model: str) -> dict[str, Any]:
@@ -249,6 +266,9 @@ def _blank_row(model: str) -> dict[str, Any]:
         "margin_ms": None,
         "gpu_mb": None,
         "hard_pass": None,
+        "task_pass": None,
+        "full_pass": None,
+        "n": None,
         "judged_mean": None,
         "bangla_purity": None,
         "scorecard": None,
@@ -316,6 +336,9 @@ async def run_bakeoff(
             row["gpu_mb"] = await asyncio.to_thread(gpu_memory_mb)
             card = await scorer(model, args, scenarios=scenarios, agent_llm=llm)
             row["hard_pass"] = card["hard"]["pass_rate"]
+            row["task_pass"] = card["task"]["pass_rate"]
+            row["full_pass"] = card["full"]["pass_rate"]
+            row["n"] = card["meta"]["case_count"]
             row["judged_mean"] = card["judged"]["mean"]
             row["bangla_purity"] = card["bangla_purity"]
             row["scorecard"] = str(scorecard.save(card, Path(args.out)))
@@ -431,7 +454,10 @@ def table(
         "p95 ms",
         "margin",
         "GPU MB",
-        "hard pass",
+        "n",
+        "hard",
+        "task",
+        "full",
         "judged",
         "Bangla",
     )
@@ -443,7 +469,10 @@ def table(
             _cell(row.get("first_token_p95_ms")),
             _cell(row.get("margin_ms")),
             _cell(row.get("gpu_mb")),
+            _cell(row.get("n")),
             _cell(row.get("hard_pass"), 3),
+            _cell(row.get("task_pass"), 3),
+            _cell(row.get("full_pass"), 3),
             _cell(row.get("judged_mean"), 2),
             _cell(row.get("bangla_purity"), 3),
         )
@@ -468,9 +497,15 @@ def table(
         best = next(row for row in rows if row["model"] == winner)
         out.append(
             f"Winner: {winner} (first token p95 {best['first_token_p95_ms']:.0f} ms + voice "
-            f"{tts_first_ms:.0f} ms, within {budget_ms:.0f} ms; hard pass "
+            f"{tts_first_ms:.0f} ms, within {budget_ms:.0f} ms; full pass "
+            f"{_cell(best.get('full_pass'), 3)} of {_cell(best.get('n'))}, hard "
             f"{_cell(best.get('hard_pass'), 3)}, judged {_cell(best.get('judged_mean'), 2)})"
         )
+        others = [row for row in ranked(rows, tts_first_ms, budget_ms) if row is not best]
+        if others and within_one_case(best, others[0]):
+            out.append(
+                f"  within one case of {others[0]['model']}: re-run the top two in full"
+            )
     elif not any(row.get("status") == "ok" for row in rows):
         out.append("No winner: no model finished the run.")
     elif tts_first_ms is None:

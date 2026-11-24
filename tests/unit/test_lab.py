@@ -338,10 +338,10 @@ class TestRunner:
         assert result.turns[2].actions == ["book_appointment"]
         assert "রেফারেন্স নম্বর এক" in result.turns[2].reply
         assert [a["start_time"] for a in result.appointments] == ["10:00"]
-        # The real confirmation template is three sentences, so the hard `brevity` check flags
-        # it; every other check, hard ones included, must hold.
+        # The confirmation template is three sentences, but a turn that booked is the product's
+        # own wording, not the model's, so `brevity` skips it: every check must hold.
         failed = [c.name for c in result.checks if not c.ok]
-        assert failed == ["brevity"], [c for c in result.checks if not c.ok]
+        assert failed == [], [c for c in result.checks if not c.ok]
 
     async def test_setup_puts_a_doctor_on_leave_and_books_an_existing_appointment(self, lab):
         scenario = Scenario(
@@ -379,9 +379,9 @@ class TestRunner:
         result = await lab.make().run(scenario)
 
         assert len(result.turns) == 1 and result.turns[0].state == "escalated"
-        # The handover template is three sentences, so the hard `brevity` check flags it;
-        # every other check must hold.
-        assert [c.name for c in result.checks if not c.ok] == ["brevity"]
+        # The handover template is three sentences, but a turn that ended the call is the
+        # product's own wording, so `brevity` skips it: every check must hold.
+        assert [c.name for c in result.checks if not c.ok] == []
 
     async def test_every_run_ends_with_the_hard_checks(self, lab):
         scenario = Scenario(id="h", title="t", tests="t", turns=["হ্যালো"])

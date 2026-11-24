@@ -265,3 +265,34 @@ def test_save_model_name_is_made_filename_safe(tmp_path):
     assert p.name.startswith("scorecard-a_b_c_d__-")
     first = save({"meta": {"model": "m"}}, tmp_path)
     assert len(first.stem.rsplit("-", 1)[1]) == 9  # HHMMSS + 3-digit milliseconds
+
+
+def test_task_pass_counts_the_scenario_checks_and_full_needs_both():
+    hard_only = failing("a", "ordinary", "caller holds 1 appointment(s)")  # hard ok, task fails
+    task_only = failing("b", "ordinary", "grounded")  # task ok, hard fails
+    turn_fail = passing("c")
+    turn_fail.turns[0].checks.append(CheckResult("replied", False))  # a turn check is task too
+    errored = passing("d")
+    errored.error = "boom"
+    card = build([hard_only, task_only, turn_fail, errored, passing("e")], {}, {})
+    assert card["hard"]["pass_rate"] == 0.6  # a, c, e
+    assert card["task"] == {"pass_rate": 0.4}  # b, e
+    assert card["full"] == {"pass_rate": 0.2}  # e only
+    empty = build([], {}, {})
+    assert empty["task"] == {"pass_rate": None} and empty["full"] == {"pass_rate": None}
+
+
+def test_summary_and_compare_show_task_full_and_the_case_count():
+    text = summary(made())
+    assert "task pass rate" in text and "full pass rate" in text and "n (cases)" in text
+    compared = compare(made(), made())
+    assert any(line.startswith("task pass rate") for line in compared.splitlines())
+    assert any(line.startswith("full pass rate") for line in compared.splitlines())
+    assert any(line.startswith("n (cases)") for line in compared.splitlines())
+
+
+def test_compare_reads_an_older_card_without_task_or_full():
+    old, new = made(), made()
+    del old["task"], old["full"]
+    row = next(r for r in compare(old, new).splitlines() if r.startswith("full pass rate"))
+    assert row.split()[-1] == "-"

@@ -245,3 +245,12 @@ def test_the_caller_is_not_a_stranger_whatever_the_phone_format(tmp_path):
         now=morning,
     )
     assert strangers_in(store, "+8801711000001") == []
+
+
+def test_brevity_skips_a_templated_turn_that_acted_or_ended_the_call():
+    three = "এক। দুই। তিন।"
+    booked = result_with([three], said=["হ্যাঁ"], actions=[["book_appointment"]])
+    handed_over = result_with([three], said=["বুকে ব্যথা"], states=["escalated"])
+    assert check(booked, set(), "brevity").ok
+    assert check(handed_over, set(), "brevity").ok
+    assert not check(result_with([three], said=["ফি?"]), set(), "brevity").ok

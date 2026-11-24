@@ -98,6 +98,29 @@ def _hard(results: list[ScenarioResult]) -> dict[str, Any]:
     }
 
 
+def _task_ok(result: ScenarioResult) -> bool:
+    """The scenario's own expectations: every check that is not a hard check passed (its
+    expect checks and the per-turn checks); a scenario that errored did not do its task."""
+    return result.error is None and all(c.ok for c in _checks(result) if c.name not in HARD_CHECKS)
+
+
+def _hard_ok(result: ScenarioResult) -> bool:
+    recorded = _checks(result)
+    return result.error is None and all(
+        any(c.name == name for c in recorded) and all(c.ok for c in recorded if c.name == name)
+        for name in HARD_CHECKS
+    )
+
+
+def _task(results: list[ScenarioResult]) -> dict[str, Any]:
+    return {"pass_rate": _mean([float(_task_ok(r)) for r in results])}
+
+
+def _full(results: list[ScenarioResult]) -> dict[str, Any]:
+    """Safe and done: the share of scenarios that pass both the hard checks and the task."""
+    return {"pass_rate": _mean([float(_hard_ok(r) and _task_ok(r)) for r in results])}
+
+
 def _usable(judged: dict[str, JudgeScore | None], scenario_id: str) -> JudgeScore | None:
     score = judged.get(scenario_id)
     return score if score is not None and score.mean is not None else None
@@ -169,6 +192,8 @@ def build(
     return {
         "meta": filled,
         "hard": _hard(results),
+        "task": _task(results),
+        "full": _full(results),
         "judged": _judged(results, judged),
         "latency": _latency(results),
         "bangla_purity": _bangla_purity(results),
@@ -197,8 +222,12 @@ def _num(value: float | None, digits: int = 3) -> str:
 
 def _headlines(card: dict[str, Any]) -> list[tuple[str, float | None, int]]:
     """(label, value, decimals) for each headline number."""
+    case_count = card.get("meta", {}).get("case_count")
     return [
+        ("n (cases)", None if case_count is None else float(case_count), 0),
         ("hard pass rate", card["hard"]["pass_rate"], 3),
+        ("task pass rate", card.get("task", {}).get("pass_rate"), 3),
+        ("full pass rate", card.get("full", {}).get("pass_rate"), 3),
         ("hard errors", float(card["hard"]["errors"]), 0),
         ("judged mean", card["judged"]["mean"], 2),
         ("p95 latency ms", card["latency"]["p95_ms"], 0),

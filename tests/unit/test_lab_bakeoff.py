@@ -24,8 +24,10 @@ from shefa.lab.bakeoff import (
 from shefa.models.base import StreamEvent
 
 CARD = {
-    "meta": {"model": "a"},
+    "meta": {"model": "a", "case_count": 20},
     "hard": {"pass_rate": 0.9},
+    "task": {"pass_rate": 0.8},
+    "full": {"pass_rate": 0.75},
     "judged": {"mean": 4.1},
     "bangla_purity": 0.97,
 }
@@ -110,7 +112,7 @@ def probes(monkeypatch):
 
 
 async def fake_scorer(model, args, **kwargs):
-    return {**CARD, "meta": {"model": model}}
+    return {**CARD, "meta": {"model": model, "case_count": 20}}
 
 
 def test_pick_winner_respects_budget_then_quality():
@@ -119,21 +121,21 @@ def test_pick_winner_respects_budget_then_quality():
             "model": "fast",
             "status": "ok",
             "first_token_p95_ms": 400,
-            "hard_pass": 0.80,
+            "full_pass": 0.80,
             "judged_mean": 3.9,
         },
         {
             "model": "best",
             "status": "ok",
             "first_token_p95_ms": 700,
-            "hard_pass": 0.90,
+            "full_pass": 0.90,
             "judged_mean": 3.5,
         },
         {
             "model": "slow",
             "status": "ok",
             "first_token_p95_ms": 1500,
-            "hard_pass": 1.0,
+            "full_pass": 1.0,
             "judged_mean": 4.8,
         },
         {"model": "gone", "status": "unavailable"},
@@ -146,26 +148,26 @@ def test_pick_winner_none_when_all_too_slow():
         "model": "s",
         "status": "ok",
         "first_token_p95_ms": 2000,
-        "hard_pass": 1,
+        "full_pass": 1,
         "judged_mean": 5,
     }
     assert pick_winner([row], 400) is None
 
 
-def test_pick_winner_ties_on_hard_pass_go_to_judged_mean():
+def test_pick_winner_ties_on_full_pass_go_to_judged_mean():
     rows = [
         {
             "model": "a",
             "status": "ok",
             "first_token_p95_ms": 300,
-            "hard_pass": 0.9,
+            "full_pass": 0.9,
             "judged_mean": 3.0,
         },
         {
             "model": "b",
             "status": "ok",
             "first_token_p95_ms": 300,
-            "hard_pass": 0.9,
+            "full_pass": 0.9,
             "judged_mean": 4.0,
         },
     ]
@@ -177,14 +179,14 @@ def test_pick_winner_budget_is_inclusive_and_error_rows_never_win():
         "model": "edge",
         "status": "ok",
         "first_token_p95_ms": 800,
-        "hard_pass": 0.5,
+        "full_pass": 0.5,
         "judged_mean": 2,
     }
     errored = {
         "model": "err",
         "status": "error",
         "first_token_p95_ms": 100,
-        "hard_pass": 1.0,
+        "full_pass": 1.0,
         "judged_mean": 5,
     }
     assert pick_winner([errored, at_budget], 400, budget_ms=1200) == "edge"
@@ -197,14 +199,14 @@ def test_pick_winner_unmeasured_quality_loses_to_measured():
             "model": "blank",
             "status": "ok",
             "first_token_p95_ms": 300,
-            "hard_pass": None,
+            "full_pass": None,
             "judged_mean": None,
         },
         {
             "model": "real",
             "status": "ok",
             "first_token_p95_ms": 300,
-            "hard_pass": 0.1,
+            "full_pass": 0.1,
             "judged_mean": 1.0,
         },
     ]
@@ -216,7 +218,7 @@ def test_pick_winner_none_without_a_voice_time_or_rows():
         "model": "m",
         "status": "ok",
         "first_token_p95_ms": 100,
-        "hard_pass": 1,
+        "full_pass": 1,
         "judged_mean": 5,
     }
     assert pick_winner([row], None) is None
@@ -409,6 +411,9 @@ async def test_row_carries_latency_memory_quality_and_scorecard_path(monkeypatch
         "margin_ms": None,
         "gpu_mb": 8000,
         "hard_pass": 0.9,
+        "task_pass": 0.8,
+        "full_pass": 0.75,
+        "n": 20,
         "judged_mean": 4.1,
         "bangla_purity": 0.97,
         "scorecard": None,
@@ -815,7 +820,7 @@ async def test_the_json_is_written_after_each_row_and_survives_an_interrupt(
     async def scorer(model, args, **kwargs):
         if model == "b":
             raise Interrupt
-        return {**CARD, "meta": {"model": model}}
+        return {**CARD, "meta": {"model": model, "case_count": 20}}
 
     async def tts():
         return 400.0
@@ -850,7 +855,7 @@ async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
         [saved] = tmp_path.glob("bakeoff-*.json") if model == "b" else [None]
         if saved:
             seen.append(json.loads(saved.read_text(encoding="utf-8")))
-        return {**CARD, "meta": {"model": model}}
+        return {**CARD, "meta": {"model": model, "case_count": 20}}
 
     async def tts():
         return 400.0
@@ -861,6 +866,7 @@ async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
     [final] = tmp_path.glob("bakeoff-*.json")
     data = json.loads(final.read_text(encoding="utf-8"))
     assert data["complete"] is True and len(data["rows"]) == 2 and str(final) == result["path"]
+    assert [r["status"] for r in data["rows"]] == ["ok", "ok"]
 
     def test_a_run_where_a_model_was_scored_exits_0(self, tmp_path, monkeypatch):
         from shefa.models.registry import registry
@@ -895,3 +901,46 @@ async def test_each_row_rewrites_the_same_file_and_the_last_write_is_complete(
         monkeypatch.setattr(registry, "reset", reset)
         argv = ["lab", "bakeoff", "m", "--scenarios", str(path), "--out", str(tmp_path)]
         assert cli.main([*argv, "--mishear", "0"]) == 0
+
+
+def _ok_row(model, full, judged=4.0, hard=1.0, task=None, n=25, p95=300.0):
+    return {
+        "model": model,
+        "status": "ok",
+        "message": None,
+        "first_token_p50_ms": p95 - 50,
+        "first_token_p95_ms": p95,
+        "margin_ms": 0.0,
+        "gpu_mb": 9000,
+        "hard_pass": hard,
+        "task_pass": full if task is None else task,
+        "full_pass": full,
+        "n": n,
+        "judged_mean": judged,
+        "bangla_purity": 1.0,
+    }
+
+
+def test_pick_winner_ranks_by_full_pass_not_by_hard_pass_alone():
+    safe_but_useless = _ok_row("safe", full=0.40, hard=1.0, judged=4.8)
+    does_the_job = _ok_row("job", full=0.80, hard=0.85, judged=3.5)
+    assert pick_winner([safe_but_useless, does_the_job], 400) == "job"
+
+
+def test_table_shows_hard_task_full_and_n():
+    text = bakeoff.table([_ok_row("a", full=0.6, hard=0.9, task=0.64)], "a", 400.0, 1200)
+    header = text.splitlines()[0].split()
+    for column in ("hard", "task", "full", "n"):
+        assert column in header
+    assert "0.640" in text and "0.600" in text and " 25" in text
+
+
+def test_a_winner_within_one_case_of_the_runner_up_says_to_rerun_the_top_two():
+    close = [_ok_row("a", full=0.92), _ok_row("b", full=0.88)]  # 23 v 22 of 25
+    text = bakeoff.table(close, pick_winner(close, 400.0), 400.0, 1200)
+    assert "Winner: a" in text
+    assert "within one case of b: re-run the top two in full" in text
+    clear = [_ok_row("a", full=0.92), _ok_row("b", full=0.80)]  # 23 v 20 of 25
+    assert "within one case" not in bakeoff.table(clear, "a", 400.0, 1200)
+    alone = [_ok_row("a", full=0.92)]
+    assert "within one case" not in bakeoff.table(alone, "a", 400.0, 1200)
