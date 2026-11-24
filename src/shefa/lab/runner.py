@@ -321,6 +321,7 @@ class Lab:
         # One generator per scenario, so what a scenario "hears" depends only on the seed and
         # its id, never on how many draws earlier scenarios or another model's replies used.
         rng = random.Random(f"{self.seed}:{scenario.id}")
+        hard: list[CheckResult] = []
         try:
             while len(result.turns) < max(scenario.max_turns, len(scenario.turns)):
                 if scripted:
@@ -340,10 +341,19 @@ class Lab:
             if scenario.phone:
                 patient = store.upsert_patient(scenario.phone)
                 result.appointments = store.appointments_for_patient(patient)
+            # The hard checks read the clinic's own data, so they run before the store closes.
+            hard = self._hard_checks(scenario, result, store)
             set_default_clinic_store(previous)
             store.close()
-        result.checks = scenario_checks(scenario, result)
+        result.checks = [*scenario_checks(scenario, result), *hard]
         return result
+
+    def _hard_checks(self, scenario: Scenario, result: ScenarioResult, store: Any):
+        from shefa.lab.hardchecks import facts_for, hard_checks, strangers_in
+
+        said = [line for turn in result.turns for line in (turn.said, turn.heard)]
+        facts = facts_for(store, self.today, said)
+        return hard_checks(scenario, result, facts, strangers_in(store, scenario.phone))
 
     async def _turn(
         self, pipeline, call_sid, scenario, said, result, transcript, rng: random.Random

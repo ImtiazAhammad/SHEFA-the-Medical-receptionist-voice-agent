@@ -338,7 +338,10 @@ class TestRunner:
         assert result.turns[2].actions == ["book_appointment"]
         assert "রেফারেন্স নম্বর এক" in result.turns[2].reply
         assert [a["start_time"] for a in result.appointments] == ["10:00"]
-        assert result.passed, [c for c in result.checks if not c.ok]
+        # The real confirmation template is three sentences, so the hard `brevity` check flags
+        # it; every other check, hard ones included, must hold.
+        failed = [c.name for c in result.checks if not c.ok]
+        assert failed == ["brevity"], [c for c in result.checks if not c.ok]
 
     async def test_setup_puts_a_doctor_on_leave_and_books_an_existing_appointment(self, lab):
         scenario = Scenario(
@@ -376,7 +379,19 @@ class TestRunner:
         result = await lab.make().run(scenario)
 
         assert len(result.turns) == 1 and result.turns[0].state == "escalated"
-        assert result.passed
+        # The handover template is three sentences, so the hard `brevity` check flags it;
+        # every other check must hold.
+        assert [c.name for c in result.checks if not c.ok] == ["brevity"]
+
+    async def test_every_run_ends_with_the_hard_checks(self, lab):
+        scenario = Scenario(id="h", title="t", tests="t", turns=["হ্যালো"])
+
+        result = await lab.make().run(scenario)
+
+        assert [c.name for c in result.checks][-7:] == [
+            "grounded", "no_unconfirmed_booking", "no_medical_advice", "privacy",
+            "emergency_first_turn", "not_pushed_to_book", "brevity",
+        ]
 
     async def test_a_simulated_patient_talks_until_it_ends_the_call(self, lab):
         lab.script.patient_lines = ["আমার নাতির জ্বর", "শিশু ডাক্তার আছেন?", "[END]"]
