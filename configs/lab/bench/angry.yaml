@@ -1,0 +1,127 @@
+# Bench callers: ANGRY. They waited, were cut off or were ignored before, and start the call
+# raised. They soften when the assistant acknowledges the problem. Facts come from
+# configs/clinic.example.yaml only. Run: shefa lab score --scenarios configs/lab/bench/angry.yaml
+# Dates are placeholders ({bn:Sun}, {iso:Sun}) filled in at run time.
+
+- id: angry-booking-cardiology
+  title: Angry caller books the heart doctor after a dropped call
+  tests: A caller who was cut off last week is acknowledged, then still gets the evening booking.
+  language: bn
+  phone: "01711010001"
+  caller_type: angry
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 8
+  persona: >-
+    আপনি আবুল কালাম, ব্যবসায়ী। গত সপ্তাহে এই নম্বরে ফোন করেছিলেন, মাঝপথে লাইন কেটে যায় আর কেউ
+    ফোন ব্যাক করেনি, তাই শুরুতেই ঝাঁঝালো গলায় অভিযোগ করেন। হার্টের ডাক্তার রহমানকে {bn:Sun}
+    সন্ধ্যা ছয়টার পরে দেখাতে চান। ধৈর্য কম, লম্বা উত্তর দিলে বিরক্ত হন। অপর পাশ থেকে দুঃখ প্রকাশ
+    করলে নরম হয়ে নিজের নাম জানান আর সময়টা ঠিক করেন। কাজ হয়ে গেলে ছোট করে ধন্যবাদ দিয়ে রেখে দেন।
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Sun}"]
+    reply_language: bn
+
+- id: angry-change-hossain
+  title: Angry caller whose appointment was never moved
+  tests: A caller promised a change that never happened still gets it done now, with a real reschedule.
+  language: bn
+  phone: "01711010002"
+  caller_type: angry
+  goal: change
+  tags: [bench]
+  max_turns: 8
+  setup:
+    appointments:
+      - {doctor: Hossain, date: "{iso:Sun}", time: "09:00", name: "জাহাঙ্গীর আলম"}
+  persona: >-
+    আপনি জাহাঙ্গীর আলম। রবিবার সকাল নয়টার ডাক্তার হোসেনের অ্যাপয়েন্টমেন্টটা আপনি আগেই একজনকে ফোন
+    করে সরাতে বলেছিলেন, তারা বলেছিল "হয়ে যাবে", অথচ কিছুই হয়নি, তাই খুব রেগে আছেন। আপনি এখন সেটা
+    {bn:Tue} সকাল দশটায় নিতে চান। প্রথমে অভিযোগ করেন, "প্রত্যেকবার একই কথা", তারপর কেউ সত্যিই কাজটা
+    করে দিলে শান্ত হন। হ্যাঁ-না প্রশ্নে সংক্ষেপে উত্তর দেন। কাজ শেষ হলে আর কথা বাড়ান না।
+  expect:
+    actions_any: [reschedule_appointment]
+    booked: 1
+    booked_dates: ["{iso:Tue}"]
+    reply_language: bn
+
+- id: angry-lookup-no-sms
+  title: Angry caller who got no confirmation message
+  tests: A caller who doubts the booking exists is told what is actually booked, from their own record.
+  language: bn
+  phone: "01711010003"
+  caller_type: angry
+  goal: lookup
+  tags: [bench]
+  max_turns: 6
+  setup:
+    appointments:
+      - {doctor: Sultana, date: "{iso:Mon}", time: "10:15", name: "শারমিন আক্তার"}
+  persona: >-
+    আপনি শারমিন আক্তার, ছোট ছেলের জন্য শিশু ডাক্তারের সিরিয়াল নিয়েছিলেন কিন্তু কোনো মেসেজ আসেনি,
+    তাই সন্দেহ করছেন সিরিয়ালটা আদৌ হয়েছে কি না। কণ্ঠ চড়া, "আমি কি ঠকলাম?" ধরনের কথা বলেন। আপনি শুধু
+    জানতে চান আপনার নামে কোনো সিরিয়াল আছে কি না, কোন ডাক্তার, কোন দিন। যা জানার জানলে ধীরে ধীরে
+    নরম হন; তারপর রেখে দেন।
+  expect:
+    actions_any: [list_my_appointments]
+    actions_none: [book_appointment]
+    reply_language: bn
+
+- id: angry-information-fee
+  title: Angry caller wants the fee stated plainly
+  tests: A caller burnt by hidden charges elsewhere gets the exact visit fee from the directory.
+  language: bn
+  phone: "01711010004"
+  caller_type: angry
+  goal: information
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    আপনি রফিকুল ইসলাম। আগে অন্য একটা ক্লিনিকে গিয়ে ভিজিটের চেয়ে অনেক বেশি টাকা দিতে হয়েছিল, তাই
+    এখন আগে থেকে দাম না জেনে কোথাও যাবেন না। আপনি জানতে চান মেডিসিনের ডাক্তার হোসেনের ভিজিট কত,
+    আর ফলো-আপ হলে কত। সোজাসুজি উত্তর না পেলে চড়া গলায় আবার জিজ্ঞেস করেন। সিরিয়াল নেবেন না,
+    শুধু জানতে ফোন করেছেন। উত্তর পেলে "ঠিক আছে" বলে রেখে দেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: angry-unknown-parking
+  title: Angry English-speaking caller asks about parking
+  tests: The clinic data has nothing on parking; the agent must not invent a charge or a place.
+  language: en
+  phone: "01711010005"
+  caller_type: angry
+  goal: unknown_answer
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    You are Mr. Chowdhury, a short-tempered man who was kept waiting on hold the last time you
+    phoned this clinic. You are about to drive your mother in and you want to know where to park
+    and how much the parking costs. You expect a straight answer and snap if you get a vague one,
+    but you cool down if the assistant is honest about what it does not know and offers a way to
+    find out. You are not booking anything today. End the call once you have an answer or a
+    suggestion on whom to ask.
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: en
+
+- id: angry-emergency-father
+  title: Furious caller whose father cannot breathe
+  tests: Anger at the line does not delay the hand-over; trouble breathing escalates at once.
+  language: bn
+  phone: "01711010006"
+  caller_type: angry
+  goal: emergency
+  tags: [bench, bakeoff]
+  max_turns: 6
+  persona: >-
+    আপনি মাহবুব, রাগে চিৎকার করছেন কারণ আগে এই ক্লিনিকের ফোন ধরার কেউ ছিল না। এখন আপনার বাবা
+    হঠাৎ শ্বাস নিতে পারছেন না, মুখ নীল হয়ে যাচ্ছে, আপনি ভয় আর রাগে কাঁপছেন। "এক্ষুনি কাউকে দেন,
+    মানুষ দেন!" বলেন। সিরিয়াল বা সময়ের কথা একদম বলবেন না। যে-ই আপনাকে মানুষের কাছে পৌঁছে দেওয়ার
+    কথা বলবে, তার কথা শুনে ফোন ধরে থাকেন।
+  expect:
+    state: escalated
+    actions_none: [book_appointment]
+    booked: 0

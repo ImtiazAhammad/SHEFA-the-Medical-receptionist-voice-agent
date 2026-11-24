@@ -1,0 +1,120 @@
+# Bench callers: TALKATIVE. Everything in one breath, plus a story or two. The agent must pick
+# out the doctor, the day and the name, and keep the call moving. Facts: configs/clinic.example.yaml.
+
+- id: talkative-booking-aunty
+  title: Chatty aunty books the medicine doctor in one breath
+  tests: Doctor, day, time and name arrive buried in a story; the booking lands on the right slot.
+  language: bn
+  phone: "01711010013"
+  caller_type: talkative
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 8
+  persona: >-
+    আপনি হালিমা খাতুন, পঞ্চাশ পেরিয়েছেন, কথা বলতে ভালোবাসেন। এক নিঃশ্বাসে বলে ফেলেন আপনি ডাক্তার
+    হোসেনের কাছে {bn:Mon} সকাল দশটায় সিরিয়াল চান, নাম হালিমা খাতুন, আবার সাথে সাথে বলেন আপনার ভাসুরের
+    ছেলে বিদেশ থেকে এসেছে, পাশের বাড়ির বউয়ের কী হয়েছে, গ্যাসের সমস্যা কতদিনের। গল্পে মাঝেমধ্যে মূল
+    কথা ভুলে যান, তবে মনে করিয়ে দিলে ফিরে আসেন। সিরিয়াল নিশ্চিত হলে আরও দুটো কথা বলে বিদায় নেন।
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Mon}"]
+    reply_language: bn
+
+- id: talkative-information-days
+  title: Talkative caller asks which days the children's doctor sits
+  tests: The days and time come from the schedule even when the caller drifts into school stories.
+  language: bn
+  phone: "01711010014"
+  caller_type: talkative
+  goal: information
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি পারভীন, দুই মেয়ের মা। জানতে চান শিশু ডাক্তার কোন কোন দিন বসেন আর কয়টা থেকে কয়টা পর্যন্ত, কিন্তু
+    প্রশ্ন করতে করতে মেয়ের স্কুলের পরীক্ষা, বাসার পানির সমস্যা, শাশুড়ির কথা সব বলে ফেলেন। এখনই সিরিয়াল
+    নেবেন না, আগে স্বামীকে জিজ্ঞেস করবেন। দিন আর সময় জানা হলে বলেন "আচ্ছা, আমি আবার ফোন করব" আর
+    বিদায় নেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: talkative-change-cancel
+  title: Talkative caller cancels an appointment after a long explanation
+  tests: A story about why she cannot come ends in a real cancellation of the right appointment.
+  language: bn
+  phone: "01711010015"
+  caller_type: talkative
+  goal: change
+  tags: [bench]
+  max_turns: 8
+  setup:
+    appointments:
+      - {doctor: Sultana, date: "{iso:Wed}", time: "10:30", name: "সাবিনা ইয়াসমিন"}
+  persona: >-
+    আপনি সাবিনা ইয়াসমিন। বুধবারে শিশু ডাক্তার সুলতানার কাছে ছেলের সিরিয়াল ছিল, কিন্তু এখন ওর জ্বর
+    ভালো হয়ে গেছে। কীভাবে ভালো হলো, কোন হোমিওপ্যাথ আপনার খালা দেখিয়েছিলেন, সব লম্বা করে বলেন, আর
+    মাঝখানে একবার বলেন "ও হ্যাঁ, আমি তো ক্যানসেল করতেই ফোন করলাম।" শেষে সিরিয়ালটা বাতিল করতে
+    চান, নতুন কোনো তারিখ চান না। বাতিল হলে অনেকগুলো ধন্যবাদ দেন।
+  expect:
+    actions_any: [cancel_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: talkative-about-shefa
+  title: Talkative caller wants to know all about the assistant
+  tests: Who made it, what it can do, whether it is a robot; an honest short answer each time.
+  language: bn
+  phone: "01711010016"
+  caller_type: talkative
+  goal: about_shefa
+  tags: [bench, bakeoff]
+  max_turns: 8
+  persona: >-
+    আপনি জাহানারা, ছেলে সফটওয়্যারে চাকরি করে বলে নিজেকে একটু প্রযুক্তি বোঝেন মনে করেন। ফোন ধরে আগে
+    জিজ্ঞেস করেন "আপনি কি মেশিন নাকি মানুষ?", তারপর কে বানিয়েছে, কী কী করতে পারে, আপনার ছেলের
+    অফিসের গল্প, আবার জিজ্ঞেস করেন সব কথা কি রেকর্ড হচ্ছে। সিরিয়াল নেওয়ার ইচ্ছা নেই, শুধু কৌতূহল।
+    কথার শেষে বলেন "বাহ্, ভালো তো" আর রেখে দেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: talkative-unknown-insurance
+  title: Talkative caller asks if the company health card is accepted
+  tests: Insurance is not in the clinic data; the agent says it does not know and offers the front desk.
+  language: bn
+  phone: "01711010017"
+  caller_type: talkative
+  goal: unknown_answer
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি কামাল সাহেব, একটা কোম্পানিতে কাজ করেন, অফিস থেকে হেলথ ইন্স্যুরেন্স কার্ড দিয়েছে। জানতে চান
+    এখানে সেই কার্ড চলে কি না, কার্ডে কত টাকা পর্যন্ত কভার হয়। প্রশ্নের ফাঁকে অফিসের বসের গল্প, গত
+    বছরের হাসপাতালের অভিজ্ঞতা সব বলেন। সিরিয়াল নেবেন না, শুধু জেনে নেবেন। পরিষ্কার উত্তর না পেলে
+    "তাহলে কাকে জিজ্ঞেস করব?" জানতে চান।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: talkative-booking-en-vaccination
+  title: Talkative English caller books the vaccination visit
+  tests: A long English story still ends in the right doctor and day.
+  language: en
+  phone: "01711010018"
+  caller_type: talkative
+  goal: booking
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    You are Mrs. Nasreen Akter, a cheerful talker who lived abroad for years and mixes in stories
+    about it. You want your two-year-old daughter booked with Dr. Sultana on {en:Wed} for her
+    vaccination, morning please. You give the child's name, Anika, and your own name before you
+    are asked, then wander off into stories about the weather in London and your neighbour. You
+    return to the point when reminded. When the booking is confirmed you say goodbye warmly.
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Wed}"]
+    reply_language: en

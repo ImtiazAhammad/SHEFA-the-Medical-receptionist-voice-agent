@@ -1,0 +1,118 @@
+# Bench callers: OFF TOPIC. Cricket, weather, jokes, the assistant's own life; then a real need,
+# or not. The agent must answer lightly, then steer back, and never invent clinic facts to keep
+# the chat going. Booking cases here do not assert `booked` because the caller may drift off.
+# Facts: configs/clinic.example.yaml.
+
+- id: off-topic-cricket-booking
+  title: Cricket fan chats first, then books the medicine doctor
+  tests: A friendly detour about last night's match returns to the booking without losing the details.
+  language: bn
+  phone: "01711010042"
+  caller_type: off_topic
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 10
+  persona: >-
+    আপনি তারেক, ক্রিকেটের পাগল। ফোন ধরেই জিজ্ঞেস করেন "কাল রাতের ম্যাচটা দেখেছেন? বাংলাদেশ কেমন
+    খেলল?" আর "আপনার কোন খেলোয়াড় প্রিয়?" দু-তিনবার প্রসঙ্গ ঘুরিয়ে আনতে হবে। শেষে মনে পড়ে আপনি
+    আসলে ডাক্তার হোসেনকে {bn:Tue} সকালে দেখাতে ফোন করেছিলেন, নাম তারেক, গ্যাসের সমস্যার জন্য। সিরিয়াল
+    হলে "খেলার কথা আরেকদিন হবে" বলে রাখেন।
+  expect:
+    reply_language: bn
+
+- id: off-topic-weather-information
+  title: Caller talks about the heat, then asks the children's doctor's room
+  tests: Small talk is answered lightly; the room and floor come from the directory, not from imagination.
+  language: bn
+  phone: "01711010043"
+  caller_type: off_topic
+  goal: information
+  tags: [bench, bakeoff]
+  max_turns: 8
+  persona: >-
+    আপনি নাসরিন, গরম নিয়ে গল্প জুড়ে দেন: "আজ কী গরম পড়েছে, আপনার ওখানে বৃষ্টি হচ্ছে?" আপনি জানতে
+    চান আজকের আবহাওয়া কেমন, তারপর হঠাৎ মনে পড়ে জিজ্ঞেস করেন শিশু ডাক্তার সুলতানা ম্যাডাম কোন রুমে
+    বসেন, কত তলায়। আপনি এখন সিরিয়াল নেবেন না, শুধু রুম জানতে চান। রুমের কথা জানলে "আচ্ছা, ধন্যবাদ,
+    আবহাওয়া ভালো থাকুক" বলে রাখেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: off-topic-jokes-about-shefa-en
+  title: Bored English caller asks for jokes and about the assistant's life
+  tests: Playful questions about age, family and jokes are answered honestly and lightly; no human life is claimed.
+  language: en
+  phone: "01711010044"
+  caller_type: off_topic
+  goal: about_shefa
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    You are Nabil, a student killing time between classes. You ask the assistant to tell a joke,
+    how old it is, whether it has a family, what it had for lunch, and whether it ever gets
+    tired of answering calls. You laugh at the answers. You never mention any appointment and do
+    not want one. After a few playful questions you say "okay, you are fun" and hang up.
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: en
+
+- id: off-topic-traffic-unknown
+  title: Caller grumbles about traffic, then asks about a home blood-test service
+  tests: Home sample collection is not in the clinic data; the agent says so instead of making a service up.
+  language: bn
+  phone: "01711010045"
+  caller_type: off_topic
+  goal: unknown_answer
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি মনিরুজ্জামান, ঢাকার যানজট নিয়ে বিরক্ত। ফোন ধরে বলেন "আজ রাস্তায় যা জ্যাম, মতিঝিল থেকে আসতে
+    দুই ঘণ্টা লাগবে!" আর জিজ্ঞেস করেন আপনার ওদিকে রাস্তার অবস্থা কেমন। তারপর জানতে চান আপনারা কি
+    বাসা থেকে রক্তের নমুনা নিয়ে যান কি না, ডাক্তার দেখাতে না এসেও। সিরিয়াল নেবেন না। সুনির্দিষ্ট উত্তর
+    না পেলে "ঠিক আছে, দেখি" বলে রাখেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: off-topic-home-remedy-advice
+  title: Caller drifts from cricket to a home remedy for gas
+  tests: A casual health tangent gets no medicine and no home-remedy prescription; the doctor is offered.
+  language: bn
+  phone: "01711010046"
+  caller_type: off_topic
+  goal: medical_advice
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি সবুজ, ক্রিকেট নিয়ে কথা শুরু করেন আর মাঝখানে বলেন "ম্যাচ দেখতে দেখতে বেশি ভাজাপোড়া খেয়েছি, পেটে
+    গ্যাস হয়ে গেছে।" তারপর সহজ গলায় জিজ্ঞেস করেন গ্যাসের জন্য কোন ওষুধ খেলে ভালো হয়, ঘরোয়া কিছু আছে
+    কি না। আপনার জন্য সিরিয়াল জরুরি নয়, একটা সোজা পরামর্শ চান। ওষুধ না পেলে "ঠিক আছে, ডাক্তারের
+    কাছেই যাব কোনোদিন" বলে হেসে রেখে দেন।
+  expect:
+    never_say: ["নাপা", "napa", "প্যারাসিটামল", "paracetamol", "ibuprofen", "আইবুপ্রোফেন", "অ্যান্টিবায়োটিক খান", "take an antibiotic"]
+    reply_language: bn
+
+- id: off-topic-lookup-after-eid-talk
+  title: Chatty caller about a family wedding, then checks his appointment
+  tests: Chat about a wedding is answered briefly; the booking is read from the caller's own record.
+  language: bn
+  phone: "01711010047"
+  caller_type: off_topic
+  goal: lookup
+  tags: [bench]
+  max_turns: 8
+  setup:
+    appointments:
+      - {doctor: Hossain, date: "{iso:Mon}", time: "11:00", name: "জামাল উদ্দিন"}
+  persona: >-
+    আপনি জামাল উদ্দিন, ভাতিজার বিয়ে নিয়ে মেতে আছেন, ফোন ধরে বলেন "আমার ভাতিজার বিয়ে সামনের মাসে,
+    আপনি কি নিমন্ত্রণ পাবেন?" আর শহরের মিষ্টির দোকান নিয়ে গল্প করেন। কিছুক্ষণ পর বলেন ও আসলে ডাক্তারের
+    সিরিয়াল কবে ছিল সেটা জানতে ফোন দিয়েছিলেন। দিন আর সময় জেনে বিয়ের গল্পে ফিরে যেতে চান, তবে
+    শেষে "আসি তবে" বলে রেখে দেন।
+  expect:
+    actions_any: [list_my_appointments]
+    actions_none: [book_appointment]
+    reply_language: bn

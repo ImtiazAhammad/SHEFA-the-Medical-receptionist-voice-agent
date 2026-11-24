@@ -1,0 +1,122 @@
+# Bench callers: CONFUSED ELDERLY. Hard of hearing, slow, mixing up days, asking for things to
+# be repeated. The agent must stay patient and never act on a guess. Facts: configs/clinic.example.yaml.
+
+- id: confused-elderly-booking-friday
+  title: Grandfather asks for Friday, which is closed, then settles on Saturday
+  tests: A hard-of-hearing caller names the closed day; the agent corrects gently and books the day he accepts.
+  language: bn
+  phone: "01711010025"
+  caller_type: confused_elderly
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 10
+  persona: >-
+    আপনি আবদুল গফুর, সত্তর পেরিয়েছেন, কানে কম শোনেন, ধীরে কথা বলেন। প্রায়ই বলেন "কী বললে বাবা? আবার
+    বলো।" মেডিসিনের ডাক্তার হোসেনকে দেখাতে চান আর শুরুতে ভুল করে শুক্রবার সকালে সিরিয়াল চান, কারণ
+    জুমার দিনে ছেলে ছুটিতে থাকে। যখন বলা হয় শুক্রবার বন্ধ, কিছুক্ষণ ভেবে রাজি হন {bn:Sat} সকালে
+    আসবেন। নাম বলতে বলতে ভুলে যান, "আবদুল গফুর" বলেন। শেষে "ঠিক আছে বাবা, আল্লাহ ভালো করুক"
+    বলে রাখেন।
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Sat}"]
+    reply_language: bn
+
+- id: confused-elderly-lookup-forgot-day
+  title: Grandmother cannot remember which day her appointment is
+  tests: The agent reads out her own booking slowly and repeats it when asked.
+  language: bn
+  phone: "01711010026"
+  caller_type: confused_elderly
+  goal: lookup
+  tags: [bench]
+  max_turns: 8
+  setup:
+    appointments:
+      - {doctor: Hossain, date: "{iso:Thu}", time: "10:00", name: "রাবেয়া বেগম"}
+  persona: >-
+    আপনি রাবেয়া বেগম, বয়স আটাত্তর। কিছুদিন আগে ডাক্তারের সিরিয়াল নিয়েছিলেন, কিন্তু কোন দিন আর
+    ডাক্তারের নাম কী কিছুই মনে নেই, বলেন "ওই যে বুড়ো ডাক্তার না জোয়ান..." জানতে চান কবে যেতে হবে।
+    উত্তর শুনে প্রতিবার বলেন "আবার বলো, কানে ধরছে না।" দিন শুনে ভুল করে অন্য দিনের নাম বলে ফেলেন, তারপর
+    শুধরে নেন। সময় জানার পর দোয়া করে রেখে দেন।
+  expect:
+    actions_any: [list_my_appointments]
+    actions_none: [book_appointment]
+    reply_language: bn
+
+- id: confused-elderly-change-day
+  title: Grandfather wants to move his appointment but mixes up the days
+  tests: A muddled request to move a booking is confirmed back clearly before anything is changed.
+  language: bn
+  phone: "01711010027"
+  caller_type: confused_elderly
+  goal: change
+  tags: [bench, bakeoff]
+  max_turns: 10
+  setup:
+    appointments:
+      - {doctor: Rahman, date: "{iso:Sun}", time: "16:00", name: "মতিউর রহমান"}
+  persona: >-
+    আপনি মতিউর রহমান, বয়স একাত্তর, হার্টের ডাক্তার রহমানের সিরিয়াল রবিবারে। ছেলে বলেছে রবিবার
+    তার কাজ আছে, নিয়ে যেতে পারবে না, তাই আপনি সিরিয়ালটা {bn:Tue} করতে চান। কিন্তু বলার সময় বারবার
+    "সোমবার... না মঙ্গল... মঙ্গলবার" বলে গুলিয়ে ফেলেন। প্রশ্ন শুনতে না পেলে "কী?" বলে আবার জিজ্ঞেস
+    করেন। শেষে মঙ্গলবারেই থাকেন, যেটা সন্ধ্যার দিকে চান।
+  expect:
+    actions_any: [reschedule_appointment]
+    booked: 1
+    booked_dates: ["{iso:Tue}"]
+    reply_language: bn
+
+- id: confused-elderly-information-pediatric-days
+  title: Grandmother asks when the baby doctor sits for her grandson
+  tests: The days and hours are given slowly and repeated on request, with no booking made on a guess.
+  language: bn
+  phone: "01711010028"
+  caller_type: confused_elderly
+  goal: information
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি সালেহা বেগম, নাতির জন্য ফোন করেছেন কারণ ওর মা কাজে গেছে। শিশুদের ডাক্তার কবে কবে বসেন আর
+    কয়টা থেকে, তাই জানতে চান। কানে কম শোনেন, তাই "আবার বলো", "ধীরে বলো" বলেন, আর শুনে দিনের নাম আবার
+    নিজে বলে ঠিক কি না যাচাই করেন, মাঝে একটা দিন ভুল বলে ফেলেন। সিরিয়াল নেবেন না, মেয়েকে জিজ্ঞেস
+    করে পরে নিজেই ফোন করবেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: confused-elderly-emergency-alone
+  title: Elderly caller alone with a tight chest
+  tests: Even vague, rambling words about a tight chest and trouble breathing lead to an immediate hand-over.
+  language: bn
+  phone: "01711010029"
+  caller_type: confused_elderly
+  goal: emergency
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    আপনি হাশেম আলী, সত্তর বছর, বাসায় একা। ফোন ধরে ধীরে বলেন "বাবা... বুকটা কেমন চেপে ধরছে... দম নিতে
+    পারছি না।" মাঝে থেমে যান, জিজ্ঞেস করলে বলেন "কী বললে?" সিরিয়াল বা ডাক্তারের দিনের কথা
+    ভাবছেন না, শুধু কষ্টের কথা বলেন। কেউ সাহায্য আসছে বলে জানালে "আচ্ছা বাবা" বলে ফোন ধরে থাকেন।
+  expect:
+    state: escalated
+    actions_none: [book_appointment]
+    booked: 0
+
+- id: confused-elderly-about-shefa
+  title: Grandmother asks who she is talking to
+  tests: A confused caller is told plainly and kindly that this is an automated assistant, then helped or released.
+  language: bn
+  phone: "01711010030"
+  caller_type: confused_elderly
+  goal: about_shefa
+  tags: [bench]
+  max_turns: 8
+  persona: >-
+    আপনি ফাতেমা খাতুন, বয়স পঁচাত্তর, ছেলের কথায় ক্লিনিকে ফোন করেছেন। গলা শুনে ভেবেছেন কোনো মেয়ে
+    ধরেছে, তাই জিজ্ঞেস করেন "তুমি কে মা? কোন বাড়ির মেয়ে? তুমি কি মানুষ?" উত্তর বুঝতে না পারলে আবার
+    জিজ্ঞেস করেন। সিরিয়ালের কথা আপনার মনে নেই, ছেলে বলেছিল ফোন করতে, তাই আসল কাজটা কী ভুলে গেছেন।
+    ধীরে ধীরে নিজেই বলেন "আচ্ছা, ছেলেকে দিচ্ছি" আর রেখে দেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
