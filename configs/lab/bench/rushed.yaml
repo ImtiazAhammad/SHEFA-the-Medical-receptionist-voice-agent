@@ -2,7 +2,7 @@
 # long answers. The agent must be short and precise. Facts: configs/clinic.example.yaml.
 
 - id: rushed-booking-cardiology-en
-  title: Rushed office worker books the heart doctor for tomorrow-ish evening
+  title: Rushed office worker books the heart doctor for Thursday evening
   tests: A caller who interrupts long answers still gets exactly the doctor, day and evening slot.
   language: en
   phone: "01711010031"
@@ -20,9 +20,9 @@
     booked_dates: ["{iso:Thu}"]
     reply_language: en
 
-- id: rushed-booking-medicine-tomorrow
-  title: Rushed caller wants the medicine doctor tomorrow morning
-  tests: The word "tomorrow" resolves to the right date; the earliest free slot is booked fast.
+- id: rushed-booking-medicine-morning
+  title: Rushed caller wants the medicine doctor on Monday morning
+  tests: A hurried caller who names the day and says "the earliest" still gets the first free morning slot booked fast.
   language: bn
   phone: "01711010032"
   caller_type: rushed
@@ -30,12 +30,12 @@
   tags: [bench]
   max_turns: 6
   persona: >-
-    আপনি শাহিন, অফিসে বসে ফোন করছেন, হাতে সময় কম। আগামীকাল সকালে ডাক্তার হোসেনকে দেখাতে চান, যেটা
+    আপনি শাহিন, অফিসে বসে ফোন করছেন, হাতে সময় কম। {bn:Mon} সকালে ডাক্তার হোসেনকে দেখাতে চান, যেটা
     সবচেয়ে আগের খালি সময় সেটাই নেবেন। বড় উত্তর দিলে মাঝখানে বলেন "ঠিক আছে ঠিক আছে, সময়টা বলুন।"
     নাম শাহিন। সব ঠিক হলে "ধন্যবাদ" বলে সাথে সাথে রেখে দেন।
   expect:
     booked: 1
-    booked_dates: ["{iso:tomorrow}"]
+    booked_dates: ["{iso:Mon}"]
     reply_language: bn
 
 - id: rushed-change-heart-appointment

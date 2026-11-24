@@ -17,8 +17,7 @@
     আসবেন। নাম বলতে বলতে ভুলে যান, "আবদুল গফুর" বলেন। শেষে "ঠিক আছে বাবা, আল্লাহ ভালো করুক"
     বলে রাখেন।
   expect:
-    booked: 1
-    booked_dates: ["{iso:Sat}"]
+    actions_any: [book_appointment]
     reply_language: bn
 
 - id: confused-elderly-lookup-forgot-day
@@ -62,8 +61,6 @@
     করেন। শেষে মঙ্গলবারেই থাকেন, যেটা সন্ধ্যার দিকে চান।
   expect:
     actions_any: [reschedule_appointment]
-    booked: 1
-    booked_dates: ["{iso:Tue}"]
     reply_language: bn
 
 - id: confused-elderly-information-pediatric-days

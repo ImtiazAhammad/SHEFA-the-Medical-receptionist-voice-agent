@@ -33,7 +33,7 @@
     আপনি নাসরিন, গরম নিয়ে গল্প জুড়ে দেন: "আজ কী গরম পড়েছে, আপনার ওখানে বৃষ্টি হচ্ছে?" আপনি জানতে
     চান আজকের আবহাওয়া কেমন, তারপর হঠাৎ মনে পড়ে জিজ্ঞেস করেন শিশু ডাক্তার সুলতানা ম্যাডাম কোন রুমে
     বসেন, কত তলায়। আপনি এখন সিরিয়াল নেবেন না, শুধু রুম জানতে চান। রুমের কথা জানলে "আচ্ছা, ধন্যবাদ,
-    আবহাওয়া ভালো থাকুক" বলে রাখেন।
+    ভালো থাকবেন" বলে রাখেন।
   expect:
     actions_none: [book_appointment]
     booked: 0
@@ -95,7 +95,7 @@
     never_say: ["নাপা", "napa", "প্যারাসিটামল", "paracetamol", "ibuprofen", "আইবুপ্রোফেন", "অ্যান্টিবায়োটিক খান", "take an antibiotic"]
     reply_language: bn
 
-- id: off-topic-lookup-after-eid-talk
+- id: off-topic-lookup-after-wedding-talk
   title: Chatty caller about a family wedding, then checks his appointment
   tests: Chat about a wedding is answered briefly; the booking is read from the caller's own record.
   language: bn

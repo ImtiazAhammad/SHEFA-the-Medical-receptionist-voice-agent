@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
+
+import yaml
 
 from shefa.lab.scenarios import CALLER_TYPES, GOALS, load_scenarios
 
@@ -107,3 +110,89 @@ def test_booking_cases_that_must_succeed_name_their_day():
     for s in _all():
         if s.goal == "booking" and s.expect.booked == 1 and s.caller_type != "confused_elderly":
             assert s.expect.booked_dates, s.id
+
+
+# --- the library must be satisfiable on any weekday the bench is run --------------------------
+
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+# Words in a persona that point at one doctor, for booking callers that have no `setup`.
+_DOCTOR_WORDS = {
+    "Rahman": ("Rahman", "রহমান", "heart", "হার্ট", "cardiolog"),
+    "Sultana": ("Sultana", "সুলতানা", "children's doctor", "শিশু", "pediatric"),
+    "Hossain": ("Hossain", "হোসেন", "medicine", "মেডিসিন"),
+}
+
+
+def _schedules() -> dict[str, list[dict]]:
+    clinic = yaml.safe_load(Path("configs/clinic.example.yaml").read_text(encoding="utf-8"))
+    return {
+        doctor["name"]: doctor["schedule"]
+        for department in clinic["departments"]
+        for doctor in department["doctors"]
+    }
+
+
+def _minutes(hhmm: str) -> int:
+    hours, minutes = hhmm.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def _works(schedule: list[dict], day: date) -> list[dict]:
+    return [w for w in schedule if _WEEKDAYS[day.weekday()] in w["days"]]
+
+
+def _on_the_grid(schedule: list[dict], day: date, hhmm: str) -> bool:
+    for window in _works(schedule, day):
+        start, end, step = (
+            _minutes(window["start"]),
+            _minutes(window["end"]),
+            window["slot_minutes"],
+        )
+        at = _minutes(hhmm)
+        if start <= at <= end - step and (at - start) % step == 0:
+            return True
+    return False
+
+
+def _doctor_of(s) -> str:
+    if s.setup.get("appointments"):
+        doctors = {a["doctor"] for a in s.setup["appointments"]}
+        assert len(doctors) == 1 or s.goal == "lookup", s.id
+        return sorted(doctors)[0]
+    hits = [
+        d
+        for d, words in _DOCTOR_WORDS.items()
+        if any(w.lower() in s.persona.lower() for w in words)
+    ]
+    assert len(hits) == 1, f"{s.id}: cannot tell which doctor the caller wants ({hits})"
+    return hits[0]
+
+
+def test_booked_dates_never_use_today_or_tomorrow():
+    # "tomorrow" is a Friday one day a week, so a correct agent would fail that scorecard.
+    for s in _all():
+        for day in s.expect.booked_dates:
+            assert not re.search(r"\{iso:(today|tomorrow)\}", day), s.id
+
+
+def test_every_expected_booking_and_setup_appointment_is_possible_any_weekday():
+    schedules = _schedules()
+    for offset in range(7):
+        today = date(2026, 11, 23) + timedelta(days=offset)
+        for s in _all():
+            filled = s.filled(today)
+            for appointment in filled.setup.get("appointments", []):
+                day = datetime.strptime(str(appointment["date"]), "%Y-%m-%d").date()
+                schedule = schedules[appointment["doctor"]]
+                assert _on_the_grid(schedule, day, str(appointment["time"])), (
+                    f"{s.id} on {today}: Dr {appointment['doctor']} cannot be booked "
+                    f"{day} {appointment['time']}"
+                )
+            if filled.expect.booked_dates:
+                doctor = _doctor_of(s)
+                for iso in filled.expect.booked_dates:
+                    day = datetime.strptime(iso, "%Y-%m-%d").date()
+                    assert day > today, f"{s.id} on {today}: {iso} is not in the future"
+                    assert _works(schedules[doctor], day), (
+                        f"{s.id} on {today}: Dr {doctor} does not sit on {iso} ({day:%a})"
+                    )
