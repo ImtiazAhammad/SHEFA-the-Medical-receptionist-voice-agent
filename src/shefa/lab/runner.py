@@ -338,13 +338,18 @@ class Lab:
         except Exception as error:  # noqa: BLE001 - one broken scenario never stops the rest
             result.error = f"{type(error).__name__}: {error}"
         finally:
-            if scenario.phone:
-                patient = store.upsert_patient(scenario.phone)
-                result.appointments = store.appointments_for_patient(patient)
-            # The hard checks read the clinic's own data, so they run before the store closes.
-            hard = self._hard_checks(scenario, result, store)
-            set_default_clinic_store(previous)
-            store.close()
+            try:
+                if scenario.phone:
+                    patient = store.upsert_patient(scenario.phone)
+                    result.appointments = store.appointments_for_patient(patient)
+                # The hard checks read the clinic's own data, so they run before the store
+                # closes; one that breaks is recorded, and never skips the clean-up below.
+                hard = self._hard_checks(scenario, result, store)
+            except Exception as error:  # noqa: BLE001
+                result.error = result.error or f"hard checks: {type(error).__name__}: {error}"
+            finally:
+                set_default_clinic_store(previous)
+                store.close()
         result.checks = [*scenario_checks(scenario, result), *hard]
         return result
 

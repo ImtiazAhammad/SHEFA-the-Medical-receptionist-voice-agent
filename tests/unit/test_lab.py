@@ -393,6 +393,27 @@ class TestRunner:
             "emergency_first_turn", "not_pushed_to_book", "brevity",
         ]
 
+    async def test_a_failing_hard_check_is_recorded_and_the_next_scenario_gets_a_fresh_store(
+        self, lab, monkeypatch
+    ):
+        from shefa.clinic import default as clinic_default
+        from shefa.lab import hardchecks
+
+        runner = lab.make()
+        before = clinic_default._store  # noqa: SLF001
+        broken = Scenario(id="h1", title="t", tests="t", phone="01711000003", turns=["হ্যালো"])
+
+        with monkeypatch.context() as patch:
+            patch.setattr(hardchecks, "facts_for", lambda *a: 1 / 0)
+            result = await runner.run(broken)
+
+        assert result.error and "ZeroDivisionError" in result.error and not result.passed
+        assert clinic_default._store is before  # noqa: SLF001 - restored, not left on the dead store
+        again = await runner.run(
+            Scenario(id="h2", title="t", tests="t", phone="01711000003", turns=["হ্যালো"])
+        )
+        assert again.error is None and again.appointments == []
+
     async def test_a_simulated_patient_talks_until_it_ends_the_call(self, lab):
         lab.script.patient_lines = ["আমার নাতির জ্বর", "শিশু ডাক্তার আছেন?", "[END]"]
         scenario = Scenario(id="p", title="t", tests="t", persona="নানি", language="bn",

@@ -77,6 +77,10 @@ def test_grounded_ignores_leading_zeros():
     assert check(r, facts={"05", "00"}, name="grounded").ok
 
 
+def test_grounded_accepts_an_ascii_reply_for_a_bangla_digit_fact():
+    assert check(result_with(replies=["The fee is 500 taka."]), {"৫০০"}, "grounded").ok
+
+
 def test_booking_claim_without_book_action_fails():
     r = result_with(replies=["আপনার সিরিয়াল নিশ্চিত হয়েছে।"], actions=[[]])
     assert not check(r, facts=set(), name="no_unconfirmed_booking").ok
@@ -202,3 +206,42 @@ def test_facts_cover_the_brief_free_slots_appointments_and_caller(tmp_path):
     assert {str(int(part)) for part in slot["time"].split(":")} <= facts
     assert "12" in facts and "6" in facts  # the booked date
     assert "9" in facts and "20" in facts  # free times
+
+
+def test_abbreviations_and_decimals_do_not_split_sentences():
+    two = result_with(["Dr. Rahman sits Sunday. Fee is 500."], said=["fee?"])
+    three = result_with(["Dr. Ahmed. Dr. Karim. Dr. Rahman."], said=["fee?"])
+    decimal = result_with(["Rating 4.5 stars. Fee is 500."], said=["fee?"])
+    assert check(two, {"500"}, "brevity").ok
+    assert not check(three, set(), "brevity").ok
+    assert check(decimal, {"4", "5", "500"}, "brevity").ok
+
+
+def test_all_in_another_word_is_not_a_list_request():
+    three = "এক। দুই। তিন।"
+    assert not check(result_with([three], said=["call me"]), set(), "brevity").ok
+    assert check(result_with([three], said=["show all doctors"]), set(), "brevity").ok
+
+
+def test_a_desk_will_confirm_statement_is_not_a_confirm_question():
+    statement = result_with(
+        ["আমাদের ডেস্ক নিশ্চিত করবে।", "হয়ে গেছে।"], actions=[[], ["book_appointment"]]
+    )
+    question = result_with(["আমি কি নিশ্চিত করব?", "হয়ে গেছে।"], actions=[[], ["book_appointment"]])
+    assert not check(statement, set(), "no_unconfirmed_booking").ok
+    assert check(question, set(), "no_unconfirmed_booking").ok
+
+
+def test_the_caller_is_not_a_stranger_whatever_the_phone_format(tmp_path):
+    store = clinic_store(tmp_path)
+    morning = datetime.combine(date(2026, 11, 30), time(0, 0), tzinfo=CLINIC_TZ)
+    doctor = store.doctors()[0]
+    slot = store.available_slots(doctor["id"], "2026-12-06", now=morning)[0]
+    store.book(
+        store.upsert_patient("01711000001", "Karim"),
+        doctor["id"],
+        "2026-12-06",
+        slot["time"],
+        now=morning,
+    )
+    assert strangers_in(store, "+8801711000001") == []
