@@ -9,6 +9,7 @@ or None for the defaults), `tags`, `judge_model`, `caller_model`, `mishear`, `se
 from __future__ import annotations
 
 import contextlib
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from shefa.lab.runner import Lab
 from shefa.lab.scenarios import Scenario, load_scenarios, select
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import date
 
     from shefa.lab.runner import ScenarioResult
@@ -73,11 +75,20 @@ def transcript_of(result: ScenarioResult) -> list[tuple[str, str]]:
     return lines
 
 
-def _confusions(args: Any) -> Confusions | None:
-    """The speech-recognition mistakes to replay: saved once, then reused by every run."""
+def _confusions(args: Any) -> Confusions:
+    """The speech-recognition mistakes to replay: saved once, then reused by every run.
+
+    A saved file that cannot be read is a ValueError (the caller fixes or deletes it); the
+    collector database being missing or busy just gives an empty table.
+    """
     path = Path(args.out) / "confusions.json"
     if path.exists():
-        return Confusions.load(path)
+        try:
+            return Confusions.load(path)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            raise ValueError(
+                f"Cannot read {path}: {error}. Fix it or delete it to build a new table."
+            ) from error
     table = Confusions.from_collector_db(COLLECTOR_DB)
     if table.subs or table.drop_rate:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,14 +98,31 @@ def _confusions(args: Any) -> Confusions | None:
     return table
 
 
-def _agreement(args: Any, judged: dict[str, Any]) -> dict[str, Any] | None:
-    import json
-
+def _human_labels(args: Any) -> dict[str, dict[str, int]] | None:
+    """The optional human scores `{scenario_id: {dimension: score}}`; ValueError if malformed."""
     path = Path(args.out) / "human_labels.json"
     if not path.exists():
         return None
-    human = json.loads(path.read_text(encoding="utf-8"))
-    return lab_judge.agreement({k: v for k, v in judged.items() if v is not None}, human)
+    try:
+        human = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"Cannot read {path}: {error}") from error
+    shaped = isinstance(human, dict) and all(
+        isinstance(scores, dict)
+        and all(
+            isinstance(name, str)
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            for name, value in scores.items()
+        )
+        for scores in human.values()
+    )
+    if not shaped:
+        raise ValueError(
+            f"{path} must map each scenario id to {{dimension: score}}, "
+            'for example {"bn-booking": {"warmth": 4}}'
+        )
+    return human
 
 
 async def _judge_all(
@@ -125,18 +153,33 @@ async def run_scorecard(
     caller_llm: Any = None,
     judge_llm: Any = None,
     today: date | None = None,
+    progress: Callable[[str], None] | None = print,
 ) -> dict[str, Any]:
     """Run the bench against `model` (None: the product's configured model) and score it.
 
     The three models can be passed in (tests, or a caller that already holds them); any it
     builds itself it closes. The product's registry is pointed at the model under test for
-    the run and put back as found.
+    the run and put back as found. With `model` None and no `agent_llm`, the configured model
+    the registry builds for the run is closed afterwards too. `progress` gets one line per
+    scenario (None: silent). ValueError, before any model is called, when `human_labels.json`
+    or a saved `confusions.json` in `args.out` is unreadable.
     """
     from shefa.models.registry import registry
     from shefa.store import audit
 
     scenarios = scenarios if scenarios is not None else select_scenarios(args)
     out = Path(args.out)
+    human = _human_labels(args)
+    requested = float(args.mishear)
+    # Real speech recognition makes its own mistakes, so none are replayed on top of it.
+    mishear_rate = 0.0 if args.speech else requested
+    table = _confusions(args) if mishear_rate > 0 else None
+    if table is not None and not (table.subs or table.drop_rate):
+        print(
+            f"warning: no recognition errors found in {COLLECTOR_DB}; running without mishearing",
+            file=sys.stderr,
+        )
+        mishear_rate = 0.0
     work = out / ".work"
     work.mkdir(parents=True, exist_ok=True)
     started = datetime.now().isoformat(timespec="seconds")
@@ -165,8 +208,6 @@ async def run_scorecard(
         label = model or _configured_label()
         voice = await registry.get_tts() if args.speech else None
         stt = await registry.get_stt() if args.speech else None
-        mishear_rate = 0.0 if args.speech else float(args.mishear)
-        table = _confusions(args) if mishear_rate > 0 else None
         lab = Lab(
             clinic_file=getattr(args, "clinic", DEFAULT_CLINIC),
             work_dir=work,
@@ -180,31 +221,39 @@ async def run_scorecard(
         )
         results: list[ScenarioResult] = []
         for scenario in scenarios:
-            print(f"  {scenario.id:<24} ", end="", flush=True)
             result = await lab.run(scenario)
             results.append(result)
             failed = [c.name for c in result.checks if not c.ok]
             failed += [c.name for t in result.turns for c in t.checks if not c.ok]
-            print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+            if progress is not None:
+                verdict = (
+                    "pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}"
+                )
+                progress(f"  {scenario.id:<24} {verdict}")
         judged = await _judge_all(judge, results)
         meta = {
             "model": label,
             "judge_model": args.judge_model,
             "caller_model": args.caller_model,
-            "mishear_rate": mishear_rate,
+            "mishear_rate": mishear_rate,  # what was applied; 0.0 when there was no table
+            "mishear_requested": requested,
             "seed": int(args.seed),
             "speech": bool(args.speech),
             "tags": getattr(args, "tags", "") or "",
             "started": started,
         }
         card = scorecard.build(results, judged, meta)
-        agreement = _agreement(args, judged)
-        if agreement is not None:
-            card["judged"]["agreement"] = agreement
+        if human is not None:
+            card["judged"]["agreement"] = lab_judge.agreement(
+                {k: v for k, v in judged.items() if v is not None}, human
+            )
         return card
     finally:
         if agent is not None:
             registry.use_llm(previous_llm)
+        elif previous_llm is None and registry._llm is not None:  # noqa: SLF001
+            owned.append(registry._llm)  # noqa: SLF001 - the configured model this run caused
+            registry.use_llm(None)
         audit.set_default_audit_store(previous_audit)
         for built in owned:
             with contextlib.suppress(Exception):

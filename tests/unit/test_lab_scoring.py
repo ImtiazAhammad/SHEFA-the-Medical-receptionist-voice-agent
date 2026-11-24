@@ -208,14 +208,98 @@ async def test_confusions_are_built_once_from_the_collector_and_saved(tmp_path, 
     assert len(built) == 1  # the second run loads the saved table
 
 
-async def test_an_empty_collector_table_is_not_saved(tmp_path, monkeypatch):
+async def test_an_empty_collector_table_is_not_saved(tmp_path, monkeypatch, capsys):
     from shefa.lab.mishear import Confusions
 
     monkeypatch.setattr(scoring, "COLLECTOR_DB", tmp_path / "missing.db")
     monkeypatch.setattr(Confusions, "from_collector_db", staticmethod(lambda p: Confusions()))
     card = await run(tmp_path, mishear=0.15)
     assert not (tmp_path / "bench" / "confusions.json").exists()
-    assert card["meta"]["mishear_rate"] == 0.15
+    # The card records what was applied, not what was asked for.
+    assert card["meta"]["mishear_rate"] == 0.0
+    assert card["meta"]["mishear_requested"] == 0.15
+    err = capsys.readouterr().err
+    assert "no recognition errors found in" in err and "missing.db" in err
+    assert "running without mishearing" in err
+
+
+async def test_a_filled_table_records_the_rate_applied(tmp_path, monkeypatch):
+    from shefa.lab.mishear import Confusions
+
+    monkeypatch.setattr(
+        Confusions, "from_collector_db", staticmethod(lambda p: Confusions({"a": ["b"]}, 0.0))
+    )
+    card = await run(tmp_path, mishear=0.15)
+    assert card["meta"]["mishear_rate"] == 0.15 == card["meta"]["mishear_requested"]
+
+
+async def test_a_bad_human_labels_file_fails_before_any_model_is_called(tmp_path):
+    out = tmp_path / "bench"
+    out.mkdir()
+    judge, agent = TextLLM(json.dumps(GOOD)), AgentLLM()
+    for text in ("{not json", "[1, 2]", '{"a": 4}', '{"a": {"warmth": "high"}}'):
+        (out / "human_labels.json").write_text(text)
+        with pytest.raises(ValueError, match="human_labels.json"):
+            await run(tmp_path, judge=judge, agent=agent)
+    assert judge.calls == 0
+
+
+async def test_a_corrupt_confusions_file_fails_before_any_model_is_called(tmp_path):
+    out = tmp_path / "bench"
+    out.mkdir()
+    judge = TextLLM(json.dumps(GOOD))
+    for text in ("{not json", '{"subs": 3}', "[]", '{"subs": {}}'):
+        (out / "confusions.json").write_text(text)
+        with pytest.raises(ValueError, match="confusions.json"):
+            await run(tmp_path, judge=judge, mishear=0.15)
+    assert judge.calls == 0
+
+
+async def test_progress_lines_go_through_the_callback(tmp_path):
+    lines = []
+    args = make_args(tmp_path)
+    await scoring.run_scorecard(
+        "m",
+        args,
+        agent_llm=AgentLLM(),
+        caller_llm=TextLLM("[END]"),
+        judge_llm=TextLLM(json.dumps(GOOD)),
+        today=date(2026, 11, 4),
+        progress=lines.append,
+    )
+    assert [line.split()[0] for line in lines] == ["a", "b"]
+
+
+async def test_progress_none_is_silent(tmp_path, capsys):
+    args = make_args(tmp_path)
+    await scoring.run_scorecard(
+        "m",
+        args,
+        agent_llm=AgentLLM(),
+        caller_llm=TextLLM("[END]"),
+        judge_llm=TextLLM(json.dumps(GOOD)),
+        today=date(2026, 11, 4),
+        progress=None,
+    )
+    assert capsys.readouterr().out == ""
+
+
+async def test_the_configured_model_the_run_caused_is_closed_and_dropped(tmp_path, monkeypatch):
+    built = AgentLLM()
+
+    async def create():
+        return built
+
+    monkeypatch.setattr(registry, "_create_llm", create)
+    args = make_args(tmp_path, model=None)
+    await scoring.run_scorecard(
+        None,
+        args,
+        caller_llm=TextLLM("[END]"),
+        judge_llm=TextLLM(json.dumps(GOOD)),
+        today=date(2026, 11, 4),
+    )
+    assert built.closed is True and registry._llm is None
 
 
 async def test_mishear_zero_skips_the_table(tmp_path, monkeypatch):
@@ -347,6 +431,28 @@ class TestScoreCommand:
         assert json.loads(saved.read_text())["meta"]["model"] == "gemma2:9b"
         assert ("gemma2:9b", None) in made
         assert {t for _, t in made} >= {0.0, 0.7}
+
+    def test_a_bad_human_labels_file_is_exit_2_and_names_the_file(self, tmp_path, capsys):
+        path = write_scenarios(tmp_path / "s.yaml")
+        out = tmp_path / "bench"
+        out.mkdir()
+        (out / "human_labels.json").write_text("{oops")
+        code = cli.main(
+            [
+                "lab",
+                "score",
+                "--scenarios",
+                str(path),
+                "--model",
+                "m",
+                "--out",
+                str(out),
+                "--mishear",
+                "0",
+            ]
+        )
+        assert code == 2
+        assert "human_labels.json" in capsys.readouterr().err
 
     def test_compare_prints_the_difference(self, tmp_path, capsys):
         from shefa.lab import scorecard

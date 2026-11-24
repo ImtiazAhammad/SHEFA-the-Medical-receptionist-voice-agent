@@ -967,6 +967,9 @@ async def _score(scenarios: list[Any], args: argparse.Namespace) -> int:
 
     try:
         card = await run_scorecard(args.model, args, scenarios=scenarios)
+    except ValueError as error:  # a bad label or table file, found before any model ran
+        print(str(error), file=sys.stderr)
+        return 2
     finally:
         await registry.reset()
     print(f"\n{scorecard.summary(card)}")
