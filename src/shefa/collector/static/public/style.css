@@ -199,3 +199,9 @@ html[lang="bn"] .en-only, html[lang="en"] .bn-only { display: none; }
 .live-turn .bubble-text { font-size: 1.05rem; }
 .live-turn .small { font-size: 0.8rem; margin: 2px 0 0; }
 .cue { font-weight: 600; margin: 0; }
+
+/* SHEFA's orbs (world/orbs, loaded on first use): the voice ring above the live call's turn cue,
+   and a connecting orb while a live call starts. Neither takes space until it has drawn. */
+.live-ring { display: none; place-items: center; height: 150px; pointer-events: none; }
+.live-ring.on { display: grid; }
+.orb-hold { display: grid; place-items: center; min-height: 64px; }

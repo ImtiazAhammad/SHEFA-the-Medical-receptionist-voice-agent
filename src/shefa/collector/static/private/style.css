@@ -354,3 +354,6 @@ button:active:not(:disabled), .btn:active { transform: scale(0.98); }
 .stat:last-child { border-bottom: 0; }
 .stat .num { order: 2; font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; text-align: end; white-space: nowrap; }
 .stat .label { order: 1; color: var(--ink); font-size: 1rem; font-weight: 600; }
+
+/* a listening orb beside the "recording" chip (world/orbs, loaded on first use) */
+.orb-mini { display: inline-flex; flex: none; width: 20px; height: 20px; vertical-align: middle; margin-inline: auto 6px; } /* pairs with the chip at the end of the row */

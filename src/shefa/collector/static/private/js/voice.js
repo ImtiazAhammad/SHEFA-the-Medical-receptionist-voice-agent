@@ -9,6 +9,7 @@ import { setMeter } from "./charts.js";
 import { applyI18n, initLangToggle, labelFor, num, onLangChange, t } from "./i18n.js";
 import { homeFor } from "./account-model.js";
 import { micErrorKey, record, releaseMic } from "./recorder.js";
+import { orbs } from "./orbs.js";
 import { COUNTDOWN_S, MAX_LINE_S, groupLines, progressOf, takeProblem, uploadErrorKey } from "./voice-model.js";
 
 const ui = {
@@ -116,6 +117,7 @@ function paintLine(name) {
   r.remove.hidden = !line.recorded;
   r.remove.disabled = !!active || busy;
   r.live.hidden = !recording;
+  listeningOrb(r, !!recording);
   const message = said.get(name);
   r.msg.textContent = message ? t(message.key, message.vars) : busy ? t("vr_working") : "";
   r.msg.className = `line-msg ${message ? message.kind : ""}`;
@@ -123,6 +125,27 @@ function paintLine(name) {
 }
 
 function paintAllLines() { for (const name of refs.keys()) paintLine(name); }
+
+// A small listening orb beside the "recording" chip while that line records (Libraries.dev
+// thinking-orbs, loaded on first use). Decoration: the chip says it in words, and if the orb
+// module cannot load nothing else changes.
+function listeningOrb(r, on) {
+  if (on && !r.orbEl) {
+    r.orbEl = document.createElement("span");
+    r.orbEl.className = "orb-mini";
+    r.orbEl.setAttribute("aria-hidden", "true");
+    r.status.before(r.orbEl);
+    const el = r.orbEl;
+    orbs().then((m) => {
+      if (!m || r.orbEl !== el) return;
+      try { r.orb = m.mountOrb(el, { state: "listening", size: 20 }); } catch { r.orb = null; }
+    });
+  } else if (!on && r.orbEl) {
+    try { if (r.orb) r.orb.destroy(); } catch { /* gone */ }
+    r.orbEl.remove();
+    r.orbEl = null; r.orb = null;
+  }
+}
 
 function render() {
   if (!data) return;

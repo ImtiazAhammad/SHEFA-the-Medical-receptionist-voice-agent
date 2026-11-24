@@ -9,6 +9,7 @@ import { createCapture } from "./capture.js";
 import { settingBlock } from "./card.js";
 import { newClipId } from "./queue.js";
 import { rejectionText } from "./i18n.js";
+import { orbs } from "./orbs.js";
 
 const VERDICTS = [["ok", "lv_v_ok"], ["misheard", "lv_v_misheard"], ["odd", "lv_v_odd"], ["slow", "lv_v_slow"], ["other", "lv_v_other"]];
 
@@ -25,6 +26,30 @@ export function runLive(view, { onFinish, onScripted }) {
   const listenBtn = h("button", { type: "button", class: "btn alt", hidden: true }, icon("sound"), T("lv_tap_hear"));
 
   function say(key, params) { fill(cue, T(key, params)); }
+
+  // SHEFA's voice ring above the turn cue (decoration; the cue says everything in words). It
+  // follows the call: processing while the clip is sent and SHEFA thinks, a gentle speech-like
+  // swell while SHEFA's answer plays (its audio path is left alone), the volunteer's own level
+  // from the recorder's meter while they talk, and resting while it is their turn.
+  const presence = h("div", { class: "live-ring", "aria-hidden": "true" });
+  let ring = null, ringState = "idle", micLevel = 0, holdOrb = null;
+  const ringLevel = () => {
+    if (ringState === "listening") return micLevel;
+    if (ringState === "speaking") { const n = performance.now(); return 0.3 + 0.2 * Math.abs(Math.sin(n / 160) * Math.sin(n / 410)); }
+    return 0;
+  };
+  function ringTo(state) { ringState = state; try { if (ring) ring.set({ state }); } catch { /* decoration */ } }
+  function mountRing() {
+    orbs().then((m) => {
+      if (!m || dead || ring || !presence.isConnected) return;
+      try { ring = m.mountRing(presence, { size: 150, state: ringState, level: ringLevel }); presence.classList.add("on"); } catch { ring = null; }
+    });
+  }
+  function dropOrbs() {
+    try { if (ring) ring.destroy(); } catch { /* gone */ }
+    try { if (holdOrb) holdOrb.destroy(); } catch { /* gone */ }
+    ring = null; holdOrb = null; presence.classList.remove("on");
+  }
   function showWarn(text) { warn.hidden = !text; warn.textContent = text || ""; }
 
   function stopAudio() {
@@ -53,6 +78,7 @@ export function runLive(view, { onFinish, onScripted }) {
       setTimeout(finish, (secs + 2) * 1000);
     };
     say("lv_speaking");
+    ringTo("speaking");
     a.play().catch(() => {
       say("lv_tap_needed");
       listenBtn.hidden = false;
@@ -89,8 +115,16 @@ export function runLive(view, { onFinish, onScripted }) {
   // ---------------------------------------------------------------- the call
   async function start() {
     showWarn("");
-    fill(view, h("div", { class: "stack center" }, h("p", { class: "waiting" }, T("lv_connecting"))));
+    // the start can take a while (SHEFA warms up): a connecting orb above the words
+    const hold = h("div", { class: "orb-hold", "aria-hidden": "true" });
+    fill(view, h("div", { class: "stack center" }, hold, h("p", { class: "waiting" }, T("lv_connecting"))));
+    orbs().then((m) => {
+      if (!m || dead || !hold.isConnected) return;
+      try { holdOrb = m.mountOrb(hold, { state: "connecting", size: 64 }); } catch { holdOrb = null; }
+    });
     const r = await api("/api/c/live/start", { method: "POST", timeout: 45000 });
+    try { if (holdOrb) holdOrb.destroy(); } catch { /* gone */ }
+    holdOrb = null;
     if (dead) return;
     if (!r.ok) {
       const code = r.error && r.error.code;
@@ -108,15 +142,19 @@ export function runLive(view, { onFinish, onScripted }) {
     cap = createCapture({
       review: false, maxS: S.cfg.max_clip_s || 20, minS: S.cfg.min_clip_s || 0.6,
       onDone: (res) => send(res),
+      onLevel: (v) => { micLevel = v; },
+      onPhase: (phase) => { if (phase === "rec") ringTo("listening"); else if (ringState === "listening") ringTo("idle"); },
     });
     cap.enable(false);
-    fill(view, h("div", { class: "stack" }, situation, log, cue, warn, listenBtn, cap.el, hang));
+    fill(view, h("div", { class: "stack" }, situation, log, presence, cue, warn, listenBtn, cap.el, hang));
+    mountRing();
     bubble("shefa", call.greeting);
     speak(call.audio, yourTurn);
   }
 
   function yourTurn() {
     if (dead || ended) return;
+    ringTo("idle");
     say("lv_your_turn");
     cap.enable(true);
   }
@@ -125,6 +163,7 @@ export function runLive(view, { onFinish, onScripted }) {
     cap.enable(false);
     showWarn("");
     say("lv_sending");
+    ringTo("processing");
     const id = newClipId();
     const person = me();
     const up = await api("/api/c/clip/" + id, {
@@ -177,6 +216,7 @@ export function runLive(view, { onFinish, onScripted }) {
   function endScreen(reason, askFeedback) {
     ended = true;
     stopAudio();
+    dropOrbs();
     if (cap) { cap.destroy(); cap = null; }
     const key = "lv_end_" + reason;
     const why = t(key) !== key ? T(key) : T("lv_end_other");
@@ -217,6 +257,7 @@ export function runLive(view, { onFinish, onScripted }) {
 
   function destroy() {
     if (dead) return;
+    dropOrbs();
     if (call && !ended) api(`/api/c/live/${call.call_id}/end`, { method: "POST", body: {} });
     dead = true;
     stopAudio();

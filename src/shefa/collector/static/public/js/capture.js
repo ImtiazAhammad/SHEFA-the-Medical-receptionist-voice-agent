@@ -11,6 +11,8 @@ import { record, micErrorKey } from "./recorder.js";
  * opts.review   false = no accept step (mic check): onDone gets the result straight away
  * opts.onAccept async (result) => ({ redo: "message" } | undefined)
  * opts.onDone   (result) => void, used when review is false
+ * opts.onLevel  (0..1) => void, optional: the meter's level, for a voice ring that follows it
+ * opts.onPhase  (phase) => void, optional: idle, rec, sending or review, as it changes
  */
 export function createCapture(opts) {
   const limit = Math.max(2, opts.maxS - 0.5);
@@ -23,7 +25,7 @@ export function createCapture(opts) {
   const err = h("p", { class: "warn", role: "alert", hidden: true });
   const review = h("div", { class: "review", hidden: true });
   const el = h("div", { class: "capture" }, meter, btn, label, err, review);
-  const level = (v) => { bar.style.transform = `scaleX(${v.toFixed(2)})`; };
+  const level = (v) => { bar.style.transform = `scaleX(${v.toFixed(2)})`; if (opts.onLevel) opts.onLevel(v); };
 
   function paint() {
     btn.disabled = !enabled || phase === "sending" || phase === "review";
@@ -36,6 +38,7 @@ export function createCapture(opts) {
     meter.hidden = phase === "review" || phase === "sending";
     setT(label, phase === "sending" ? "rec_sending" : phase === "rec" ? "rec_stop" : enabled ? "rec_tap" : "rec_wait");
     label.hidden = phase === "review";
+    if (opts.onPhase) opts.onPhase(phase);
   }
 
   function showError(key, params) {
@@ -74,6 +77,7 @@ export function createCapture(opts) {
     phase = "sending"; paint();
     level(0);
     const res = await h0.stop();
+    level(0); // the recorder can report one last level after the reset above: the meter rests at zero
     res.cut = cut;
     if (res.dur < opts.minS + 0.1) { phase = "idle"; paint(); showError("rec_short"); return; }
     last = res;
