@@ -310,6 +310,26 @@ def _blank_row(model: str) -> dict[str, Any]:
     }
 
 
+def _bare(model: str) -> str:
+    """A model name without Ollama's default tag, so `qwen3` and `qwen3:latest` match."""
+    return model.removesuffix(":latest")
+
+
+def self_judged(models: list[str], args: Any) -> list[str]:
+    """The candidates that would also play the caller or the judge: the same model name on
+    the same server. A model that marks its own calls, or talks to itself, is not measured."""
+    root = _ollama_root(getattr(args, "base_url", None) or OLLAMA_URL)
+    side = _ollama_root(getattr(args, "side_base_url", None) or OLLAMA_URL)
+    if root.rstrip("/") != side.rstrip("/"):
+        return []
+    sides = {
+        _bare(name)
+        for name in (getattr(args, "caller_model", None), getattr(args, "judge_model", None))
+        if name
+    }
+    return [model for model in models if _bare(model) in sides]
+
+
 async def _unload_after(model: str, args: Any, root: str) -> None:
     """Unload the candidate, and the caller and judge too when they share its server."""
     names = [model]

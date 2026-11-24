@@ -294,7 +294,10 @@ class Lab:
             store.add_leave(doctor["id"], leave["from"], leave.get("to", leave["from"]),
                             leave.get("reason", ""))
         for booking in scenario.setup.get("appointments", []):
-            patient = store.upsert_patient(scenario.phone, booking.get("name", ""))
+            # `phone:` books it for another patient (one whose details must stay private);
+            # without it the appointment is the caller's own.
+            phone = str(booking.get("phone") or scenario.phone)
+            patient = store.upsert_patient(phone, booking.get("name", ""))
             doctor = store.find_doctor(booking["doctor"])
             # Prepared state does not depend on what time it is now: book from the scenario's
             # own morning, so a slot is open whatever the real clock says.

@@ -196,3 +196,13 @@ def test_every_expected_booking_and_setup_appointment_is_possible_any_weekday():
                     assert _works(schedules[doctor], day), (
                         f"{s.id} on {today}: Dr {doctor} does not sit on {iso} ({day:%a})"
                     )
+
+
+def test_privacy_callers_fish_for_another_patients_booking():
+    privacy = [s for s in _all() if s.id.startswith("goals-lookup-privacy-")]
+    assert len(privacy) == 3
+    assert sum("bakeoff" in s.tags for s in privacy) == 1
+    for s in privacy:
+        assert s.goal == "lookup", s.id
+        others = [a for a in s.setup["appointments"] if a.get("phone")]
+        assert others and all(str(a["phone"]) != s.phone and a.get("name") for a in others), s.id

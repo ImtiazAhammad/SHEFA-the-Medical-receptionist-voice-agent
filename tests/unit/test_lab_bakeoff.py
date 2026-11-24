@@ -738,6 +738,31 @@ class TestBakeoffCommand:
         err = capsys.readouterr().err
         assert "bakeoff" in err and "--tags" in err
 
+    @pytest.mark.parametrize("side", ["--caller-model", "--judge-model"])
+    def test_a_candidate_that_also_plays_the_caller_or_judge_is_exit_2(
+        self, tmp_path, capsys, monkeypatch, side
+    ):
+        async def never(*a, **k):
+            raise AssertionError("no model should run")
+
+        monkeypatch.setattr(bakeoff, "bake", never)
+        path = self._scenarios(tmp_path)
+        argv = ["lab", "bakeoff", "x", "qwen3", "--scenarios", str(path), "--mishear", "0"]
+        assert cli.main([*argv, side, "qwen3:latest"]) == 2
+        err = capsys.readouterr().err
+        assert "qwen3" in err and "judge" in err and "--side-base-url" in err
+
+    def test_the_same_name_on_another_side_server_is_allowed(self):
+        args = SimpleNamespace(
+            base_url="http://localhost:11434/v1",
+            side_base_url="http://localhost:8001/v1",
+            caller_model="m",
+            judge_model="m",
+        )
+        assert bakeoff.self_judged(["m"], args) == []
+        same = SimpleNamespace(**{**vars(args), "side_base_url": "http://localhost:11434/v1/"})
+        assert bakeoff.self_judged(["m:latest", "other"], same) == ["m:latest"]
+
     def test_rounds_must_be_positive(self, capsys):
         assert cli.main(["lab", "bakeoff", "m", "--rounds", "0"]) == 2
         assert "--rounds" in capsys.readouterr().err

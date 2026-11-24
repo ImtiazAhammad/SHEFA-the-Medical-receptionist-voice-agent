@@ -1022,6 +1022,18 @@ def _run_bakeoff(args: argparse.Namespace) -> int:
     if args.rounds < 1:
         print("--rounds must be at least 1", file=sys.stderr)
         return 2
+    from shefa.lab.bakeoff import self_judged
+
+    clashes = self_judged(args.models, args)
+    if clashes:
+        print(
+            f"{', '.join(clashes)} would also play the caller or the judge "
+            f"(--caller-model {args.caller_model}, --judge-model {args.judge_model}) on the same "
+            "server, so it would mark its own calls. Pick another caller and judge, or run them "
+            "on another server with --side-base-url.",
+            file=sys.stderr,
+        )
+        return 2
     try:
         scenarios = select_scenarios(args)
     except ValueError as error:

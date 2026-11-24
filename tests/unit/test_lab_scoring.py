@@ -125,6 +125,8 @@ async def test_end_to_end_with_fake_models(tmp_path):
     assert judge.calls == 2
     assert card["meta"]["model"] == "agent-m" and card["meta"]["judge_model"] == "j"
     assert card["meta"]["seed"] == 7 and card["meta"]["mishear_rate"] == 0.0
+    # what makes two runs unlike is recorded, so `compare` can warn about it
+    assert {"judge_model", "caller_model", "tags", "speech"} <= set(card["meta"])
     assert card["meta"]["case_count"] == 2
     assert card["judged"]["mean"] == pytest.approx(
         sum(v for v in GOOD.values() if isinstance(v, int)) / 7

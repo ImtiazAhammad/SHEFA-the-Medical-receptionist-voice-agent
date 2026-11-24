@@ -296,3 +296,21 @@ def test_compare_reads_an_older_card_without_task_or_full():
     del old["task"], old["full"]
     row = next(r for r in compare(old, new).splitlines() if r.startswith("full pass rate"))
     assert row.split()[-1] == "-"
+
+
+def test_compare_warns_when_the_judge_caller_tags_or_speech_differ():
+    for key, a_value, b_value in (
+        ("judge_model", "j1", "j2"),
+        ("caller_model", "c1", "c2"),
+        ("tags", "bakeoff", ""),
+        ("speech", False, True),
+    ):
+        a, b = made(), made()
+        a["meta"][key], b["meta"][key] = a_value, b_value
+        warning = next(r for r in compare(a, b).splitlines() if r.startswith("WARNING"))
+        assert key in warning
+
+
+def test_grounded_is_labelled_as_a_digits_only_check():
+    assert "grounded (digits only)" in summary(made())
+    assert "grounded (digits only)" in compare(made(), made())

@@ -3,7 +3,8 @@
 A scenario is either scripted (`turns`: the patient's lines, word for word, so an edge
 case is reproduced exactly) or simulated (`persona`: the language model plays the
 patient for up to `max_turns`, so the agent meets phrasing nobody scripted). Both can
-start from `setup`: existing appointments for the caller, or a doctor on leave.
+start from `setup`: existing appointments (the caller's, or with `phone:` another patient's),
+or a doctor on leave.
 
 Dates are written as placeholders and filled in at run time, so a scenario never goes
 stale: `{iso:Sun}` is the next Sunday as YYYY-MM-DD, `{en:Sun}` "Sunday 8 November",

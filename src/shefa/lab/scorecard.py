@@ -216,6 +216,10 @@ def save(card: dict[str, Any], out_dir: Path) -> Path:
     return path
 
 
+# `grounded` only compares the numbers in a reply with the clinic's data; the label says so.
+_LABELS = {"grounded": "grounded (digits only)"}
+
+
 def _num(value: float | None, digits: int = 3) -> str:
     return "-" if value is None else f"{value:.{digits}f}"
 
@@ -241,13 +245,15 @@ def summary(card: dict[str, Any]) -> str:
     """A short fixed-width table of the headline numbers."""
     meta = card.get("meta", {})
     lines = [f"scorecard  {meta.get('model', '?')}  ({meta.get('case_count', '?')} cases)"]
-    lines += [f"{label:<20}{_num(value, digits):>10}" for label, value, digits in _headlines(card)]
+    lines += [f"{label:<24}{_num(value, digits):>10}" for label, value, digits in _headlines(card)]
+    grounded = card["hard"].get("by_check", {}).get("grounded")
+    lines.append(f"{_LABELS['grounded']:<24}{_num(grounded, 3):>10}")
     return "\n".join(lines)
 
 
 def _row(label: str, a: float | None, b: float | None, digits: int) -> str:
     diff = "-" if a is None or b is None else f"{b - a:+.{digits}f}"
-    return f"{label:<26}{_num(a, digits):>10}{_num(b, digits):>10}{diff:>10}"
+    return f"{label:<30}{_num(a, digits):>10}{_num(b, digits):>10}{diff:>10}"
 
 
 def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
@@ -255,13 +261,23 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
     a_meta, b_meta = a.get("meta", {}), b.get("meta", {})
     lines = [f"a: {a_meta.get('model', '?')}", f"b: {b_meta.get('model', '?')}"]
     unlike = [
-        key for key in ("case_count", "seed", "mishear_rate") if a_meta.get(key) != b_meta.get(key)
+        key
+        for key in (
+            "case_count",
+            "seed",
+            "mishear_rate",
+            "judge_model",
+            "caller_model",
+            "tags",
+            "speech",
+        )
+        if a_meta.get(key) != b_meta.get(key)
     ]
     if unlike:
         lines.append(
             f"WARNING: runs differ in {', '.join(unlike)}; the numbers are not like for like"
         )
-    lines.append(f"{'':<26}{'a':>10}{'b':>10}{'b - a':>10}")
+    lines.append(f"{'':<30}{'a':>10}{'b':>10}{'b - a':>10}")
     for (label, av, digits), (_, bv, _) in zip(_headlines(a), _headlines(b), strict=True):
         lines.append(_row(label, av, bv, digits))
     checks = [
@@ -271,7 +287,10 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
     for name in checks:
         lines.append(
             _row(
-                f"check {name}", a["hard"]["by_check"].get(name), b["hard"]["by_check"].get(name), 3
+                f"check {_LABELS.get(name, name)}",
+                a["hard"]["by_check"].get(name),
+                b["hard"]["by_check"].get(name),
+                3,
             )
         )
     for name in DIMENSIONS:
