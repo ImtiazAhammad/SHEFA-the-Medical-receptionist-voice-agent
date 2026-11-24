@@ -3,6 +3,7 @@ import { api, type Department, type Doctor } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
 import { languageName } from '../lib/labels'
+import { Disclosure } from '../lib/motion'
 import { Empty, ErrorNote, PageHeader, Skeleton, docClass } from '../components'
 
 function matches(doc: Doctor, query: string): boolean {
@@ -69,8 +70,7 @@ function DoctorCard({ doc }: { doc: Doctor }) {
           <strong>{t('seesFor')}:</strong> {conditions.join(', ')}
         </p>
       ) : null}
-      <details>
-        <summary>{t('hours')}</summary>
+      <Disclosure summary={t('hours')}>
         {doc.schedule.length ? (
           <ul className="plain">
             {doc.schedule.map((s) => (
@@ -80,7 +80,7 @@ function DoctorCard({ doc }: { doc: Doctor }) {
         ) : (
           <p className="muted">{t('noHours')}</p>
         )}
-      </details>
+      </Disclosure>
     </article>
   )
 }

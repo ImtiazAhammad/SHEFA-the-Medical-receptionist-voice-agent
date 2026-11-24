@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react'
 
 // the text-swap-soft timings live in CSS (styles.css); read them so the cleanup matches
 const cssMs = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0
@@ -109,4 +109,126 @@ export function SoftText({ text, className }: { text: string; className?: string
     )
   }, [text])
   return <span ref={ref} className={`t-text-soft${className ? ` ${className}` : ''}`} />
+}
+
+// Bangla letters are clusters (a consonant, its vowel sign, a conjunct): split by grapheme so a
+// shared start or end never cuts one in half.
+const graphemes = (s: string): string[] => {
+  const Seg = (Intl as unknown as { Segmenter?: new (l?: string, o?: { granularity: string }) => { segment(s: string): Iterable<{ segment: string }> } }).Segmenter
+  return Seg ? Array.from(new Seg(undefined, { granularity: 'grapheme' }).segment(s), (x) => x.segment) : Array.from(s)
+}
+
+/**
+ * A button label that changes in place ("Copy" to "Copied", "Book" to "Booking…"). When the two
+ * labels share letters at the start or end, only the part that differs cross-blurs while its
+ * width eases (transitions.dev "text morph"); when they share nothing, the label exits up and the
+ * new one rises in (transitions.dev "text states swap"). First render is instant; React never
+ * renders the children, the swap is done on the DOM.
+ */
+export function MorphText({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current as (HTMLSpanElement & { morphTimer?: number }) | null
+    if (!el) return
+    const prev = el.dataset.text
+    if (prev === undefined) {
+      el.dataset.text = text
+      el.textContent = text
+      return
+    }
+    if (prev === text) return
+    el.dataset.text = text
+    window.clearTimeout(el.morphTimer)
+    el.classList.remove('t-text-swap', 'is-exit', 'is-enter-start')
+    const p = graphemes(prev)
+    const n = graphemes(text)
+    let a = 0
+    while (a < p.length && a < n.length && p[a] === n[a]) a++
+    let b = 0
+    while (b < p.length - a && b < n.length - a && p[p.length - 1 - b] === n[n.length - 1 - b]) b++
+    if (a === 0 && b === 0) {
+      // nothing shared: the three-phase text swap
+      const dur = cssMs('--text-swap-dur') || 150
+      el.textContent = prev
+      el.classList.add('t-text-swap', 'is-exit')
+      el.morphTimer = window.setTimeout(() => {
+        el.textContent = text
+        el.classList.remove('is-exit')
+        el.classList.add('is-enter-start')
+        void el.offsetHeight // reflow, so the entrance transitions
+        el.classList.remove('is-enter-start')
+      }, dur)
+      return
+    }
+    const swap = document.createElement('span')
+    swap.className = 't-morph-swap'
+    const out = document.createElement('span')
+    out.className = 't-morph-old'
+    out.setAttribute('aria-hidden', 'true')
+    out.textContent = p.slice(a, p.length - b).join('')
+    const inn = document.createElement('span')
+    inn.className = 't-morph-new'
+    inn.textContent = n.slice(a, n.length - b).join('')
+    swap.append(out, inn)
+    el.textContent = ''
+    el.append(n.slice(0, a).join(''), swap, n.slice(n.length - b).join(''))
+    swap.style.width = `${out.getBoundingClientRect().width}px`
+    void swap.offsetWidth // reflow, so the width transitions
+    swap.classList.add('is-morphing')
+    swap.style.width = `${inn.getBoundingClientRect().width}px`
+    el.morphTimer = window.setTimeout(
+      () => {
+        el.textContent = text
+      },
+      Math.max(cssMs('--text-morph-dur'), cssMs('--text-morph-resize-dur')) + 40,
+    )
+  }, [text])
+  return <span ref={ref} className="t-morph" />
+}
+
+/**
+ * A real checkbox whose tick draws itself (transitions.dev "checkbox check"). The recipe uses a
+ * button with role="checkbox"; this keeps the native input (keyboard, forms, labels, screen
+ * readers all as before) and draws the box and tick over it.
+ */
+export function TickBox(props: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <span className="t-check-box">
+      <input type="checkbox" className="t-check" {...props} />
+      <svg viewBox="0 0 10.1668 10.1668" aria-hidden="true">
+        <path d="M1 5.52L3.92 9.17L9.17 1" />
+      </svg>
+    </span>
+  )
+}
+
+/**
+ * A disclosure that grows open and shut (transitions.dev "accordion expand": grid rows 0fr to 1fr,
+ * the chevron flipping). A real button carries aria-expanded and aria-controls; the closed panel
+ * is inert, so it leaves the tab order and the accessibility tree like a closed <details>.
+ */
+export function Disclosure({ summary, children }: { summary: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  return (
+    <div className="t-acc" data-open={open}>
+      <button type="button" className="t-acc-head" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        {summary}
+        <AccChevron />
+      </button>
+      <div className="t-acc-panel" id={id} inert={!open}>
+        <div className="t-acc-panel-inner">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+export function AccChevron() {
+  return (
+    <span className="t-acc-chevron" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="16" height="16">
+        <path d="M4 6.5L8 10.5L12 6.5" />
+      </svg>
+    </span>
+  )
 }

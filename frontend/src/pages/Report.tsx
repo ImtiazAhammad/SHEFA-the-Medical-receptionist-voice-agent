@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { useI18n, type Key } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
+import { MorphText } from '../lib/motion'
+import { donut } from '../lib/donut'
 import { ErrorNote, PageHeader, Skeleton } from '../components'
 
 // What SHEFA did for the clinic this week, in numbers the owner can check, plus the same as a
@@ -62,36 +64,60 @@ export function Report() {
       </div>
       <section className="sources" aria-labelledby="src-h">
         <h2 id="src-h" className="section-title">{t('repBySource')}</h2>
-        <ul className="ledger">
-          {([
-            ['srcPhone', d.bookings.by_shefa_phone, 'bar-shefa'],
-            ['srcWeb', d.bookings.by_web_page, 'bar-web'],
-            ['srcWalkIn', d.bookings.walk_in, 'bar-desk'],
-          ] as [Key, number, string][]).map(([key, n, hatch]) => {
-            const most = Math.max(1, d.bookings.by_shefa_phone, d.bookings.by_web_page, d.bookings.walk_in)
-            return (
+        <div className="sources-body">
+          <SourceDonut
+            values={[d.bookings.by_shefa_phone, d.bookings.by_web_page, d.bookings.walk_in]}
+            total={num(d.bookings.by_shefa_phone + d.bookings.by_web_page + d.bookings.walk_in)}
+            label={t('repTotal')}
+          />
+          <ul className="ledger">
+            {([
+              ['srcPhone', d.bookings.by_shefa_phone, 'bar-shefa'],
+              ['srcWeb', d.bookings.by_web_page, 'bar-web'],
+              ['srcWalkIn', d.bookings.walk_in, 'bar-desk'],
+            ] as [Key, number, string][]).map(([key, n, hatch]) => (
               <li key={key} className="ledger-row source-row">
+                <span className={`source-dot ${hatch}`} aria-hidden="true" />
                 <span className="source-name">{t(key)}</span>
-                <span className="source-track" aria-hidden="true">
-                  <span className={`source-bar ${n ? hatch : ''}`} style={{ width: `${(n / most) * 100}%` }} />
-                </span>
                 <span className="source-n">{num(n)}</span>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        </div>
       </section>
       {d.sms.not_sent_no_gateway ? <div className="note note-warn">{t('repSmsOff', { n: num(d.sms.not_sent_no_gateway) })}</div> : null}
       <section className="card stack no-print">
         <h2 className="section-title">{t('repShare')}</h2>
         <pre className="share-text" lang="bn">{d.text_bn}</pre>
         <div className="inline-form">
-          <button type="button" className="btn" onClick={() => void copy()}>{copied ? t('copied') : t('copy')}</button>
+          <button type="button" className="btn" onClick={() => void copy()}><MorphText text={copied ? t('copied') : t('copy')} /></button>
           <a className="btn btn-primary" href={`https://wa.me/?text=${encodeURIComponent(d.text_bn)}`} target="_blank" rel="noopener noreferrer">
             {t('repWhatsapp')}
           </a>
         </div>
       </section>
     </>
+  )
+}
+
+/** Bookings by source as a donut (transitions.dev "donut chart"): SHEFA's calls in SHEFA violet,
+ * the web page and the desk in greys, in the same order as the legend beside it, which keeps every
+ * number as text. The ring is a picture of that legend, so it is hidden from screen readers. */
+function SourceDonut({ values, total, label }: { values: number[]; total: string; label: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  const set = useRef<((v: number[]) => void) | null>(null)
+  useLayoutEffect(() => {
+    if (!box.current) return
+    if (!set.current) set.current = donut(box.current, ['var(--shefa)', 'var(--ink-2)', 'var(--ink-3)'])
+    set.current(values)
+  }, [values])
+  return (
+    <div className="t-donut" data-thickness="14" ref={box}>
+      <svg viewBox="0 0 140 140" aria-hidden="true" />
+      <div className="t-donut-center" aria-hidden="true">
+        <strong>{total}</strong>
+        <span>{label}</span>
+      </div>
+    </div>
   )
 }

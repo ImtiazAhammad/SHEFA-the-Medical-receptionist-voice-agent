@@ -457,3 +457,45 @@ form.stack, .stack > form, .stack-narrow { max-width: 34rem; }
 .mark-orb { gap: 0.3rem; padding-inline-start: 0.3rem; }
 .mark-orb::before { display: none; }
 .mark-orb canvas { flex: none; }
+
+/* ---------- transitions.dev: donut chart (35), bookings by source on the report ---------- */
+:root {
+  --chart-morph-dur: 400ms;
+  --chart-morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --chart-gap: 3px;
+  --chart-corner: 2px;
+}
+.t-donut {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+.t-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.t-donut-seg {
+  stroke-linejoin: round;
+  transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-donut-seg.is-dim { opacity: 0.2; }
+.t-donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-donut-seg { transition: none !important; }
+}
+.t-donut-center strong { font-family: var(--font-display); font-size: var(--step-2); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.t-donut-center span { font-size: var(--step--1); color: var(--ink-2); }
+.sources-body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); max-width: 52rem; }
+.sources-body .ledger { flex: 1 1 18rem; margin: 0; }
+.source-row { grid-template-columns: auto minmax(0, 1fr) 4rem; align-items: center; }
+.source-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; }
+.source-dot.bar-shefa { background: var(--shefa); } .source-dot.bar-web { background: var(--ink-2); } .source-dot.bar-desk { background: var(--ink-3); }
+@media (max-width: 52rem) { .source-row { grid-template-columns: auto minmax(0, 1fr) 3rem; } }

@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { useSegPill } from './motion'
 import { Monitor, Moon, Sun } from 'lucide-react'
 
@@ -35,20 +35,65 @@ export function applyTheme(theme: Theme) {
 export function ThemeSwitch({ labels }: { labels: { group: string; auto: string; light: string; dark: string } }) {
   const [theme, setTheme] = useState<Theme>(readTheme)
   const pill = useSegPill<HTMLDivElement>(theme)
+  const tip = useRef<HTMLSpanElement>(null)
   const options: [Theme, string, typeof Sun][] = [
     ['auto', labels.auto, Monitor],
     ['light', labels.light, Sun],
     ['dark', labels.dark, Moon],
   ]
+
+  // One tooltip shared by the three icons (transitions.dev "tooltip"): it appears after a short
+  // delay, then travels between icons while it stays open, and leaves at once. Only for a mouse
+  // or keyboard focus, never a touch tap (it would stay stuck on a phone). It repeats the
+  // button's own hidden label, so screen readers are not told twice.
+  function place(trigger: HTMLElement) {
+    const el = tip.current
+    const group = pill.current
+    if (!el || !group) return
+    const text = el.firstElementChild as HTMLElement
+    const showing = el.dataset.show === 'true'
+    text.textContent = trigger.dataset.tooltip ?? ''
+    const cs = getComputedStyle(el)
+    const width = Math.ceil(text.scrollWidth + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight))
+    const g = group.getBoundingClientRect()
+    const r = trigger.getBoundingClientRect()
+    const x = r.left - g.left + r.width / 2 - width / 2
+    el.classList.toggle('t-tt-below', r.top < 96) // a header bar at the top: open downward
+    if (!showing) {
+      el.style.transition = 'none'
+      el.style.width = `${width}px`
+      el.style.setProperty('--tt-x', `${x}px`)
+      void el.offsetWidth
+      el.style.transition = ''
+    } else {
+      el.style.width = `${width}px`
+      el.style.setProperty('--tt-x', `${x}px`)
+    }
+    el.dataset.show = 'true'
+  }
+  function hide() {
+    if (tip.current) tip.current.dataset.show = 'false'
+  }
+
   return (
-    <div className="seg theme-switch" role="group" aria-label={labels.group} ref={pill}>
+    <div
+      className="seg theme-switch t-tt-group"
+      role="group"
+      aria-label={labels.group}
+      ref={pill}
+      onPointerLeave={hide}
+      onKeyDown={(e) => e.key === 'Escape' && hide()}
+    >
       <span className="seg-pill" aria-hidden="true" />
       {options.map(([value, label, Icon]) => (
         <button
           key={value}
           type="button"
           aria-pressed={theme === value}
-          title={label}
+          data-tooltip={label}
+          onPointerEnter={(e) => e.pointerType === 'mouse' && place(e.currentTarget)}
+          onFocus={(e) => e.currentTarget.matches(':focus-visible') && place(e.currentTarget)}
+          onBlur={hide}
           onClick={() => {
             setTheme(value)
             applyTheme(value)
@@ -58,6 +103,9 @@ export function ThemeSwitch({ labels }: { labels: { group: string; auto: string;
           <span className="visually-hidden">{label}</span>
         </button>
       ))}
+      <span className="t-tt" ref={tip} aria-hidden="true" data-show="false">
+        <span className="t-tt-text" />
+      </span>
     </div>
   )
 }

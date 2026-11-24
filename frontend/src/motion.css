@@ -1,0 +1,238 @@
+/* Motion recipes from transitions.dev used across the staff app, the patient page and the demo.
+   Each block is the recipe's CSS (and its reduced-motion guard) with SHEFA's tokens for colour. */
+
+/* ---------- text morph (33): a label changes in place, only the differing part cross-blurs ---------- */
+:root {
+  --text-morph-dur: 180ms;
+  --text-morph-resize-dur: 240ms;
+  --text-morph-blur: 2px;
+  --text-morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-morph {
+  white-space: nowrap;
+}
+.t-morph-swap {
+  display: inline-grid;
+  vertical-align: bottom;
+  justify-items: start;
+  transition: width var(--text-morph-resize-dur) var(--text-morph-ease);
+}
+.t-morph-swap > span {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition:
+    opacity var(--text-morph-dur) var(--text-morph-ease),
+    filter  var(--text-morph-dur) var(--text-morph-ease);
+}
+.t-morph-new {
+  opacity: 0;
+  filter: blur(var(--text-morph-blur));
+}
+.t-morph-swap.is-morphing .t-morph-old {
+  opacity: 0;
+  filter: blur(var(--text-morph-blur));
+}
+.t-morph-swap.is-morphing .t-morph-new {
+  opacity: 1;
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-morph-swap,
+  .t-morph-swap > span { transition: none !important; }
+}
+
+/* ---------- text states swap (04): the label shares nothing with the next one ---------- */
+:root {
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+}
+.t-text-swap {
+  display: inline-block;
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease),
+    opacity   var(--text-swap-dur) var(--text-swap-ease);
+  will-change: transform, filter, opacity;
+}
+.t-text-swap.is-exit {
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+}
+.t-text-swap.is-enter-start {
+  transform: translateY(var(--text-swap-translate-y));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { transition: none !important; }
+}
+
+/* ---------- accordion expand (21): grid rows 0fr to 1fr, the chevron flips ---------- */
+:root {
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+.t-acc-chevron path { vector-effect: non-scaling-stroke; }
+.t-acc[data-open="true"] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-acc-panel, .t-acc-panel-inner, .t-acc-chevron {
+    transition: none !important;
+  }
+}
+/* SHEFA: a panel mounted already open (the doctor editor) grows from closed */
+@starting-style {
+  .t-acc[data-open="true"] .t-acc-panel { grid-template-rows: 0fr; }
+  .t-acc[data-open="true"] .t-acc-panel-inner { opacity: 0; filter: blur(2px); }
+}
+/* a chevron on a button that opens a panel elsewhere flips with the button's own state */
+[aria-expanded="true"] > .t-acc-chevron { transform: scaleY(-1); }
+.t-acc-chevron svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.t-acc-head {
+  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; padding: 0;
+  border: 0; background: none; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer;
+}
+.t-acc-panel-inner > :first-child { margin-top: 0; }
+
+/* ---------- checkbox check (25): the box fills, then the tick draws itself ---------- */
+:root {
+  --check-box: 150ms;
+  --check-draw: 350ms;
+  --check-delay: 0ms;
+  --check-uncheck: 150ms;
+  --check-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* the recipe drives a button[role=checkbox]; here the native input stays, styled as the box,
+   with the tick drawn over it, so :checked plays the recipe's [aria-checked="true"] */
+.t-check-box { position: relative; display: inline-grid; flex: none; width: 1.2rem; height: 1.2rem; vertical-align: -0.2em; }
+.t-check-box > * { grid-area: 1 / 1; }
+.t-check {
+  appearance: none; -webkit-appearance: none; margin: 0; width: 100%; height: 100%; min-height: 0;
+  border: 1.5px solid var(--rule-strong); border-radius: 5px; background: var(--box); cursor: pointer;
+  transition:
+    background var(--check-box) var(--check-ease),
+    box-shadow var(--check-box) var(--check-ease);
+}
+.t-check:checked { background: var(--primary); border-color: var(--primary); }
+.t-check:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.t-check-box svg { width: 62%; height: 62%; place-self: center; pointer-events: none; fill: none; stroke: var(--on-primary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.t-check-box svg path {
+  --check-len: 15; /* this tick's getTotalLength() is 14.39 */
+  stroke-dasharray: var(--check-len, 15);
+  stroke-dashoffset: var(--check-len, 15);
+  transition: stroke-dashoffset var(--check-uncheck) var(--check-ease);
+}
+.t-check:checked + svg path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--check-draw) var(--check-ease) var(--check-delay);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-check, .t-check-box svg path { transition: none !important; }
+}
+
+/* ---------- tooltip (17): one bubble shared by a group, travels between triggers ---------- */
+:root {
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  --tt-move-dur: 160ms;
+  --tt-move-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tt-bg: var(--ink);   /* SHEFA: an ink bubble, which reads on both themes */
+  --tt-fg: var(--box);
+}
+.t-tt-group {
+  position: relative;
+  display: inline-flex;
+}
+.t-tt {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  overflow: hidden;
+  translate: var(--tt-x, 0px) 0;
+  scale: var(--tt-scale);
+  transform-origin: 50% 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--tt-bg);
+  color: var(--tt-fg);
+  font-size: var(--step--1);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 2px 6px 0 rgba(0, 0, 0, 0.05),
+    0 4px 42px 0 rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease),
+    scale     var(--tt-out-dur) var(--tt-out-ease),
+    translate var(--tt-move-dur) var(--tt-move-ease),
+    width     var(--tt-move-dur) var(--tt-move-ease);
+}
+.t-tt[data-show="true"] {
+  opacity: 1;
+  scale: 1;
+  transition:
+    opacity   var(--tt-in-dur) var(--tt-in-ease) var(--tt-delay),
+    scale     var(--tt-in-dur) var(--tt-in-ease) var(--tt-delay),
+    translate var(--tt-move-dur) var(--tt-move-ease),
+    width     var(--tt-move-dur) var(--tt-move-ease);
+}
+.t-tt-text { white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .t-tt { transition: none !important; }
+}
+/* SHEFA: near the top of the screen (a header bar) the bubble opens downward */
+.t-tt.t-tt-below { bottom: auto; top: calc(100% + 8px); transform-origin: 50% 0; }

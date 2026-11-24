@@ -3,6 +3,7 @@ import { api, ApiError } from '../lib/api'
 import { dictionaries, type PKey, type PLang } from './strings'
 import '@world/fonts-lite.css'
 import { ThemeSwitch } from '../lib/theme'
+import { MorphText, TickBox } from '../lib/motion'
 import './patient.css'
 
 interface PublicDoctor {
@@ -516,7 +517,7 @@ function Details(props: {
       </label>
       {props.callbackOn ? (
         <label className="p-check">
-          <input type="checkbox" checked={call} onChange={(e) => setCall(e.target.checked)} />
+          <TickBox checked={call} onChange={(e) => setCall(e.target.checked)} />
           <span>{t('confirmCall')}</span>
         </label>
       ) : null}
@@ -538,7 +539,7 @@ function Details(props: {
           {t('back')}
         </button>
         <button type="submit" className="p-btn p-primary" disabled={busy}>
-          {busy ? t('booking') : t('book')}
+          <MorphText text={busy ? t('booking') : t('book')} />
         </button>
       </div>
     </form>
@@ -608,7 +609,7 @@ function Manage(props: {
         ) : null}
         <div className="p-actions">
           <button type="submit" className="p-btn p-primary" disabled={busy}>
-            {busy ? t('working') : t('lookup')}
+            <MorphText text={busy ? t('working') : t('lookup')} />
           </button>
         </div>
       </form>
@@ -693,7 +694,7 @@ function Callback({ t }: { t: T }) {
             </div>
           ) : null}
           <button type="submit" className="p-btn p-primary" disabled={busy}>
-            {busy ? t('working') : t('callbackBtn')}
+            <MorphText text={busy ? t('working') : t('callbackBtn')} />
           </button>
         </form>
       ) : (

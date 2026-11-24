@@ -5,6 +5,7 @@ import { VoiceCall, type VoiceEnd, type VoiceState } from './voice'
 import '@world/fonts-lite.css'
 import { VoiceRing } from 'voice-ring'
 import { ThinkingOrb } from 'thinking-orbs'
+import { MetalText } from 'metal-fx'
 import { ThemeSwitch, useReducedMotion, useShownTheme } from '../lib/theme'
 import '../patient/patient.css'
 import './demo.css'
@@ -154,6 +155,12 @@ export default function DemoApp() {
   }
 
   const live = state === 'live'
+  // the metal is a single unbroken line, so it takes only the short clause before the comma; the
+  // rest of the title follows as a plain second line and the heading still reads as one sentence
+  const [titleLead, titleRest] = (() => {
+    const i = t.title.indexOf(',')
+    return i < 0 ? [t.title, ''] : [t.title.slice(0, i + 1), t.title.slice(i + 1).trim()]
+  })()
   const ringState = state === 'connecting' ? 'processing' : live ? (agentTalking ? 'speaking' : 'listening') : 'idle'
   const time = `${digits.format(Math.floor(secondsLeft / 60))}:${secondsLeft % 60 < 10 ? digits.format(0) : ''}${digits.format(secondsLeft % 60)}`
 
@@ -181,7 +188,19 @@ export default function DemoApp() {
         </div>
       </header>
       <main className="p-main">
-        <h1>{t.title}</h1>
+        {/* liquid metal on the demo's headline (metal-fx, WebGL2): a showpiece for the one marketing page.
+            It labels its text for screen readers itself; it has no pause, so reduced motion gets the
+            plain heading, and without WebGL2 the library shows the plain text too. */}
+        <h1 className="demo-title">
+          {calm ? (
+            titleLead
+          ) : (
+            <MetalText font="600 28px/1.25 'Hind Siliguri', sans-serif" color={shownTheme === 'dark' ? '#e9ecf5' : '#2b3040'} theme={shownTheme}>
+              {titleLead}
+            </MetalText>
+          )}
+          {titleRest ? <span className="demo-title-rest">{titleRest}</span> : null}
+        </h1>
         <p className="p-lead">{t.lead}</p>
         <p className="demo-sample">{t.sample}</p>
 

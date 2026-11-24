@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
+import { MorphText } from '../lib/motion'
 import { LangSwitch, StaffThemeSwitch, Wordmark } from '../Shell'
 
 export function SignIn() {
@@ -96,7 +97,7 @@ export function SignIn() {
           {failed ? (useToken ? t('wrongToken') : t('wrongLogin')) : offline ? t('offline') : ''}
         </p>
         <button className="btn btn-primary" type="submit" disabled={busy || !ready}>
-          {busy ? t('signingIn') : t('signIn')}
+          <MorphText text={busy ? t('signingIn') : t('signIn')} />
         </button>
         <button
           type="button"

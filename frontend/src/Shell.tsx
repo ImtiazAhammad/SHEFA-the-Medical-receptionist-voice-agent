@@ -5,7 +5,7 @@ import { useAuth } from './lib/auth'
 import { setSound, soundOn, useDeskAlert } from './lib/deskAlert'
 import { useI18n, type Lang } from './lib/i18n'
 import { ThemeSwitch } from './lib/theme'
-import { useSegPill } from './lib/motion'
+import { TickBox, useSegPill } from './lib/motion'
 
 /** SHEFA's mark: a capsule on a pharma-green box, half white, half SHEFA blue.
  * Drawn, not lettered, so it reads the same in Bangla and English. */
@@ -125,7 +125,7 @@ export function Shell() {
           ) : null}
           {can('records:read') ? (
             <label className="nav-item sound-toggle">
-              <input type="checkbox" checked={sound} onChange={(e) => { setSound(e.target.checked); setSoundState(e.target.checked) }} />
+              <TickBox checked={sound} onChange={(e) => { setSound(e.target.checked); setSoundState(e.target.checked) }} />
               <span>{t('alertSound')}</span>
             </label>
           ) : null}

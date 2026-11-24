@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api, ApiError } from '../lib/api'
 import { useI18n, type Key } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
+import { AccChevron, MorphText, TickBox } from '../lib/motion'
 import { ErrorNote, PageHeader, Pill, Skeleton, docClass } from '../components'
 
 // The clinic sets up its own doctors, chamber hours and leave here: no file to edit, no call to us.
@@ -57,6 +58,17 @@ export function Setup() {
   const { t } = useI18n()
   const dir = useLoad(() => api<Directory>('/api/v1/admin/directory'), [])
   const [open, setOpen] = useState<number | 'new' | null>(null)
+  // an editor stays mounted while it animates shut (transitions.dev accordion), then unmounts,
+  // so a closed editor still forgets unsaved edits as before
+  const [closing, setClosing] = useState<number | null>(null)
+  function toggle(id: number) {
+    if (typeof open === 'number') {
+      const was = open
+      setClosing(was)
+      window.setTimeout(() => setClosing((c) => (c === was ? null : c)), 300)
+    }
+    setOpen(open === id ? null : id)
+  }
   const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
   const [stranded, setStranded] = useState<Stranded[]>([])
 
@@ -101,17 +113,24 @@ export function Setup() {
                 {!d.active ? <Pill tone="gone">{t('doctorOff')}</Pill> : null}
                 <div className="muted small">{sessionsLine(d.sessions, t)}</div>
               </div>
-              <button type="button" className="btn btn-small" aria-expanded={open === d.id} onClick={() => setOpen(open === d.id ? null : d.id)}>
-                {open === d.id ? t('close') : t('edit')}
+              <button type="button" className="btn btn-small" aria-expanded={open === d.id} aria-controls={`editor-${d.id}`} onClick={() => toggle(d.id)}>
+                <MorphText text={open === d.id ? t('close') : t('edit')} />
+                <AccChevron />
               </button>
             </div>
-            {open === d.id ? (
-              <DoctorEditor
-                doctor={d}
-                departments={data.departments}
-                onSaved={(r) => saved(t('saved'), r)}
-                onError={failed}
-              />
+            {open === d.id || closing === d.id ? (
+              <div className="t-acc" data-open={open === d.id}>
+                <div className="t-acc-panel" id={`editor-${d.id}`} inert={open !== d.id}>
+                  <div className="t-acc-panel-inner">
+                    <DoctorEditor
+                      doctor={d}
+                      departments={data.departments}
+                      onSaved={(r) => saved(t('saved'), r)}
+                      onError={failed}
+                    />
+                  </div>
+                </div>
+              </div>
             ) : null}
           </section>
         ))}
@@ -343,7 +362,7 @@ function DoctorEditor({
         </fieldset>
         {doctor ? (
           <label>
-            <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> {t('doctorActive')}
+            <TickBox checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> {t('doctorActive')}
           </label>
         ) : null}
         <div>

@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth'
 import { Legend } from '../Shell'
 import { useI18n } from '../lib/i18n'
 import { useLoad } from '../lib/useLoad'
-import { LiveCount } from '../lib/motion'
+import { LiveCount, MorphText } from '../lib/motion'
 import { Empty, ErrorNote, PageHeader, Pill, Skeleton, docClass, durationText } from '../components'
 
 export function CallStatus({ call }: { call: CallRow }) {
@@ -177,7 +177,7 @@ function Callbacks() {
               </span>
               {can('records:write') ? (
                 <button type="button" className="btn btn-small ledger-end" disabled={busy === c.id} onClick={() => void resolve(c.id)}>
-                  {busy === c.id ? t('resolving') : t('resolve')}
+                  <MorphText text={busy === c.id ? t('resolving') : t('resolve')} />
                 </button>
               ) : null}
             </li>

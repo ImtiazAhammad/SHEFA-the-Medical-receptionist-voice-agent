@@ -2,6 +2,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 // The shared SHEFA world (tokens, controls, state marks). Each app adds its own fonts and layout.
 import '@world/world.css'
+import './motion.css'
 import { applyTheme, readTheme } from './lib/theme'
 
 // The viewer's light/dark choice applies before the first paint, so no page flashes.

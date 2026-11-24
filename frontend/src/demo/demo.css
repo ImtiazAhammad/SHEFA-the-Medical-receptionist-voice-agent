@@ -54,3 +54,5 @@
 .demo-pending p { display: flex; align-items: center; gap: 0.5rem; color: var(--ink-2); transition: opacity var(--dur-3) ease-out; }
 @starting-style { .demo-pending p { opacity: 0; } }
 .demo-pending canvas { flex: none; }
+.demo-title { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+.demo-title-rest { font-size: 1.15rem; font-weight: 500; color: var(--ink-2); line-height: 1.35; }
