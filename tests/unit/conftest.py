@@ -70,3 +70,13 @@ def _isolate_the_default_calls_store(tmp_path):
     yield
     set_default_calls_store(None)
     store.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_config_store(tmp_path):
+    from shefa.brain.config import ConfigStore, set_default_config_store
+
+    store = ConfigStore(tmp_path / "default-config.db")
+    set_default_config_store(store)
+    yield
+    set_default_config_store(None)

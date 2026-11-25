@@ -162,6 +162,9 @@ class PipelineConfig(StrictModel):
     # The longest one turn (router, reply, voice) may take before it counts as a failure and goes
     # through the retry-then-hand-over path. A caller never waits longer than this on a dead line.
     turn_deadline_s: float = Field(default=20.0, gt=0)
+    # Which engine talks: "guided" (code-led booking, the default) or "agent" (the conversation
+    # brain, shefa.brain). Flipping it is a decision after the bench, never a code change.
+    engine: Literal["agent", "guided"] = "guided"
 
 
 class LanguagesConfig(StrictModel):
@@ -687,6 +690,21 @@ class RemindersConfig(StrictModel):
     quiet_end: str = "08:00"
 
 
+class BrainConfig(StrictModel):
+    """The conversation brain (`shefa.brain`): knowledge search, config cache, prompt size."""
+
+    kb_max_hits: int = Field(default=4, ge=1)
+    kb_min_words_score: float = 1.2
+    kb_min_meaning_score: float = 0.83
+    embedding_model: str = ""  # empty = search by words only
+    config_cache_s: float = Field(default=5.0, ge=0)
+    history_turns: int = Field(default=6, ge=0)
+    greeting_timeout_s: float = Field(default=1.5, gt=0)
+    prompt_budget_tokens: int = Field(default=3000, gt=0)
+    # What the brain says about being an assistant, per language ({"bn": ..., "en": ...}).
+    disclosure: dict[str, str] = Field(default_factory=dict)
+
+
 class AppConfig(StrictModel):
     """Root configuration loaded from YAML."""
 
@@ -696,6 +714,7 @@ class AppConfig(StrictModel):
     telephony: TelephonyConfig = Field(default_factory=TelephonyConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     escalation: EscalationConfig = Field(default_factory=EscalationConfig)
+    brain: BrainConfig = Field(default_factory=BrainConfig)
     compliance: ComplianceConfig = Field(default_factory=ComplianceConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     booking: BookingConfig = Field(default_factory=BookingConfig)

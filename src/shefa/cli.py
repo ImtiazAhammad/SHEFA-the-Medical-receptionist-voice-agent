@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -323,6 +325,21 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--https", action="store_true", help="self-signed certificate (phone mics need https)"
     )
+
+    config = sub.add_parser("config", help="versioned prompts and settings of the brain")
+    config_sub = config.add_subparsers(dest="config_command", required=True)
+    c_show = config_sub.add_parser("show", help="each key's live version id, or default")
+    c_show.add_argument("--clinic", default="", help="a clinic's own layer (default: the platform)")
+    c_draft = config_sub.add_parser("draft", help="save a new draft; prints its version id")
+    c_draft.add_argument("key")
+    c_draft.add_argument("--file", required=True, help="the value: text, or JSON for settings")
+    c_draft.add_argument("--note", default="")
+    c_draft.add_argument("--clinic", default="")
+    c_publish = config_sub.add_parser("publish", help="make a version live (an old one = rollback)")
+    c_publish.add_argument("version_id", type=int)
+    c_history = config_sub.add_parser("history", help="every version of a key, newest first")
+    c_history.add_argument("key")
+    c_history.add_argument("--clinic", default="")
 
     token = sub.add_parser("token", help="mint an API bearer token for a configured role")
     token.add_argument("--name", required=True, help="principal name, e.g. front-desk")
@@ -1200,6 +1217,56 @@ def run_asterisk(args: argparse.Namespace) -> int:
     return 0
 
 
+_JSON_OBJECT_KEYS = {"model.llm.params", "turn.settings", "escalation.settings"}
+
+
+def _config_value(key: str, text: str) -> Any:
+    """Prompts are taken as written; other keys are JSON, or a bare word like `agent`."""
+    if key.startswith("prompt."):
+        return text
+    try:
+        return json.loads(text)
+    except ValueError:
+        if key in _JSON_OBJECT_KEYS:
+            raise ValueError(f"{key} needs JSON") from None
+        return text.strip()
+
+
+def run_config(args: argparse.Namespace) -> int:
+    import getpass
+
+    from shefa.brain.config import KEYS, default_config_store
+
+    store = default_config_store()
+    scope = getattr(args, "clinic", "") or "platform"
+    try:
+        if args.config_command == "show":
+            for key in sorted(KEYS):
+                rows = [v for v in store.versions(key, scope) if v["status"] == "live"]
+                print(f"{key:<22} {rows[0]['id'] if rows else 'default'}")
+        elif args.config_command == "draft":
+            text = Path(args.file).read_text(encoding="utf-8")
+            vid = store.draft(
+                args.key,
+                _config_value(args.key, text),
+                scope=scope,
+                author=getpass.getuser(),
+                note=args.note,
+            )
+            print(vid)
+        elif args.config_command == "publish":
+            store.publish(args.version_id, author=getpass.getuser())
+            print(f"version {args.version_id} is live")
+        else:
+            for v in store.versions(args.key, scope):
+                when = time.strftime("%Y-%m-%d %H:%M", time.localtime(v["created_at"]))
+                print(f"{v['id']:>5}  {v['status']:<8} {when}  {v['author']}  {v['note']}")
+    except (ValueError, OSError) as problem:
+        print(f"config: {problem}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -1256,6 +1323,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "staff":
         return run_staff(args)
+
+    if args.command == "config":
+        return run_config(args)
 
     if args.command == "setup":
         return run_setup(args)
