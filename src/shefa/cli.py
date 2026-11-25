@@ -341,6 +341,22 @@ def build_parser() -> argparse.ArgumentParser:
     c_history.add_argument("key")
     c_history.add_argument("--clinic", default="")
 
+    kb = sub.add_parser("kb", help="the knowledge base the brain may speak from")
+    kb_sub = kb.add_subparsers(dest="kb_command", required=True)
+    k_seed = kb_sub.add_parser("seed", help="add the clinic's facilities and About SHEFA, once")
+    k_seed.add_argument("--clinic", default="", help="clinic id (default: the single clinic)")
+    k_list = kb_sub.add_parser("list", help="entries, oldest first")
+    k_list.add_argument("--scope", default="", help="platform, or a clinic id (default: all)")
+    k_list.add_argument("--all", action="store_true", help="include deactivated entries")
+    k_add = kb_sub.add_parser("add", help="add an entry; prints its id")
+    k_add.add_argument("--scope", required=True, help="platform, or a clinic id")
+    k_add.add_argument("--topic", required=True)
+    k_add.add_argument("--bn", required=True, help="the text in Bangla (may be empty)")
+    k_add.add_argument("--en", required=True, help="the text in English (may be empty)")
+    k_add.add_argument("--tags", default="", help="comma-separated words that find this entry")
+    k_off = kb_sub.add_parser("deactivate", help="hide an entry from the brain")
+    k_off.add_argument("entry_id", type=int)
+
     token = sub.add_parser("token", help="mint an API bearer token for a configured role")
     token.add_argument("--name", required=True, help="principal name, e.g. front-desk")
     token.add_argument("--role", required=True, help="a role declared in auth.roles")
@@ -1267,6 +1283,48 @@ def run_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_kb(args: argparse.Namespace) -> int:
+    import getpass
+
+    from shefa.brain.knowledge import PLATFORM_FILE, default_knowledge_store, seed
+    from shefa.clinic.registry import valid_id
+
+    store = default_knowledge_store()
+    try:
+        if args.kb_command == "seed":
+            if args.clinic and not valid_id(args.clinic):
+                raise ValueError(f"not a clinic id: {args.clinic!r}")
+            added = seed(store, clinic_id=args.clinic, platform_file=PLATFORM_FILE)
+            print(f"{added} entries added")
+        elif args.kb_command == "list":
+            for e in store.all_entries(active_only=not args.all):
+                if args.scope and e.scope != args.scope:
+                    continue
+                flag = "" if e.active else "  (inactive)"
+                print(f"{e.id:>4}  {e.scope:<10} {e.topic:<22} v{e.version}  {e.text('en')}{flag}")
+        elif args.kb_command == "add":
+            if not (args.bn.strip() or args.en.strip()):
+                raise ValueError("give --bn or --en text")
+            tags = tuple(t.strip() for t in args.tags.split(",") if t.strip())
+            print(
+                store.add(
+                    args.scope,
+                    args.topic,
+                    text_bn=args.bn.strip(),
+                    text_en=args.en.strip(),
+                    tags=tags,
+                    author=getpass.getuser(),
+                )
+            )
+        else:
+            store.deactivate(args.entry_id, author=getpass.getuser())
+            print(f"entry {args.entry_id} is deactivated")
+    except (ValueError, OSError) as problem:
+        print(f"kb: {problem}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -1326,6 +1384,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "config":
         return run_config(args)
+
+    if args.command == "kb":
+        return run_kb(args)
 
     if args.command == "setup":
         return run_setup(args)

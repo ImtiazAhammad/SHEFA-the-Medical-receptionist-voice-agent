@@ -80,3 +80,13 @@ def _isolate_the_default_config_store(tmp_path):
     set_default_config_store(store)
     yield
     set_default_config_store(None)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_knowledge_store(tmp_path):
+    from shefa.brain.knowledge import KnowledgeStore, set_default_knowledge_store
+
+    store = KnowledgeStore(tmp_path / "default-knowledge.db")
+    set_default_knowledge_store(store)
+    yield
+    set_default_knowledge_store(None)
