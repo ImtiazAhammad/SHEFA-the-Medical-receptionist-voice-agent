@@ -77,14 +77,29 @@ class OpenAICompatibleLLM(BaseLLM):
         **overrides: Any,
     ) -> Any:
         return await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=converted,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            **({"extra_body": self._extra_body} if self._extra_body else {}),
-            **overrides,
+            **self._request(messages, converted, dict(overrides))
         )
+
+    def _request(
+        self,
+        messages: list[dict[str, str]],
+        converted: list[dict[str, Any]] | None,
+        overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        """The request fields: a caller's per-request settings win over the client's, and a
+        per-request extra body is merged into the client's rather than replacing it."""
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "tools": converted,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+        }
+        extra = {**(self._extra_body or {}), **(overrides.pop("extra_body", None) or {})}
+        if extra:
+            request["extra_body"] = extra
+        request.update(overrides)
+        return request
 
     async def generate(
         self,
@@ -157,14 +172,7 @@ class OpenAICompatibleLLM(BaseLLM):
         **overrides: Any,
     ) -> Any:
         return await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=converted,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
-            **({"extra_body": self._extra_body} if self._extra_body else {}),
-            **overrides,
+            **self._request(messages, converted, {**overrides, "stream": True})
         )
 
     async def generate_events(

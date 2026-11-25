@@ -415,3 +415,23 @@ async def test_generate_drops_a_models_written_reasoning() -> None:
     result = await llm.generate(_MESSAGES)
 
     assert result.text == "Tuesday at ten."
+
+
+async def test_per_request_settings_override_the_clients_and_extra_body_merges() -> None:
+    # The brain's router asks for temperature 0, a few tokens and a server-enforced output shape
+    # on the same client the reply uses; its extra body must not replace the client's own.
+    llm, completions = _llm(_reply("{}"))
+    llm._extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    await llm.generate(
+        _MESSAGES,
+        temperature=0,
+        max_tokens=40,
+        extra_body={"structured_outputs": {"regex": "x"}},
+    )
+    sent = completions.calls[0]
+    assert sent["temperature"] == 0
+    assert sent["max_tokens"] == 40
+    assert sent["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "structured_outputs": {"regex": "x"},
+    }

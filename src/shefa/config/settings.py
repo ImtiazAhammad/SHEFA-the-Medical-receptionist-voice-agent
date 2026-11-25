@@ -700,6 +700,8 @@ class BrainConfig(StrictModel):
     config_cache_s: float = Field(default=5.0, ge=0)
     history_turns: int = Field(default=6, ge=0)
     greeting_timeout_s: float = Field(default=1.5, gt=0)
+    # The router call beside the reply; past this the turn goes on as a plain reply.
+    router_timeout_s: float = Field(default=1.5, gt=0)
     prompt_budget_tokens: int = Field(default=3000, gt=0)
     # What the brain says about being an assistant, per language ({"bn": ..., "en": ...}).
     disclosure: dict[str, str] = Field(default_factory=dict)
