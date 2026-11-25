@@ -117,11 +117,11 @@ are noise.
 | Qwen3-8B **+think** | 2 (0.077) | 0.346 | 0.269 | 3.51 | 0.982 | 13747 / 32258 | 4531 / 28914 | 7160 |
 
 ¹ In the main run TigerLLM failed every call: Ollama's runner aborted (`GGML_ASSERT(buffer)`, a
-failed graphics-memory allocation) when the caller model loaded beside it and the voice models.
-The row is its re-run without the voice models loaded. Re-run like for like (voice models
-loaded), it crashed again (`data/bench/bakeoff-20261125-105613.json`), so it cannot sit beside the
-voice stack in that setup. That crash had the same cause as gemma-3-12b's (the side model on the
-card beside it, below), so TigerLLM was also run on all 112 cases with the side model on the CPU.
+failed graphics-memory allocation) with the caller model loaded on the card beside it. The row is
+its re-run without `--with-voice`. Re-run with it, it crashed again
+(`data/bench/bakeoff-20261125-105613.json`). The cause is the same as gemma-3-12b's on the full
+run (the side model on the card beside it, below), so TigerLLM was also run on all 112 cases with
+the side model on the CPU, where it had no errors.
 
 ² Whole-card memory in use during the model's probe. The bench process never showed on the card,
 so the voice models appear to run off it in the bench; the column is the model plus the
