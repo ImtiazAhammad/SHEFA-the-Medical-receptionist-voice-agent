@@ -296,3 +296,28 @@ def test_set_goals_still_move_to_each_other_when_named():
     state = track(state, "না, বাতিল করুন", today=TODAY)
     assert state.goal == "change"
     assert track(state, "আমার সিরিয়াল কবে", today=TODAY).goal == "lookup"
+
+
+def test_a_lone_yes_said_twice_is_an_answer_not_a_repeat():
+    state = track(CallState(), "হ্যাঁ", previous="হ্যাঁ", today=TODAY)
+    assert state.mood != "confused" and state.repeats == 0
+
+
+def test_bangla_vowel_signs_and_hasanta_survive_the_repeat_check():
+    from shefa.brain.state import _norm
+
+    assert _norm("ডাক্তার রহমান কখন বসেন?") == "ডাক্তার রহমান কখন বসেন"
+    assert _norm("হ্যাঁ!") == "হ্যাঁ"
+
+
+def test_two_different_bangla_questions_are_not_a_repeat():
+    # Before the fix both were cut to the same scraps of letters and looked alike.
+    state = track(CallState(), "ডাক্তার রহমান কখন বসেন", previous="ডাক্তার হোসেন কোথায় বসেন", today=TODAY)
+    assert state.mood != "confused" and state.repeats == 0
+    state = track(CallState(), "ফি কত", previous="ফি কখন", today=TODAY)
+    assert state.mood != "confused"
+
+
+def test_a_repeated_bangla_question_is_still_a_repeat():
+    state = track(CallState(), "ডাক্তার রহমান কখন বসেন?", previous="ডাক্তার রহমান কখন বসেন", today=TODAY)
+    assert state.mood == "confused" and state.repeats == 1

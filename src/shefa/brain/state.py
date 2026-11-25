@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any
@@ -88,7 +89,6 @@ MAX_NAME_WORDS = 3
 
 _BANGLA = re.compile(r"[ঀ-৿]")
 _LATIN_WORD = re.compile(r"[A-Za-z]+")
-_PUNCT = re.compile(r"[^\w\s]|_", re.UNICODE)
 _CASE_ENDINGS = ("দের", "কে", "ের", "র", "ে", "ও", "ই", "টা", "টি")
 
 
@@ -140,7 +140,12 @@ def _goal(said: str, current: str) -> str:
 
 
 def _norm(text: str) -> str:
-    return " ".join(_PUNCT.sub(" ", text.lower()).split())
+    """Lower-cased words without punctuation or symbols.
+
+    Combining marks stay: `\\w` drops Bangla vowel signs and the hasanta, which turns "হ্যাঁ" into
+    two letters and "ডাক্তার" into scraps."""
+    kept = (" " if unicodedata.category(c)[0] in "PS" else c for c in text.lower())
+    return " ".join("".join(kept).split())
 
 
 def _is_repeat(said: str, previous: str) -> bool:
