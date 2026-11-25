@@ -352,3 +352,67 @@ def test_the_real_directory_block_grounds_its_fees_and_hours(tmp_path):
     assert check("ডাক্তার সুলতানার প্রথমবারের ফি ছয়শো টাকা, পরের বার চারশো।", g).ok
     assert check("উনি সকাল দশটা থেকে দুপুর একটা পর্যন্ত বসেন।", g).ok
     assert check("ডাক্তার সুলতানার ফি সাতশো টাকা।", g).kind == "fact"
+
+
+# --- more spellings (controller ruling after the first review) ---------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("পাঁচশ", "500"),
+        ("পাঁচশত", "500"),
+        ("পাঁচশো", "500"),
+        ("দুশো", "200"),
+        ("দুইশ", "200"),
+        ("দুইশো", "200"),
+        ("দুশ", "200"),
+        ("তিনশ", "300"),
+        ("একশ", "100"),
+        ("বারোশো", "1200"),
+        ("পাঁচশর", "500"),
+        ("এক হাজার পাঁচশ", "1500"),
+        ("হাজার", "1000"),
+        ("হাজার টাকা", "1000"),
+        ("দুই হাজার তিনশত পঞ্চাশ", "2350"),
+        ("একশো এক", "101"),
+    ],
+)
+def test_bangla_hundred_and_thousand_spellings(text, value):
+    assert numbers_in(text) == {value}
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("five hundred", "500"),
+        ("one thousand two hundred", "1200"),
+        ("seven hundred and fifty", "750"),
+        ("twenty-five", "25"),
+        ("twenty five", "25"),
+        ("nineteen", "19"),
+        ("zero", "0"),
+        ("a hundred", "100"),
+        ("Seven Hundred", "700"),
+        ("thousand", "1000"),
+    ],
+)
+def test_english_number_words(text, value):
+    assert numbers_in(text) == {value}
+
+
+@pytest.mark.parametrize(
+    "text", ["one moment", "a couple of minutes", "two", "the first visit", "no one", "often"]
+)
+def test_english_one_and_two_and_non_numbers_are_ignored(text):
+    assert numbers_in(text) == set()
+
+
+def test_controller_cases_for_spelled_fees():
+    g = grounds("fee 500")
+    assert check("ফি পাঁচশ টাকা।", g).ok
+    assert check("ফি সাতশত টাকা।", g).kind == "fact"
+    assert check("The fee is seven hundred taka.", g, language="en").kind == "fact"
+    assert check("The fee is five hundred taka.", g, language="en").ok
+    assert check("One moment please.", language="en").ok
+    assert check("এক মিনিট দেখছি।").ok

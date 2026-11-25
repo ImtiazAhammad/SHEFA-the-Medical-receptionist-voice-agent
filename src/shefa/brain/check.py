@@ -35,6 +35,10 @@ def _norm(text: str) -> str:
     return unicodedata.normalize("NFC", text).replace("‌", "").replace("‍", "")
 
 
+def _split(words: str) -> list[str]:
+    return words.split()
+
+
 def _wordset(words: str) -> frozenset[str]:
     return frozenset(_norm(w) for w in words.split())
 
@@ -67,28 +71,114 @@ _TO_ASCII = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 _DIGITS = re.compile(rf"[{_DIGIT}]+(?:,[{_DIGIT}]{{2,3}})*")
 _CLOCK = re.compile(rf"(?<![{_DIGIT}])([{_DIGIT}]{{1,2}}):[{_DIGIT}]{{2}}")
 _PHONE = re.compile(rf"[{_DIGIT}](?:-?[{_DIGIT}]){{6,}}")
-_SUFFIX = "(?:টায়|টার|টা|টি|য়|এ|ে|র)"
-_NOT = "নয়"  # also the word "not": "এটা সম্ভব নয়" says nothing about nine
+# Endings a number word takes ("ছয়টায়", "পাঁচশোর", "দশে"); one ends the number.
+_SUFFIXES = tuple(_norm(e) for e in ("টায়", "টার", "টা", "টি", "য়", "এ", "ে", "র"))
+_NOT = _norm("নয়")  # also the word "not": "এটা সম্ভব নয়" says nothing about nine
+_BN_UNITS = {_norm(bn_number(n)): n for n in range(100)}
+# "পাঁচশো", "পাঁচশ", "পাঁচশত", "দুশো", "বারোশো": a multiplier glued to a hundred.
+_BN_MULTIPLIERS = {**{w: n for w, n in _BN_UNITS.items() if n}, _norm("দু"): 2}
+_BN_HUNDREDS = tuple(_norm(h) for h in ("শত", "শো", "শ"))
+_BN_THOUSAND = _norm("হাজার")
+_EN_UNITS = {
+    w: n
+    for n, w in enumerate(
+        _split(
+            "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+            "fourteen fifteen sixteen seventeen eighteen nineteen"
+        )
+    )
+}
+_EN_UNITS["a"] = 1  # "a hundred"; alone it is 1, which is never read
+_EN_TENS = {
+    w: 10 * n
+    for n, w in enumerate(_split("twenty thirty forty fifty sixty seventy eighty ninety"), 2)
+}
+_UNIT, _TENS, _HUNDRED, _THOUSAND = 1, 2, 3, 4  # the kinds of number word
 
 
-def _number_words() -> dict[str, int]:
-    values = list(range(1001)) + list(range(1100, 100000, 100))
-    table: dict[str, int] = {}
-    for n in values:
-        word = _norm(bn_number(n))
-        if not word.isdigit():
-            table.setdefault(word, n)
-    return table
+def _bn_part(word: str) -> tuple[int, int, bool] | None:
+    """One Bangla word as (kind, value, ends the number), or None."""
+    stems = [(word, False)] + [
+        (word[: -len(e)], True) for e in _SUFFIXES if word.endswith(e) and len(word) > len(e)
+    ]
+    for stem, suffixed in stems:
+        if stem in _BN_UNITS and (stem != _NOT or suffixed):
+            return _UNIT, _BN_UNITS[stem], suffixed
+        if stem == _BN_THOUSAND:
+            return _THOUSAND, 1000, suffixed
+        for hundred in _BN_HUNDREDS:
+            multiplier = stem[: -len(hundred)]
+            if stem.endswith(hundred) and multiplier in _BN_MULTIPLIERS:
+                return _HUNDRED, _BN_MULTIPLIERS[multiplier] * 100, suffixed
+    return None
 
 
-_WORDS = _number_words()
-_WORD_RE = re.compile(
-    _B
-    + "("
-    + "|".join(re.escape(w).replace(r"\ ", r"\s+") for w in sorted(_WORDS, key=len, reverse=True))
-    + f")({_SUFFIX})?"
-    + _E
-)
+def _en_part(word: str) -> tuple[int, int, bool] | None:
+    word = word.lower()
+    if word in _EN_UNITS:
+        return _UNIT, _EN_UNITS[word], False
+    if word in _EN_TENS:
+        return _TENS, _EN_TENS[word], False
+    if word == "hundred":
+        return _HUNDRED, 100, False
+    if word == "thousand":
+        return _THOUSAND, 1000, False
+    return None
+
+
+class _Number:
+    """A spoken number read word by word: "দুই হাজার তিনশত পঞ্চাশ" -> 2350."""
+
+    def __init__(self, kind: int, value: int, ended: bool) -> None:
+        self.total = value if kind == _THOUSAND else 0
+        self.part = 0 if kind == _THOUSAND else value
+        self.last, self.ended = kind, ended
+
+    def extend(self, kind: int, value: int, ended: bool) -> bool:
+        if self.ended:
+            return False
+        if kind == _THOUSAND and self.last != _THOUSAND:
+            self.total, self.part = self.total + (self.part or 1) * 1000, 0
+        elif kind == _HUNDRED and self.last in (_UNIT, _TENS) and self.part < 100 and value == 100:
+            self.part *= 100  # English: "five hundred"
+        elif kind == _HUNDRED and self.last == _THOUSAND:
+            self.part += value  # Bangla: "এক হাজার পাঁচশো"
+        elif (kind in (_UNIT, _TENS) and self.last in (_HUNDRED, _THOUSAND)) or (
+            kind == _UNIT and self.last == _TENS and value < 10
+        ):
+            self.part += value  # "two hundred fifty", "twenty-five"
+        else:
+            return False
+        self.last, self.ended = kind, ended
+        return True
+
+    @property
+    def value(self) -> int:
+        return self.total + self.part
+
+
+def _spoken(text: str, word_re: re.Pattern[str], part_of, joiners: str) -> set[int]:
+    """Numbers spoken in words. Words join into one number when only `joiners` lie between."""
+    found: list[_Number] = []
+    current: _Number | None = None
+    end = 0
+    for m in word_re.finditer(text):
+        gap = text[end : m.start()]
+        end = m.end()
+        if current and m.group().lower() == "and" and current.last in (_HUNDRED, _THOUSAND):
+            continue  # "seven hundred and fifty"
+        part = part_of(m.group())
+        joined = current is not None and not gap.strip(joiners)
+        if part and joined and current.extend(*part):
+            continue
+        current = _Number(*part) if part else None
+        if current:
+            found.append(current)
+    return {n.value for n in found}
+
+
+_BN_WORD = re.compile(r"[ঀ-৿]+")
+_EN_WORD = re.compile(r"[A-Za-z]+")
 
 
 def _plain(digits: str) -> str:
@@ -102,9 +192,10 @@ def _run(digits: str) -> str:
 
 def numbers_in(text: str) -> set[str]:
     """Every number the text states, as ASCII digits without leading zeros: digits in either
-    script, Bangla number words (suffix stripped, "ছয়টায়" -> 6), and for a clock time also its
-    12-hour hour ("18:00" grounds "ছয়টায়"). Words for 1 and 2 are skipped: "এক মিনিট", "একটু"
-    and "দুই একটা" are speech, not facts."""
+    script, Bangla number words (suffix stripped, "ছয়টায়" -> 6; শো/শ/শত and হাজার
+    spellings), English number words ("seven hundred and fifty"), and for a clock time also its
+    12-hour hour ("18:00" grounds "ছয়টায়"). Words for 1 and 2 are skipped: "এক মিনিট", "একটু",
+    "দুই একটা" and "one moment" are speech, not facts."""
     return set(_numbers(text))
 
 
@@ -117,13 +208,8 @@ def _numbers(text: str) -> frozenset[str]:
         hour = int(_plain(m.group(1)))
         if hour <= 24:
             found.add(str(hour % 12 or 12))
-    for m in _WORD_RE.finditer(text):
-        word = re.sub(r"\s+", " ", m.group(1))
-        if word == _NOT and not m.group(2):
-            continue
-        value = _WORDS[word]
-        if value not in (1, 2):
-            found.add(str(value))
+    words = _spoken(text, _BN_WORD, _bn_part, " \t\n") | _spoken(text, _EN_WORD, _en_part, " \t\n-")
+    found |= {str(n) for n in words if n not in (1, 2)}
     return frozenset(found)
 
 
