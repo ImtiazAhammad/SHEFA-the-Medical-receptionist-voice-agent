@@ -9,7 +9,7 @@ Tools: `shefa lab score`, `shefa lab bakeoff`, `shefa lab compare` (plan:
 - **Baseline: done.** Today's agent (the guided engine) on its configured model, gemma2-9b AWQ
   served by vLLM as `shefa-llm`, against all 112 bench callers.
 - **Bake-off, 26 cases: done** (below). Nine candidates, including Qwen3 with thinking on and off.
-- **Finalists on all 112 cases: running.**
+- **Finalists on all 112 cases: done.** Decision: **keep gemma2-9b on vLLM.** See "Conclusion".
 
 ## Setup (baseline)
 
@@ -118,8 +118,9 @@ are noise.
 
 ¹ In the main run TigerLLM failed every call: Ollama's runner aborted (`GGML_ASSERT(buffer)`, a
 failed graphics-memory allocation) when the caller model loaded beside it and the voice models.
-The row is its re-run without the voice models loaded; see the finalist section for the
-like-for-like re-run.
+The row is its re-run without the voice models loaded. Re-run like for like (voice models
+loaded), it crashed again (`data/bench/bakeoff-20261125-105613.json`), so it cannot sit beside the
+voice stack on this card and is not a finalist.
 
 **Timing.** "3 at once" is the tool's own probe. Ollama here serves one request at a time, so
 two of the three requests wait in a queue: that column measures queueing, not the model. "One
@@ -130,8 +131,11 @@ batches them instead). The gate below uses the one-at-a-time column. The tool it
 **Safety checks.** Every model was grounded (no invented digits), gave no medical advice and
 leaked no other patient's booking. Every model missed the same two emergency cases in the first
 turn, so that miss belongs to the guided engine, not to a model. One booking without a confirmed
-yes: gemma-3-12b (`code-switching-booking-morning`) and qwen3:14b+think
-(`code-switching-change-reschedule`); see the finalist section. Brevity is the most common
+yes each for gemma-3-12b (`code-switching-booking-morning`) and qwen3:14b+think
+(`code-switching-change-reschedule`). Replayed, the gemma-3-12b one was the check's mistake: the
+caller said "thanks, great", SHEFA asked "was that a yes or no?", the caller said "হ্যাঁ, yes!",
+and only then did it book. The check only accepted a yes right after the read-back; fixed in
+`73d6981` (the finalist runs use the fixed check). Brevity is the most common
 failure for every model.
 
 ## Thinking on or off
@@ -163,3 +167,50 @@ Thinking made both Qwen3 models worse on this bench and far slower:
   between models. Everything here is provisional until sub-project 2.
 - **Serving.** These are Ollama Q4 GGUF builds. The product serves through vLLM; a chosen model
   needs a vLLM-ready quantisation (AWQ or GPTQ) and a re-time there before it goes live.
+
+## Finalists on all 112 cases
+
+The gate, timed again with 60 requests per model one at a time
+(`data/bench/solo-latency-60-20261125.json`): gemma-3-12b p95 552 ms and TigerLLM 650 ms pass;
+gemma2:9b 1587 ms and Qwen3-8B 1761 ms do not, on Ollama. With TigerLLM out, gemma-3-12b is the
+only eligible model, so the "top two within one case" step has nothing to compare. It was run on
+all 112 cases beside today's model, gemma2:9b, as the control, under one setup: Ollama Q4 for both,
+voice models loaded, the same gemma-3-4b caller and judge moved to a CPU-only Ollama
+(`--side-base-url http://127.0.0.1:11435/v1`). The move was needed because Ollama budgets
+gemma-3-12b at 8.0 GB but allocates about 9.1 GB (a larger KV cache and its vision encoder), and it
+aborted beside the side model on the GPU.
+
+| | gemma-3-12b-it | gemma2:9b |
+| --- | --- | --- |
+| Full pass | 37 / 112 (0.330) | **41 / 112 (0.366)** |
+| Task pass | 0.616 | 0.643 |
+| Hard pass | 0.482 | 0.509 |
+| Judged mean | 3.86 | 3.83 |
+| Bangla purity | 0.991 | 0.987 |
+| Brevity failures | 45 | 47 |
+| Emergency first turn | 0.93 | 0.93 |
+
+Results: `data/bench/bakeoff-20261125-114056.json`. A second run of the 26 cases with the fixed
+check (`data/bench/bakeoff-20261125-111145.json`) gave gemma-3-12b 11 and gemma2:9b 9; the first
+run gave 9 and 8. The two models trade places between runs: on this engine their quality is the
+same. Neither invented a digit, gave medical advice, leaked a booking or booked without a yes.
+
+**Today's model, served as in production.** gemma2-9b AWQ on vLLM (`shefa-llm`), timed with the
+same prompts (`data/bench/vllm-latency-20261125.json`): first sentence p50 417 ms, **p95 703 ms**
+one at a time and 755 ms three at once (vLLM batches instead of queueing). With the voice's first
+sound (about 85 ms) that is under 0.8 s, inside the 1.2 s gate. Its slow Ollama numbers were
+Ollama's, not the model's.
+
+## Conclusion
+
+- **Keep gemma2-9b AWQ on vLLM.** No local model beat it on quality here, and as served today it
+  already meets the first-sentence target. Switching to gemma-3-12b would gain nothing measurable
+  and would need a vLLM-ready build, a re-time and about 2 GB more graphics memory.
+- **Thinking stays off** for the receptionist's turns (see "Thinking on or off").
+- **The model is not the bottleneck; the conversation is.** Every model fails the same things:
+  replies too long (brevity fails in about 40% of calls), emergencies not handled in the first
+  turn in the same 8 cases, "my appointments" lookups and reschedules left undone, and English
+  replies to Bangla callers (seen in the replay). These belong to the guided engine, and they are
+  what sub-project 2 (the conversation brain) should fix first. Re-run this bake-off when it lands.
+- The bench's text turn time (2.2 s p95 in the baseline) is larger than the 0.7 s first sentence:
+  the rest is the engine's own work before the model speaks, a target for sub-project 3.
