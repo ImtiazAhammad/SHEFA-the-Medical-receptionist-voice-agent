@@ -205,12 +205,13 @@ Ollama's, not the model's.
 
 - **Keep gemma2-9b AWQ on vLLM.** No local model beat it on quality here, and as served today it
   already meets the first-sentence target. Switching to gemma-3-12b would gain nothing measurable
-  and would need a vLLM-ready build, a re-time and about 2 GB more graphics memory.
+  and would need a vLLM-ready build and a re-time, and it needs more graphics memory than gemma2.
 - **Thinking stays off** for the receptionist's turns (see "Thinking on or off").
 - **The model is not the bottleneck; the conversation is.** Every model fails the same things:
   replies too long (brevity fails in about 40% of calls), emergencies not handled in the first
   turn in the same 8 cases, "my appointments" lookups and reschedules left undone, and English
   replies to Bangla callers (seen in the replay). These belong to the guided engine, and they are
   what sub-project 2 (the conversation brain) should fix first. Re-run this bake-off when it lands.
-- The bench's text turn time (2.2 s p95 in the baseline) is larger than the 0.7 s first sentence:
-  the rest is the engine's own work before the model speaks, a target for sub-project 3.
+- The baseline's text turn time (2.2 s p95) times the whole reply, not its first sentence, so it
+  is not comparable with the 0.7 s here. Measuring the first sound of a real call end to end is
+  sub-project 3's job.
