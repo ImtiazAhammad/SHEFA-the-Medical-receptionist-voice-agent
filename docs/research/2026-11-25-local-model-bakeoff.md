@@ -8,12 +8,8 @@ Tools: `shefa lab score`, `shefa lab bakeoff`, `shefa lab compare` (plan:
 
 - **Baseline: done.** Today's agent (the guided engine) on its configured model, gemma2-9b AWQ
   served by vLLM as `shefa-llm`, against all 112 bench callers.
-- **Bake-off of the other local models: not run yet.** The graphics card (RTX 4060 Ti, 16 GB)
-  is held by the running services: vLLM with gemma2-9b (9.9 GB, serving `shefa serve` and the
-  voice-collection site's live agent), the voice-collection server's speech model (1.1 GB),
-  `shefa serve` on :8000 (2.4 GB) and Ollama. An 8 to 9 GB candidate cannot load beside them. The
-  bake-off needs a maintenance window in which those services are stopped; it is waiting for the
-  founder's go-ahead.
+- **Bake-off, 26 cases: done** (below). Nine candidates, including Qwen3 with thinking on and off.
+- **Finalists on all 112 cases: running.**
 
 ## Setup (baseline)
 
@@ -77,7 +73,7 @@ information-only caller offered a booking (4).
 - No human labels exist yet, so the judge's agreement with people is unmeasured; the founder marks
   real transcripts in the console (sub-project 4).
 
-## Bake-off: how it will run
+## Bake-off: how it was planned to run
 
 `shefa lab bakeoff gemma2:9b hf.co/unsloth/gemma-3-12b-it-GGUF:Q4_K_M qwen3:14b
 hf.co/unsloth/Qwen3-8B-GGUF:Q4_K_M aya-expanse:8b hf.co/mradermacher/TigerLLM-9B-it-GGUF:Q4_K_M
@@ -87,3 +83,83 @@ Each model gets: the scorecard, time to its first complete sentence on the produ
 with three calls at once (30 samples), graphics memory with recognition and the voice loaded, and
 the winner rule: eligible when first sentence p95 + the voice's first sound is at most 1200 ms,
 ranked by full pass, then judged mean.
+
+## Bake-off setup (as run)
+
+| | |
+| --- | --- |
+| Command | the planned command plus `"qwen3:14b+think" "hf.co/unsloth/Qwen3-8B-GGUF:Q4_K_M+think" --caller-model hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --judge-model hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --tags bakeoff` |
+| Code | `e7c5649` |
+| Server | Ollama, every model a Q4 GGUF, run one at a time with the services stopped (vLLM, `shefa serve`) |
+| Simulated caller and judge | gemma-3-4b (Q4); not a candidate, so no model judges itself |
+| Cases | the 26 tagged `bakeoff`, 15% mishearing, seed 7 |
+| Results | `data/bench/bakeoff-20261125-081531.json`; TigerLLM re-run `data/bench/bakeoff-20261125-103200.json` |
+| One-at-a-time timing | `data/bench/solo-latency-20261125.json` (15 requests per model) |
+
+`+think` means the same model with its reasoning turned on (up to 4096 reply tokens). The reasoning
+is never spoken: every reply passes through `shefa.models.llm.think_filter`.
+
+## Bake-off results, 26 cases
+
+Full pass counts out of 26. At n = 26 one case is 3.8 points, so differences of one or two cases
+are noise.
+
+| Model | Full | Task | Hard | Judged | Bangla | 3 at once p50 / p95 ms | One at a time p50 / p95 ms | GPU MB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| qwen3:14b | **11** (0.423) | 0.462 | 0.654 | 3.75 | 0.994 | 4807 / 10604 | 2314 / 3381 | 11157 |
+| gemma-3-12b-it | 9 (0.346) | 0.500 | 0.538 | 3.88 | 0.989 | 1087 / 2970 | **517 / 839** | 11970 |
+| qwen3:14b **+think** | 9 (0.346) | 0.500 | 0.462 | 3.64 | 0.990 | 20717 / 163769 | 8886 / 29198 | 11164 |
+| gemma2:9b (today's model) | 8 (0.308) | 0.538 | 0.423 | **3.91** | 0.984 | 1460 / 3144 | 686 / 1595 | 13617 |
+| Qwen3-8B | 8 (0.308) | 0.500 | 0.538 | 3.50 | 0.988 | 2015 / 4697 | 1074 / 1640 | 7016 |
+| TigerLLM-9B-it ¹ | 8 (0.308) | 0.538 | 0.500 | 3.79 | 0.996 | 1264 / 3055 | **516 / 691** | 11792 |
+| qwen2.5:7b | 6 (0.231) | 0.462 | 0.308 | 3.66 | 0.984 | 3440 / 7443 | 976 / 2293 | 6577 |
+| aya-expanse:8b | 5 (0.192) | 0.269 | 0.385 | 3.79 | 0.988 | 9977 / 21597 | 2011 / 3132 | 7634 |
+| Qwen3-8B **+think** | 2 (0.077) | 0.346 | 0.269 | 3.51 | 0.982 | 13747 / 32258 | 4531 / 28914 | 7160 |
+
+¹ In the main run TigerLLM failed every call: Ollama's runner aborted (`GGML_ASSERT(buffer)`, a
+failed graphics-memory allocation) when the caller model loaded beside it and the voice models.
+The row is its re-run without the voice models loaded; see the finalist section for the
+like-for-like re-run.
+
+**Timing.** "3 at once" is the tool's own probe. Ollama here serves one request at a time, so
+two of the three requests wait in a queue: that column measures queueing, not the model. "One
+at a time" is the same prompts with no queue, and is what a caller hears when no other call is
+in progress; two calls at once on one Ollama process would queue as the first column shows (vLLM
+batches them instead). The gate below uses the one-at-a-time column. The tool itself, using the queued column, reported no eligible model.
+
+**Safety checks.** Every model was grounded (no invented digits), gave no medical advice and
+leaked no other patient's booking. Every model missed the same two emergency cases in the first
+turn, so that miss belongs to the guided engine, not to a model. One booking without a confirmed
+yes: gemma-3-12b (`code-switching-booking-morning`) and qwen3:14b+think
+(`code-switching-change-reschedule`); see the finalist section. Brevity is the most common
+failure for every model.
+
+## Thinking on or off
+
+Thinking made both Qwen3 models worse on this bench and far slower:
+
+| | Full pass | Judged | One at a time p95 |
+| --- | --- | --- | --- |
+| qwen3:14b, off → on | 11 → 9 | 3.75 → 3.64 | 3.4 s → 29.2 s |
+| Qwen3-8B, off → on | 8 → 2 | 3.50 → 3.51 | 1.6 s → 28.9 s |
+
+- Brevity failures rose with thinking on (qwen3:14b 7 → 12, Qwen3-8B 10 → 17): the replies got
+  longer, which a phone caller hears as a speech rather than an answer.
+- The slowest thinking turns take about 29 s even with no queue, above the real pipeline's 20 s
+  turn deadline (`pipeline.turn_deadline_s`), so on a live call those turns would be dropped.
+  The bench's text runner has no deadline, so the table above flatters thinking.
+- Faster hardware shortens the reasoning in proportion but does not remove the silence while the
+  model thinks before its first word. A front-desk turn is short and grounded in clinic data the
+  engine already looks up; there is little left for reasoning to improve.
+- Today's guided engine decides most turns itself and uses the model for wording, so this is a
+  test of thinking for wording. When the conversation brain (sub-project 2) gives the model more
+  of the decision, thinking gets re-tested there, perhaps for one hard step rather than every turn.
+
+## Caveats
+
+- **Judge.** gemma-3-4b is lenient (most scores 3.5 to 4) and may favour Gemma-family wording. The
+  judged mean only breaks ties; the ranking rests on the hard and task checks.
+- **Engine.** The guided engine writes most replies from templates, which narrows the gaps
+  between models. Everything here is provisional until sub-project 2.
+- **Serving.** These are Ollama Q4 GGUF builds. The product serves through vLLM; a chosen model
+  needs a vLLM-ready quantisation (AWQ or GPTQ) and a re-time there before it goes live.
