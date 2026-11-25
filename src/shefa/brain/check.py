@@ -101,7 +101,10 @@ _BN_HUNDREDS = tuple(_norm(h) for h in ("শত", "শো", "শ"))
 _BN_THOUSAND = _norm("হাজার")
 # Words that begin like a number but are not one ("আটকে", "চারপাশে", "নয়তো").
 _NOT_NUMBERS = tuple(_norm(w) for w in _split("আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ"))
-_CONSONANT = re.compile("[\u0995-\u09b9\u09ce\u09dc-\u09df]")
+# A number glued to these still says that number even with an ending the table lacks
+# ("সাতটাকা", "পাঁচশোটাকা"); any other continuation ("নয়ন", a name) is not a number.
+_GLUED = tuple(_norm(w) for w in _split("টা শো শ হাজার"))
+_CLOCK_STEMS = {_norm("ছ"): 6, _norm("ন"): 9, _norm("বার"): 12}
 _EN_UNITS = {
     w: n
     for n, w in enumerate(
@@ -158,9 +161,14 @@ def _bn_part(word: str) -> _Part | None:
         return None
     for size in range(len(word) - 1, 0, -1):
         stem, rest = word[:size], word[size:]
-        if _CONSONANT.match(rest) and (part := _bn_stem(stem, True)):
+        if rest.startswith(_GLUED) and (part := _bn_stem(stem, True) or _clock_stem(stem)):
             return part if part.kind in (_UNIT, _HUNDREDS) else None
     return None
+
+
+def _clock_stem(stem: str) -> _Part | None:
+    """ "ছ", "ন" and "বার" name a number only before টা/টায়: "ছটায়" 6, "নটা" 9, "বারটায়" 12."""
+    return _Part(_UNIT, _CLOCK_STEMS[stem], True) if stem in _CLOCK_STEMS else None
 
 
 def _en_part(word: str) -> _Part | None:
@@ -268,10 +276,13 @@ def numbers_in(text: str) -> set[str]:
     return set(_numbers(text))
 
 
+_APOSTROPHE = re.compile("(?<=[ঀ-৿])['\u2019](?=[ঀ-৿])")  # "ছ'টা" is ছটা
+
+
 # Ground texts repeat for every sentence of a turn and the word regex is large: remember them.
 @lru_cache(maxsize=512)
 def _numbers(text: str) -> frozenset[str]:
-    text = _norm(text).translate(_TO_ASCII)
+    text = _APOSTROPHE.sub("", _norm(text).translate(_TO_ASCII))
     found = {str(n) for n in _spoken(text)}
     for m in _CLOCK.finditer(text):
         hour = int(m.group(1))
@@ -294,6 +305,8 @@ _HONORIFICS = frozenset(
     for w in _split("মোঃ মো. মোহাম্মদ মোহাম্মাদ মুহাম্মদ মুহম্মদ md md. mohammad muhammad mohammed")
 )
 _NAME_JOINERS = _wordset("ও আর এবং and &")
+# A title after a joiner starts a new name that its own title match checks ("ও ডাক্তার রহিম").
+_TITLES = _wordset("ডাক্তার ডাঃ ডা. ডক্টর dr dr. doctor")
 _WEEKDAY_WORDS = (
     "শনিবার রবিবার সোমবার মঙ্গলবার বুধবার বৃহস্পতিবার শুক্রবার "
     "saturday sunday monday tuesday wednesday thursday friday"
@@ -326,6 +339,8 @@ def _names_after(sentence: str, title_end: int, bangla: bool) -> list[str]:
             break
         word, pos = m.group(1), m.end()
         low = word.lower()
+        if low in _TITLES:
+            break
         if low in _HONORIFICS:
             continue
         if low in _NAME_JOINERS and names:
@@ -430,8 +445,8 @@ def _unknown_day(sentence: str, texts: list[str]) -> str | None:
 # A clock hour said with a part of the day names a 24-hour time: "সকাল ছয়টায়" is 06, "সন্ধ্যা
 # ছয়টায়" is 18. That hour must be a time in the grounds ("18:00").
 _PERIOD_KINDS = (
-    ("সকাল সকালে morning", "am"),
-    ("দুপুর দুপুরে বিকাল বিকেল বিকালে বিকেলে সন্ধ্যা সন্ধ্যায় afternoon evening", "pm"),
+    ("সকাল সকালে ভোর ভোরে morning am", "am"),
+    ("দুপুর দুপুরে বিকাল বিকেল বিকালে বিকেলে সন্ধ্যা সন্ধ্যায় afternoon evening pm", "pm"),
     ("রাত রাতে night", "night"),
 )
 _PERIODS = {_norm(w): kind for words, kind in _PERIOD_KINDS for w in _split(words)}
@@ -447,7 +462,8 @@ _BN_TIME = re.compile(
 )
 _EN_TIME = re.compile(
     r"\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+in\s+the\s+(morning|afternoon|evening)\b"
-    r"|\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+at\s+(night)\b",
+    r"|\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+at\s+(night)\b"
+    r"|\b" + _HOUR_WORD + r"(?::[0-9]{2})?\s*([ap])\.?\s?m\b\.?",
     re.IGNORECASE,
 )
 
@@ -481,8 +497,10 @@ def _unknown_time(sentence: str, texts: list[str]) -> str | None:
         (m.group(), m.group(2), m.group(1)) for m in _BN_TIME.finditer(sentence)
     ]
     for m in _EN_TIME.finditer(sentence):
-        hour, period = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
-        said.append((m.group(), hour, period))
+        hour, period = next(
+            (h, p) for h, p in zip(m.groups()[::2], m.groups()[1::2], strict=True) if h
+        )
+        said.append((m.group(), hour, period + "m" if len(period) == 1 else period))
     for phrase, hour_word, period in said:
         hour = _hour(hour_word)
         if hour and not _hours_24(hour, _PERIODS[_norm(period).lower()]) & grounded:
@@ -509,13 +527,16 @@ def _backed_yes(sentence: str, known: set[str]) -> bool:
 # --- success claims and booking offers --------------------------------------------------------
 
 # Done-for-you forms in Bangla: "বুক করে দিয়েছি", "করেছি", "দিয়ে দিয়েছি", "(করা) হয়েছে".
-_DONE = r"(?:করে দিয়েছি|করেছি|দিয়ে দিয়েছি|দিয়েছি|(?:করা |করে দেওয়া )?হয়েছে|হয়ে গেছে)"
+_DONE = (
+    r"(?:করে দিয়েছি|করে দিলাম|করেছি|করলাম|দিয়ে দিয়েছি|দিয়ে দিলাম|দিয়েছি|দিলাম"
+    r"|(?:করা |করে দেওয়া |দেওয়া )?(?:হয়েছে|হয়ে গেছে)|করা আছে)"
+)
 _CLAIMS = {
     "book": re.compile(
         r"(?<!fully )\bbooked\b|\b(?:is|are|was|been|now) confirmed\b|\bconfirmed (?:for|your)\b"
         r"|\b(?:I|we)(?:'ve| have)? scheduled\b|\bscheduled you\b|\ball set\b"
-        rf"|বুক {_DONE}|সিরিয়াল (?:দেওয়া|নেওয়া) হয়েছে|সিরিয়াল দিয়ে দিয়েছি|সিরিয়াল দিয়েছি"
-        rf"|(?:নিশ্চিত|কনফার্ম) {_DONE}",
+        r"|\bmade (?:the|your|a) booking\b|\bput you down\b"
+        rf"|বুক {_DONE}|সিরিয়াল (?:নেওয়া )?{_DONE}|(?:নিশ্চিত|কনফার্ম) {_DONE}",
         re.IGNORECASE,
     ),
     "cancel_booking": re.compile(rf"\bcancel+ed\b|বাতিল {_DONE}", re.IGNORECASE),
@@ -531,6 +552,7 @@ _CLAIMS = {
     ),
     "hand_over": re.compile(
         r"\btransferr(?:ed|ing)\b|\bconnecting you\b|\b(?:will|'ll) (?:transfer|connect) you\b"
+        r"|\bput(?:ting)? you through\b"
         r"|সংযোগ দিচ্ছি|সংযোগ করে দিচ্ছি|কথা বলিয়ে দিচ্ছি|লাইন(?:টা)? দিচ্ছি"
         r"|(?:রিসেপশন|রিসেপশনিস্ট|কর্মী|মানুষ|ডেস্ক)\S*\s+(?:দিচ্ছি|দিয়ে দিচ্ছি|ট্রান্সফার করছি)",
         re.IGNORECASE,
@@ -539,15 +561,18 @@ _CLAIMS = {
 # A negation only cancels a claim when it sits right before it: "has not been booked", but not
 # "Don't worry, your appointment is booked".
 _NEGATED = re.compile(
-    r"(?:\bnot|n't|\bnever)\s+(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was)\s+){0,2}$",
+    r"(?:\bnot|n't|\bnever|\bnothing|\bnobody|\bno one)\s+"
+    r"(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was|were)\s+){0,2}$",
     re.IGNORECASE,
 )
 _PUSH = re.compile(
     r"বুক করবেন|সিরিয়াল নেবেন|অ্যাপয়েন্টমেন্ট নেবেন|সিরিয়াল দিয়ে দেব|বুক করে দেব"
-    r"|(?:সিরিয়াল|অ্যাপয়েন্টমেন্ট) নিতে চান|বুক করতে চান"
+    r"|(?:সিরিয়াল|অ্যাপয়েন্টমেন্ট) নিতে চা(?:ন|চ্ছেন|ইছেন)|বুক করতে চা(?:ন|চ্ছেন|ইছেন)"
+    r"|বুক করে দিই|সিরিয়াল দিয়ে দিই|বুক করে দিতে পারি|সিরিয়াল দিয়ে দিতে পারি"
     r"|\bbook an appointment\b|\bshall I book\b|\bwould you like to book\b"
     r"|\b(?:do you|would you) (?:want|like) (?:to book|an appointment|me to book)\b"
-    r"|\bI can book you\b|\bwant me to book\b",
+    r"|\b(?:I can|can I|should I|shall I) book you\b|\bwant me to book\b"
+    r"|\bmake an appointment\b",
     re.IGNORECASE,
 )
 _ACTIONS = {
@@ -559,14 +584,18 @@ _ACTIONS = {
 }
 
 
+# "বুক হয়েছে কি?" and "বুক হয়েছে কিনা দেখছি" ask; they do not claim.
+_ASKED = re.compile(r"\s*(?:কি|কী|কিনা|কি না)" + _E)
+
+
 def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
     for tool, pattern in _CLAIMS.items():
-        m = pattern.search(sentence)
-        if (
-            m
-            and tool not in succeeded
-            and not _NEGATED.search(sentence[: m.start()].rstrip() + " ")
-        ):
+        if tool in succeeded:
+            continue
+        for m in pattern.finditer(sentence):
+            before = sentence[: m.start()].rstrip() + " "
+            if _NEGATED.search(before) or _ASKED.match(sentence, m.end()):
+                continue
             return Verdict(
                 False,
                 "claim",

@@ -581,3 +581,122 @@ def test_a_clock_hour_with_a_period_word_must_match_the_period():
     assert check("Come at 6 in the evening.", g, language="en").ok
     assert check("সকাল দশটায় আসুন।", grounds(DIRECTORY_LINE)).ok
     assert check("রাত দশটায় আসুন।", grounds(DIRECTORY_LINE)).kind == "fact"
+
+
+# --- review fix round 2 -----------------------------------------------------------------------
+
+TWO_DOCTORS = "- Dr Sultana / ডাক্তার সুলতানা - Mon\n- Dr Rahim / ডাক্তার রহিম - Wed"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("Dr Sultana and Dr Rahim sit today.", "en"),
+        ("Dr Sultana and Dr. Rahim sit today.", "en"),
+        ("ডাক্তার সুলতানা ও ডাক্তার রহিম আজ বসেন।", "bn"),
+        ("ডাক্তার সুলতানা এবং ডাঃ রহিম আজ বসেন।", "bn"),
+    ],
+)
+def test_two_titled_doctors_both_grounded_pass(sentence, language):
+    assert check(sentence, grounds(TWO_DOCTORS), language=language).ok
+
+
+def test_a_second_titled_doctor_is_still_checked():
+    g = grounds(TWO_DOCTORS)
+    assert check("Dr Sultana and Dr Karim sit today.", g, language="en").kind == "fact"
+    assert check("ডাক্তার সুলতানা ও ডাক্তার করিম আজ বসেন।", g).kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "tool", "language"),
+    [
+        ("বুক করে দিলাম।", "book", "bn"),
+        ("সিরিয়াল দিয়ে দিলাম।", "book", "bn"),
+        ("বুক করলাম।", "book", "bn"),
+        ("সিরিয়াল কনফার্ম করলাম।", "book", "bn"),
+        ("আপনার সিরিয়াল হয়ে গেছে।", "book", "bn"),
+        ("সিরিয়াল দেওয়া হয়ে গেছে।", "book", "bn"),
+        ("বুক করা আছে।", "book", "bn"),
+        ("I've made the booking.", "book", "en"),
+        ("I have put you down for Monday.", "book", "en"),
+        ("বাতিল করে দিলাম।", "cancel_booking", "bn"),
+        ("সময় পরিবর্তন করে দিলাম।", "reschedule_booking", "bn"),
+        ("I'll put you through to reception.", "hand_over", "en"),
+    ],
+)
+def test_past_and_other_success_claims(sentence, tool, language):
+    g = grounds("Monday")
+    assert check(sentence, g, language=language).kind == "claim"
+    assert check(sentence, grounds("Monday", succeeded={tool}), language=language).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("আপনার সিরিয়াল বুক হয়েছে কি?", "bn"),
+        ("বুক হয়েছে কিনা দেখছি।", "bn"),
+        ("Nothing was booked.", "en"),
+    ],
+)
+def test_questions_and_nothing_are_not_claims(sentence, language):
+    assert check(sentence, language=language).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("Come at 6 am.", "en"),
+        ("Come at 6 a.m.", "en"),
+        ("সকাল ছটায় আসুন।", "bn"),
+        ("ভোর ছয়টায় আসুন।", "bn"),
+    ],
+)
+def test_more_morning_forms_fail_against_an_evening_time(sentence, language):
+    assert check(sentence, grounds("slots from 18:00"), language=language).kind == "fact"
+
+
+def test_pm_forms_pass_against_an_evening_time():
+    g = grounds("slots from 18:00")
+    assert check("Come at 6 pm.", g, language="en").ok
+    assert check("Come at 6 p.m.", g, language="en").ok
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("ছটায়", "6"),
+        ("ছ'টা", "6"),
+        ("নটায়", "9"),
+        ("নটা", "9"),
+        ("বারটায়", "12"),
+        ("এগারটা", "11"),
+        ("দশটা", "10"),
+    ],
+)
+def test_colloquial_clock_hours(text, value):
+    assert numbers_in(text) == {value}
+
+
+def test_a_colloquial_hour_needs_grounds():
+    assert check("ছটায় আসুন।").kind == "fact"
+
+
+@pytest.mark.parametrize("text", ["নয়ন আসবেন", "নয়ন", "বার বার বলছি"])
+def test_names_and_words_that_start_like_numbers(text):
+    assert numbers_in(text) == set()
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("Would you like to make an appointment?", "en"),
+        ("Should I book you?", "en"),
+        ("Can I book you?", "en"),
+        ("বুক করে দিই?", "bn"),
+        ("সিরিয়াল দিয়ে দিই?", "bn"),
+        ("আমি বুক করে দিতে পারি।", "bn"),
+        ("আপনি কি সিরিয়াল নিতে চাচ্ছেন?", "bn"),
+    ],
+)
+def test_round_two_booking_offers_are_a_push(sentence, language):
+    assert check(sentence, goal="information", language=language).kind == "push"
