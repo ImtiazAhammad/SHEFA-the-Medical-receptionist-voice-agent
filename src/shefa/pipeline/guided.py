@@ -297,7 +297,7 @@ def _similar(a: str, b: str) -> bool:
     return len(shorter) >= 4 and longer.startswith(shorter)
 
 
-def _symptom_department(said: str) -> dict[str, Any] | None:
+def symptom_department(said: str) -> dict[str, Any] | None:
     """The one department whose doctors see this problem ("বাচ্চার জ্বর" -> Pediatrics)."""
     store = default_clinic_store()
     words = [fold(w) for w in tokens(said)]
@@ -320,6 +320,10 @@ def _symptom_department(said: str) -> dict[str, Any] | None:
     if len(winners) != 1:
         return None
     return next((d for d in store.departments() if d["id"] == winners[0]), None)
+
+
+# The old private name, kept so callers inside the guided engine stay as they are.
+_symptom_department = symptom_department
 
 
 _CASE_ENDINGS = ("দের", "কে", "ের", "র", "ে", "ও", "ই", "টা", "টি")
