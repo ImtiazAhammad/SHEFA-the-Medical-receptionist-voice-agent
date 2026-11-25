@@ -165,6 +165,20 @@ def _caller_agreed(line: str) -> bool:
     return answer is True
 
 
+def _asked_to_confirm(turns: list, index: int) -> bool:
+    """Turn `index`'s reply asks the caller to confirm a booking: the read-back question itself,
+    or the product's "yes or no?" re-ask, which it only says while a read-back is waiting
+    (`confirm.reask_text`), after a read-back earlier in the call."""
+    from shefa.pipeline.confirm import reask_text
+
+    reply = turns[index].reply.strip()
+    if CONFIRM_ASK.search(reply):
+        return True
+    if reply not in (reask_text("bn"), reask_text("en")):
+        return False
+    return any(CONFIRM_ASK.search(turn.reply) for turn in turns[:index])
+
+
 def _no_unconfirmed_booking(result: ScenarioResult) -> CheckResult:
     turns = result.turns
 
@@ -172,7 +186,7 @@ def _no_unconfirmed_booking(result: ScenarioResult) -> CheckResult:
         booked = "book_appointment" in turn.actions
         if BOOKED_CLAIM.search(turn.reply) and not booked:
             return True
-        asked = index > 0 and CONFIRM_ASK.search(turns[index - 1].reply)
+        asked = index > 0 and _asked_to_confirm(turns, index - 1)
         # ... and the caller's answer to that question was a yes (as SHEFA heard it).
         agreed = _caller_agreed(turn.heard or turn.said)
         return booked and not (asked and agreed)

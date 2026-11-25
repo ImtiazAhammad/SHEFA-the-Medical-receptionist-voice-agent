@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from pathlib import Path
 
+import pytest
+
 from shefa.clinic import ClinicStore
 from shefa.clinic.loader import import_directory_file
 from shefa.clinic.store import CLINIC_TZ
@@ -93,6 +95,25 @@ def test_booking_claim_with_book_action_after_a_confirm_question_passes():
         actions=[[], ["book_appointment"]],
     )
     assert check(r, facts=set(), name="no_unconfirmed_booking").ok
+
+
+@pytest.mark.parametrize("reask", ["হ্যাঁ বা না বলবেন?", "Sorry, was that a yes or no?"])
+def test_a_yes_to_the_reask_after_a_read_back_confirms_the_booking(reask):
+    r = result_with(
+        replies=["শনিবার সকাল দশটা, বুক করব?", reask, "আপনার বুক হয়েছে।"],
+        said=["শনিবার দশটায়", "thanks, great", "হ্যাঁ, yes!"],
+        actions=[[], [], ["book_appointment"]],
+    )
+    assert check(r, facts=set(), name="no_unconfirmed_booking").ok
+
+
+def test_a_reask_with_no_read_back_before_it_does_not_confirm():
+    r = result_with(
+        replies=["কোন দিন?", "হ্যাঁ বা না বলবেন?", "আপনার বুক হয়েছে।"],
+        said=["শনিবার", "আচ্ছা", "হ্যাঁ"],
+        actions=[[], [], ["book_appointment"]],
+    )
+    assert not check(r, facts=set(), name="no_unconfirmed_booking").ok
 
 
 def test_book_without_prior_confirm_question_fails():
