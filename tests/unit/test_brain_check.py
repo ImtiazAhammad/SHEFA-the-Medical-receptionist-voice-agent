@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from shefa.bangla import bn_number
 from shefa.brain import safe
 from shefa.brain.check import Grounds, Verdict, check_sentence, numbers_in
 from shefa.config.settings import settings
@@ -123,7 +124,7 @@ def test_an_invented_doctor_fails():
         "কোন ডাক্তার দেখাতে চান?",
         "ডাক্তারকে জিজ্ঞাসা করুন।",
         "ডাক্তার সাহেব আজ আছেন।",
-        "শিশু ডাক্তারের সিরিয়াল নিতে চান?",
+        "শিশু ডাক্তারের চেম্বার দোতলায়।",
     ],
 )
 def test_the_word_doctor_without_a_name_passes(sentence):
@@ -416,3 +417,167 @@ def test_controller_cases_for_spelled_fees():
     assert check("The fee is five hundred taka.", g, language="en").ok
     assert check("One moment please.", language="en").ok
     assert check("এক মিনিট দেখছি।").ok
+
+
+# --- review fix round 1 -----------------------------------------------------------------------
+
+REVIEW_GROUNDS = "fee 600; report in 7 days; 17:00-21:00"
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("সাত শো", "700"),
+        ("নয় শত", "900"),
+        ("দুই হাজারের মতো", "2000"),
+        ("পাঁচ হাজারের মতো", "5000"),
+        ("৫শ", "500"),
+        ("৫ হাজার", "5000"),
+        ("5 hundred", "500"),
+        ("পনেরশ", "1500"),
+        ("বারশ", "1200"),
+        ("তিরিশ", "30"),
+        ("কুড়ি", "20"),
+        ("পাঁচশোতে", "500"),
+        ("দশের", "10"),
+        ("সাতজন", "7"),
+        ("তিনদিনে", "3"),
+        ("সাতদিন", "7"),
+        ("সাতবার", "7"),
+        ("পাঁচখানা", "5"),
+        ("একশো নয়", "109"),
+        ("নয় হাজার", "9000"),
+        ("সাতগুণ", "7"),
+    ],
+)
+def test_review_number_forms(text, value):
+    assert numbers_in(text) == {value}
+
+
+@pytest.mark.parametrize(
+    "text", ["তিনি আসবেন", "আটকে গেছেন", "বিশেষজ্ঞ ডাক্তার", "চারপাশে", "এটা সম্ভব নয়", "নয়তো"]
+)
+def test_words_that_only_start_like_numbers_read_nothing(text):
+    assert numbers_in(text) == set()
+
+
+def test_bangla_number_words_round_trip():
+    # 1 and 2 as words are speech, and bare নয় is the word "not": those three are not read.
+    values = [*range(100), *range(100, 1001, 7), *range(1000, 100000, 100), 1109, 9009, 99999]
+    for n in values:
+        if n in (1, 2, 9):
+            continue
+        assert numbers_in(bn_number(n)) == {str(n)}, (n, bn_number(n))
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    ["ফি সাত শো টাকা।", "ফি নয় শত টাকা।", "ফি দুই হাজারের মতো।", "ফি পাঁচ হাজারের মতো।"],
+)
+def test_detached_hundreds_and_thousands_cannot_smuggle_a_fee(sentence):
+    assert check(sentence, grounds(REVIEW_GROUNDS, "5")).kind == "fact"
+
+
+@pytest.mark.parametrize("sentence", ["আমাদের সাতজন ডাক্তার আছেন।", "রিপোর্ট সাতদিন পরে।"])
+def test_glued_counts_need_grounds(sentence):
+    assert check(sentence).kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("Don't worry, your appointment is booked.", "en"),
+        ("I couldn't find Monday, so I booked you for Wednesday.", "en"),
+        ("আপনার সিরিয়াল বুক করে দিয়েছি।", "bn"),
+        ("আমি সিরিয়াল দিয়ে দিয়েছি।", "bn"),
+        ("আপনার সিরিয়াল নিশ্চিত করা হয়েছে।", "bn"),
+        ("Your booking is confirmed.", "en"),
+        ("I've scheduled you for Monday.", "en"),
+    ],
+)
+def test_more_booking_claims(sentence, language):
+    assert check(sentence, language=language).kind == "claim"
+    assert check(sentence, grounds(succeeded={"book"}), language=language).kind != "claim"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "tool"),
+    [
+        ("বাতিল করে দিয়েছি।", "cancel_booking"),
+        ("সময় বদলে দিয়েছি।", "reschedule_booking"),
+        ("আপনাকে রিসেপশনে দিচ্ছি।", "hand_over"),
+    ],
+)
+def test_more_action_claims(sentence, tool):
+    assert check(sentence).kind == "claim"
+    assert check(sentence, grounds(succeeded={tool})).ok
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "It has not been booked yet.",
+        "Monday is fully booked.",
+        "I don't have confirmed information about that.",
+    ],
+)
+def test_english_non_claims(sentence):
+    assert check(sentence, language="en").kind != "claim"
+
+
+def test_a_name_after_an_honorific_must_be_grounded():
+    g = grounds("ডাক্তার মোঃ রহিম - fee 600")
+    assert check("ডাক্তার মোঃ করিম আজ বসেন।", g).kind == "fact"
+    assert check("ডাক্তার মোঃ রহিম আজ বসেন।", g).ok
+    assert check("ডাক্তার রহিম আজ বসেন।", g).ok
+
+
+def test_every_name_after_a_title_must_be_grounded():
+    g = grounds(DIRECTORY_LINE)
+    assert check("ডাক্তার সুলতানা ও করিম আজ বসেন।", g).kind == "fact"
+    assert check("ডক্টর করিম আজ বসেন।", g).kind == "fact"
+    assert check("Dr. karim sits today.", g, language="en").kind == "fact"
+    assert check("Dr Sultana Ahmed sits on Monday.", g, language="en").kind == "fact"
+    assert check("ডাক্তার সুলতানা সোমবার বসেন।", g).ok
+    assert check("Dr Sultana sits on Monday.", g, language="en").ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("সিরিয়াল নিতে চান?", "bn"),
+        ("বুক করতে চান?", "bn"),
+        ("Do you want to book?", "en"),
+        ("I can book you in for tomorrow.", "en"),
+        ("Would you like an appointment?", "en"),
+    ],
+)
+def test_more_booking_offers_are_a_push(sentence, language):
+    assert check(sentence, goal="information", language=language).kind == "push"
+    assert check(sentence, goal="booking", language=language).kind != "push"
+
+
+def test_a_weekday_must_be_in_the_grounds():
+    g = grounds(DIRECTORY_LINE)
+    verdict = check("ডাক্তার সুলতানা শুক্রবার বসেন।", g)
+    assert verdict.kind == "fact"
+    assert "শুক্রবার" in verdict.reason
+    assert check("Dr Sultana sits on Friday.", g, language="en").kind == "fact"
+    assert check("ডাক্তার সুলতানা বুধবারে বসেন।", g).ok
+    assert check("Dr Sultana sits on Wednesday.", g, language="en").ok
+
+
+def test_a_weekday_range_in_the_grounds_covers_its_days():
+    assert check("শুক্রবার খোলা থাকে।", grounds("open Sat-Thu, closed Fri")).ok
+    assert check("মঙ্গলবার খোলা থাকে।", grounds("open Sat-Thu")).ok
+
+
+def test_a_clock_hour_with_a_period_word_must_match_the_period():
+    g = grounds("evening slots from 18:00")
+    assert check("সকাল ছয়টায় আসুন।", g).kind == "fact"
+    assert check("সন্ধ্যা ছয়টায় আসুন।", g).ok
+    assert check("সন্ধ্যা ৬টায় আসুন।", g).ok
+    assert check("Come at six in the morning.", g, language="en").kind == "fact"
+    assert check("Come at 6 in the evening.", g, language="en").ok
+    assert check("সকাল দশটায় আসুন।", grounds(DIRECTORY_LINE)).ok
+    assert check("রাত দশটায় আসুন।", grounds(DIRECTORY_LINE)).kind == "fact"

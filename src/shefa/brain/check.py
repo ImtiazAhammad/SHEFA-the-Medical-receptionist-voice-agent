@@ -67,18 +67,41 @@ class Verdict:
 
 _DIGIT = "0-9০-৯"
 _TO_ASCII = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
-# "1,500" is one number; a comma inside a digit group is a thousands mark.
-_DIGITS = re.compile(rf"[{_DIGIT}]+(?:,[{_DIGIT}]{{2,3}})*")
 _CLOCK = re.compile(rf"(?<![{_DIGIT}])([{_DIGIT}]{{1,2}}):[{_DIGIT}]{{2}}")
 _PHONE = re.compile(rf"[{_DIGIT}](?:-?[{_DIGIT}]){{6,}}")
-# Endings a number word takes ("ছয়টায়", "পাঁচশোর", "দশে"); one ends the number.
-_SUFFIXES = tuple(_norm(e) for e in ("টায়", "টার", "টা", "টি", "য়", "এ", "ে", "র"))
+# Endings a number word takes ("ছয়টায়", "পাঁচশোর", "দশে", "সাতজন", "তিনদিনে"); one ends the
+# number. Longest first, so "দিনে" is cut before "ে".
+_SUFFIXES = tuple(
+    sorted(
+        (
+            _norm(e)
+            for e in _split("টায় টার টাতে টা টি জনের জন দিনের দিনে দিন বারের বার খানা গুণ তে ের এর য় এ ে র")
+        ),
+        key=len,
+        reverse=True,
+    )
+)
 _NOT = _norm("নয়")  # also the word "not": "এটা সম্ভব নয়" says nothing about nine
-_BN_UNITS = {_norm(bn_number(n)): n for n in range(100)}
-# "পাঁচশো", "পাঁচশ", "পাঁচশত", "দুশো", "বারোশো": a multiplier glued to a hundred.
-_BN_MULTIPLIERS = {**{w: n for w, n in _BN_UNITS.items() if n}, _norm("দু"): 2}
+
+
+def _bn_units() -> dict[str, int]:
+    units = {_norm(bn_number(n)): n for n in range(100)}
+    # Everyday spellings: "পনের" for পনেরো, "তিরিশ", "কুড়ি", "চোদ্দ", "দু".
+    for word, n in list(units.items()):
+        if word.endswith("ো") and 10 < n < 20 and n != 12:  # "বার" alone means "times"
+            units.setdefault(word[:-1], n)
+    units.update({_norm(w): n for w, n in (("তিরিশ", 30), ("কুড়ি", 20), ("চোদ্দ", 14), ("দু", 2))})
+    return units
+
+
+_BN_UNITS = _bn_units()
+# "পাঁচশো", "পাঁচশ", "পাঁচশত", "দুশো", "বারশো": a multiplier glued to a hundred.
+_BN_MULTIPLIERS = {**{w: n for w, n in _BN_UNITS.items() if n}, _norm("বার"): 12}
 _BN_HUNDREDS = tuple(_norm(h) for h in ("শত", "শো", "শ"))
 _BN_THOUSAND = _norm("হাজার")
+# Words that begin like a number but are not one ("আটকে", "চারপাশে", "নয়তো").
+_NOT_NUMBERS = tuple(_norm(w) for w in _split("আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ"))
+_CONSONANT = re.compile("[\u0995-\u09b9\u09ce\u09dc-\u09df]")
 _EN_UNITS = {
     w: n
     for n, w in enumerate(
@@ -93,92 +116,138 @@ _EN_TENS = {
     w: 10 * n
     for n, w in enumerate(_split("twenty thirty forty fifty sixty seventy eighty ninety"), 2)
 }
-_UNIT, _TENS, _HUNDRED, _THOUSAND = 1, 2, 3, 4  # the kinds of number word
+# Kinds of number word. HUNDRED multiplies what came before ("সাত শো", "five hundred");
+# HUNDREDS already carries its multiplier ("সাতশো").
+_UNIT, _TENS, _HUNDRED, _HUNDREDS, _THOUSAND, _DIGITS_RUN = range(6)
 
 
-def _bn_part(word: str) -> tuple[int, int, bool] | None:
-    """One Bangla word as (kind, value, ends the number), or None."""
-    stems = [(word, False)] + [
-        (word[: -len(e)], True) for e in _SUFFIXES if word.endswith(e) and len(word) > len(e)
-    ]
-    for stem, suffixed in stems:
-        if stem in _BN_UNITS and (stem != _NOT or suffixed):
-            return _UNIT, _BN_UNITS[stem], suffixed
-        if stem == _BN_THOUSAND:
-            return _THOUSAND, 1000, suffixed
-        for hundred in _BN_HUNDREDS:
-            multiplier = stem[: -len(hundred)]
-            if stem.endswith(hundred) and multiplier in _BN_MULTIPLIERS:
-                return _HUNDRED, _BN_MULTIPLIERS[multiplier] * 100, suffixed
+@dataclass(frozen=True)
+class _Part:
+    kind: int
+    value: int
+    ended: bool = False  # an ending ("ছয়টায়") closes the number
+    bare_not: bool = False  # the word নয় with nothing on it: "not" unless more number follows
+
+
+def _bn_stem(stem: str, ended: bool) -> _Part | None:
+    if stem in _BN_UNITS:
+        return _Part(_UNIT, _BN_UNITS[stem], ended, bare_not=stem == _NOT and not ended)
+    if stem == _BN_THOUSAND:
+        return _Part(_THOUSAND, 1000, ended)
+    if stem in _BN_HUNDREDS:
+        return _Part(_HUNDRED, 100, ended)
+    for hundred in _BN_HUNDREDS:
+        multiplier = stem[: -len(hundred)]
+        if stem.endswith(hundred) and multiplier in _BN_MULTIPLIERS:
+            return _Part(_HUNDREDS, _BN_MULTIPLIERS[multiplier] * 100, ended)
     return None
 
 
-def _en_part(word: str) -> tuple[int, int, bool] | None:
+def _bn_part(word: str) -> _Part | None:
+    """One Bangla word as a number part, or None."""
+    if part := _bn_stem(word, False):
+        return part
+    for ending in _SUFFIXES:
+        stem = word[: -len(ending)]
+        if word.endswith(ending) and stem and (part := _bn_stem(stem, True)):
+            return part
+    # A number glued to an ending this table does not know still says that number (fail
+    # closed), unless the stem letter carries a vowel sign ("তিনি", "বিশেষ") or the word is a
+    # known look-alike ("আটকে").
+    if word.startswith(_NOT_NUMBERS):
+        return None
+    for size in range(len(word) - 1, 0, -1):
+        stem, rest = word[:size], word[size:]
+        if _CONSONANT.match(rest) and (part := _bn_stem(stem, True)):
+            return part if part.kind in (_UNIT, _HUNDREDS) else None
+    return None
+
+
+def _en_part(word: str) -> _Part | None:
     word = word.lower()
     if word in _EN_UNITS:
-        return _UNIT, _EN_UNITS[word], False
+        return _Part(_UNIT, _EN_UNITS[word])
     if word in _EN_TENS:
-        return _TENS, _EN_TENS[word], False
+        return _Part(_TENS, _EN_TENS[word])
     if word == "hundred":
-        return _HUNDRED, 100, False
+        return _Part(_HUNDRED, 100)
     if word == "thousand":
-        return _THOUSAND, 1000, False
+        return _Part(_THOUSAND, 1000)
     return None
+
+
+def _part(word: str) -> _Part | None:
+    if word[0].isdigit():
+        return _Part(_DIGITS_RUN, int(word.replace(",", "")))
+    if word[0].isascii():
+        return _en_part(word)
+    return _bn_part(word)
 
 
 class _Number:
-    """A spoken number read word by word: "দুই হাজার তিনশত পঞ্চাশ" -> 2350."""
+    """A spoken number read word by word: "দুই হাজার তিনশত পঞ্চাশ" -> 2350, "সাত শো" -> 700."""
 
-    def __init__(self, kind: int, value: int, ended: bool) -> None:
-        self.total = value if kind == _THOUSAND else 0
-        self.part = 0 if kind == _THOUSAND else value
-        self.last, self.ended = kind, ended
+    def __init__(self, part: _Part) -> None:
+        self.total = part.value if part.kind == _THOUSAND else 0
+        self.part = 0 if part.kind == _THOUSAND else part.value
+        self.last, self.ended = part.kind, part.ended
+        self.digits = part.kind == _DIGITS_RUN
+        self.bare_not = part.bare_not
+        self.words = 1
 
-    def extend(self, kind: int, value: int, ended: bool) -> bool:
+    def extend(self, part: _Part) -> bool:
+        kind, value, last = part.kind, part.value, self.last
+        counting = (_UNIT, _TENS, _DIGITS_RUN)
         if self.ended:
             return False
-        if kind == _THOUSAND and self.last != _THOUSAND:
+        if kind == _THOUSAND and last != _THOUSAND:
             self.total, self.part = self.total + (self.part or 1) * 1000, 0
-        elif kind == _HUNDRED and self.last in (_UNIT, _TENS) and self.part < 100 and value == 100:
-            self.part *= 100  # English: "five hundred"
-        elif kind == _HUNDRED and self.last == _THOUSAND:
-            self.part += value  # Bangla: "এক হাজার পাঁচশো"
-        elif (kind in (_UNIT, _TENS) and self.last in (_HUNDRED, _THOUSAND)) or (
-            kind == _UNIT and self.last == _TENS and value < 10
+        elif kind == _HUNDRED and last in counting and 0 < self.part < 100:
+            self.part *= 100
+        elif kind == _HUNDREDS and last == _THOUSAND:
+            self.part += value
+        elif (kind in (_UNIT, _TENS) and last in (_HUNDRED, _HUNDREDS, _THOUSAND)) or (
+            kind == _UNIT and last == _TENS and value < 10
         ):
-            self.part += value  # "two hundred fifty", "twenty-five"
+            self.part += value  # "একশো নয়", "two hundred fifty", "twenty-five"
         else:
             return False
-        self.last, self.ended = kind, ended
+        self.last, self.ended = kind, part.ended
+        self.words += 1
         return True
 
     @property
-    def value(self) -> int:
-        return self.total + self.part
+    def value(self) -> int | None:
+        """The number, or None for speech: bare নয় ("not"), and 1 or 2 said as words."""
+        if self.bare_not and self.words == 1:
+            return None
+        value = self.total + self.part
+        if value in (1, 2) and not self.digits:
+            return None
+        return value
 
 
-def _spoken(text: str, word_re: re.Pattern[str], part_of, joiners: str) -> set[int]:
-    """Numbers spoken in words. Words join into one number when only `joiners` lie between."""
+_NUMBER_WORD = re.compile(r"[0-9]+(?:,[0-9]{2,3})*|[ঀ-৿]+|[A-Za-z]+")
+
+
+def _spoken(text: str) -> set[int]:
+    """Every number in the text, digits and words, joined into one number when only spaces or
+    a hyphen lie between ("৫ হাজার", "twenty-five")."""
     found: list[_Number] = []
     current: _Number | None = None
     end = 0
-    for m in word_re.finditer(text):
-        gap = text[end : m.start()]
-        end = m.end()
-        if current and m.group().lower() == "and" and current.last in (_HUNDRED, _THOUSAND):
+    for m in _NUMBER_WORD.finditer(text):
+        gap, end = text[end : m.start()], m.end()
+        joined = current is not None and not gap.strip(" \t\n-")
+        if joined and m.group().lower() == "and" and current.last in (_HUNDRED, _THOUSAND):
             continue  # "seven hundred and fifty"
-        part = part_of(m.group())
-        joined = current is not None and not gap.strip(joiners)
-        if part and joined and current.extend(*part):
+        part = _part(m.group())
+        if part and joined and current.extend(part):
             continue
-        current = _Number(*part) if part else None
+        current = _Number(part) if part else None
         if current:
             found.append(current)
-    return {n.value for n in found}
-
-
-_BN_WORD = re.compile(r"[ঀ-৿]+")
-_EN_WORD = re.compile(r"[A-Za-z]+")
+    return {n.value for n in found if n.value is not None}
 
 
 def _plain(digits: str) -> str:
@@ -202,31 +271,91 @@ def numbers_in(text: str) -> set[str]:
 # Ground texts repeat for every sentence of a turn and the word regex is large: remember them.
 @lru_cache(maxsize=512)
 def _numbers(text: str) -> frozenset[str]:
-    text = _norm(text)
-    found = {_plain(m.group()) for m in _DIGITS.finditer(text)}
+    text = _norm(text).translate(_TO_ASCII)
+    found = {str(n) for n in _spoken(text)}
     for m in _CLOCK.finditer(text):
-        hour = int(_plain(m.group(1)))
+        hour = int(m.group(1))
         if hour <= 24:
             found.add(str(hour % 12 or 12))
-    words = _spoken(text, _BN_WORD, _bn_part, " \t\n") | _spoken(text, _EN_WORD, _en_part, " \t\n-")
-    found |= {str(n) for n in words if n not in (1, 2)}
     return frozenset(found)
 
 
 # --- doctors' names ---------------------------------------------------------------------------
 
-# The title must end where it ends: "ডাক্তারের" / "ডাক্তারকে" is the word doctor, not a title.
-_BN_DOCTOR = re.compile(_B + r"(?:(?:ডাক্তার|ডাঃ)(?![ঀ-৿])|ডা\.)\s*([ঀ-৿]+)")
-_EN_DOCTOR = re.compile(r"\b(?:[Dd]r\.?|[Dd]octor)\s+([A-Z][A-Za-z'-]+)")
+# A title, then the name words after it. The title must end where it ends: "ডাক্তারের" and
+# "ডাক্তারকে" are the word doctor, not a title. "Dr" takes any case ("Dr. karim"); "Doctor" only a
+# capitalised name, since "the doctor sees children" names nobody.
+_BN_DOCTOR = re.compile(_B + r"(?:(?:ডাক্তার|ডাঃ|ডক্টর)(?![ঀ-৿])|ডা\.)")
+_EN_DOCTOR = re.compile(r"\b(?:(?i:dr)\b\.?|(?i:doctor)\b(?=\s+[A-Z]))")
+_NAME_RUN = re.compile(r"\s*([ঀ-৿]+[.ঃ]?|[A-Za-z][A-Za-z'.-]*)")
+# Honorifics are allowed whether or not the grounds carry them; the name after them is not.
+_HONORIFICS = frozenset(
+    _norm(w).lower()
+    for w in _split("মোঃ মো. মোহাম্মদ মোহাম্মাদ মুহাম্মদ মুহম্মদ md md. mohammad muhammad mohammed")
+)
+_NAME_JOINERS = _wordset("ও আর এবং and &")
+_WEEKDAY_WORDS = (
+    "শনিবার রবিবার সোমবার মঙ্গলবার বুধবার বৃহস্পতিবার শুক্রবার "
+    "saturday sunday monday tuesday wednesday thursday friday"
+)
+_PERIOD_WORDS = "সকাল সকালে দুপুর দুপুরে বিকাল বিকেল বিকালে বিকেলে সন্ধ্যা সন্ধ্যায় রাত রাতে"
 # Words that follow "ডাক্তার" without being a name ("কোন ডাক্তার দেখাতে চান?").
 _NOT_A_NAME = _wordset(
     "দেখাতে দেখানো দেখানোর দেখাবেন দেখান দেখাবো দেখবেন সাহেব সাহেবের সাহেবকে ম্যাডাম কি কী কে "
     "কোন কবে কখন কোথায় আছেন আছে নেই বসেন বসবেন বসছেন এখন আজ কাল আপনাকে আপনার সাথে "
     "যিনি উনি তিনি ছুটিতে লাগবে বলবেন বলেছেন এবং ও বা হিসেবে সাধারণত সকালে বিকেলে "
-    "সন্ধ্যায় রাতে এই সেই আসবেন আসেন না পাবেন পাওয়া দেখেন দেখছেন থাকবেন থাকেন চান"
+    "সন্ধ্যায় রাতে এই সেই আসবেন আসেন না পাবেন পাওয়া দেখেন দেখছেন থাকবেন থাকেন চান "
+    "শুধু প্রতি প্রতিদিন আগামী পরশু গতকাল সপ্তাহে চেম্বারে চেম্বার রোগী " + _WEEKDAY_WORDS + " " + _PERIOD_WORDS
 )
-_EN_NOT_A_NAME = frozenset({"I", "The", "A", "An", "Is", "Will", "And", "Or"})
+_EN_NOT_A_NAME = frozenset(
+    w.lower() for w in _split("I The A An Is Will And Or On At In To For Today Tomorrow")
+) | frozenset(_split(_WEEKDAY_WORDS)[7:])
 _NAME_ENDINGS = tuple(_norm(e) for e in ("েরও", "কেও", "ের", "এর", "কে", "র", "ও", "'s"))
+
+
+def _names_after(sentence: str, title_end: int, bangla: bool) -> list[str]:
+    """The name words after a title, honorifics left out: "ডাক্তার মোঃ করিম" -> ["করিম"],
+    "ডাক্তার সুলতানা ও করিম আজ" -> ["সুলতানা", "করিম"], "Dr Sultana Ahmed sits" -> both.
+    Bangla has no capitals, so after the first name only "ও/আর/এবং" leads to another name; a
+    case ending ("সুলতানার") closes the name."""
+    names: list[str] = []
+    pos, expect_name = title_end, True
+    while len(names) < 4:
+        m = _NAME_RUN.match(sentence, pos)
+        if not m:
+            break
+        word, pos = m.group(1), m.end()
+        low = word.lower()
+        if low in _HONORIFICS:
+            continue
+        if low in _NAME_JOINERS and names:
+            expect_name = True
+            continue
+        bare = word.rstrip(".")
+        if bangla != (not word[0].isascii()) or numbers_in(word) or not expect_name and bangla:
+            break
+        if bangla and low in _NOT_A_NAME:
+            break
+        if not bangla and (low.rstrip(".") in _EN_NOT_A_NAME or (names and not bare[0].isupper())):
+            break
+        names.append(bare)
+        expect_name = not bangla
+        if (
+            sentence[pos : pos + 1] in (",", "।", "?", "!", ";")
+            or (word.endswith(".") and not bangla)
+            or (bangla and low.endswith(_NAME_ENDINGS))
+        ):
+            break
+    return names
+
+
+def _unknown_doctor(sentence: str, known: set[str]) -> str | None:
+    for regex, bangla in ((_BN_DOCTOR, True), (_EN_DOCTOR, False)):
+        for m in regex.finditer(sentence):
+            for word in _names_after(sentence, m.end(), bangla):
+                if not _named(word, known):
+                    return word
+    return None
 
 
 # `names.tokens` keeps the danda ("সুলতানা।"), so words are cut on anything that is not a letter.
@@ -249,15 +378,115 @@ def _named(word: str, known: set[str]) -> bool:
     return any(fold(c) in known for c in candidates)
 
 
-def _unknown_doctor(sentence: str, known: set[str]) -> str | None:
-    for m in _BN_DOCTOR.finditer(sentence):
-        word = m.group(1)
-        if word not in _NOT_A_NAME and not _named(word, known):
-            return word
-    for m in _EN_DOCTOR.finditer(sentence):
-        word = m.group(1)
-        if word not in _EN_NOT_A_NAME and not _named(word, known):
-            return word
+# --- days and times of day ---------------------------------------------------------------------
+
+_BN_DAYS = tuple(_norm(d) for d in _split("সোম মঙ্গল বুধ বৃহস্পতি শুক্র শনি রবি"))  # Monday first
+_EN_DAYS = _split("monday tuesday wednesday thursday friday saturday sunday")
+_BN_DAY_SAID = re.compile(_B + "(" + "|".join(_BN_DAYS) + ")বার(?:ের|এর|ে|র)?" + _E)
+_EN_DAY_SAID = re.compile(r"\b(" + "|".join(_EN_DAYS) + r")s?\b", re.IGNORECASE)
+# In grounds also "Mon/Wed/Sat", "সোম-বুধ" and ranges ("Sat-Thu").
+_DAY_NAME = (
+    r"(?:(?i:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\b"
+    + "|"
+    + _B
+    + "(?:"
+    + "|".join(_BN_DAYS)
+    + ")(?:বার)?(?:ের|এর|ে|র)?"
+    + _E
+    + ")"
+)
+_DAY_RANGE = re.compile(rf"({_DAY_NAME})\s*(?:-|–|to|থেকে)\s*({_DAY_NAME})")
+_DAY_ANY = re.compile(_DAY_NAME)
+
+
+def _day_index(word: str) -> int | None:
+    low = word.lower()
+    for i, (bn, en) in enumerate(zip(_BN_DAYS, _EN_DAYS, strict=True)):
+        if low.startswith(bn) or low.startswith(en[:3]):
+            return i
+    return None
+
+
+@lru_cache(maxsize=512)
+def _ground_days(text: str) -> frozenset[int]:
+    text = _norm(text)
+    days = {i for m in _DAY_ANY.finditer(text) if (i := _day_index(m.group())) is not None}
+    for m in _DAY_RANGE.finditer(text):
+        first, last = _day_index(m.group(1)), _day_index(m.group(2))
+        if first is not None and last is not None:
+            days.update((first + k) % 7 for k in range((last - first) % 7 + 1))
+    return frozenset(days)
+
+
+def _unknown_day(sentence: str, texts: list[str]) -> str | None:
+    grounded = set().union(*(_ground_days(t) for t in texts)) if texts else set()
+    for regex in (_BN_DAY_SAID, _EN_DAY_SAID):
+        for m in regex.finditer(sentence):
+            if _day_index(m.group(1)) not in grounded:
+                return m.group()
+    return None
+
+
+# A clock hour said with a part of the day names a 24-hour time: "সকাল ছয়টায়" is 06, "সন্ধ্যা
+# ছয়টায়" is 18. That hour must be a time in the grounds ("18:00").
+_PERIOD_KINDS = (
+    ("সকাল সকালে morning", "am"),
+    ("দুপুর দুপুরে বিকাল বিকেল বিকালে বিকেলে সন্ধ্যা সন্ধ্যায় afternoon evening", "pm"),
+    ("রাত রাতে night", "night"),
+)
+_PERIODS = {_norm(w): kind for words, kind in _PERIOD_KINDS for w in _split(words)}
+_HOUR_WORD = r"([0-9০-৯]{1,2}|[ঀ-৿]+|[A-Za-z]+)"
+_BN_TIME = re.compile(
+    _B
+    + "("
+    + "|".join(k for k in _PERIODS if not k.isascii())
+    + ")"
+    + _E
+    + r"\s+(?:(?:সাড়ে|পৌনে|সোয়া)\s+)?"
+    + _HOUR_WORD
+)
+_EN_TIME = re.compile(
+    r"\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+in\s+the\s+(morning|afternoon|evening)\b"
+    r"|\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+at\s+(night)\b",
+    re.IGNORECASE,
+)
+
+
+def _hours_24(hour: int, period: str) -> set[int]:
+    if period == "am":
+        return {hour % 12}
+    if period == "pm":
+        return {hour % 12 + 12}
+    return {hour % 12 + 12, hour % 12} if hour <= 4 or hour == 12 else {hour % 12 + 12}
+
+
+@lru_cache(maxsize=512)
+def _ground_hours(text: str) -> frozenset[int]:
+    return frozenset(
+        int(m.group(1)) % 24 for m in _CLOCK.finditer(_norm(text).translate(_TO_ASCII))
+    )
+
+
+def _hour(word: str) -> int | None:
+    """The clock hour a word says ("ছয়টায়", "৬", "six"); here "এক" and "one" do count."""
+    part = _part(_norm(word).translate(_TO_ASCII))
+    if part and part.kind in (_UNIT, _DIGITS_RUN) and 1 <= part.value <= 12:
+        return part.value
+    return None
+
+
+def _unknown_time(sentence: str, texts: list[str]) -> str | None:
+    grounded = set().union(*(_ground_hours(t) for t in texts)) if texts else set()
+    said: list[tuple[str, str, str]] = [
+        (m.group(), m.group(2), m.group(1)) for m in _BN_TIME.finditer(sentence)
+    ]
+    for m in _EN_TIME.finditer(sentence):
+        hour, period = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+        said.append((m.group(), hour, period))
+    for phrase, hour_word, period in said:
+        hour = _hour(hour_word)
+        if hour and not _hours_24(hour, _PERIODS[_norm(period).lower()]) & grounded:
+            return phrase
     return None
 
 
@@ -279,15 +508,21 @@ def _backed_yes(sentence: str, known: set[str]) -> bool:
 
 # --- success claims and booking offers --------------------------------------------------------
 
+# Done-for-you forms in Bangla: "বুক করে দিয়েছি", "করেছি", "দিয়ে দিয়েছি", "(করা) হয়েছে".
+_DONE = r"(?:করে দিয়েছি|করেছি|দিয়ে দিয়েছি|দিয়েছি|(?:করা |করে দেওয়া )?হয়েছে|হয়ে গেছে)"
 _CLAIMS = {
     "book": re.compile(
-        r"\bbooked\b|\bappointment is confirmed\b"
-        r"|বুক (?:করা )?হয়েছে|বুক হয়ে গেছে|সিরিয়াল (?:দেওয়া|নেওয়া) হয়েছে",
+        r"(?<!fully )\bbooked\b|\b(?:is|are|was|been|now) confirmed\b|\bconfirmed (?:for|your)\b"
+        r"|\b(?:I|we)(?:'ve| have)? scheduled\b|\bscheduled you\b|\ball set\b"
+        rf"|বুক {_DONE}|সিরিয়াল (?:দেওয়া|নেওয়া) হয়েছে|সিরিয়াল দিয়ে দিয়েছি|সিরিয়াল দিয়েছি"
+        rf"|(?:নিশ্চিত|কনফার্ম) {_DONE}",
         re.IGNORECASE,
     ),
-    "cancel_booking": re.compile(r"\bcancel+ed\b|বাতিল (?:করা )?হয়েছে|বাতিল হয়ে গেছে", re.IGNORECASE),
+    "cancel_booking": re.compile(rf"\bcancel+ed\b|বাতিল {_DONE}", re.IGNORECASE),
     "reschedule_booking": re.compile(
-        r"\bmoved\b|\brescheduled\b|পরিবর্তন (?:করা )?হয়েছে|বদল(?:ানো)? হয়েছে", re.IGNORECASE
+        rf"\bmoved\b|\brescheduled\b|পরিবর্তন {_DONE}|বদল(?:ানো)? হয়েছে|বদলে দিয়েছি"
+        r"|সরিয়ে দিয়েছি",
+        re.IGNORECASE,
     ),
     "request_callback": re.compile(
         r"\bcall you back\b|\bwill call you\b|ফোন করবে(?!ন)|আপনাকে[^।?!]{0,30}ফোন করবেন"
@@ -296,14 +531,23 @@ _CLAIMS = {
     ),
     "hand_over": re.compile(
         r"\btransferr(?:ed|ing)\b|\bconnecting you\b|\b(?:will|'ll) (?:transfer|connect) you\b"
-        r"|সংযোগ দিচ্ছি|সংযোগ করে দিচ্ছি",
+        r"|সংযোগ দিচ্ছি|সংযোগ করে দিচ্ছি|কথা বলিয়ে দিচ্ছি|লাইন(?:টা)? দিচ্ছি"
+        r"|(?:রিসেপশন|রিসেপশনিস্ট|কর্মী|মানুষ|ডেস্ক)\S*\s+(?:দিচ্ছি|দিয়ে দিচ্ছি|ট্রান্সফার করছি)",
         re.IGNORECASE,
     ),
 }
-_NEGATED = re.compile(r"\bnot\b|n't\b|\bnever\b|\byet to\b", re.IGNORECASE)
+# A negation only cancels a claim when it sits right before it: "has not been booked", but not
+# "Don't worry, your appointment is booked".
+_NEGATED = re.compile(
+    r"(?:\bnot|n't|\bnever)\s+(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was)\s+){0,2}$",
+    re.IGNORECASE,
+)
 _PUSH = re.compile(
     r"বুক করবেন|সিরিয়াল নেবেন|অ্যাপয়েন্টমেন্ট নেবেন|সিরিয়াল দিয়ে দেব|বুক করে দেব"
-    r"|\bbook an appointment\b|\bshall I book\b|\bwould you like to book\b",
+    r"|(?:সিরিয়াল|অ্যাপয়েন্টমেন্ট) নিতে চান|বুক করতে চান"
+    r"|\bbook an appointment\b|\bshall I book\b|\bwould you like to book\b"
+    r"|\b(?:do you|would you) (?:want|like) (?:to book|an appointment|me to book)\b"
+    r"|\bI can book you\b|\bwant me to book\b",
     re.IGNORECASE,
 )
 _ACTIONS = {
@@ -318,7 +562,11 @@ _ACTIONS = {
 def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
     for tool, pattern in _CLAIMS.items():
         m = pattern.search(sentence)
-        if m and tool not in succeeded and not _NEGATED.search(sentence[: m.start()]):
+        if (
+            m
+            and tool not in succeeded
+            and not _NEGATED.search(sentence[: m.start()].rstrip() + " ")
+        ):
             return Verdict(
                 False,
                 "claim",
@@ -356,6 +604,10 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
         return Verdict(False, "fact", f"the number {number} is not in the facts")
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
+    if day := _unknown_day(text, grounds.texts):
+        return Verdict(False, "fact", f"the day {day} is not in the facts")
+    if time := _unknown_time(text, grounds.texts):
+        return Verdict(False, "fact", f"the time {time} is not in the facts")
     # A closing question asks rather than states ("Yes, how else can I help you?"), but what comes
     # before it still states: "হ্যাঁ, এমআরআই আছে, আসবেন?" is judged on "হ্যাঁ, এমআরআই আছে".
     stated = text.rsplit(",", 1)[0] if text.rstrip().endswith("?") else text
