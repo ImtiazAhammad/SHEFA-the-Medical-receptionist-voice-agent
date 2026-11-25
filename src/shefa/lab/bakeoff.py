@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from shefa.lab import scorecard
-from shefa.lab.models import OLLAMA_URL, ollama_llm
+from shefa.lab.models import OLLAMA_URL, ollama_llm, split_candidate
 from shefa.lab.scorecard import _percentile
 from shefa.lab.scoring import run_scorecard
 
@@ -311,8 +311,9 @@ def _blank_row(model: str) -> dict[str, Any]:
 
 
 def _bare(model: str) -> str:
-    """A model name without Ollama's default tag, so `qwen3` and `qwen3:latest` match."""
-    return model.removesuffix(":latest")
+    """The model a name loads, without Ollama's default tag or the bench's "+think", so
+    `qwen3`, `qwen3:latest` and `qwen3+think` all match."""
+    return split_candidate(model)[0].removesuffix(":latest")
 
 
 def self_judged(models: list[str], args: Any) -> list[str]:
@@ -374,7 +375,8 @@ async def run_bakeoff(
         print(f"\n[{number}/{len(models)}] {model}")
         row = _blank_row(model)
         rows.append(row)
-        if not await model_available(model, root):
+        served, think = split_candidate(model)  # "qwen3:14b+think": qwen3:14b, thinking on
+        if not await model_available(served, root):
             row.update(
                 status="unavailable",
                 message=f"not found in Ollama at {root} (is it running, is the model pulled?)",
@@ -383,7 +385,7 @@ async def run_bakeoff(
             if on_row is not None:
                 on_row(rows)
             continue
-        llm = ollama_llm(model, base_url=base_url)
+        llm = ollama_llm(served, base_url=base_url, think=think)
         try:
             print("  loading and timing the first sentence ...")
             await _first_sentence_ms(llm, prompts[0])  # loading from disk is not latency
@@ -407,7 +409,7 @@ async def run_bakeoff(
         finally:
             with contextlib.suppress(Exception):
                 await llm.close()
-            await _unload_after(model, args, root)
+            await _unload_after(served, args, root)
         if on_row is not None:
             on_row(rows)
     return rows

@@ -395,3 +395,23 @@ async def test_an_empty_extra_body_sends_no_extra_fields(call):
     assert set(bodies[0]) <= {"model", "messages", "stream", "temperature", "max_tokens",
                               "stream_options", "tools", "tool_choice"}
     assert "think" not in bodies[0] and "extra_body" not in bodies[0]
+
+
+async def test_generate_events_never_publishes_a_models_written_reasoning() -> None:
+    # Qwen3 builds from Hugging Face write <think>…</think> into the reply itself; spoken,
+    # the caller would hear the model talk to itself.
+    llm, _ = _llm(
+        _AsyncStream([_chunk("<thi"), _chunk("nk>\nthe user…\n</think>\n\n"), _chunk("At ten.")])
+    )
+
+    events = await _collect(llm)
+
+    assert "".join(e.text for e in events) == "At ten."
+
+
+async def test_generate_drops_a_models_written_reasoning() -> None:
+    llm, _ = _llm(_reply("<think>\n\n</think>\n\nTuesday at ten."))
+
+    result = await llm.generate(_MESSAGES)
+
+    assert result.text == "Tuesday at ten."

@@ -93,8 +93,9 @@ def probes(monkeypatch):
     )
     llm = SlowFirstChunkLLM(0)
 
-    def build(model, base_url=None, temperature=None):
+    def build(model, base_url=None, temperature=None, *, think=False):
         calls.built.append((model, base_url))
+        calls.thinking = [*getattr(calls, "thinking", []), think]
         return llm
 
     async def latency(llm, prompts, concurrency=3, rounds=10):
@@ -438,6 +439,26 @@ async def test_unavailable_model_is_reported_not_fatal(monkeypatch, tmp_path, pr
     assert [r["status"] for r in rows] == ["ok", "unavailable"]
     assert rows[1]["message"] and rows[1]["hard_pass"] is None
     assert probes.built == [("a", "http://localhost:11434/v1")]  # b was never built
+
+
+async def test_a_think_candidate_runs_its_model_with_thinking_on_under_its_own_name(
+    monkeypatch, tmp_path, probes
+):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"qwen3:14b"}))
+    rows = await run_bakeoff(
+        ["qwen3:14b", "qwen3:14b+think"], args_stub(tmp_path), scorer=fake_scorer
+    )
+    assert [r["model"] for r in rows] == ["qwen3:14b", "qwen3:14b+think"]
+    assert [r["status"] for r in rows] == ["ok", "ok"]
+    assert probes.built == [("qwen3:14b", "http://localhost:11434/v1")] * 2
+    assert probes.thinking == [False, True]
+    assert "qwen3:14b+think" not in probes.unloaded and "qwen3:14b" in probes.unloaded
+    assert json.loads(Path(rows[1]["scorecard"]).read_text())["meta"]["model"] == "qwen3:14b+think"
+
+
+def test_a_think_candidate_still_may_not_judge_itself(tmp_path):
+    args = args_stub(tmp_path, judge_model="qwen3:14b")
+    assert bakeoff.self_judged(["qwen3:14b+think"], args) == ["qwen3:14b+think"]
 
 
 async def test_row_carries_latency_memory_quality_and_scorecard_path(monkeypatch, tmp_path, probes):

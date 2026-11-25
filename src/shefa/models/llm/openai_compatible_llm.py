@@ -15,6 +15,7 @@ from shefa.models.base import (
     StreamEvent,
     ToolDefinition,
 )
+from shefa.models.llm.think_filter import ThinkFilter, strip_thinking
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -115,7 +116,7 @@ class OpenAICompatibleLLM(BaseLLM):
                     "arguments": tc.function.arguments,
                 })
 
-        text = message.content or ""
+        text = strip_thinking(message.content or "")
         return LLMResult(
             text=text,
             tool_calls=tool_calls,
@@ -138,10 +139,16 @@ class OpenAICompatibleLLM(BaseLLM):
             stream=True,
             **({"extra_body": self._extra_body} if self._extra_body else {}),
         )
+        thinking = ThinkFilter()
         async for chunk in response:
             delta = chunk.choices[0].delta if chunk.choices else None
             if delta and delta.content:
-                yield delta.content
+                text = thinking.feed(delta.content)
+                if text:
+                    yield text
+        rest = thinking.flush()
+        if rest:
+            yield rest
 
     async def _create_stream(
         self,
@@ -192,6 +199,7 @@ class OpenAICompatibleLLM(BaseLLM):
 
         pending: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
+        thinking = ThinkFilter()  # a model's written-out reasoning is never spoken
         async for chunk in stream:
             if not chunk.choices:
                 continue
@@ -199,7 +207,9 @@ class OpenAICompatibleLLM(BaseLLM):
             delta = choice.delta
             if delta is not None:
                 if delta.content:
-                    yield StreamEvent(text=delta.content)
+                    text = thinking.feed(delta.content)
+                    if text:
+                        yield StreamEvent(text=text)
                 for tc in delta.tool_calls or []:
                     acc = pending.setdefault(
                         tc.index, {"id": "", "name": "", "arguments": ""}
@@ -215,6 +225,9 @@ class OpenAICompatibleLLM(BaseLLM):
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
 
+        rest = thinking.flush()
+        if rest:
+            yield StreamEvent(text=rest)
         if pending:
             yield StreamEvent(
                 tool_calls=[pending[index] for index in sorted(pending)],
