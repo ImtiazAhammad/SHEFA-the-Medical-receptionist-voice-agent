@@ -447,3 +447,37 @@ def test_the_retriever_runs_off_the_event_loop(monkeypatch):
     session = _session(FEE_QUESTION)
     _turn(session, FEE_QUESTION, FakeLLM("ফি ৮০০ টাকা।"), Recorder())
     assert seen
+
+
+NEAR_MISSES = [
+    'TOOL: {"name": "free_times", "args": {"day": "tomorrow"}}',
+    'tool {"name": "end_call"}',
+    '{"name": "find_doctors", "args": {"symptom": "chest pain"}}',
+    '```json\n{"name": "end_call"}\n```',
+    "TOOL",
+]
+
+
+@pytest.mark.parametrize("reply", NEAR_MISSES)
+@pytest.mark.parametrize("size", [1, 3, 200])
+def test_a_near_miss_tool_line_is_never_spoken(reply, size):
+    said = "Is Dr. Rahman free tomorrow?"
+    session = _session(said)
+    llm = FakeLLM(reply, reply, size=size)
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == [settings.escalation.repeat_prompt["en"]]
+    assert len(llm.calls) == 2
+    assert TOOL_RETRY in _system(llm.calls[1])
+    assert session.metadata["brain_trace"][-1]["safe"] == "tool"
+
+
+def test_a_broken_tool_line_after_a_spoken_sentence_stops_without_regenerating():
+    said = "Is there parking?"
+    session = _session(said)
+    llm = FakeLLM("There is parking behind the clinic. Let me check.\nTOOL {broken", "unused")
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["There is parking behind the clinic."]
+    assert len(llm.calls) == 1
+    assert session.metadata["brain_trace"][-1]["regenerated"] is False

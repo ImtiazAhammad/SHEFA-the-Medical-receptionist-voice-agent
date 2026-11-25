@@ -48,6 +48,9 @@ WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday
 
 # "TOOL" as a word, followed by a space or the JSON: the start of a tool line wherever it sits.
 _TOOL_START = re.compile(r"(?<![A-Za-z])TOOL(?=[\s{])")
+# A tool line the model got slightly wrong ("TOOL:", "tool {", bare JSON, a code fence) is still
+# never words for the caller: it is treated as a broken tool line.
+_TOOL_LIKE = re.compile(r"[{}]|```|(?<![A-Za-z])TOOL(?![A-Za-z])|(?i:\btool\s*[:{])")
 # The sentence splitter cuts after any ". "; a title is not the end of a sentence.
 _TITLE_END = re.compile(r"(?:^|[\s(])(?:(?i:dr|mr|mrs|ms|prof)|ডা|ডাঃ)\.$")
 
@@ -223,6 +226,8 @@ class Brain:
                 try:
                     call = _parse(out.tool_text)
                 except ToolLineError:
+                    if out.spoken:
+                        break  # the caller already heard a reply; never add a second one
                     if not last:
                         correction = TOOL_CORRECTION
                         continue
@@ -269,6 +274,9 @@ class Brain:
             text = tidy(raw)
             if not text:
                 return True
+            if _TOOL_LIKE.search(text):
+                out.tool_text = text
+                return False
             verdict = check_sentence(text, grounds, goal=state.goal, language=state.language)
             out.verdicts.append("ok" if verdict.ok else verdict.kind)
             if verdict.ok:
