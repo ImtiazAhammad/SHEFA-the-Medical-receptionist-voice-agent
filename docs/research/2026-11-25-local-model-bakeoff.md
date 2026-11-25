@@ -120,7 +120,8 @@ are noise.
 failed graphics-memory allocation) when the caller model loaded beside it and the voice models.
 The row is its re-run without the voice models loaded. Re-run like for like (voice models
 loaded), it crashed again (`data/bench/bakeoff-20261125-105613.json`), so it cannot sit beside the
-voice stack on this card and is not a finalist.
+voice stack in that setup. That crash had the same cause as gemma-3-12b's (the side model on the
+card beside it, below), so TigerLLM was also run on all 112 cases with the side model on the CPU.
 
 ² Whole-card memory in use during the model's probe. The bench process never showed on the card,
 so the voice models appear to run off it in the bench; the column is the model plus the
@@ -179,31 +180,32 @@ drop (11 → 9) is inside the two-case swing seen between repeated runs of the s
 
 The gate, timed again with 60 requests per model one at a time
 (`data/bench/solo-latency-60-20261125.json`): gemma-3-12b p95 552 ms and TigerLLM 650 ms pass;
-gemma2:9b 1587 ms and Qwen3-8B 1761 ms do not, on Ollama. With TigerLLM out, gemma-3-12b is the
-only eligible model, so the "top two within one case" step has nothing to compare. It was run on
-all 112 cases beside today's model, gemma2:9b, as the control, under one setup: Ollama Q4 for both,
+gemma2:9b 1587 ms and Qwen3-8B 1761 ms do not, on Ollama. Both eligible models finish within one case of
+each other on the 26, so both were run on all 112 cases beside today's model, gemma2:9b, as the
+control, under one setup: Ollama Q4 for both,
 voice models loaded, the same gemma-3-4b caller and judge moved to a CPU-only Ollama
 (`--side-base-url http://127.0.0.1:11435/v1`). The move was needed because Ollama budgets
 gemma-3-12b at 8.0 GB but allocates about 9.1 GB (a larger KV cache and its vision encoder), and it
 aborted beside the side model on the GPU.
 
-| | gemma-3-12b-it | gemma2:9b |
-| --- | --- | --- |
-| Full pass | 37 / 112 (0.330) | **41 / 112 (0.366)** |
-| Task pass | 0.616 | 0.643 |
-| Hard pass | 0.482 | 0.509 |
-| Judged mean | 3.86 | 3.83 |
-| Bangla purity | 0.991 | 0.987 |
-| Brevity failures | 45 | 47 |
-| Emergency first turn | 0.93 | 0.93 |
+| | gemma-3-12b-it | TigerLLM-9B-it | gemma2:9b |
+| --- | --- | --- | --- |
+| Full pass | 37 / 112 (0.330) | 36 / 112 (0.321) | **41 / 112 (0.366)** |
+| Task pass | 0.616 | 0.625 | 0.643 |
+| Hard pass | 0.482 | 0.473 | 0.509 |
+| Judged mean | 3.86 | 3.88 | 3.83 |
+| Missing judgments | 5 | 7 | 5 |
+| Bangla purity | 0.991 | 0.993 | 0.987 |
+| Brevity failures | 45 | 50 | 47 |
+| Emergency first turn | 0.93 | 0.93 | 0.93 |
 
-Results: `data/bench/bakeoff-20261125-114056.json`. A second run of the 26 cases with the fixed
+Results: `data/bench/bakeoff-20261125-114056.json` (gemma-3-12b, gemma2:9b) and
+`data/bench/bakeoff-20261125-133049.json` (TigerLLM, no runner errors). A second run of the 26 cases with the fixed
 check (`data/bench/bakeoff-20261125-111145.json`) gave gemma-3-12b 11 and gemma2:9b 9; the first
-run gave 9 and 8. The two models trade places between runs: on this engine their quality is the
-same. Neither invented a digit, gave medical advice, leaked a booking or booked without a yes.
-Information-only callers were offered a booking in 5 calls (gemma-3-12b, 0.96) and 2 calls
-(gemma2:9b, 0.98). Each run lacks 5 judgments; the judged mean
-covers the other 107.
+run gave 9 and 8. The two models trade places between runs: on this engine the three models' quality is
+the same. None invented a digit, gave medical advice, leaked a booking or booked without a yes.
+Information-only callers were offered a booking in 5 calls (gemma-3-12b, 0.96) and 2 calls each
+(gemma2:9b and TigerLLM, 0.98). The judged mean covers only the calls with a judgment.
 
 **Today's model, served as in production.** gemma2-9b AWQ on vLLM (`shefa-llm`), timed with the
 same prompts (`data/bench/vllm-latency-20261125.json`): first sentence p50 417 ms, **p95 703 ms**
@@ -214,7 +216,7 @@ Ollama's, not the model's.
 ## Conclusion
 
 - **Keep gemma2-9b AWQ on vLLM.** No local model was distinguishably better on quality, and as
-  served today it already meets the first-sentence target. Switching to gemma-3-12b would gain nothing measurable
+  served today it already meets the first-sentence target. Switching to gemma-3-12b or TigerLLM would gain nothing measurable
   and would need a vLLM-ready build and a re-time, and it needs more graphics memory than gemma2.
 - **Ungated quality ranking (26 cases, full pass):** qwen3:14b 11; gemma-3-12b, qwen3:14b+think 9;
   gemma2:9b, Qwen3-8B, TigerLLM 8; qwen2.5:7b 6; aya-expanse 5; Qwen3-8B+think 2. At n = 26 the
