@@ -90,3 +90,14 @@ def _isolate_the_default_knowledge_store(tmp_path):
     set_default_knowledge_store(store)
     yield
     set_default_knowledge_store(None)
+
+
+@pytest.fixture(autouse=True)
+def _keep_retrieval_offline(monkeypatch):
+    """The embedding model is on by default; no test may load it (slow) or reach the network."""
+    from shefa.brain import retrieve
+
+    retrieve.reset()
+    monkeypatch.setattr(retrieve, "load_embedder", lambda name: None)
+    yield
+    retrieve.reset()

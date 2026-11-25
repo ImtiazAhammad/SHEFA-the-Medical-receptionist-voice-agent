@@ -211,3 +211,61 @@ def test_retriever_for_loads_the_embedder_once(kb, monkeypatch):
     retriever_for("beta")
     retriever_for("alo")
     assert loads == ["fake/model"]
+
+
+# --- stopwords and tags ------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded(tmp_path):
+    """The five About-SHEFA entries and one parking entry, and nothing else (a small KB)."""
+    from shefa.brain.knowledge import PLATFORM_FILE, seed
+
+    store = KnowledgeStore(tmp_path / "seeded.db")
+    seed(store, clinic_id="alo", platform_file=PLATFORM_FILE)
+    store.add(
+        "alo",
+        "parking",
+        text_bn="হ্যাঁ, পেছনে গাড়ি রাখা যায়।",
+        text_en="Cars can be left behind the clinic.",
+        tags=["parking", "পার্কিং"],
+        author="t",
+    )
+    return store.entries(["platform", "alo"])
+
+
+@pytest.mark.parametrize("question", ["Is the clinic open on Friday?", "what is the weather like"])
+def test_function_words_do_not_find_about_shefa(seeded, question):
+    hits = Retriever(seeded, None).search(question)
+    assert [h.entry.topic for h in hits if h.entry.scope == "platform"] == []
+
+
+def test_a_tag_finds_its_entry_even_in_a_small_knowledge_base(seeded):
+    hits = Retriever(seeded, None).search("পার্কিং আছে?")
+    assert [(h.entry.topic, h.how) for h in hits] == [("parking", "words")]
+    hits = Retriever(seeded, None).search("SHEFA কে বানিয়েছে?")
+    assert hits and hits[0].entry.topic == "who_made_shefa" and hits[0].how == "words"
+
+
+def test_a_topic_word_finds_its_entry(seeded):
+    # "parking" is also a tag; "talk" is only in the topic `talk_to_person`.
+    assert [h.entry.topic for h in Retriever(seeded, None).search("talk")] == ["talk_to_person"]
+
+
+def test_a_stopword_tag_does_not_qualify_an_entry(seeded):
+    from shefa.brain.knowledge import Entry
+
+    odd = Entry(99, "alo", "misc", ("the",), "", "unrelated words only", True, 1)
+    assert Retriever([*seeded, odd], None).search("the") == []
+
+
+def test_a_tag_qualifies_even_when_the_word_is_common(seeded):
+    from shefa.brain.knowledge import Entry
+
+    crowd = [
+        Entry(100 + i, "alo", f"c{i}", (), "", f"the fee is listed at the desk {i}", True, 1)
+        for i in range(8)
+    ]
+    tagged = Entry(200, "alo", "billing", ("fee",), "", "pay at the desk", True, 1)
+    hits = Retriever([*seeded, *crowd, tagged], None).search("fee")
+    assert hits[0].entry.id == 200 and hits[0].how == "words"

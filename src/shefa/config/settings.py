@@ -696,7 +696,7 @@ class BrainConfig(StrictModel):
     kb_max_hits: int = Field(default=4, ge=1)
     kb_min_words_score: float = 1.2
     kb_min_meaning_score: float = 0.83
-    embedding_model: str = ""  # empty = search by words only
+    embedding_model: str = "intfloat/multilingual-e5-small"  # empty = words only; needs a download
     config_cache_s: float = Field(default=5.0, ge=0)
     history_turns: int = Field(default=6, ge=0)
     greeting_timeout_s: float = Field(default=1.5, gt=0)

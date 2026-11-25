@@ -128,7 +128,8 @@ def test_the_tool_prompt_names_the_protocol_and_every_tool():
 def test_the_brain_settings_have_the_agreed_defaults():
     b = settings.brain
     assert (b.kb_max_hits, b.kb_min_words_score, b.kb_min_meaning_score) == (4, 1.2, 0.83)
-    assert (b.embedding_model, b.config_cache_s, b.history_turns) == ("", 5.0, 6)
+    assert b.embedding_model == "intfloat/multilingual-e5-small"
+    assert (b.config_cache_s, b.history_turns) == (5.0, 6)
     assert (b.greeting_timeout_s, b.prompt_budget_tokens, b.disclosure) == (1.5, 3000, {})
 
 

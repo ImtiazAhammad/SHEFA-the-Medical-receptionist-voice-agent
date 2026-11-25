@@ -31,6 +31,19 @@ _K1 = 1.5
 _B = 0.75
 _RRF = 60
 
+# Function words say nothing about which fact is wanted, yet in a small knowledge base they
+# outweigh the real word. Dropped from questions and entries before BM25.
+_ENGLISH_STOPWORDS = (
+    "a an the is are was be do does of to in on at for and or it this that what how i you we "
+    "my your me can will there have has any like clinic"  # every fact here is about the clinic
+)
+_BANGLA_STOPWORDS = (
+    "কি কী কে আছে আছেন আমি আমার আপনি আপনার আপনাদের এটা ওটা এই ওই কোন কোনো একটু তো না হ্যাঁ জি "
+    "এবং আর বা থেকে জন্য করে কিভাবে কীভাবে কেমন হবে হয় দিন বলুন বলবেন ক্লিনিক"
+)
+_STOPWORDS = frozenset(f"{_ENGLISH_STOPWORDS} {_BANGLA_STOPWORDS}".split())
+_FOLDED_STOPWORDS = frozenset(fold(w) for w in _STOPWORDS)
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -40,7 +53,7 @@ class Hit:
 
 
 def _words(text: str) -> list[str]:
-    return [fold(t) for t in tokens(text)]
+    return [f for f in (fold(t) for t in tokens(text)) if f not in _FOLDED_STOPWORDS]
 
 
 def _document(entry: Entry) -> str:
@@ -61,6 +74,8 @@ class Retriever:
             frequency.update(doc.keys())
         n = len(self._docs)
         self._idf = {w: math.log(1 + (n - c + 0.5) / (c + 0.5)) for w, c in frequency.items()}
+        # What a person typed as a tag or the topic is a direct label, strong on its own.
+        self._labels = [set(_words(" ".join([e.topic, *e.tags]))) for e in self._entries]
         self._vectors: np.ndarray | None = None
         if embedder is not None and self._entries:
             try:
@@ -99,14 +114,18 @@ class Retriever:
         by_words = self._word_scores(words)
         by_meaning = self._meaning_scores(query)
 
-        def ranks(scores: Sequence[float] | None, floor: float) -> dict[int, int]:
+        def ranks(
+            scores: Sequence[float] | None, floor: float, also: set[int] = frozenset()
+        ) -> dict[int, int]:
             if scores is None:
                 return {}
-            keep = [i for i, s in enumerate(scores) if s >= floor]
+            keep = [i for i, s in enumerate(scores) if s >= floor or i in also]
             keep.sort(key=lambda i: (-scores[i], self._entries[i].id))
             return {i: rank for rank, i in enumerate(keep, start=1)}
 
-        word_rank = ranks(by_words, settings.brain.kb_min_words_score)
+        # An entry labelled with a query word qualifies whatever its BM25 score is.
+        labelled = {i for i, label in enumerate(self._labels) if label & set(words)}
+        word_rank = ranks(by_words, settings.brain.kb_min_words_score, labelled)
         meaning_rank = ranks(by_meaning, settings.brain.kb_min_meaning_score)
         fused = []
         for i in word_rank.keys() | meaning_rank.keys():
