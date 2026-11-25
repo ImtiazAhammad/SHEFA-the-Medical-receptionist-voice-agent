@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from shefa.bangla import bn_number
 from shefa.clinic.names import fold, tokens
@@ -104,6 +105,12 @@ def numbers_in(text: str) -> set[str]:
     script, Bangla number words (suffix stripped, "ছয়টায়" -> 6), and for a clock time also its
     12-hour hour ("18:00" grounds "ছয়টায়"). Words for 1 and 2 are skipped: "এক মিনিট", "একটু"
     and "দুই একটা" are speech, not facts."""
+    return set(_numbers(text))
+
+
+# Ground texts repeat for every sentence of a turn and the word regex is large: remember them.
+@lru_cache(maxsize=512)
+def _numbers(text: str) -> frozenset[str]:
     text = _norm(text)
     found = {_plain(m.group()) for m in _DIGITS.finditer(text)}
     for m in _CLOCK.finditer(text):
@@ -117,7 +124,7 @@ def numbers_in(text: str) -> set[str]:
         value = _WORDS[word]
         if value not in (1, 2):
             found.add(str(value))
-    return found
+    return frozenset(found)
 
 
 # --- doctors' names ---------------------------------------------------------------------------
@@ -136,8 +143,16 @@ _EN_NOT_A_NAME = frozenset({"I", "The", "A", "An", "Is", "Will", "And", "Or"})
 _NAME_ENDINGS = tuple(_norm(e) for e in ("েরও", "কেও", "ের", "এর", "কে", "র", "ও", "'s"))
 
 
+# `names.tokens` keeps the danda ("সুলতানা।"), so words are cut on anything that is not a letter.
+_NON_WORD = re.compile(r"[^ঀ-৿A-Za-z0-9']+")
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in tokens(_NON_WORD.sub(" ", _norm(text))) if w]
+
+
 def _ground_words(texts: list[str]) -> set[str]:
-    return {fold(t) for text in texts for t in tokens(_norm(text))}
+    return {fold(w) for text in texts for w in _words(text)}
 
 
 def _named(word: str, known: set[str]) -> bool:
@@ -172,8 +187,8 @@ _YES_FILLER = _wordset(
 def _backed_yes(sentence: str, known: set[str]) -> bool:
     """Every content word of the yes-sentence appears in a ground text: "হ্যাঁ, পার্কিং আছে"
     with a parking fact is true, but "হ্যাঁ, শুক্রবার খোলা" with "শুক্রবার বন্ধ" is not."""
-    words = [w for w in tokens(_norm(sentence)) if w not in _YES_FILLER and w.strip("।")]
-    return bool(words) and all(_named(w.strip("।"), known) for w in words)
+    words = [w for w in _words(sentence) if w not in _YES_FILLER]
+    return bool(words) and all(_named(w, known) for w in words)
 
 
 # --- success claims and booking offers --------------------------------------------------------
@@ -190,11 +205,13 @@ _CLAIMS = {
     ),
     "request_callback": re.compile(
         r"\bcall you back\b|\bwill call you\b|ফোন করবে(?!ন)|আপনাকে[^।?!]{0,30}ফোন করবেন"
-        r"|ফোন দেবে(?!ন)|কল ব্যাক করা হবে",
+        r"|ফোন দেবে(?!ন)|কল ব্যাক করা হবে|আপনাকে[^।?!]{0,30}ফোন (?:করব(?![ে])|করা হবে)",
         re.IGNORECASE,
     ),
     "hand_over": re.compile(
-        r"\btransferr(?:ed|ing)\b|\bconnecting you\b|সংযোগ দিচ্ছি|সংযোগ করে দিচ্ছি", re.IGNORECASE
+        r"\btransferr(?:ed|ing)\b|\bconnecting you\b|\b(?:will|'ll) (?:transfer|connect) you\b"
+        r"|সংযোগ দিচ্ছি|সংযোগ করে দিচ্ছি",
+        re.IGNORECASE,
     ),
 }
 _NEGATED = re.compile(r"\bnot\b|n't\b|\bnever\b|\byet to\b", re.IGNORECASE)
@@ -253,9 +270,10 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
         return Verdict(False, "fact", f"the number {number} is not in the facts")
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
-    # A question asks rather than states ("Yes, how else can I help you?").
-    asking = text.rstrip().endswith("?")
-    if unsupported_claim(text) and not asking and not _backed_yes(text, known):
+    # A closing question asks rather than states ("Yes, how else can I help you?"), but what comes
+    # before it still states: "হ্যাঁ, এমআরআই আছে, আসবেন?" is judged on "হ্যাঁ, এমআরআই আছে".
+    stated = text.rsplit(",", 1)[0] if text.rstrip().endswith("?") else text
+    if unsupported_claim(stated) and not _backed_yes(stated, known):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
     if grounds.caller and parrots(text, _norm(grounds.caller)):
         return Verdict(False, "unsupported", "it only repeats the caller's own words")

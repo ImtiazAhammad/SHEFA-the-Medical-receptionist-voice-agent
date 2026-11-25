@@ -313,3 +313,42 @@ def test_doctor_hours_from_the_directory_pass():
     g = grounds(DIRECTORY_LINE)
     assert check("উনি সকাল ১০টা থেকে দুপুর ১টা পর্যন্ত বসেন।", g).ok
     assert check("উনি সকাল দশটা থেকে বসেন।", g).ok
+
+
+def test_a_ground_word_at_the_end_of_a_bangla_sentence_still_counts():
+    assert check("ডাক্তার সুলতানা আজ বসেন।", grounds("আজ বসবেন ডাক্তার সুলতানা।")).ok
+    assert check("হ্যাঁ, পার্কিং আছে।", grounds("ভবনের নিচে পার্কিং।")).ok
+
+
+def test_a_made_up_yes_before_a_question_still_fails():
+    assert check("হ্যাঁ, আমাদের এমআরআই আছে, আসবেন?").kind == "unsupported"
+    assert check("Yes, how else can I help you?", language="en").ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "tool", "language"),
+    [
+        ("আমরা আপনাকে ফোন করব।", "request_callback", "bn"),
+        ("আপনাকে ফোন করা হবে।", "request_callback", "bn"),
+        ("I will transfer you to reception.", "hand_over", "en"),
+        ("I'll connect you to reception now.", "hand_over", "en"),
+    ],
+)
+def test_a_first_person_promise_is_a_claim(sentence, tool, language):
+    assert check(sentence, language=language).kind == "claim"
+    assert check(sentence, grounds(succeeded={tool}), language=language).ok
+
+
+def test_the_real_directory_block_grounds_its_fees_and_hours(tmp_path):
+    from shefa.clinic import ClinicStore
+    from shefa.clinic.brief import directory_brief
+    from shefa.clinic.loader import import_directory
+    from tests.unit.test_directory_brief import DIRECTORY
+
+    with ClinicStore(tmp_path / "c.db") as store:
+        import_directory(store, DIRECTORY)
+        block = directory_brief(store, "bn")
+    g = grounds(block)
+    assert check("ডাক্তার সুলতানার প্রথমবারের ফি ছয়শো টাকা, পরের বার চারশো।", g).ok
+    assert check("উনি সকাল দশটা থেকে দুপুর একটা পর্যন্ত বসেন।", g).ok
+    assert check("ডাক্তার সুলতানার ফি সাতশো টাকা।", g).kind == "fact"
