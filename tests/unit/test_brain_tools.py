@@ -429,6 +429,39 @@ def test_reschedule_maps_the_new_day_and_time(two_bookings):
     )
 
 
+@pytest.mark.parametrize(
+    "which", ["the one with Dr. Rahman", "রহমানের সিরিয়ালটা", "my Friday appointment"]
+)
+def test_which_finds_a_doctor_or_day_inside_a_longer_phrase(two_bookings, which):
+    patient, first, _ = two_bookings
+    resolved = run("cancel_booking", {"which": which}, who=patient)
+    assert resolved == Resolved(
+        "cancel_booking", "cancel_appointment", {"appointment_id": _id(first)}
+    )
+
+
+def test_every_booking_example_in_the_prompt_resolves(two_bookings):
+    patient, _, _ = two_bookings
+    lines = [
+        line
+        for line in _tools_md().splitlines()
+        if line.startswith(TOOL_PREFIX) and "<tool>" not in line
+    ]
+    calls = [parse_tool_line(line) for line in lines]
+    acting = [
+        c for c in calls if c.name in ("free_times", "book", "cancel_booking", "reschedule_booking")
+    ]
+    assert {c.name for c in acting} == {
+        "free_times",
+        "book",
+        "cancel_booking",
+        "reschedule_booking",
+    }
+    for call in acting:
+        result = resolve(call, session(patient), CallState(), today=TODAY)
+        assert isinstance(result, Resolved), (call, result)
+
+
 def test_reschedule_needs_the_new_day():
     problem = run("reschedule_booking", {"time": "10:30"})
     assert isinstance(problem, ToolProblem) and "which day" in problem.message
