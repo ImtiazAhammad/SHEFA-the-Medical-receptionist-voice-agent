@@ -44,15 +44,13 @@ embedding model, pytest.
 - Tables for the config store and knowledge base live in the platform database
   (`settings.storage.db_path`), never in a clinic's own file.
 
-**Spec deviations (proposed; the founder confirms before Task 4):**
+**Spec deviations (confirmed by the founder, 2026-11-25):**
 - Mood and goal come from code rules on the words (plus voice cues when sub-project 3 supplies
   them), not a classifier prompt: a second model call per turn costs latency on one card, and the
   label only steers tone. A classifier can replace `state.track` later behind the same signature.
 - The running summary is built by code from `CallState`, not written by the model.
 - `model.*`, `turn.*` keys are stored and versioned here; applying them at runtime (model switch
   with self-test) is sub-project 4. The brain reads `prompt.*`, `escalation.*` and `engine`.
-- The knowledge base's "who made SHEFA" entry is not seeded (the repo does not say); the founder
-  adds it with `shefa kb add`.
 
 ## Review Focus
 
@@ -238,7 +236,9 @@ def test_a_call_keeps_the_config_it_started_with(tmp_path, monkeypatch): ...
 clinic and its doctors and books, moves and cancels appointments), `what_shefa_cannot_do` (no
 medical advice, diagnosis or medicine; a person at the desk handles those and anything it cannot),
 `call_notes` (the call's words are written down for the booking, as the greeting says),
-`talk_to_person` (the caller can ask for a person at any time).
+`talk_to_person` (the caller can ask for a person at any time), `who_made_shefa` (en: `SHEFA was
+made by Imtiaz Ahammad, an AI engineer.`; bn: `SHEFA তৈরি করেছেন ইমতিয়াজ আহাম্মদ, একজন এআই
+ইঞ্জিনিয়ার।`; tags: made, maker, creator, developer, তৈরি, বানিয়েছে, নির্মাতা).
 
 - [ ] **Step 1: Failing tests:** add/update keeps history and bumps version; `entries(["platform",
   "alo"])` never returns another clinic's entry; deactivated entries are hidden unless
