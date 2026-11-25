@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -20,7 +20,8 @@ from shefa.brain.tools import (
     resolve,
 )
 from shefa.clinic import default as clinic_default
-from shefa.clinic.store import ClinicStore
+from shefa.clinic import store as clinic_store
+from shefa.clinic.store import CLINIC_TZ, ClinicStore
 from shefa.pipeline import guided
 from shefa.session.manager import CallSession
 from shefa.tools.definitions import get_tool_definitions
@@ -31,8 +32,28 @@ TOMORROW = "2026-11-26"
 NOT_IDENTIFIED = "The caller is not identified: ask for their phone number."
 
 
+# The clinic's clock, frozen at 08:00 on TODAY: the store reads "now" to drop past slots and to
+# check a booking, so without this the tests would start failing once the real date passes.
+FROZEN_NOW = datetime(TODAY.year, TODAY.month, TODAY.day, 8, 0, tzinfo=CLINIC_TZ)
+
+
+class _FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return FROZEN_NOW if tz is None else FROZEN_NOW.astimezone(tz)
+
+
 @pytest.fixture(autouse=True)
-def clinic(tmp_path):
+def frozen_clock(monkeypatch):
+    monkeypatch.setattr(clinic_store, "datetime", _FrozenDatetime)
+
+
+def test_the_clinic_clock_is_frozen_at_today():
+    assert clinic_store.clinic_today() == TODAY
+
+
+@pytest.fixture(autouse=True)
+def clinic(tmp_path, frozen_clock):
     store = ClinicStore(tmp_path / "c.db")
     cardio = store.add_department("Cardiology", "হৃদরোগ")
     medicine = store.add_department("Medicine", "মেডিসিন")
