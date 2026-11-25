@@ -262,8 +262,8 @@ def track(
     if new.mood == "confused":
         new.repeats += 1
     new.angry_turns = state.angry_turns + 1 if new.mood == "angry" else 0
-    if LIST_WORDS.search(said):
-        new.asked_list = True
+    # Only this turn: a list asked for once must not lift the two-sentence limit for the call.
+    new.asked_list = bool(LIST_WORDS.search(said))
     _slots(said, today, new.booking)
     return new
 

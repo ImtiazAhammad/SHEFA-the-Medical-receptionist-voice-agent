@@ -201,10 +201,11 @@ def test_angry_turns_count_only_consecutive_angry_turns():
     "said",
     ["সব ডাক্তার কারা", "কোন কোন ডাক্তার আছেন", "কী কী টেস্ট হয়", "list the doctors", "all the doctors"],
 )
-def test_asking_for_a_list_is_remembered(said):
+def test_asking_for_a_list_holds_for_that_turn_only(said):
     state = after(said)
     assert state.asked_list is True
-    assert track(state, "ঠিক আছে", today=TODAY).asked_list is True  # stays once asked
+    # the next turn asks for no list, so the two-sentence limit applies again
+    assert track(state, "ঠিক আছে", today=TODAY).asked_list is False
 
 
 def test_no_list_word_leaves_it_unset():

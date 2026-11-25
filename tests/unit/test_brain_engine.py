@@ -481,3 +481,21 @@ def test_a_broken_tool_line_after_a_spoken_sentence_stops_without_regenerating()
     assert speak.said == ["There is parking behind the clinic."]
     assert len(llm.calls) == 1
     assert session.metadata["brain_trace"][-1]["regenerated"] is False
+
+
+def test_a_list_asked_for_lifts_the_sentence_limit_for_that_turn_only():
+    clinic = default_clinic_store()
+    dept = clinic.add_department("Cardiology", "হৃদরোগ")
+    clinic.add_doctor("Rahman", dept, name_bn="রহমান")
+    clinic.add_doctor("Hossain", dept, name_bn="হোসেন")
+    session = _session("সব ডাক্তারের নাম বলুন")
+    llm = FakeLLM("জি। ডা. রহমান আছেন। ডা. হোসেন আছেন।")
+    speak = Recorder()
+    _turn(session, "সব ডাক্তারের নাম বলুন", llm, speak)
+    assert len(speak.said) == 3
+    session.add_turn("assistant", " ".join(speak.said))
+    session.add_turn("user", FEE_QUESTION)
+    llm = FakeLLM("জি। ফি ৮০০ টাকা। আর কিছু জানতে চান?")
+    speak = Recorder()
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert speak.said == ["জি।", "ফি ৮০০ টাকা।"]
