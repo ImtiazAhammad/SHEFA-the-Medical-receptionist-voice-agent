@@ -268,3 +268,31 @@ def test_load_ignores_unknown_or_broken_stored_state():
     assert (state.goal, state.mood) == ("booking", "angry")
     session.metadata["brain"] = "garbage"
     assert load(session) == CallState()
+
+
+def test_an_information_question_does_not_pull_a_booking_off_its_goal():
+    state = after("আমি ডাক্তার রহমানকে কাল দেখাতে চাই")
+    assert state.goal == "booking"
+    state = track(state, "ফি কত?", today=TODAY)
+    assert state.goal == "booking"
+    assert state.booking["doctor"] == "Dr. Rahman" and state.booking["date"] == "2026-11-26"
+
+
+@pytest.mark.parametrize("first", ["আমার সিরিয়ালটা বাতিল করে দিন", "আমি অভিযোগ করতে চাই"])
+def test_other_set_goals_also_hold_against_an_information_question(first):
+    state = after(first)
+    assert track(state, "ফি কত?", today=TODAY).goal == state.goal
+
+
+def test_an_unknown_or_small_talk_caller_asking_about_fees_becomes_information():
+    assert after("ফি কত?").goal == "information"
+    greeted = after("হ্যালো")
+    assert greeted.goal == "small_talk"
+    assert track(greeted, "ফি কত?", today=TODAY).goal == "information"
+
+
+def test_set_goals_still_move_to_each_other_when_named():
+    state = after("আমি একটা অ্যাপয়েন্টমেন্ট নিতে চাই")
+    state = track(state, "না, বাতিল করুন", today=TODAY)
+    assert state.goal == "change"
+    assert track(state, "আমার সিরিয়াল কবে", today=TODAY).goal == "lookup"

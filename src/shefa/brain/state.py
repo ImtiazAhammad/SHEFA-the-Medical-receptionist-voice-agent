@@ -129,7 +129,9 @@ def _goal(said: str, current: str) -> str:
         return "lookup"
     if wants_to_book(said):
         return "booking"
-    if INFORMATION_WORDS.search(said):
+    # A question about fees or times mid-booking does not end the booking: only a caller with no
+    # goal yet (or chatting) becomes an information caller.
+    if INFORMATION_WORDS.search(said) and current in ("unknown", "small_talk", "information"):
         return "information"
     # Chatter after a real goal does not undo it.
     if current in ("unknown", "small_talk") and SMALL_TALK_WORDS.search(said):
