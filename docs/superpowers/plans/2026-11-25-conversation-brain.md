@@ -115,7 +115,7 @@ Tests: one `tests/unit/test_brain_<module>.py` per module, plus pipeline and CLI
   - `BrainConfig` (field `settings.brain`): `kb_max_hits: int = 4`,
     `kb_min_words_score: float = 1.2`, `kb_min_meaning_score: float = 0.83`,
     `embedding_model: str = ""` (empty = words only), `config_cache_s: float = 5.0`,
-    `history_turns: int = 6`, `greeting_timeout_s: float = 1.5`,
+    `history_turns: int = 6`, `greeting_timeout_s: float = 1.5`, `prompt_budget_tokens: int = 3000`,
     `disclosure: dict[str, str] = {}` (bn/en; Task 10 fills the default)
   - `KEYS: frozenset[str]` = `prompt.persona, prompt.conduct, prompt.greeting, prompt.tools,
     model.llm, model.llm.params, model.stt, model.tts.bn, model.tts.en, turn.settings,
@@ -129,7 +129,9 @@ Tests: one `tests/unit/test_brain_<module>.py` per module, plus pipeline and CLI
     `live(key: str, scope: str = "platform") -> Any | None`,
     `versions(key: str, scope: str = "platform") -> list[dict[str, Any]]` (newest first),
     `live_values(scope: str = "platform") -> dict[str, Any]`
-  - `default_config_store() -> ConfigStore` (at `settings.storage.db_path`)
+  - `default_config_store() -> ConfigStore` (at `settings.storage.db_path`) and
+    `set_default_config_store(store: ConfigStore | None) -> None` (same pattern as
+    `store.audit.set_default_audit_store`; also clears the snapshot cache)
   - `defaults() -> dict[str, Any]`: `prompt.*` from `configs/prompts/brain/*.md`, `engine` from
     `settings.pipeline.engine`, `escalation.settings` from `settings.escalation.model_dump()`
   - `snapshot(clinic_id: str = "") -> dict[str, Any]`: defaults, overlaid by platform live values,
@@ -223,7 +225,8 @@ def test_a_call_keeps_the_config_it_started_with(tmp_path, monkeypatch): ...
     `kb_history`); `deactivate(entry_id, *, author) -> None`;
     `entries(scopes: Iterable[str], *, active_only: bool = True) -> list[Entry]`;
     `stamp() -> float` (latest change time, for cache invalidation)
-  - `default_knowledge_store() -> KnowledgeStore` (at `settings.storage.db_path`)
+  - `default_knowledge_store() -> KnowledgeStore` (at `settings.storage.db_path`) and
+    `set_default_knowledge_store(store: KnowledgeStore | None) -> None`
   - `seed(store, *, clinic_id: str, platform_file: Path) -> int`: adds, once per topic and scope,
     every `settings.facilities` topic the clinic wrote (scope = clinic id, or `default` when there
     is one clinic; tags = the Bangla and English topic names from `pipeline.facilities.TOPICS` when
@@ -365,7 +368,16 @@ hit as `[kb:<id>] <entry.text(language)>` or `Facts you may use: none for this q
 the directory block, then `tool_note` and `correction` when given; then the last
 `settings.brain.history_turns` user/assistant turns.
 
-- [ ] Steps: tests that the angry cue and the information cue appear for those states; hit ids and
+Budget: the whole prompt stays within `settings.brain.prompt_budget_tokens` (new `BrainConfig`
+field, default 3000: vLLM serves `max_model_len` 4096 and a reply reserves 512), estimated as
+`ceil(len(text) / 2)` per message (conservative for Bangla). Over budget, trim in this order until
+it fits: history from the oldest down to the last 2 turns; the directory block to
+`directory_brief(..., full=False)` limited to the doctors in `state.booking` or the hits; the hits
+from 4 down to 2. Persona, conduct, tools and the cues are never trimmed.
+
+- [ ] Steps: tests that the angry cue and the information cue appear for those states; a long
+  call with a long directory stays under the budget and keeps persona, conduct and the last 2
+  turns; hit ids and
   texts appear in the caller's language; "none for this question" with no hits; history is cut to
   6 turns; `correction` text appears last in the system message; the prompt seeds from the config
   snapshot (a published persona replaces the seed); fail → implement → pass → commit
@@ -430,19 +442,24 @@ Test `tests/unit/test_brain_check.py`
 - Consumes: `pipeline.replycheck.gives_medical_advice`, `fits_language`; `bangla.bn_number`.
 - Produces:
   - `@dataclass class Grounds: texts: list[str]; succeeded: set[str]; caller: str` and
-    `Grounds.add(text: str)`. `succeeded` holds tool names whose result had no error this call
+    `Grounds.add(text: str)`. The caller's words never ground a fact (a caller's guess "ফি ৫০০ তো?"
+    must not become "হ্যাঁ, ৫০০ টাকা"); `caller` is used only for the `parrots` rule. `succeeded` holds tool names whose result had no error this call
     (`book`, `cancel_booking`, `reschedule_booking`, `request_callback`, `hand_over`).
   - `@dataclass(frozen=True) class Verdict: ok: bool; kind: str = ""; reason: str = ""`,
-    kinds `fact`, `claim`, `medical`, `privacy`, `push`, `language`
+    kinds `fact`, `unsupported`, `claim`, `medical`, `privacy`, `push`, `language`
   - `numbers_in(text: str) -> set[str]`: ASCII and Bangla digits normalised to ASCII without
     leading zeros, plus Bangla number words read through a table built from `bn_number(n)` for
-    n in 0–1000 and every hundred to 100000 (longest match first)
+    n in 0–1000 and every hundred to 100000 (longest match first), matched after stripping the
+    suffixes টা, টায়, টার, টি, য়, এ, র (so "ছয়টায়" reads 6). Number words for 1 and 2 are ignored
+    ("এক মিনিট", "একটু", "দুই একটা"); digits are always read. A clock time in a ground text
+    (`18:00`) also grounds its 12-hour hour (6), so "সন্ধ্যা ছয়টায়" passes and "সাতটায়" fails.
   - `check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str) -> Verdict`
   - `safe.sentence(kind: str, language: str) -> str`
 
 Rules: `fact`: a number in the sentence not in `numbers_in` of any ground text or the caller's
 words; or a doctor title (`ডাক্তার|ডাঃ|ডা\.|Dr\.?|Doctor`) followed by a name word whose `fold`
-is in no ground text. `claim`: a success claim (booked / বুক হয়েছে / সিরিয়াল দেওয়া হয়েছে /
+is in no ground text. `unsupported`: `replycheck.unsupported_claim(sentence)` (the "হ্যাঁ, পার্কিং
+আছে" made-up yes) or `replycheck.parrots(sentence, grounds.caller)`. `claim`: a success claim (booked / বুক হয়েছে / সিরিয়াল দেওয়া হয়েছে /
 cancelled / বাতিল করা হয়েছে / moved / পরিবর্তন করা হয়েছে / call you back / ফোন করবে /
 transferred / সংযোগ দিচ্ছি) without the matching tool in `succeeded`. `medical`:
 `gives_medical_advice`. `privacy`: a run of 7+ digits not in grounds (a phone number). `push`:
@@ -456,13 +473,19 @@ Safe sentences (exact copy):
 - `claim`: bn `দুঃখিত, এটা এখনো করা হয়নি। আপনি চাইলে আমি এখনই করে দিতে পারি।` /
   en `Sorry, that has not been done yet. I can do it for you now if you like.`
 - `privacy`: bn `দুঃখিত, অন্য কারো তথ্য আমি জানাতে পারি না।` / en `Sorry, I can't share anyone else's details.`
-- `push`, `language` and anything else: `settings.escalation.repeat_prompt[language]`
+- `unsupported`: same as `fact`
+- `push` and `language` are not spoken over: the sentence is dropped and the reply continues
+  (Task 8); when nothing at all passes after the regeneration, bn `জি, বলুন, আর কীভাবে সাহায্য
+  করতে পারি?` / en `Yes, how else can I help you?`
 
 - [ ] Steps: one test per kind (pass and fail), including: `ফি সাতশো টাকা` fails with grounds
   `fee 500` and passes with `fee 700`; `৫০০` and `500` and `পাঁচশো` all match `500`; a doctor named
   in the directory passes and an invented `ডাক্তার করিম` fails; `আপনার সিরিয়াল বুক হয়েছে` fails
   without `book` in `succeeded`; an information caller offered a booking fails as `push`, a
-  booking caller does not; fail → implement → pass → commit
+  booking caller does not; `হ্যাঁ, আমাদের পার্কিং আছে।` with no parking fact fails as
+  `unsupported`; caller asks `ফি ৫০০ তো?`, reply `হ্যাঁ, ৫০০ টাকা।` with no fee fact fails as
+  `fact`; grounds `18:00` passes `সন্ধ্যা ছয়টায়` and fails `সাতটায়`; `এক মিনিট দেখছি` and
+  `একটু অপেক্ষা করুন` pass with no grounds; fail → implement → pass → commit
   `brain: sentence checker and safe sentences`.
 
 ---
@@ -494,7 +517,8 @@ Flow of `turn` (this task: no tools yet; Task 9 adds actions):
    `Your tool line was not valid JSON. Write it again exactly as the protocol says.`
 4. Each complete sentence is checked; a passing sentence is spoken at once (`speak`). Stop after
    `MAX_SENTENCES` spoken sentences unless `state.asked_list`.
-5. The first failing sentence stops the stream. If nothing was spoken yet: regenerate once with
+5. A `push` or `language` sentence is dropped and the stream continues. Any other failing
+   sentence stops the stream. If nothing was spoken yet: regenerate once with
    correction `Your last reply was not used because <reason>. Say it again without that.`; a
    second failure speaks `safe.sentence(kind, language)`. If something was spoken already, stop
    there (no regeneration).
@@ -510,6 +534,28 @@ Flow of `turn` (this task: no tools yet; Task 9 adds actions):
   invented answer ends in `unsure()`; the trace records hits, verdicts and `regenerated`.
 - [ ] **Step 2–5:** fail, implement, pass, ruff.
 - [ ] **Step 6:** Commit `brain: turn loop with per-sentence checking`.
+
+---
+
+### Task 8b: Live gate on the real model
+
+**Files:** Create `scripts/brain_probe.py`, `docs/research/2026-11-2x-brain-probe.md`
+
+No downtime: today's vLLM (`shefa-llm`, gemma2-9b AWQ) is up. The script runs 20 typed turns
+through `Brain.turn` on a fresh `CallSession` each (with stores pointed at a temporary folder and
+seeded): 6 knowledge questions (fee, parking, address, a fact not in the base, About SHEFA, a
+doctor's days), 6 turns that need a tool (find a doctor by symptom, free times tomorrow evening,
+"my appointment", book with all details, cancel, a call-back request), 4 mood turns (angry,
+anxious, rushed, rude), 4 English. For each it records: did a tool turn produce a valid `TOOL`
+line (parsed with `parse_tool_line`; Task 9 is not built yet, so the line is only parsed), checker
+verdicts and regenerations, estimated prompt tokens, time to the first spoken sentence, and the
+spoken text.
+
+Gate: valid tool lines on at least 5 of 6 tool turns; regeneration on at most 4 of 20 turns; no
+prompt over the budget; first spoken sentence p95 at most 1100 ms on non-tool turns (leaving the
+voice's ~85 ms inside 1.2 s). Write the numbers and every reply to the doc and commit. If the gate
+fails, stop before Task 9 and rule on the fix (protocol wording, few-shot examples in `tools.md`,
+or a JSON-only router call for tool turns) in the ledger, then re-run the gate.
 
 ---
 
@@ -599,18 +645,24 @@ Behaviour:
 
 Behaviour: with engine `agent`, `_generate_reply` calls `Brain.turn(session, said, llm, speak)`
 where `speak` emits through `self._emit(tts, sentence, language, put_playback)`. The emergency and
-other-language checks before it stay as they are. On `asyncio.TimeoutError`, `httpx.HTTPError`,
+other-language checks before it stay as they are. On `asyncio.TimeoutError`, `openai.APIError` (the
+client's errors: `APIConnectionError`, `APITimeoutError`, `InternalServerError` and the rest),
 `ConnectionError` or `MalformedLLMOutputError` from the brain before anything was spoken, the turn
 is answered by the guided path (`self._reply`) and `session.metadata["brain_fallbacks"]` is
 incremented; if something was already spoken the turn ends with what was said. The next turn tries
 the brain again. The greeting uses `greeting()` when the engine is `agent`. `--engine` sets
 `settings.pipeline.engine` for the run (restored after) and is recorded in the scorecard meta.
+The lab never reads production's prompts or knowledge base: like the audit store, `run_scorecard`
+points `set_default_config_store` and `set_default_knowledge_store` at files in its work folder,
+seeds the knowledge base there with `seed(...)`, and puts the defaults back afterwards. With no
+live rows there, `--engine` is what the calls use.
 
 - [ ] Steps: tests: engine `guided` behaves exactly as before (an existing handle_text test
   re-run with the setting explicit); engine `agent` routes a typed turn through a fake brain; a
-  brain that raises `httpx.ConnectError` before speaking gets the guided reply, a brain that
+  brain that raises `openai.APIConnectionError` before speaking gets the guided reply, a brain that
   raised after speaking does not (Review Focus 5); `lab score --engine agent` records
-  `meta["engine"] == "agent"`; full suite green; commit
+  `meta["engine"] == "agent"`; a live `engine = guided` row in the production config store does
+  not change a lab run with `--engine agent`; full suite green; commit
   `pipeline: agent engine behind pipeline.engine, guided fallback`.
 
 ---
@@ -627,7 +679,13 @@ Run (no downtime: agent on vLLM, caller and judge on a CPU-only Ollama on :11435
 bake-off): `PYTHONUNBUFFERED=1 uv run shefa lab score --engine guided --side-base-url
 http://127.0.0.1:11435/v1 --caller-model hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --judge-model
 hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --out data/bench`, then the same with `--engine agent`,
-then `shefa lab compare` on the two scorecards.
+then `shefa lab compare` on the two scorecards. Run each engine twice (the bake-off saw two-case
+swings between runs of the same setup) and average.
+
+The bar, decided before the runs: the agent engine has no hard-check failure that the classification
+finds to be an engine fault; its judged mean averaged over the two runs is above the guided
+engine's for every caller type by at least 0.2 (one caller type has about 10 calls); and its full
+pass is not lower than guided's by more than 2 calls in either run.
 
 - [ ] Steps: edit the scenarios and run the lab's scenario-file test; run both scorecards; write
   the results (full/task/hard/judged per caller type, every hard-check failure of the agent engine
@@ -640,6 +698,7 @@ then `shefa lab compare` on the two scorecards.
 
 ## Self-review notes
 
+- Gate before actions: Task 8b checks gemma2 holds the protocol before Tasks 9–11 build on it.
 - Spec 5.1 steps 1–7 → Tasks 4, 3, 5, 8, 7/8, 8 (speak is section 6's streaming, already sentence by
   sentence). 5.2 → 6, 9. 5.3 → 2, 3. 5.4 → 4, 5, 1 (conduct text). 5.5 → 4 (slots kept), 9
   (read-back), conduct (no two-strike handover; `hand_over` only on request, conduct or checker).
