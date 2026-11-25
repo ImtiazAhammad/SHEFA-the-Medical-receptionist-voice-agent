@@ -44,7 +44,7 @@ embedding model, pytest.
 - Tables for the config store and knowledge base live in the platform database
   (`settings.storage.db_path`), never in a clinic's own file.
 
-**Spec deviations (rulings):**
+**Spec deviations (proposed; the founder confirms before Task 4):**
 - Mood and goal come from code rules on the words (plus voice cues when sub-project 3 supplies
   them), not a classifier prompt: a second model call per turn costs latency on one card, and the
   label only steers tone. A classifier can replace `state.track` later behind the same signature.
