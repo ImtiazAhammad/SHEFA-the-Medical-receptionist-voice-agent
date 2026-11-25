@@ -733,7 +733,18 @@ def test_number_words_glued_to_any_noun_fail_closed(text, value):
 
 
 @pytest.mark.parametrize(
-    "text", ["নয়ন", "নয়না", "নয়নের", "নয়নকে", "নয়নতারা", "দশমিক", "বার বার বলছি"]
+    "text",
+    [
+        "নয়ন",
+        "নয়না",
+        "নয়নের",
+        "নয়নকে",
+        "নয়নতারা",
+        "দশমিক",
+        "বার বার বলছি",
+        "সাতসকালে",
+        "আটপৌরে",
+    ],
 )
 def test_real_words_that_start_with_a_number_stem(text):
     assert numbers_in(text) == set()
@@ -776,3 +787,84 @@ def test_questions_and_offers_are_not_claims(sentence, language):
 )
 def test_claims_beside_a_question_still_fail(sentence, language):
     assert check(sentence, language=language).kind == "claim"
+
+
+# --- review round 4: a question or offer exempts a claim only where it governs the claim -----
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "I can confirm you are booked.",
+        "I can confirm you're booked.",
+        "Okay, I can confirm you are booked.",
+        "I can tell you your appointment is confirmed.",
+        "I can say you are all set.",
+        "I can let you know you are booked.",
+        "I can confirm the booking was cancelled.",
+        "I can confirm it has been rescheduled.",
+        "I can confirm the doctor will call you back.",
+        "I can confirm I'm transferring you now.",
+        "Should I mention that you are booked",
+        "Shall I confirm you are booked?",
+        "Have you heard you are booked?",
+        "I can confirm you're booked if you like.",
+        "We have you booked for Monday.",
+    ],
+)
+def test_an_offer_opener_does_not_hide_a_claim_later_in_the_clause(sentence):
+    assert check(sentence, grounds("Monday"), language="en").kind == "claim"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("Your booking is confirmed and is there anything else?", "en"),
+        ("You're booked — anything else?", "en"),
+        ("You're booked—anything else?", "en"),
+        ("Great news you are booked and what else can I do?", "en"),
+        ("I've cancelled it what else can I help with?", "en"),
+        ("আপনার সিরিয়াল বুক হয়েছে এবং আর কি কিছু লাগবে?", "bn"),
+        ("ডাক্তার আপনাকে ফোন করবেন আর কি লাগবে?", "bn"),
+        ("বুক হয়েছে কিন্তু কি লাগবে?", "bn"),
+        ("বুক হয়েছে এখন কি করবেন?", "bn"),
+        ("আপনি কি জানেন আপনার সিরিয়াল বুক হয়েছে?", "bn"),
+        ("You're booked. Anything else?", "en"),
+        ("Shall I tell you? You are booked.", "en"),
+        ("আপনার সিরিয়াল বুক হয়েছে! আর কিছু?", "bn"),
+    ],
+)
+def test_a_claim_joined_to_a_question_still_fails(sentence, language):
+    assert check(sentence, language=language).kind == "claim"
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "সিরিয়াল দিয়েছিলাম।",
+        "আপনার সিরিয়াল দিয়েছিলাম।",
+        "বুক করেছিলাম।",
+        "বুক করে দিয়েছিলাম",
+        "বাতিল করেছিলাম।",
+        "বুক হয়েছেই।",
+        "সিরিয়াল দিলামই",
+        "বাতিল করা হয়েছেও",
+    ],
+)
+def test_only_second_person_endings_unglue_a_bangla_claim(sentence):
+    assert check(sentence).kind == "claim"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("shall i put you through?", "en"),
+        ("Can I put you through to reception?", "en"),
+        ("Would you like me to put you down for Monday?", "en"),
+        ("Has it been cancelled?", "en"),
+        ("Has it been confirmed?", "en"),
+        ("বুক হয়েছে তো কি?", "bn"),
+    ],
+)
+def test_a_governing_question_or_offer_still_exempts(sentence, language):
+    assert check(sentence, grounds("Monday"), goal="booking", language=language).ok

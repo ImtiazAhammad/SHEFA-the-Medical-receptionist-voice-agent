@@ -101,8 +101,9 @@ _BN_HUNDREDS = tuple(_norm(h) for h in ("শত", "শো", "শ"))
 _BN_THOUSAND = _norm("হাজার")
 # Words that begin like a number but are not one ("আটকে", "চারপাশে", "নয়তো").
 # Real words that begin like a glued number: the name নয়ন (and নয়না, নয়নতারা), "আটকে",
-# "চারপাশে", "নয়তো", "দশমিক" (the decimal point, not ten).
-_NOT_NUMBERS = tuple(_norm(w) for w in _split("নয়ন আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ দশমিক"))
+# "চারপাশে", "নয়তো", "দশমিক" (the decimal point, not ten), "সাতসকালে", "আটপৌরে".
+_NOT_NUMBER_WORDS = "নয়ন আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ দশমিক সাতসকাল আটপৌর"
+_NOT_NUMBERS = tuple(_norm(w) for w in _split(_NOT_NUMBER_WORDS))
 # A number glued to any word ("সাতমাস", "তিনতলায়") still says that number: it fails closed.
 # Only a following vowel sign or hasanta ("তিনি", "বিশেষ", "বিশ্ব") shows the stem is not a
 # number; ছ/ন/বার are numbers only before টা ("ছটায়").
@@ -591,28 +592,65 @@ _ACTIONS = {
 }
 
 
-# A clause that asks ("বুক করা আছে কি?", "আপনার কি সিরিয়াল করা আছে?", "Have you booked?") or
-# offers ("Shall I put you through?", "I can put you down for Monday") claims nothing.
-_BN_ASKS = re.compile(_B + r"(?:কি|কী|নাকি|কিনা)" + _E)
+# A question or offer exempts a claim only where it governs the claim verb itself: "Have you
+# booked?", "Shall I put you through?", "বুক হয়েছে কি?", "আপনার কি আগে থেকে বুক করা আছে?".
+# An opener elsewhere in the clause proves nothing ("I can confirm you are booked"), and a claim
+# joined to a question is still a claim ("You're booked — anything else?"). Everything else
+# fails closed: a wrong "claim" only costs a regeneration.
+_CLAUSE_END = re.compile(
+    r"[,;।.!?—–]|\b(?:and|but)\b|" + _B + r"(?:এবং|আর|কিন্তু)" + _E, re.IGNORECASE
+)
+_EN_LEAD = r"^\s*(?:(?:so|okay|ok|then|now|well|alright)\s+)?"
+_EN_ASKS = re.compile(
+    _EN_LEAD + r"(?:have you|has it|did you)\s+(?:(?:already|been|yet)\s+)*$", re.IGNORECASE
+)
 _EN_OFFERS = re.compile(
-    r"^\s*(?:\w+,\s*)?(?:shall I|should I|do you want me to|would you like me to|I can)\b",
+    _EN_LEAD + r"(?:(?:shall|should|can|may) I|do you want me to|would you like me to)\s+$",
     re.IGNORECASE,
 )
-_CLAUSE_END = re.compile(r"[,;।]|$")
+_EN_I_CAN = re.compile(_EN_LEAD + r"I can\s+$", re.IGNORECASE)
+_EN_OFFER_VERB = re.compile(
+    r"(?:book|put you (?:through|down)|connect|transfer|cancel|reschedule|move)\b", re.IGNORECASE
+)
+_EN_IF_YOU_LIKE = re.compile(r"\bif you (?:like|want|wish|prefer)\b", re.IGNORECASE)
+_BN_ASK = r"(?:কি|কী|কিনা|নাকি)" + _E
+# At most one small particle may sit between the claim and its কি ("বুক হয়েছে তো কি?"); any
+# other word ("বুক হয়েছে এখন কি করবেন?") starts a new question and the claim stands.
+_BN_ASKS_AFTER = re.compile(r"\s+(?:(?:তো|এখনো|এখনও|ইতিমধ্যে)\s+)?" + _BN_ASK)
+# কি up to two words before the claim, in a clause that ends with "?": "আপনার কি আগে থেকে বুক
+# করা আছে?". The words between may only say when or what ("আপনি কি জানেন … বুক হয়েছে?" stays
+# a claim).
+_BN_BETWEEN = r"(?:আগে|আগেই|থেকে|ইতিমধ্যে|এখনো|এখনও|সিরিয়াল|সিরিয়ালটা|বুকিং|অ্যাপয়েন্টমেন্ট)"
+_BN_ASKS_BEFORE = re.compile(_B + r"(?:কি|কী)\s+(?:" + _BN_BETWEEN + r"\s+){0,2}$")
+# Only a second-person or honorific ending turns a glued claim verb into someone else's act
+# ("দিয়েছিলেন"); "দিয়েছিলাম", "হয়েছেই" and "দিলামই" are still claims.
+_SECOND_PERSON = re.compile(r"(?:ছিলেন|লেন|েন)" + _E)
 
 
-def _asks_or_offers(sentence: str, start: int, end: int) -> bool:
-    begin = max(sentence.rfind(c, 0, start) for c in ",;।") + 1
+def _clause(sentence: str, start: int, end: int) -> tuple[str, str, str]:
+    """The text before the match and after it inside its clause, and the clause's last mark."""
+    begin = 0
+    for m in _CLAUSE_END.finditer(sentence, 0, start):
+        begin = m.end()
     stop = _CLAUSE_END.search(sentence, end)
-    clause = sentence[begin : stop.start() if stop else len(sentence)]
-    return (
-        clause.rstrip().endswith("?")
-        or bool(_BN_ASKS.search(clause))
-        or bool(_EN_OFFERS.match(clause))
-    )
+    after = sentence[end : stop.start() if stop else len(sentence)]
+    mark = stop.group() if stop else ""
+    return sentence[begin:start], after, mark
 
 
-_BANGLA_LETTER = re.compile("[ঀ-৿]")
+def _governed(sentence: str, m: re.Match[str]) -> bool:
+    before, after, mark = _clause(sentence, m.start(), m.end())
+    claim = m.group()
+    if _EN_ASKS.search(before):
+        return True
+    if _EN_OFFER_VERB.match(claim):
+        if _EN_OFFERS.search(before):
+            return True
+        if _EN_I_CAN.search(before) and _EN_IF_YOU_LIKE.search(after):
+            return True
+    if _BN_ASKS_AFTER.match(after):
+        return True
+    return mark == "?" and bool(_BN_ASKS_BEFORE.search(before))
 
 
 def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
@@ -621,11 +659,12 @@ def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
             continue
         for m in pattern.finditer(sentence):
             before = sentence[: m.start()].rstrip() + " "
-            glued_on = _BANGLA_LETTER.match(sentence, m.end()) and _BANGLA_LETTER.match(
-                m.group()[-1]
-            )
-            if glued_on or _NEGATED.search(before) or _asks_or_offers(sentence, m.start(), m.end()):
-                continue  # "দিয়েছিলেন" is not "দিয়েছি"
+            if (
+                _SECOND_PERSON.match(sentence, m.end())
+                or _NEGATED.search(before)
+                or _governed(sentence, m)
+            ):
+                continue
             return Verdict(
                 False,
                 "claim",
