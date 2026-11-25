@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_ITERATIONS = 20
+DEFAULT_EMBEDDER = "intfloat/multilingual-e5-small"
 
 # `shefa setup --demo`: the same agent with OpenAI doing speech recognition and the language
 # model, so a laptop without a GPU or Ollama can run it. The voice (Piper) still runs here,
@@ -356,6 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
     k_add.add_argument("--tags", default="", help="comma-separated words that find this entry")
     k_off = kb_sub.add_parser("deactivate", help="hide an entry from the brain")
     k_off.add_argument("entry_id", type=int)
+    kb_sub.add_parser(
+        "fetch-embedder", help="download the embedding model (once, needs the network)"
+    )
 
     token = sub.add_parser("token", help="mint an API bearer token for a configured role")
     token.add_argument("--name", required=True, help="principal name, e.g. front-desk")
@@ -1288,6 +1292,7 @@ def run_kb(args: argparse.Namespace) -> int:
 
     from shefa.brain.knowledge import PLATFORM_FILE, default_knowledge_store, seed
     from shefa.clinic.registry import valid_id
+    from shefa.config.settings import settings
 
     store = default_knowledge_store()
     try:
@@ -1316,6 +1321,14 @@ def run_kb(args: argparse.Namespace) -> int:
                     author=getpass.getuser(),
                 )
             )
+        elif args.kb_command == "fetch-embedder":
+            from huggingface_hub import snapshot_download
+
+            name = settings.brain.embedding_model or DEFAULT_EMBEDDER
+            snapshot_download(name)
+            print(f"{name} is downloaded")
+            if settings.brain.embedding_model != name:
+                print(f"set brain.embedding_model: {name} in the config to search by meaning")
         else:
             store.deactivate(args.entry_id, author=getpass.getuser())
             print(f"entry {args.entry_id} is deactivated")

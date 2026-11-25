@@ -64,3 +64,29 @@ def test_seed_command(store, capsys, monkeypatch):
     assert {e.topic for e in store.entries(["default"])} == {"parking"}
     assert cli.main(["kb", "seed"]) == 0
     assert capsys.readouterr().out.startswith("0 ")
+
+
+def test_fetch_embedder_downloads_the_configured_model(store, capsys, monkeypatch):
+    import huggingface_hub
+
+    seen: list[str] = []
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda name, **_k: seen.append(name))
+    monkeypatch.setattr(settings.brain, "embedding_model", "")
+    assert cli.main(["kb", "fetch-embedder"]) == 0
+    assert seen == ["intfloat/multilingual-e5-small"]
+    assert "embedding_model" in capsys.readouterr().out
+
+    monkeypatch.setattr(settings.brain, "embedding_model", "some/other-model")
+    assert cli.main(["kb", "fetch-embedder"]) == 0
+    assert seen[-1] == "some/other-model"
+
+
+def test_fetch_embedder_reports_a_failed_download(store, capsys, monkeypatch):
+    import huggingface_hub
+
+    def boom(*_a, **_k):
+        raise OSError("no network")
+
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", boom)
+    assert cli.main(["kb", "fetch-embedder"]) == 2
+    assert "no network" in capsys.readouterr().err
