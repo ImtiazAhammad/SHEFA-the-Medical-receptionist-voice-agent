@@ -54,3 +54,17 @@ def test_nothing_is_held_back_once_the_text_cannot_be_a_tag():
 
 def test_streamed_reasoning_that_never_closes_says_nothing():
     assert _stream(["<think>", "the patient is"]) == ""
+
+
+def test_reasoning_whose_opening_tag_was_in_the_prompt_is_removed():
+    # Some chat templates write <think> into the prompt, so the reply holds only the close.
+    assert strip_thinking("the caller wants a slot\n</think>\n\nআমি দেখছি।") == "আমি দেখছি।"
+
+
+def test_a_streamed_closing_tag_is_never_spoken():
+    assert "</think>" not in _stream(["হ্যাঁ। ", "</think>", "আমি দেখছি।"])
+
+
+def test_reasoning_between_two_words_leaves_a_space():
+    assert strip_thinking("Hi <think>x</think>there") == "Hi there"
+    assert _stream(["Hi", "<think>x</think> there"]) == "Hi there"

@@ -21,7 +21,7 @@ import yaml
 from shefa.lab import judge as lab_judge
 from shefa.lab import scorecard
 from shefa.lab.mishear import Confusions
-from shefa.lab.models import OLLAMA_URL, ollama_llm
+from shefa.lab.models import OLLAMA_URL, ollama_llm, split_candidate
 from shefa.lab.runner import Lab
 from shefa.lab.scenarios import Scenario, load_scenarios, select
 
@@ -217,7 +217,11 @@ async def run_scorecard(
 
     caller = build(caller_llm, args.caller_model, CALLER_TEMPERATURE)
     judge = build(judge_llm, args.judge_model, JUDGE_TEMPERATURE)
-    agent = agent_llm if agent_llm is not None or model is None else ollama_llm(model)
+    if agent_llm is not None or model is None:
+        agent = agent_llm
+    else:
+        served, think = split_candidate(model)  # "name+think": the model with reasoning on
+        agent = ollama_llm(served, think=True) if think else ollama_llm(served)
     if agent is not None and agent is not agent_llm:
         owned.append(agent)
     previous_llm = registry._llm  # noqa: SLF001 - put back as found

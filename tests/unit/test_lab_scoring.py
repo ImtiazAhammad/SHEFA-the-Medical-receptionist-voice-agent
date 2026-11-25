@@ -287,6 +287,20 @@ async def test_the_side_server_defaults_to_ollama(tmp_path, monkeypatch):
     assert built == ["http://localhost:11434/v1"] * 2
 
 
+async def test_scoring_a_think_candidate_runs_the_model_with_reasoning_on(tmp_path, monkeypatch):
+    built = []
+
+    def fake_ollama(model, base_url="default", temperature=None, *, think=False):
+        built.append((model, think))
+        if model == "qwen3:14b":
+            return AgentLLM()
+        return TextLLM("[END]") if temperature == 0.7 else TextLLM(json.dumps(GOOD))
+
+    monkeypatch.setattr(scoring, "ollama_llm", fake_ollama)
+    await scoring.run_scorecard("qwen3:14b+think", make_args(tmp_path), today=date(2026, 11, 4))
+    assert ("qwen3:14b", True) in built
+
+
 def test_validate_files_finds_the_same_bad_files_without_running_anything(tmp_path):
     out = tmp_path / "bench"
     out.mkdir()

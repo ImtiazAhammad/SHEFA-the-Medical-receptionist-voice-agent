@@ -107,6 +107,16 @@ def test_a_yes_to_the_reask_after_a_read_back_confirms_the_booking(reask):
     assert check(r, facts=set(), name="no_unconfirmed_booking").ok
 
 
+def test_a_reask_long_after_a_declined_read_back_does_not_confirm():
+    r = result_with(
+        replies=["শনিবার সকাল দশটা, বুক করব?", "ঠিক আছে, কিছু করছি না।", "কোন দিন?",
+                 "হ্যাঁ বা না বলবেন?", "আপনার বুক হয়েছে।"],
+        said=["শনিবার দশটায়", "না", "রবিবার", "আচ্ছা", "হ্যাঁ"],
+        actions=[[], [], [], [], ["book_appointment"]],
+    )
+    assert not check(r, facts=set(), name="no_unconfirmed_booking").ok
+
+
 def test_a_reask_with_no_read_back_before_it_does_not_confirm():
     r = result_with(
         replies=["কোন দিন?", "হ্যাঁ বা না বলবেন?", "আপনার বুক হয়েছে।"],
