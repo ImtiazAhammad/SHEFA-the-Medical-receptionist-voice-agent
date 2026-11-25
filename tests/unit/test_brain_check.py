@@ -700,3 +700,79 @@ def test_names_and_words_that_start_like_numbers(text):
 )
 def test_round_two_booking_offers_are_a_push(sentence, language):
     assert check(sentence, goal="information", language=language).kind == "push"
+
+
+# --- review fix round 3 -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("সাতমাস", "7"),
+        ("তিনবছর", "3"),
+        ("তিনঘণ্টা", "3"),
+        ("পাঁচমিনিট", "5"),
+        ("তিনসপ্তাহ", "3"),
+        ("সাতমাসের", "7"),
+        ("ছয়মাস", "6"),
+        ("বিশমিনিট", "20"),
+        ("আটমাসের", "8"),
+        ("দশবছরের", "10"),
+        ("তিনজনকে", "3"),
+        ("পাঁচজনকে", "5"),
+        ("চারতলা", "4"),
+        ("তিনতলায়", "3"),
+        ("পাঁচতলা", "5"),
+        ("সাতনম্বর", "7"),
+        ("তিননম্বরে", "3"),
+        ("পনেরোমিনিট", "15"),
+    ],
+)
+def test_number_words_glued_to_any_noun_fail_closed(text, value):
+    assert numbers_in(text) == {value}
+
+
+@pytest.mark.parametrize(
+    "text", ["নয়ন", "নয়না", "নয়নের", "নয়নকে", "নয়নতারা", "দশমিক", "বার বার বলছি"]
+)
+def test_real_words_that_start_with_a_number_stem(text):
+    assert numbers_in(text) == set()
+
+
+@pytest.mark.parametrize(
+    "sentence", ["সাতমাস পরে আসুন।", "তিনঘণ্টা অপেক্ষা করতে হবে।", "পনেরোমিনিট লাগবে।"]
+)
+def test_glued_durations_need_grounds(sentence):
+    assert check(sentence).kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("আপনার কি আগে থেকে বুক করা আছে?", "bn"),
+        ("আপনার কি সিরিয়াল করা আছে?", "bn"),
+        ("সিরিয়াল হয়ে গেছে নাকি?", "bn"),
+        ("আগে কি সিরিয়াল দিয়েছিলেন?", "bn"),
+        ("Shall I put you through to reception?", "en"),
+        ("Do you want me to put you through?", "en"),
+        ("I can put you down for Monday if you like.", "en"),
+        ("Have you already made the booking?", "en"),
+        ("Have you already booked?", "en"),
+    ],
+)
+def test_questions_and_offers_are_not_claims(sentence, language):
+    assert check(sentence, grounds("Monday"), goal="booking", language=language).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("বুক করে দিলাম।", "bn"),
+        ("I'll put you through to reception.", "en"),
+        ("Your booking is confirmed.", "en"),
+        ("Your booking is confirmed, anything else?", "en"),
+        ("আপনার সিরিয়াল বুক হয়েছে, আর কিছু জানতে চান?", "bn"),
+    ],
+)
+def test_claims_beside_a_question_still_fail(sentence, language):
+    assert check(sentence, language=language).kind == "claim"

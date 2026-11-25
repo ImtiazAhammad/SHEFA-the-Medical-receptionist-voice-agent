@@ -100,10 +100,14 @@ _BN_MULTIPLIERS = {**{w: n for w, n in _BN_UNITS.items() if n}, _norm("বার
 _BN_HUNDREDS = tuple(_norm(h) for h in ("শত", "শো", "শ"))
 _BN_THOUSAND = _norm("হাজার")
 # Words that begin like a number but are not one ("আটকে", "চারপাশে", "নয়তো").
-_NOT_NUMBERS = tuple(_norm(w) for w in _split("আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ"))
-# A number glued to these still says that number even with an ending the table lacks
-# ("সাতটাকা", "পাঁচশোটাকা"); any other continuation ("নয়ন", a name) is not a number.
-_GLUED = tuple(_norm(w) for w in _split("টা শো শ হাজার"))
+# Real words that begin like a glued number: the name নয়ন (and নয়না, নয়নতারা), "আটকে",
+# "চারপাশে", "নয়তো", "দশমিক" (the decimal point, not ten).
+_NOT_NUMBERS = tuple(_norm(w) for w in _split("নয়ন আটক চারপাশ চারদিক সাতক্ষীরা নয়ত পাঁচমিশ বিশদ দশমিক"))
+# A number glued to any word ("সাতমাস", "তিনতলায়") still says that number: it fails closed.
+# Only a following vowel sign or hasanta ("তিনি", "বিশেষ", "বিশ্ব") shows the stem is not a
+# number; ছ/ন/বার are numbers only before টা ("ছটায়").
+_CONSONANT = re.compile("[\u0995-\u09b9\u09ce\u09dc-\u09df]")
+_CLOCK_ONLY = _norm("টা")
 _CLOCK_STEMS = {_norm("ছ"): 6, _norm("ন"): 9, _norm("বার"): 12}
 _EN_UNITS = {
     w: n
@@ -161,13 +165,16 @@ def _bn_part(word: str) -> _Part | None:
         return None
     for size in range(len(word) - 1, 0, -1):
         stem, rest = word[:size], word[size:]
-        if rest.startswith(_GLUED) and (part := _bn_stem(stem, True) or _clock_stem(stem)):
+        if not _CONSONANT.match(rest):
+            continue
+        part = _bn_stem(stem, True) or (_clock_stem(stem) if rest.startswith(_CLOCK_ONLY) else None)
+        if part:
             return part if part.kind in (_UNIT, _HUNDREDS) else None
     return None
 
 
 def _clock_stem(stem: str) -> _Part | None:
-    """ "ছ", "ন" and "বার" name a number only before টা/টায়: "ছটায়" 6, "নটা" 9, "বারটায়" 12."""
+    """ "ছ", "ন" and "বার" name a number only before টা: "ছটায়" 6, "নটা" 9, "বারটায়" 12."""
     return _Part(_UNIT, _CLOCK_STEMS[stem], True) if stem in _CLOCK_STEMS else None
 
 
@@ -584,8 +591,28 @@ _ACTIONS = {
 }
 
 
-# "বুক হয়েছে কি?" and "বুক হয়েছে কিনা দেখছি" ask; they do not claim.
-_ASKED = re.compile(r"\s*(?:কি|কী|কিনা|কি না)" + _E)
+# A clause that asks ("বুক করা আছে কি?", "আপনার কি সিরিয়াল করা আছে?", "Have you booked?") or
+# offers ("Shall I put you through?", "I can put you down for Monday") claims nothing.
+_BN_ASKS = re.compile(_B + r"(?:কি|কী|নাকি|কিনা)" + _E)
+_EN_OFFERS = re.compile(
+    r"^\s*(?:\w+,\s*)?(?:shall I|should I|do you want me to|would you like me to|I can)\b",
+    re.IGNORECASE,
+)
+_CLAUSE_END = re.compile(r"[,;।]|$")
+
+
+def _asks_or_offers(sentence: str, start: int, end: int) -> bool:
+    begin = max(sentence.rfind(c, 0, start) for c in ",;।") + 1
+    stop = _CLAUSE_END.search(sentence, end)
+    clause = sentence[begin : stop.start() if stop else len(sentence)]
+    return (
+        clause.rstrip().endswith("?")
+        or bool(_BN_ASKS.search(clause))
+        or bool(_EN_OFFERS.match(clause))
+    )
+
+
+_BANGLA_LETTER = re.compile("[ঀ-৿]")
 
 
 def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
@@ -594,8 +621,11 @@ def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
             continue
         for m in pattern.finditer(sentence):
             before = sentence[: m.start()].rstrip() + " "
-            if _NEGATED.search(before) or _ASKED.match(sentence, m.end()):
-                continue
+            glued_on = _BANGLA_LETTER.match(sentence, m.end()) and _BANGLA_LETTER.match(
+                m.group()[-1]
+            )
+            if glued_on or _NEGATED.search(before) or _asks_or_offers(sentence, m.start(), m.end()):
+                continue  # "দিয়েছিলেন" is not "দিয়েছি"
             return Verdict(
                 False,
                 "claim",
