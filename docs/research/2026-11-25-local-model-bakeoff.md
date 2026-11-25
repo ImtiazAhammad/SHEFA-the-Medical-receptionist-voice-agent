@@ -104,7 +104,7 @@ is never spoken: every reply passes through `shefa.models.llm.think_filter`.
 Full pass counts out of 26. At n = 26 one case is 3.8 points, so differences of one or two cases
 are noise.
 
-| Model | Full | Task | Hard | Judged | Bangla | 3 at once p50 / p95 ms | One at a time p50 / p95 ms | GPU MB |
+| Model | Full | Task | Hard | Judged | Bangla | 3 at once p50 / p95 ms | One at a time p50 / p95 ms | Card in use, MB ² |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | qwen3:14b | **11** (0.423) | 0.462 | 0.654 | 3.75 | 0.994 | 4807 / 10604 | 2314 / 3381 | 11157 |
 | gemma-3-12b-it | 9 (0.346) | 0.500 | 0.538 | 3.88 | 0.989 | 1087 / 2970 | **517 / 839** | 11970 |
@@ -122,6 +122,10 @@ The row is its re-run without the voice models loaded. Re-run like for like (voi
 loaded), it crashed again (`data/bench/bakeoff-20261125-105613.json`), so it cannot sit beside the
 voice stack on this card and is not a finalist.
 
+² Whole-card memory in use during the model's probe. The bench process never showed on the card,
+so the voice models appear to run off it in the bench; the column is the model plus the
+collector's speech model, not the full voice stack.
+
 **Timing.** "3 at once" is the tool's own probe. Ollama here serves one request at a time, so
 two of the three requests wait in a queue: that column measures queueing, not the model. "One
 at a time" is the same prompts with no queue, and is what a caller hears when no other call is
@@ -130,7 +134,9 @@ batches them instead). The gate below uses the one-at-a-time column. The tool it
 
 **Safety checks.** Every model was grounded (no invented digits), gave no medical advice and
 leaked no other patient's booking. Every model missed the same two emergency cases in the first
-turn, so that miss belongs to the guided engine, not to a model. One booking without a confirmed
+turn; on the full 112 both finalists missed the same 8 of 9. That is mostly the simulated caller:
+gemma-3-4b often opens without saying what is wrong ("আরে, হ্যাঁ?"), so turn 1 has nothing to
+react to. The baseline, whose caller was gemma2-9b, scored 0.96 here. See "Conclusion". One booking without a confirmed
 yes each for gemma-3-12b (`code-switching-booking-morning`) and qwen3:14b+think
 (`code-switching-change-reschedule`). Replayed, the gemma-3-12b one was the check's mistake: the
 caller said "thanks, great", SHEFA asked "was that a yes or no?", the caller said "হ্যাঁ, yes!",
@@ -140,7 +146,8 @@ failure for every model.
 
 ## Thinking on or off
 
-Thinking made both Qwen3 models worse on this bench and far slower:
+Thinking did not help either Qwen3 model, clearly hurt the 8B, and was far slower. The 14B's
+drop (11 → 9) is inside the two-case swing seen between repeated runs of the same model:
 
 | | Full pass | Judged | One at a time p95 |
 | --- | --- | --- | --- |
@@ -194,24 +201,37 @@ Results: `data/bench/bakeoff-20261125-114056.json`. A second run of the 26 cases
 check (`data/bench/bakeoff-20261125-111145.json`) gave gemma-3-12b 11 and gemma2:9b 9; the first
 run gave 9 and 8. The two models trade places between runs: on this engine their quality is the
 same. Neither invented a digit, gave medical advice, leaked a booking or booked without a yes.
+Information-only callers were offered a booking in 5 calls (gemma-3-12b, 0.96) and 2 calls
+(gemma2:9b, 0.98). Each run lacks 5 judgments; the judged mean
+covers the other 107.
 
 **Today's model, served as in production.** gemma2-9b AWQ on vLLM (`shefa-llm`), timed with the
 same prompts (`data/bench/vllm-latency-20261125.json`): first sentence p50 417 ms, **p95 703 ms**
 one at a time and 755 ms three at once (vLLM batches instead of queueing). With the voice's first
-sound (about 85 ms) that is under 0.8 s, inside the 1.2 s gate. Its slow Ollama numbers were
+sound (about 85 ms) that is 0.79 s alone and 0.84 s three at once, inside the 1.2 s gate. Its slow Ollama numbers were
 Ollama's, not the model's.
 
 ## Conclusion
 
-- **Keep gemma2-9b AWQ on vLLM.** No local model beat it on quality here, and as served today it
-  already meets the first-sentence target. Switching to gemma-3-12b would gain nothing measurable
+- **Keep gemma2-9b AWQ on vLLM.** No local model was distinguishably better on quality, and as
+  served today it already meets the first-sentence target. Switching to gemma-3-12b would gain nothing measurable
   and would need a vLLM-ready build and a re-time, and it needs more graphics memory than gemma2.
+- **Ungated quality ranking (26 cases, full pass):** qwen3:14b 11; gemma-3-12b, qwen3:14b+think 9;
+  gemma2:9b, Qwen3-8B, TigerLLM 8; qwen2.5:7b 6; aya-expanse 5; Qwen3-8B+think 2. At n = 26 the
+  top six are within three cases of each other. qwen3:14b had the best hard pass (0.654) but was
+  gated out on Ollama timings (3.4 s p95 alone); on vLLM it might be about twice as fast, which
+  could still miss the gate. It was not run on all 112 cases: that is the one open question.
 - **Thinking stays off** for the receptionist's turns (see "Thinking on or off").
-- **The model is not the bottleneck; the conversation is.** Every model fails the same things:
-  replies too long (brevity fails in about 40% of calls), emergencies not handled in the first
-  turn in the same 8 cases, "my appointments" lookups and reschedules left undone, and English
-  replies to Bangla callers (seen in the replay). These belong to the guided engine, and they are
-  what sub-project 2 (the conversation brain) should fix first. Re-run this bake-off when it lands.
+- **The model is not the bottleneck; the conversation is.** Both finalists fail the same things:
+  replies too long (brevity fails in about 40% of calls), "my appointments" lookups (8 to 11
+  calls) and reschedules (5 to 6) left undone, and information-only callers offered a booking (2
+  to 5). Replies in the wrong language are rare (1 to 2 of 112) but real: a replay showed English
+  replies to a Bangla caller. These belong to the guided engine, and they are what sub-project 2
+  (the conversation brain) should fix first. Re-run this bake-off when it lands.
+- **Emergencies need two fixes.** The bench's caller must say the emergency in its first line
+  (scenarios should fix the opening line), and the engine must react to one said later: in a
+  replay on today's production model, "আমার বাবার খুব ব্যথা" (my father is in great pain) got a
+  list of departments and then a booking offer.
 - The baseline's text turn time (2.2 s p95) times the whole reply, not its first sentence, so it
   is not comparable with the 0.7 s here. Measuring the first sound of a real call end to end is
   sub-project 3's job.
