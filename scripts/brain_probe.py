@@ -56,7 +56,8 @@ REGEN_LIMIT = 0.20
 
 # (id, kind, caller's line, expected tool or None). Kinds: tool (the router must name the tool)
 # and, with no tool, knowledge | doctor | mood | english | talk. None of these lines was used to
-# write or tune the router prompt (that used a separate set, see the 8c report).
+# tune the router prompt (that used a separate set, see the 8c report), but the prompt's three
+# examples are near-copies of k-fee, k-days/e-days and t-book.
 TOOLS: list[tuple[str, str, str, str | None]] = [
     ("t-free", "tool", "কাল সন্ধ্যায় ডাক্তার রহমানের কোন সময় খালি আছে?", "free_times"),
     ("t-free2", "tool", "সোমবার সকালে ডাক্তার সুলতানার কাছে কয়টায় জায়গা আছে?", "free_times"),

@@ -242,7 +242,9 @@ What changed in the brain (Task 8c):
   HTTP response (see "Orphaned generations").
 
 The router prompt was written and tuned on a separate set of 24 lines (15 tool, 9 non-tool, none
-of them in the probe; 24/24 right on the first try) and frozen before the gate ran. The probe's
+of them in the probe; 24/24 right on the first try) and frozen before the gate ran. Its three
+built-in examples are near-copies of probe turns (≈ k-fee, k-days/e-days, t-book); without those
+4 turns the router scores 29/30 right and 2/56 false in both runs. The probe's
 turns: 31 tool turns (4 to 5 per tool, Bangla and English, two emergencies and two "a person,
 please") and 59 non-tool turns (15 knowledge, 10 doctor questions including symptom → doctor,
 10 moods, 16 English, 8 small talk). Each turn is a fresh call (greeting + caller's line).
@@ -307,7 +309,11 @@ sentences (hardware-bound at ~39 tokens/s on this card for gemma2-9b AWQ).
 ("হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলেন।"), s-salam ("আসসালামু আলাইকুম, ভালো আছি।"); "it says yes to something
 the facts do not state" on d-lady (the directory lists a female doctor as `female`). The two
 `fact` ones are the word-form time issue from 8b (m-rushed "রাত ৯টা", e-hours "9 pm"), still open.
-Several of these end in the safe sentence after the second attempt fails the same way.
+Several of these end in the safe sentence after the second attempt fails the same way. The
+refused answers are true per `configs/clinic.example.yaml` (Rahman 18 years, Sultana follow-up
+400 and female, Hossain speaks English), and re-checking the 9 failing first sentences with the
+word-rule goal and with the old directory header gives the same verdicts: this is the checker,
+not 8c's goal override or header.
 
 ### Orphaned generations (found and fixed in 8c)
 
