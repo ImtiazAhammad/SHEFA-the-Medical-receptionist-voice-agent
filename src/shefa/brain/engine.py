@@ -1,10 +1,13 @@
-"""One caller turn: generate, check each sentence, speak what passes, regenerate once if needed.
+"""One caller turn: route, generate, check each sentence, speak what passes, regenerate once.
 
-The model streams; a sentence is spoken the moment it passes the check, so the caller hears the
-first words early. A sentence is held until the text after it shows it is not a tool line,
-because a `TOOL {...}` line is an action for code, never words for the caller, and whatever the
-model wrote before it is dropped. A failing sentence gets one regeneration with the reason, then a
-fixed safe sentence; once something was spoken the reply just stops there.
+Two model calls start together: the router (`shefa.brain.router`, a short JSON-only call that
+names the tool a turn needs, if any) and the reply stream. Nothing of the reply is spoken until
+the router has answered: a named tool closes the reply stream unheard and goes to `_act`; "none"
+(or a router failure) lets the held sentences go and the stream carries on. From then on a
+sentence is spoken the moment it passes the check, so the caller hears the first words early.
+Text that looks like a tool line or JSON is never spoken. A failing sentence gets one
+regeneration with the reason, then a fixed safe sentence; once something was spoken the reply
+just stops there.
 """
 
 from __future__ import annotations
@@ -23,13 +26,17 @@ from shefa.brain.check import Grounds, Verdict, check_sentence
 from shefa.brain.config import call_config
 from shefa.brain.prompt import compose
 from shefa.brain.retrieve import retriever_for
-from shefa.brain.state import Cues, load, save, track
-from shefa.brain.tools import TOOL_PREFIX, ToolCall, ToolLineError, parse_tool_line
+from shefa.brain.router import Route, route
+from shefa.brain.state import Cues, _doctor_named, load, save, track
+from shefa.brain.tools import ToolCall
 from shefa.clinic import default_clinic_store
 from shefa.clinic.brief import directory_brief
 from shefa.clinic.registry import current
 from shefa.clinic.store import clinic_today
 from shefa.config.settings import settings
+from shefa.models.base import Language
+from shefa.pipeline.grounding import parse_date, parse_time
+from shefa.pipeline.language_detector import is_emergency
 from shefa.pipeline.replycheck import tidy
 
 if TYPE_CHECKING:
@@ -40,11 +47,17 @@ if TYPE_CHECKING:
 Speak = Callable[[str], Awaitable[None]]
 
 MAX_SENTENCES = 2
-TOOL_CORRECTION = "Your tool line was not valid JSON. Write it again exactly as the protocol says."
+TOOL_CORRECTION = (
+    "Your last reply held a tool line or JSON, which the caller cannot hear. "
+    "Answer in plain spoken words only."
+)
 CHECK_CORRECTION = "Your last reply was not used because {reason}. Say it again without that."
 REPEAT_FALLBACK = "Sorry, could you say that again?"
 EMERGENCY_NUMBER = "999"
 WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+# Goals that a question asked along the way never replaces (the Task 4 rule in `state._goal`).
+_REAL_GOALS = frozenset({"booking", "change", "lookup", "complaint"})
 
 # "TOOL" as a word, followed by a space or the JSON: the start of a tool line wherever it sits.
 _TOOL_START = re.compile(r"(?<![A-Za-z])TOOL(?=[\s{])")
@@ -61,13 +74,8 @@ class _Attempt:
     verdicts: list[str] = field(default_factory=list)
     failed: Verdict | None = None  # the failure that stopped the stream
     dropped: Verdict | None = None  # the last push/language sentence dropped
-    tool_text: str | None = None
-
-
-def _may_start_tool(text: str) -> bool:
-    """True while the text after a sentence could still turn out to be a tool line."""
-    head = text.lstrip()[: len(TOOL_PREFIX)]
-    return TOOL_PREFIX.startswith(head)
+    tool_text: str | None = None  # tool-like text the model wrote: never spoken
+    routed: bool = False  # the router named a tool: the reply was cut off unheard
 
 
 def _sentences(text: str) -> list[tuple[int, int]]:
@@ -160,6 +168,53 @@ def _history(session: CallSession, said: str) -> tuple[list[dict[str, str]], str
     return turns, previous
 
 
+def _apply_route(state: CallState, before: CallState, found: Route) -> None:
+    """The router's mood and goal for this turn; the word rules stay where it gave none.
+
+    A question along the way never replaces a real goal, and "unknown" or small talk tells
+    nothing new, so those keep the goal the words gave."""
+    if found.mood is not None:
+        state.mood = found.mood
+        state.angry_turns = before.angry_turns + 1 if found.mood == "angry" else 0
+    goal = found.goal
+    if goal is None or goal == "unknown":
+        return
+    if state.goal in _REAL_GOALS and goal not in _REAL_GOALS:
+        return
+    state.goal = goal
+
+
+def _tool_args(name: str, said: str, state: CallState, today: _date) -> dict[str, Any]:
+    """Arguments for a routed tool, for `tools.resolve`.
+
+    The router names only the tool, so the arguments come from code. `track` has already read
+    this line's doctor, day, time, period and name into `state.booking`, and the resolver fills
+    blanks from there, so free_times and book pass nothing: handing the whole line to the time
+    reader would let any number in it ("৫ তারিখে") become a time. cancel passes the line only
+    when it names a day or a doctor; otherwise the executor takes the caller's only booking.
+    reschedule reads the new day and time from the line; it cannot tell "which" from the new day
+    in one sentence, so "which" is left to the executor. hand_over's reason is code's: the
+    clinic's emergency words, else the router's anger, else a request for a person."""
+    if name == "cancel_booking":
+        named = parse_date(said, today) is not None or _doctor_named(said) is not None
+        return {"which": said} if named else {}
+    if name == "reschedule_booking":
+        args = {}
+        if parse_date(said, today) is not None:
+            args["day"] = said
+        if parse_time(said) is not None:
+            args["time"] = said
+        return args
+    if name == "request_callback":
+        return {"reason": said}
+    if name == "hand_over":
+        language = Language.BANGLA if state.language == "bn" else Language.ENGLISH
+        if is_emergency(said, language):
+            return {"reason": "emergency"}
+        return {"reason": "angry" if state.mood == "angry" else "asked_for_person"}
+    return {}
+
+
 class Brain:
     """The conversation engine for one turn at a time; holds nothing between calls (all call
     state lives on the session)."""
@@ -178,8 +233,44 @@ class Brain:
         started = time.monotonic()
         today = today or clinic_today()
         history, previous = _history(session, said)
-        state = track(load(session), said, previous=previous, cues=cues, today=today)
+        before = load(session)
+        state = track(before, said, previous=previous, cues=cues, today=today)
         config = call_config(session)
+        language = state.language
+        router_task = asyncio.create_task(self._route(llm, state, said, history, language))
+        try:
+            return await self._turn(
+                session, said, llm, speak, today, history, before, state, config, router_task,
+                started,
+            )
+        finally:
+            if not router_task.done():
+                router_task.cancel()
+
+    async def _route(
+        self, llm: Any, state: CallState, said: str, history: list[dict[str, str]], language: str
+    ) -> tuple[Route, int]:
+        began = time.monotonic()
+        try:
+            found = await route(llm, state, said, history, language=language)
+        except Exception as exc:  # noqa: BLE001 - route() never raises; a failure is a plain reply
+            found = Route(None, None, None, f"{type(exc).__name__}: {exc}"[:200])
+        return found, int((time.monotonic() - began) * 1000)
+
+    async def _turn(
+        self,
+        session: CallSession,
+        said: str,
+        llm: Any,
+        speak: Speak,
+        today: _date,
+        history: list[dict[str, str]],
+        before: CallState,
+        state: CallState,
+        config: dict[str, Any],
+        router_task: asyncio.Task[tuple[Route, int]],
+        started: float,
+    ) -> str:
         language = state.language
         clinic = current()
         hits = await asyncio.to_thread(lambda: retriever_for(clinic).search(said))
@@ -197,9 +288,31 @@ class Brain:
             "verdicts": [],
             "regenerated": False,
             "safe": None,
+            "route": None,
             "ms": 0,
         }
         spoken: list[str] = []
+        known: list[Route] = []
+
+        async def decided() -> Route:
+            """The router's answer, waited for once; its mood and goal apply from then on."""
+            if not known:
+                found, ms = await router_task
+                _apply_route(state, before, found)
+                trace["mood"], trace["goal"] = state.mood, state.goal
+                trace["route"] = {
+                    "tool": found.tool,
+                    "mood": found.mood,
+                    "goal": found.goal,
+                    "ms": ms,
+                    **({"error": found.error} if found.error else {}),
+                }
+                known.append(found)
+            return known[0]
+
+        async def routed_now() -> bool:
+            """True once the router has named a tool; never waits."""
+            return router_task.done() and (await decided()).tool is not None
 
         async def say_fixed(text: str, kind: str) -> None:
             trace["safe"] = kind
@@ -219,26 +332,25 @@ class Brain:
                 correction=correction,
                 directory_for=lambda n: directory_brief(store, language, max_chars=n),
             )
-            out = await self._stream(llm, messages, grounds, state, speak)
+            out = await self._stream(llm, messages, grounds, state, speak, decided, routed_now)
             trace["verdicts"].extend(out.verdicts)
             spoken.extend(out.spoken)
-            if out.tool_text is not None:
-                try:
-                    call = _parse(out.tool_text)
-                except ToolLineError:
-                    if out.spoken:
-                        break  # the caller already heard a reply; never add a second one
-                    if not last:
-                        correction = TOOL_CORRECTION
-                        continue
-                    await say_fixed(_repeat_prompt(config, language), "tool")
-                    break
+            # Nothing is spoken, retried or replaced before the route is known.
+            found = await decided()
+            if found.tool is not None and not out.spoken:
+                call = ToolCall(found.tool, _tool_args(found.tool, said, state, today))
                 trace["tool"], trace["tool_args"] = call.name, dict(call.args)
                 said_now = await self._act(call, session, state, grounds, speak, today)
                 if said_now:
                     spoken.append(said_now)
                 break
             if out.spoken:
+                break
+            if out.tool_text is not None:
+                if not last:
+                    correction = TOOL_CORRECTION
+                    continue
+                await say_fixed(_repeat_prompt(config, language), "tool")
                 break
             problem = out.failed or out.dropped
             if problem is not None:
@@ -252,6 +364,8 @@ class Brain:
                 continue
             await say_fixed(_repeat_prompt(config, language), "empty")
 
+        if trace["route"] is None:
+            await decided()
         save(session, state)
         trace["ms"] = int((time.monotonic() - started) * 1000)
         session.metadata.setdefault("brain_trace", []).append(trace)
@@ -264,8 +378,13 @@ class Brain:
         grounds: Grounds,
         state: CallState,
         speak: Speak,
+        decided: Callable[[], Awaitable[Route]],
+        routed_now: Callable[[], Awaitable[bool]],
     ) -> _Attempt:
-        """Run one generation: speak each sentence that passes, stop where the rules say."""
+        """Run one generation: speak each sentence that passes, stop where the rules say.
+
+        Each sentence first waits for the route (instant once it is known): a named tool stops
+        the stream with nothing of it spoken."""
         out = _Attempt()
         limit = None if state.asked_list else MAX_SENTENCES
 
@@ -276,6 +395,9 @@ class Brain:
                 return True
             if _TOOL_LIKE.search(text):
                 out.tool_text = text
+                return False
+            if (await decided()).tool is not None and not out.spoken:
+                out.routed = True
                 return False
             verdict = check_sentence(text, grounds, goal=state.goal, language=state.language)
             out.verdicts.append("ok" if verdict.ok else verdict.kind)
@@ -293,27 +415,29 @@ class Brain:
         stream = llm.generate_stream(messages)
         try:
             async for chunk in stream:
+                if not out.spoken and await routed_now():
+                    out.routed = True
+                    return out
                 buffer += chunk
-                if out.tool_text is not None:
-                    out.tool_text += chunk
-                    continue
                 if m := _TOOL_START.search(buffer):
-                    out.tool_text = buffer[m.start() :]  # what came before it is dropped
-                    continue
+                    # Finished sentences before it may still be said; the line itself never is.
+                    head = buffer[: m.start()]
+                    for a, b in _sentences(head):
+                        if not await take(head[a:b]):
+                            return out
+                    out.tool_text = buffer[m.start() :]
+                    return out
                 spans = _sentences(buffer)
-                if spans and _may_start_tool(buffer[spans[-1][1] :]):
-                    spans.pop()  # held until what follows shows it is not a tool line
                 for start, end in spans:
                     if not await take(buffer[start:end]):
                         return out
                 if spans:
                     buffer = buffer[spans[-1][1] :]
-            if out.tool_text is None:
-                spans = _sentences(buffer)
-                tail = buffer[spans[-1][1] :] if spans else buffer
-                for raw in [*(buffer[a:b] for a, b in spans), tail]:
-                    if not await take(raw):
-                        return out
+            spans = _sentences(buffer)
+            tail = buffer[spans[-1][1] :] if spans else buffer
+            for raw in [*(buffer[a:b] for a, b in spans), tail]:
+                if not await take(raw):
+                    return out
             return out
         finally:
             close = getattr(stream, "aclose", None)
@@ -333,12 +457,3 @@ class Brain:
         text = _repeat_prompt(call_config(session), state.language)
         await speak(text)
         return text
-
-
-def _parse(text: str) -> ToolCall:
-    """The tool call in the model's text: its first line, else all of it on one line."""
-    first = text.strip().split("\n", 1)[0]
-    try:
-        return parse_tool_line(first)
-    except ToolLineError:
-        return parse_tool_line(" ".join(text.split()))

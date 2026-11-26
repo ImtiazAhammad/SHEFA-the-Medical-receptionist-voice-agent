@@ -1,13 +1,15 @@
 """The turn loop: stream, check each sentence, speak what passes, regenerate once, else a safe line.
 
 A scripted fake model (one reply per call, streamed in tiny chunks so a word like TOOL arrives in
-pieces) and a recording `speak`; no real model, no network.
+pieces; the router's answer from `generate`) and a recording `speak`; no real model, no network.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import date, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,7 +29,10 @@ FROZEN_NOW = datetime(TODAY.year, TODAY.month, TODAY.day, 8, 0, tzinfo=CLINIC_TZ
 
 FEE_QUESTION = "ডাক্তারের ফি কত?"
 FEE_FACT_BN = "ডাক্তার দেখানোর ফি ৮০০ টাকা।"
-TOOL_RETRY = "Your tool line was not valid JSON. Write it again exactly as the protocol says."
+TOOL_RETRY = (
+    "Your last reply held a tool line or JSON, which the caller cannot hear. "
+    "Answer in plain spoken words only."
+)
 
 
 class _FrozenDatetime(datetime):
@@ -63,14 +68,34 @@ def knowledge():
     return {"fee": fee}
 
 
-class FakeLLM:
-    """Gives the scripted replies in order, three characters at a time."""
+def route_json(tool: str = "none", mood: str = "calm", goal: str = "unknown") -> str:
+    return json.dumps({"tool": tool, "mood": mood, "goal": goal}, separators=(",", ":"))
 
-    def __init__(self, *replies: str, size: int = 3) -> None:
+
+class FakeLLM:
+    """Gives the scripted replies in order, three characters at a time. `route` is the router's
+    answer; without one the router call fails, and the turn goes on as a plain reply."""
+
+    def __init__(
+        self, *replies: str, size: int = 3, route: str | None = None, route_delay: float = 0
+    ) -> None:
         self.replies = list(replies)
         self.size = size
+        self.route = route
+        self.route_delay = route_delay
+        self.routed = False
+        self.route_calls = 0
         self.calls: list[list[dict[str, str]]] = []
         self.closed = 0
+
+    async def generate(self, messages, tools=None, **kwargs):
+        self.route_calls += 1
+        if self.route_delay:
+            await asyncio.sleep(self.route_delay)
+        if self.route is None:
+            raise RuntimeError("no router scripted")
+        self.routed = True
+        return SimpleNamespace(text=self.route)
 
     async def generate_stream(self, messages, tools=None, **kwargs):
         self.calls.append(messages)
@@ -276,56 +301,48 @@ def test_an_unfinished_last_sentence_is_still_spoken():
     assert speak.said == ["ফি ৮০০ টাকা"]
 
 
-# --- tool lines -------------------------------------------------------------------------------
+# --- tool text in a reply (the reply prompt has no tool protocol; the router decides) ---------
 
 TOOL_LINE = 'TOOL {"name": "free_times", "args": {"doctor": "Dr. Rahman", "day": "আগামীকাল?"}}'
 
 
 @pytest.mark.parametrize("size", [1, 2, 3, 7, 200])
-def test_a_tool_line_is_never_spoken(size):
+def test_a_tool_line_in_a_reply_is_never_spoken_nor_acted_on(size):
+    # Changed in 8c: a TOOL line from the talker used to be parsed and acted on; now only the
+    # router names tools, so the line is unspeakable text and the reply is asked for again.
     session = _session("কাল রহমান স্যার কখন বসবেন?")
-    llm = FakeLLM(TOOL_LINE, size=size)
+    llm = FakeLLM(TOOL_LINE, TOOL_LINE, size=size)
     speak = Recorder()
     _turn(session, "কাল রহমান স্যার কখন বসবেন?", llm, speak)
     assert speak.said == [settings.escalation.repeat_prompt["bn"]]
+    assert TOOL_RETRY in _system(llm.calls[1])
     trace = session.metadata["brain_trace"][-1]
-    assert trace["tool"] == "free_times"
-    assert trace["tool_args"] == {"doctor": "Dr. Rahman", "day": "আগামীকাল?"}
+    assert trace["tool"] is None and trace["tool_args"] is None
+    assert trace["safe"] == "tool"
 
 
 @pytest.mark.parametrize("size", [1, 3, 200])
-def test_text_before_a_tool_line_is_dropped(size):
+def test_a_sentence_before_a_tool_line_is_spoken_and_the_line_is_not(size):
+    # Changed in 8c: with the hold gone, a finished sentence before a tool line is spoken
+    # (whatever the chunk size), and the stream stops at the line.
     session = _session("কাল রহমান স্যার কখন বসবেন?")
-    llm = FakeLLM("জি। " + TOOL_LINE, size=size)
+    llm = FakeLLM("জি। " + TOOL_LINE, "unused", size=size)
     speak = Recorder()
     _turn(session, "কাল রহমান স্যার কখন বসবেন?", llm, speak)
-    assert speak.said == [settings.escalation.repeat_prompt["bn"]]
-    assert not any("TOOL" in s or "{" in s for s in speak.said)
-    assert session.metadata["brain_trace"][-1]["tool"] == "free_times"
+    assert speak.said == ["জি।"]
+    assert len(llm.calls) == 1
+    assert session.metadata["brain_trace"][-1]["tool"] is None
 
 
-def test_a_broken_tool_line_is_regenerated_with_the_tool_correction():
-    session = _session("কাল রহমান স্যার কখন বসবেন?")
-    llm = FakeLLM('TOOL {"name": "free_times", "args": {', TOOL_LINE)
+def test_a_broken_tool_line_is_regenerated_with_the_plain_words_correction():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM('TOOL {"name": "free_times", "args": {', "ফি ৮০০ টাকা।")
     speak = Recorder()
-    _turn(session, "কাল রহমান স্যার কখন বসবেন?", llm, speak)
+    _turn(session, FEE_QUESTION, llm, speak)
     assert len(llm.calls) == 2
     assert TOOL_RETRY in _system(llm.calls[1])
-    assert not any("TOOL" in s or "{" in s for s in speak.said)
-    trace = session.metadata["brain_trace"][-1]
-    assert trace["regenerated"] is True
-    assert trace["tool"] == "free_times"
-
-
-def test_two_broken_tool_lines_ask_again():
-    session = _session("কাল রহমান স্যার কখন বসবেন?")
-    llm = FakeLLM("TOOL {oops", 'TOOL {"name": "nope"}')
-    speak = Recorder()
-    _turn(session, "কাল রহমান স্যার কখন বসবেন?", llm, speak)
-    assert speak.said == [settings.escalation.repeat_prompt["bn"]]
-    trace = session.metadata["brain_trace"][-1]
-    assert trace["tool"] is None
-    assert trace["safe"] == "tool"
+    assert speak.said == ["ফি ৮০০ টাকা।"]
+    assert session.metadata["brain_trace"][-1]["regenerated"] is True
 
 
 def test_a_word_that_starts_like_tool_is_spoken():
@@ -425,6 +442,7 @@ def test_state_is_saved_and_the_trace_has_exactly_the_listed_keys(knowledge):
         "verdicts",
         "regenerated",
         "safe",
+        "route",
         "ms",
     }
     assert trace["turn"] == 1
@@ -478,7 +496,8 @@ def test_a_broken_tool_line_after_a_spoken_sentence_stops_without_regenerating()
     llm = FakeLLM("There is parking behind the clinic. Let me check.\nTOOL {broken", "unused")
     speak = Recorder()
     _turn(session, said, llm, speak)
-    assert speak.said == ["There is parking behind the clinic."]
+    # Changed in 8c: "Let me check." is no longer held back waiting to see if a tool line follows.
+    assert speak.said == ["There is parking behind the clinic.", "Let me check."]
     assert len(llm.calls) == 1
     assert session.metadata["brain_trace"][-1]["regenerated"] is False
 
@@ -499,3 +518,227 @@ def test_a_list_asked_for_lifts_the_sentence_limit_for_that_turn_only():
     speak = Recorder()
     _turn(session, FEE_QUESTION, llm, speak)
     assert speak.said == ["জি।", "ফি ৮০০ টাকা।"]
+
+
+# --- the router beside the reply ---------------------------------------------------------------
+
+
+class Acted:
+    """Stands in for `Brain._act` (still a stub until Task 9) and records what reached it."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def __call__(self, brain, call, session, state, grounds, speak, today):
+        self.calls.append((call, state))
+        await speak("ACTED")
+        return "ACTED"
+
+
+@pytest.fixture
+def acted_brain(monkeypatch):
+    recorder = Acted()
+
+    async def fake(self, call, session, state, grounds, speak, today):
+        return await recorder(self, call, session, state, grounds, speak, today)
+
+    monkeypatch.setattr(Brain, "_act", fake)
+    return recorder
+
+
+def test_a_none_route_speaks_the_reply():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "calm", "information"))
+    speak = Recorder()
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert speak.said == ["ফি ৮০০ টাকা।"]
+    assert llm.route_calls == 1
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert (route["tool"], route["mood"], route["goal"]) == (None, "calm", "information")
+    assert isinstance(route["ms"], int)
+
+
+def test_sentences_are_held_until_the_router_answers():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা। আর কিছু?", route=route_json(), route_delay=0.05)
+    heard_after_route = []
+
+    async def speak(text):
+        heard_after_route.append(llm.routed)
+
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert heard_after_route == [True, True]
+
+
+def test_a_routed_tool_cancels_the_reply_and_acts(acted_brain):
+    said = "কাল বিকেল ৫টায় রহমান স্যারের সিরিয়াল দিন"
+    session = _session(said)
+    llm = FakeLLM("ফি ৮০০ টাকা। আর কিছু?", "unused", route=route_json("book", "calm", "booking"))
+    speak = Recorder()
+
+    async def run():
+        await Brain().turn(session, said, llm, speak, today=TODAY)
+        return llm.closed
+
+    closed = asyncio.run(run())
+    assert speak.said == ["ACTED"]  # nothing of the reply was spoken
+    assert closed == 1 and len(llm.calls) == 1  # the reply stream was closed, never retried
+    call, _state = acted_brain.calls[0]
+    assert call.name == "book"
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["tool"] == "book"
+    assert trace["route"]["tool"] == "book"
+
+
+def test_a_failed_check_waits_for_the_route_and_a_tool_route_skips_the_regeneration(acted_brain):
+    said = "কাল রহমান স্যারের সিরিয়াল দিন"
+    session = _session(said)
+    llm = FakeLLM(
+        "ফি ৫০০ টাকা।", "ফি ৬০০ টাকা।", route=route_json("book", "calm", "booking"), route_delay=0.05
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert len(llm.calls) == 1
+    assert speak.said == ["ACTED"]
+    assert session.metadata["brain_trace"][-1]["regenerated"] is False
+
+
+def test_a_router_failure_is_a_plain_reply_and_the_reason_is_traced():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।")  # no router answer: the call raises
+    speak = Recorder()
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert speak.said == ["ফি ৮০০ টাকা।"]
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert route["tool"] is None
+    assert "no router scripted" in route["error"]
+
+
+def test_the_router_runs_once_per_turn_even_with_a_regeneration():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৫০০ টাকা।", "ফি ৮০০ টাকা।", route=route_json())
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert llm.route_calls == 1
+    assert len(llm.calls) == 2
+
+
+def test_router_mood_and_goal_override_the_word_rules():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "angry", "complaint"))
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    trace = session.metadata["brain_trace"][-1]
+    assert (trace["mood"], trace["goal"]) == ("angry", "complaint")
+    saved = session.metadata["brain"]
+    assert (saved["mood"], saved["goal"], saved["angry_turns"]) == ("angry", "complaint", 1)
+
+
+def test_the_router_goal_steers_the_push_check():
+    # The words alone track "booking" (a doctor and a day), the router hears a question: the push
+    # sentence is dropped because the check runs with the router's goal.
+    said = "রহমান স্যার কাল বসবেন?"
+    session = _session(said)
+    llm = FakeLLM(
+        "জি, বলছি। সিরিয়াল দিয়ে দেব? আর কিছু?",
+        route=route_json("none", "calm", "information"),
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["জি, বলছি।", "আর কিছু?"]
+
+
+def test_information_from_the_router_never_replaces_a_booking_goal():
+    session = _session(FEE_QUESTION)
+    save(session, CallState(goal="booking"))
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "calm", "information"))
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["goal"] == "booking"
+
+
+def test_an_unknown_goal_from_the_router_keeps_the_word_goal():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "calm", "unknown"))
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["goal"] == "information"
+
+
+# --- the arguments a routed tool gets ----------------------------------------------------------
+
+
+@pytest.fixture
+def rahman():
+    clinic = default_clinic_store()
+    dept = clinic.add_department("Cardiology", "হৃদরোগ")
+    doctor = clinic.add_doctor("Rahman", dept, name_bn="রহমান")
+    for weekday in range(7):
+        clinic.add_schedule(doctor, weekday, "16:00", "19:00", 30)
+    return doctor
+
+
+def _routed(said, tool, *, patient=None, mood="calm", acted=None):
+    session = _session(said)
+    if patient is not None:
+        session.patient_id = str(patient)
+    llm = FakeLLM("unused", route=route_json(tool, mood, "booking"))
+    _turn(session, said, llm, Recorder())
+    return session, acted.calls[-1]
+
+
+def test_book_args_are_left_to_the_state_and_resolve(rahman, acted_brain):
+    from shefa.brain.tools import Resolved, resolve
+
+    said = "আমার নাম করিম, কাল বিকেল ৫টায় ডাক্তার রহমানের কাছে সিরিয়াল দিন"
+    patient = default_clinic_store().upsert_patient("01712345678")
+    session, (call, state) = _routed(said, "book", patient=patient, acted=acted_brain)
+    assert call.args == {}
+    resolved = resolve(call, session, state, today=TODAY)
+    assert isinstance(resolved, Resolved)
+    assert resolved.args["date"] == "2026-11-26"
+    assert resolved.args["time"] == "17:00"
+    assert resolved.args["doctor_id"] == rahman
+
+
+def test_free_times_args_are_left_to_the_state_and_resolve(rahman, acted_brain):
+    from shefa.brain.tools import Resolved, resolve
+
+    said = "কাল সন্ধ্যায় ডাক্তার রহমানের কোন সময় খালি আছে?"
+    session, (call, state) = _routed(said, "free_times", acted=acted_brain)
+    assert call.args == {}
+    resolved = resolve(call, session, state, today=TODAY)
+    assert isinstance(resolved, Resolved)
+    assert resolved.args["date"] == "2026-11-26"
+    assert resolved.args["doctor_id"] == rahman
+
+
+def test_cancel_names_which_only_when_the_line_names_a_day_or_doctor(rahman, acted_brain):
+    named = "ডাক্তার রহমানের সাথে আমার সিরিয়ালটা বাতিল করতে চাই"
+    _, (call, _) = _routed(named, "cancel_booking", acted=acted_brain)
+    assert call.args == {"which": named}
+    _, (call, _) = _routed("আমার সিরিয়ালটা বাতিল করুন", "cancel_booking", acted=acted_brain)
+    assert call.args == {}
+
+
+def test_callback_reason_is_the_callers_line(acted_brain):
+    said = "রিপোর্ট নিয়ে কেউ আমাকে পরে ফোন করবেন?"
+    _, (call, _) = _routed(said, "request_callback", acted=acted_brain)
+    assert call.args == {"reason": said}
+
+
+@pytest.mark.parametrize(
+    ("said", "mood", "reason"),
+    [
+        ("I have severe chest pain", "anxious", "emergency"),
+        ("Just put me through to a person", "angry", "angry"),
+        ("Can I talk to someone at the desk?", "calm", "asked_for_person"),
+    ],
+)
+def test_hand_over_reason_is_decided_by_code(said, mood, reason, acted_brain):
+    _, (call, _) = _routed(said, "hand_over", mood=mood, acted=acted_brain)
+    assert call.args == {"reason": reason}
+
+
+def test_reschedule_reads_the_new_day_and_time_from_the_line(rahman, acted_brain):
+    said = "Please move my appointment to tomorrow at 5 pm"
+    _, (call, _) = _routed(said, "reschedule_booking", acted=acted_brain)
+    assert call.args == {"day": said, "time": said}
+    _, (call, _) = _routed("Can you move my appointment?", "reschedule_booking", acted=acted_brain)
+    assert call.args == {}
