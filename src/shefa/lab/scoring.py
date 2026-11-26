@@ -228,9 +228,10 @@ async def run_scorecard(
     previous_audit = getattr(audit, "_default_audit_store", None)
     # Lab calls write audit rows like real calls; they go to the bench's own file, never to
     # the clinic's database.
-    isolated = isolate(work, getattr(args, "engine", None))
-    audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
+    isolated: _Isolated | None = None
     try:
+        isolated = isolate(work, getattr(args, "engine", None))
+        audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
         if agent is not None:
             registry.use_llm(agent)  # None: the registry builds the configured model itself
         label = model or _configured_label()
@@ -269,7 +270,7 @@ async def run_scorecard(
             "speech": bool(args.speech),
             "tags": getattr(args, "tags", "") or "",
             "started": started,
-            "engine": isolated.engine,
+            "engine": _current_engine(),
         }
         card = scorecard.build(results, judged, meta)
         if human is not None:
@@ -284,7 +285,8 @@ async def run_scorecard(
             owned.append(registry._llm)  # noqa: SLF001 - the configured model this run caused
             registry.use_llm(None)
         audit.set_default_audit_store(previous_audit)
-        isolated.restore()
+        if isolated is not None:
+            isolated.restore()
         for built in owned:
             with contextlib.suppress(Exception):
                 await built.close()
@@ -368,6 +370,13 @@ def _isolated(
 
     undo.append(put_back_calls)
     return _Isolated(settings.pipeline.engine, undo)
+
+
+def _current_engine() -> str:
+    """The engine this run answers with (`--engine`, or the configured one)."""
+    from shefa.config.settings import settings
+
+    return settings.pipeline.engine
 
 
 def _configured_label() -> str:

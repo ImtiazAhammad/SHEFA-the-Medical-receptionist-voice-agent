@@ -12,7 +12,10 @@ import asyncio
 import contextlib
 import copy
 import random
+import sqlite3
 import struct
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -21,8 +24,10 @@ import pytest
 
 from shefa.audio import AudioFrame
 from shefa.brain import actions as brain_actions
+from shefa.brain import config as brain_config
 from shefa.brain import engine as brain_engine
 from shefa.brain import greeting as brain_greeting
+from shefa.brain import safe
 from shefa.brain.engine import Brain
 from shefa.brain.state import CallState, load, save
 from shefa.clinic import default_clinic_store
@@ -31,7 +36,7 @@ from shefa.models.base import Language, LLMResult, StreamEvent, STTResult
 from shefa.models.registry import registry
 from shefa.pipeline.error_taxonomy import MalformedLLMOutputError
 from shefa.pipeline.voice_pipeline import VoicePipeline
-from shefa.session.manager import CallSession
+from shefa.session.manager import CallSession, SessionManager
 from tests.unit.test_brain_actions import (  # noqa: F401 - fixtures used by name
     BOOK_LINE,
     BOOKED,
@@ -140,6 +145,7 @@ def test_a_read_back_cut_off_by_a_barge_in_is_not_left_waiting_for_a_yes(executo
 
 
 GUIDED_REPLY = "guided says this"
+_REAL_GUIDED_REPLY = VoicePipeline._reply  # before any test stubs it
 
 
 def _connection_error() -> openai.APIConnectionError:
@@ -225,12 +231,13 @@ def test_only_exactly_agent_selects_the_brain(held, engine):
     assert VoicePipeline._engine(session) == engine
 
 
-def test_the_engine_is_read_once_per_call(monkeypatch):
+async def test_the_engine_is_read_once_per_call(monkeypatch):
     monkeypatch.setattr(settings.pipeline, "engine", "agent")
     session = CallSession(call_sid="CA-frozen")
-    assert VoicePipeline._engine(session) == "agent"
+    assert await VoicePipeline()._engine_ready(session) == "agent"
     monkeypatch.setattr(settings.pipeline, "engine", "guided")
-    assert VoicePipeline._engine(session) == "agent"  # frozen in metadata["brain_config"]
+    assert await VoicePipeline()._engine_ready(session) == "agent"  # frozen for the call
+    assert VoicePipeline._engine(session) == "agent"
 
 
 async def test_a_typed_turn_goes_through_the_brain_with_the_history_string(agent):
@@ -273,14 +280,33 @@ async def test_review_focus_5_a_brain_failing_after_it_spoke_keeps_what_was_said
     assert "brain_fallbacks" not in session.metadata
 
 
-async def test_any_other_brain_error_is_a_failed_turn_as_before(agent):
-    FakeBrain.lines, FakeBrain.error = [], ValueError("a bug")
+async def test_a_brain_bug_before_it_speaks_gets_the_guided_reply_and_a_traceback(agent, caplog):
+    # Fix round 1, ruling 3: any Exception before speech (a bug too) never silences the turn.
+    FakeBrain.lines, FakeBrain.error = [], KeyError("slot")
     pipe = VoicePipeline()
-    with pytest.raises(ValueError):
-        await pipe.handle_text("CA-bug", "ফি কত?")
-    assert agent.guided == []
+    with caplog.at_level("ERROR"):
+        out = await pipe.handle_text("CA-bug", "ফি কত?")
+    assert out["reply"] == GUIDED_REPLY and agent.guided == ["ফি কত?"]
+    assert any(r.exc_info and r.exc_info[0] is KeyError for r in caplog.records)
     session = await pipe.session_for("CA-bug")
-    assert [t.role for t in session.history] == ["assistant"]  # resendable, as for guided
+    assert session.metadata["brain_fallbacks"] == 1
+
+
+async def test_a_brain_bug_after_it_spoke_ends_the_turn_there(agent):
+    FakeBrain.lines, FakeBrain.error = ["জি।"], KeyError("slot")
+    out = await VoicePipeline().handle_text("CA-bug2", "ফি কত?")
+    assert out["reply"] == "জি।" and agent.guided == []
+
+
+async def test_a_voice_failure_still_goes_to_the_voice_rescue(agent):
+    from shefa.pipeline.voice_pipeline import _SynthesisError
+
+    FakeBrain.lines, FakeBrain.error = [], _SynthesisError("tts down")
+    session = CallSession(call_sid="CA-tts", language=Language.BANGLA)
+    session.add_turn("user", "ফি কত?")
+    with pytest.raises(_SynthesisError):
+        await VoicePipeline()._generate_reply(_QuietLLM(), _SilentVoice(), session, _sink)
+    assert agent.guided == []
 
 
 async def test_a_fallback_voids_the_brains_open_read_back(agent):
@@ -300,14 +326,13 @@ async def test_a_fallback_voids_the_brains_open_read_back(agent):
 async def test_a_brain_turn_voids_the_guided_engines_open_questions(agent):
     session = CallSession(call_sid="CA-void2", language=Language.BANGLA)
     session.metadata.update(
-        pending={"name": "book_appointment", "arguments": {}, "preview": {}},
         offer={"name": "book_appointment", "arguments": {}},
         choices={"doctor_id": 1, "times": ["10:00", "10:30"], "turns_left": 2},
         guided={"step": "confirm"},
     )
     session.add_turn("user", "হ্যাঁ")
     await VoicePipeline()._generate_reply(_QuietLLM(), _SilentVoice(), session, _sink)
-    for key in ("pending", "offer", "choices", "guided"):
+    for key in ("offer", "choices", "guided"):
         assert key not in session.metadata
 
 
@@ -393,12 +418,11 @@ async def test_the_real_brain_and_the_pipeline_agree_on_a_cut_off_turn(monkeypat
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
         await turn
-    assert [t.content for t in session.history] == ["স্বাগতম।"]
-    assert (
-        "brain_trace" not in session.metadata
-        and "brain" not in session.metadata
-        or (load(session).turn == 0)
-    )
+    # Fix round 1, ruling 9: like guided, the reply path keeps the caller's line on a cut-off
+    # (the turn deadline); only a typed chat's cancelled request drops it (see below).
+    assert [t.content for t in session.history] == ["স্বাগতম।", "ফি কত?"]
+    assert "brain_trace" not in session.metadata
+    assert load(session).turn == 0
 
 
 # --- greeting and closing -----------------------------------------------------------------------
@@ -540,22 +564,22 @@ async def test_the_real_brain_cut_off_after_a_sentence_is_kept_on_both_sides(mon
     session.add_turn("user", "হ্যালো")
     llm = FakeLLM("জি, বলুন। কীভাবে সাহায্য করতে পারি?", route=route_json())
 
+    second = asyncio.Event()
+
     class _Voice:
         def __init__(self):
             self.played = []
 
         async def synthesize_stream(self, text, language="en"):
             if self.played:
+                second.set()
                 await asyncio.Event().wait()  # the caller barges in on the second sentence
             self.played.append(text)
             yield AudioFrame(b"\x00" * 320, rate=8000)
 
     voice = _Voice()
     turn = asyncio.create_task(VoicePipeline()._generate_reply(llm, voice, session, _sink))
-    while len(voice.played) < 1 or llm.closed == 0 and len(llm.calls) == 0:
-        await asyncio.sleep(0.001)
-    for _ in range(50):
-        await asyncio.sleep(0.001)
+    await asyncio.wait_for(second.wait(), timeout=5)
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
         await turn
@@ -592,3 +616,281 @@ async def test_the_real_brain_failing_after_a_sentence_ends_the_turn_there(monke
     assert reply == "জি, বলুন।" and guided == []
     assert "brain_fallbacks" not in session.metadata
     assert session.metadata["brain_trace"][-1]["error"].startswith("APIConnectionError")
+
+
+# --- fix round 1 -------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def locked_platform(tmp_path, monkeypatch):
+    """The platform database held by another writer (rollback journal), nothing opened yet."""
+    path = tmp_path / "locked" / "shefa.db"
+    path.parent.mkdir()
+    writer = sqlite3.connect(str(path))
+    writer.execute("PRAGMA journal_mode=DELETE")
+    writer.execute("CREATE TABLE t (x)")
+    writer.commit()
+    writer.execute("BEGIN EXCLUSIVE")
+    monkeypatch.setattr(settings.storage, "db_path", str(path))
+    brain_config.set_default_config_store(None)
+
+    async def release() -> None:
+        """Let the writer go and wait for the read that timed out, still in its thread."""
+        writer.rollback()
+        deadline = time.monotonic() + 6
+        while brain_config._default_config_store is None and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+
+    yield SimpleNamespace(path=path, release=release)
+    writer.rollback()
+    writer.close()
+
+
+async def test_a_locked_platform_database_never_holds_the_greeting(locked_platform, monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    session = CallSession(call_sid="CA-locked")
+    began = time.monotonic()
+    greeting = await VoicePipeline()._opening(session, "fixed")
+    assert greeting == "fixed"
+    assert time.monotonic() - began < settings.brain.greeting_timeout_s
+    assert session.metadata["brain_config"] == {"engine": "guided"}  # frozen for the call
+    await locked_platform.release()
+
+
+async def test_a_locked_platform_database_never_holds_a_guided_turn(locked_platform, monkeypatch):
+    async def guided_reply(self, llm, tts, session, put_playback):
+        return GUIDED_REPLY
+
+    monkeypatch.setattr(VoicePipeline, "_reply", guided_reply)
+    monkeypatch.setattr(registry, "_llm", _QuietLLM())
+    pipe = VoicePipeline()
+    began = time.monotonic()
+    first = await pipe.handle_text("CA-locked2", "ফি কত?")
+    second = await pipe.handle_text("CA-locked2", "আচ্ছা")
+    assert first["reply"] == second["reply"] == GUIDED_REPLY
+    assert time.monotonic() - began < 1.5  # one bounded read (0.5 s) for the whole call
+    await locked_platform.release()
+
+
+async def test_a_failed_config_read_never_flips_the_call_later(monkeypatch):
+    class Broken:
+        reads = 0
+
+        def live_values(self, scope="platform"):
+            Broken.reads += 1
+            raise sqlite3.DatabaseError("malformed")
+
+    monkeypatch.setattr(settings.pipeline, "engine", "guided")
+    brain_config.set_default_config_store(Broken())
+    pipe = VoicePipeline()
+    session = CallSession(call_sid="CA-flip")
+    assert await pipe._engine_ready(session) == "guided"
+    # The store recovers with a live "agent" row: the call that began guided stays guided.
+    healthy = brain_config.ConfigStore(Path(settings.storage.db_path).parent / "ok.db")
+    healthy.publish(healthy.draft("engine", "agent", author="t"), author="t")
+    brain_config.set_default_config_store(healthy)
+    assert await pipe._engine_ready(session) == "guided"
+    assert Broken.reads == 1
+
+
+async def test_a_guided_call_freezes_only_its_engine_an_agent_call_the_whole_snapshot(
+    monkeypatch,
+):
+    pipe = VoicePipeline()
+    monkeypatch.setattr(settings.pipeline, "engine", "guided")
+    guided_call = CallSession(call_sid="CA-g")
+    await pipe._engine_ready(guided_call)
+    assert guided_call.metadata["brain_config"] == {"engine": "guided"}
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    brain_config._clear_cache()  # the snapshot cache would hold the guided read for 5 s
+    agent_call = CallSession(call_sid="CA-a")
+    await pipe._engine_ready(agent_call)
+    assert agent_call.metadata["brain_config"]["engine"] == "agent"
+    assert agent_call.metadata["brain_config"]["prompt.persona"]
+
+
+async def test_a_greeting_that_fails_any_way_is_the_fixed_one(agent, monkeypatch):
+    async def broken():
+        raise RuntimeError("no model")
+
+    monkeypatch.setattr(registry, "get_llm", broken)
+    assert await VoicePipeline()._opening(CallSession(call_sid="CA-g2"), "fixed") == "fixed"
+
+
+async def test_a_yes_to_the_fallbacks_read_back_books(agent, monkeypatch):
+    """Ruling 4: the guided fallback ended on a read-back, so guided hears the answer."""
+    from shefa.tools.executor import preview_action
+
+    monkeypatch.setattr(settings.pipeline.llm, "tool_calls", False)
+    pipe = VoicePipeline()
+    store = default_clinic_store()
+    session = await pipe._session_manager.get_or_create("CA-lost")
+    session.patient_id = str(store.upsert_patient("01712345678", "করিম"))
+    rahman = next(d for d in store.doctors() if d["name_en"] == "Rahman")
+    args = {"doctor_id": rahman["id"], "doctor_name": "Rahman", "date": "2026-11-26",
+            "time": "18:00"}  # fmt: skip
+    preview = await preview_action("book_appointment", args, session)
+    assert "preview" in preview
+
+    async def guided_reads_back(self, llm, tts, session, put_playback):
+        session.metadata["pending"] = {
+            "name": "book_appointment", "arguments": args, "preview": preview["preview"],
+        }  # fmt: skip
+        return "ডাক্তার রহমান, কাল সন্ধ্যা ৬টা। ঠিক আছে?"
+
+    monkeypatch.setattr(VoicePipeline, "_reply", guided_reads_back)
+    FakeBrain.lines, FakeBrain.error = [], _connection_error()
+    await pipe.handle_text("CA-lost", "কাল সন্ধ্যা ৬টায় ডাক্তার রহমান")
+    assert "pending" in session.metadata
+    # The brain would answer the "yes" now; it must not get the turn.
+    monkeypatch.setattr(VoicePipeline, "_reply", _REAL_GUIDED_REPLY)
+    FakeBrain.error = None
+    FakeBrain.seen = []
+    out = await pipe.handle_text("CA-lost", "হ্যাঁ")
+    assert FakeBrain.seen == []
+    assert "book_appointment" in out["actions"]
+    patient = store.upsert_patient("01712345678")
+    assert [a["start_time"] for a in store.appointments_for_patient(patient)] == ["18:00"]
+    assert "pending" not in session.metadata
+    FakeBrain.seen = []
+    await pipe.handle_text("CA-lost", "ধন্যবাদ")
+    assert FakeBrain.seen  # the read-back settled: the brain answers again
+
+
+class _JsonSessions(SessionManager):
+    """Sessions kept as JSON, as on Redis: every `get` is a fresh copy, only `save` persists."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.saved: dict[str, str] = {}
+
+    async def get(self, call_sid):
+        import json
+
+        raw = self.saved.get(call_sid)
+        return CallSession.from_dict(json.loads(raw)) if raw else None
+
+    async def save(self, session):
+        import json
+
+        self.saved[session.call_sid] = json.dumps(session.to_dict())
+
+
+async def test_a_cancelled_typed_turn_is_saved_on_a_json_session_store(agent):
+    class Books(FakeBrain):
+        holding = asyncio.Event()
+
+        async def turn(self, session, said, llm, speak, **kw):
+            await speak("জি, হয়ে গেছে।")
+            session.metadata["brain_trace"] = [{"cancelled": True}]
+            session.metadata["brain"] = {"pending": None, "done": [{"kind": "book"}]}
+            Books.holding.set()
+            await asyncio.Event().wait()
+
+    import shefa.brain.engine as eng
+
+    original = eng.Brain
+    eng.Brain = Books
+    try:
+        sessions = _JsonSessions()
+        pipe = VoicePipeline(sessions)
+        turn = asyncio.create_task(pipe.handle_text("CA-redis", "হ্যাঁ"))
+        await asyncio.wait_for(Books.holding.wait(), timeout=5)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+    finally:
+        eng.Brain = original
+    stored = await sessions.get("CA-redis")
+    assert stored.metadata["brain"]["done"] == [{"kind": "book"}]  # the booking is remembered
+    assert [(t.role, t.content) for t in stored.history][-2:] == [
+        ("user", "হ্যাঁ"),
+        ("assistant", "জি, হয়ে গেছে।"),
+    ]
+
+
+async def test_a_fallback_after_a_saved_call_back_says_so_and_saves_no_second(agent):
+    class Saves(FakeBrain):
+        async def turn(self, session, said, llm, speak, **kw):
+            session.metadata.setdefault(brain_actions.SUCCEEDED, []).append("request_callback")
+            session.metadata.setdefault("brain_trace", []).append({"error": "x"})
+            raise _connection_error()
+
+    import shefa.brain.engine as eng
+
+    original, eng.Brain = eng.Brain, Saves
+    try:
+        out = await VoicePipeline().handle_text("CA-cb", "আমাকে ফোন করবেন")
+    finally:
+        eng.Brain = original
+    assert out["reply"] == safe.callback_saved("bn")
+    assert agent.guided == []  # the guided path would route the line and save it again
+
+
+async def test_a_fallback_after_a_transfer_says_the_transfer(agent):
+    class Transfers(FakeBrain):
+        async def turn(self, session, said, llm, speak, **kw):
+            session.metadata.setdefault(brain_actions.SUCCEEDED, []).append("hand_over")
+            session.state = "escalated"
+            session.metadata.setdefault("brain_trace", []).append({"error": "x"})
+            raise _connection_error()
+
+    import shefa.brain.engine as eng
+
+    original, eng.Brain = eng.Brain, Transfers
+    try:
+        out = await VoicePipeline().handle_text("CA-tr", "আমার একটা সমস্যা আছে")
+    finally:
+        eng.Brain = original
+    assert out["reply"] == safe.connecting("bn") and out["state"] == "escalated"
+    assert agent.guided == []
+
+
+async def test_a_cancel_during_the_transfer_counts_as_handed_over(monkeypatch):
+    from shefa.telephony import control as control_module
+    from shefa.tools.executor import execute_tool
+
+    started = asyncio.Event()
+
+    async def slow_transfer(call_sid, to):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(control_module.control, "transfer", slow_transfer)
+    monkeypatch.setattr(settings.escalation, "on_call_numbers", ["01700000000"])
+    monkeypatch.setattr(settings.escalation, "hold_audio_url", "")
+    session = CallSession(call_sid="CA-xfer")
+    turn = asyncio.create_task(execute_tool("transfer_to_human", {"reason": "x"}, session))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    assert session.state == "escalated"  # the PBX may already have moved the call
+
+
+async def test_the_turn_deadline_keeps_the_callers_line_on_a_spoken_call(agent, monkeypatch):
+    FakeBrain.lines, FakeBrain.hang = [], True
+    monkeypatch.setattr(settings.pipeline, "turn_deadline_s", 0.2)
+    monkeypatch.setattr(registry, "_stt", _STT())
+    monkeypatch.setattr(registry, "_tts", _SilentVoice())
+    pipe = VoicePipeline()
+    rescued = asyncio.Event()
+
+    async def no_wait(delay):
+        rescued.set()
+
+    pipe._sleep = no_wait
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    task = asyncio.create_task(pipe.process_audio_stream("SID-DEADLINE", queue, _sink))
+    for _ in range(10):
+        await queue.put(_pcm(200.0, 0))
+    for _ in range(12):
+        await queue.put(_pcm(3000.0, 1))
+        await asyncio.sleep(0.01)
+    await asyncio.wait_for(rescued.wait(), timeout=5)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    session = await pipe.session_for("SID-DEADLINE")
+    assert session.history[-1].role == "user"
+    assert session.history[-1].content == "আর কিছু না, ধন্যবাদ"

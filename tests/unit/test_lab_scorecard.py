@@ -59,8 +59,13 @@ def test_build_counts_hard_and_judged():
     assert card["judged"]["mean"] == 3.0
     assert card["judged"]["by_dimension"]["warmth"] == 4.0
     assert card["judged"]["by_dimension"]["natural_bangla"] is None
-    assert card["scenarios"]["a"] == {"passed": True, "failed": [], "judge_mean": 3.0}
-    assert card["scenarios"]["b"] == {"passed": False, "failed": ["grounded"], "judge_mean": None}
+    assert card["scenarios"]["a"] == {
+        "passed": True, "failed": [], "judge_mean": 3.0, "brain_fallbacks": 0,
+    }  # fmt: skip
+    assert card["brain_fallbacks"] == 0
+    assert card["scenarios"]["b"] == {
+        "passed": False, "failed": ["grounded"], "judge_mean": None, "brain_fallbacks": 0,
+    }  # fmt: skip
 
 
 def test_older_scenario_checks_do_not_count_as_hard():

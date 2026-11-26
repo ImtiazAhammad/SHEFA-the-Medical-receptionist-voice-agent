@@ -85,6 +85,17 @@ def transfer_failed(language: str) -> str:
     return _pick(_TRANSFER_FAILED, language)
 
 
+_CALLBACK_SAVED = {
+    "bn": "ঠিক আছে, আমাদের স্টাফ আপনাকে ফোন করবেন।",
+    "en": "All right, our staff will phone you back.",
+}
+
+
+def callback_saved(language: str) -> str:
+    """Said only once a call-back request was saved."""
+    return _pick(_CALLBACK_SAVED, language)
+
+
 def sentence(kind: str, language: str, *, booking: bool = False) -> str:
     """What to say instead of a reply that failed with `kind`; `booking` for a turn inside a
     booking, a change or a tool's answer."""

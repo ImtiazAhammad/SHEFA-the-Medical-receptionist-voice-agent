@@ -200,6 +200,7 @@ def build(
             "passed": r.passed,
             "failed": _failed(r),
             "judge_mean": score.mean if score else None,
+            "brain_fallbacks": r.brain_fallbacks,
         }
     return {
         "meta": filled,
@@ -210,6 +211,9 @@ def build(
         "latency": _latency(results),
         "bangla_purity": _bangla_purity(results),
         "scenarios": scenarios,
+        # Turns the brain failed and the guided engine answered: an "agent" card that is
+        # largely guided says so.
+        "brain_fallbacks": sum(r.brain_fallbacks for r in results),
     }
 
 

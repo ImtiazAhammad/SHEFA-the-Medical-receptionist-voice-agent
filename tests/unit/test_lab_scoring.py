@@ -659,3 +659,43 @@ class TestEngineFlag:
         assert parse(["lab", *command, "--engine", "guided"]).engine == "guided"
         with pytest.raises(SystemExit):
             parse(["lab", *command, "--engine", "banana"])
+
+
+class FlakyBrainLLM(AgentLLM):
+    """The brain's every call fails; the guided path (generate / generate_events) still works."""
+
+    def generate_stream(self, messages, tools=None, **kwargs):
+        return self._fail()
+
+    async def _fail(self):
+        import httpx
+        import openai
+
+        raise openai.APIConnectionError(request=httpx.Request("POST", "http://llm/v1"))
+        yield ""  # pragma: no cover - makes this an async generator
+
+
+async def test_the_scorecard_counts_the_turns_the_guided_fallback_answered(tmp_path):
+    card = await run_engine(tmp_path, "agent", FlakyBrainLLM())
+    assert card["scenarios"]["a"]["brain_fallbacks"] == 1  # one caller line, answered by guided
+    assert card["scenarios"]["b"]["brain_fallbacks"] == 1
+    assert card["brain_fallbacks"] == 2
+
+
+async def test_a_brain_that_never_failed_records_no_fallbacks(tmp_path):
+    card = await run_engine(tmp_path, "agent", BrainLLM())
+    assert card["brain_fallbacks"] == 0
+    assert card["scenarios"]["a"]["brain_fallbacks"] == 0
+
+
+async def test_a_failure_setting_up_the_stores_puts_everything_back(tmp_path, monkeypatch):
+    from shefa.store import audit
+
+    def broken(path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(audit, "AuditStore", broken)
+    old_path, old_engine = settings.storage.db_path, settings.pipeline.engine
+    with pytest.raises(OSError):
+        await run_engine(tmp_path, "agent")
+    assert settings.storage.db_path == old_path and settings.pipeline.engine == old_engine

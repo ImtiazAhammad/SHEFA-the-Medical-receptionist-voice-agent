@@ -82,6 +82,7 @@ class ScenarioResult:
     checks: list[CheckResult] = field(default_factory=list)
     appointments: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    brain_fallbacks: int = 0  # turns the brain failed and the guided engine answered
 
     @property
     def passed(self) -> bool:
@@ -338,6 +339,10 @@ class Lab:
                 await self._turn(pipeline, call_sid, scenario, said, result, transcript, rng)
                 if result.turns[-1].state != "active":
                     break
+            session = await pipeline.session_for(call_sid)
+            result.brain_fallbacks = int((session.metadata if session else {}).get(
+                "brain_fallbacks", 0
+            ))
         except Exception as error:  # noqa: BLE001 - one broken scenario never stops the rest
             result.error = f"{type(error).__name__}: {error}"
         finally:
