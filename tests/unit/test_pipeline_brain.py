@@ -484,3 +484,111 @@ async def test_a_spoken_call_the_brain_ends_is_left_like_a_guided_goodbye(agent,
     assert voice.spoken[0] == ("স্বাগতম।", "bn")  # the generated greeting opened the call
     assert ("ভালো থাকবেন।", "bn") in voice.spoken
     assert session.history[-1].content == "ভালো থাকবেন।"
+
+
+# --- review round: the real brain under failure and cut-off ------------------------------------
+
+
+def test_a_read_back_whose_voice_failed_is_not_left_waiting_for_a_yes(executor):
+    executor.previews["book_appointment"] = {"preview": BOOKED | {"serial_no": None}}
+    executor.results["book_appointment"] = BOOKED
+    session = identified_session()
+    session.add_turn("user", BOOK_LINE)
+    llm = FakeLLM("unused", route=route_json("book", "calm", "booking"))
+
+    async def broken_voice(text):
+        raise RuntimeError("voice down")
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(Brain().turn(session, BOOK_LINE, llm, broken_voice, today=TODAY))
+    assert load(session).pending is None  # the caller never heard it: no yes can book it
+    assert session.metadata["brain_trace"][-1]["error"].startswith("RuntimeError")
+    say(session, "হ্যাঁ", FakeLLM("জি।", route=route_json()))
+    assert executor.ran == []
+
+
+def test_a_cancelled_turn_undoes_what_settling_changed(executor, monkeypatch):
+    session, _, _ = read_back_booking(executor)
+    line = "হ্যাঁ, তবে বিকেলে হলে ভালো"  # voids the read-back and forgets its facts, at once
+    session.add_turn("user", line)
+    before = copy.deepcopy(session.metadata)
+    started = []
+
+    class _SlowSearch:
+        def search(self, said):
+            started.append(said)
+            import time
+
+            time.sleep(0.2)
+            return []
+
+    monkeypatch.setattr(brain_engine, "retriever_for", lambda clinic: _SlowSearch())
+
+    async def run():
+        turn = asyncio.create_task(Brain().turn(session, line, FakeLLM(), Recorder(), today=TODAY))
+        await _cancel_once(turn, lambda: started)
+
+    asyncio.run(run())
+    assert session.metadata == before
+    assert load(session).pending is not None  # the read-back the caller heard still stands
+
+
+async def test_the_real_brain_cut_off_after_a_sentence_is_kept_on_both_sides(monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    session = CallSession(call_sid="CA-real2", language=Language.BANGLA)
+    session.add_turn("assistant", "স্বাগতম।")
+    session.add_turn("user", "হ্যালো")
+    llm = FakeLLM("জি, বলুন। কীভাবে সাহায্য করতে পারি?", route=route_json())
+
+    class _Voice:
+        def __init__(self):
+            self.played = []
+
+        async def synthesize_stream(self, text, language="en"):
+            if self.played:
+                await asyncio.Event().wait()  # the caller barges in on the second sentence
+            self.played.append(text)
+            yield AudioFrame(b"\x00" * 320, rate=8000)
+
+    voice = _Voice()
+    turn = asyncio.create_task(VoicePipeline()._generate_reply(llm, voice, session, _sink))
+    while len(voice.played) < 1 or llm.closed == 0 and len(llm.calls) == 0:
+        await asyncio.sleep(0.001)
+    for _ in range(50):
+        await asyncio.sleep(0.001)
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    assert [(t.role, t.content) for t in session.history][-2:] == [
+        ("user", "হ্যালো"),
+        ("assistant", "জি, বলুন।"),
+    ]
+    assert session.metadata["brain_trace"][-1]["cancelled"] is True
+    assert load(session).turn == 1
+
+
+async def test_the_real_brain_failing_after_a_sentence_ends_the_turn_there(monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    session = CallSession(call_sid="CA-real3", language=Language.BANGLA)
+    session.add_turn("assistant", "স্বাগতম।")
+    session.add_turn("user", "হ্যালো")
+
+    class _Dies(FakeLLM):
+        async def _reply_stream(self, messages):
+            self.calls.append(messages)
+            yield "জি, বলুন। "
+            yield "কী"
+            raise _connection_error()
+
+    llm = _Dies(route=route_json())
+    guided = []
+
+    async def guided_reply(self, *a):
+        guided.append(1)
+        return GUIDED_REPLY
+
+    monkeypatch.setattr(VoicePipeline, "_reply", guided_reply)
+    reply = await VoicePipeline()._generate_reply(llm, _SilentVoice(), session, _sink)
+    assert reply == "জি, বলুন।" and guided == []
+    assert "brain_fallbacks" not in session.metadata
+    assert session.metadata["brain_trace"][-1]["error"].startswith("APIConnectionError")

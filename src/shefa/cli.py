@@ -1196,23 +1196,30 @@ async def _run_lab(scenarios: list[Any], args: argparse.Namespace) -> int:
     # Lab calls write audit rows like real calls; they go to the lab's own file, never
     # to the clinic's database.
     audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
-    voice = await registry.get_tts() if args.audio or args.speech else None
-    stt = await registry.get_stt() if args.speech else None
-    lab = Lab(
-        clinic_file=args.clinic,
-        work_dir=work,
-        voice=voice,
-        stt=stt,
-        patient_llm=await registry.get_llm(),
-    )
-    results = []
-    for scenario in scenarios:
-        print(f"  {scenario.id:<24} ", end="", flush=True)
-        result = await lab.run(scenario)
-        results.append(result)
-        failed = [c.name for c in result.checks if not c.ok]
-        failed += [c.name for t in result.turns for c in t.checks if not c.ok]
-        print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    # Nor does it read production's config store or knowledge base, or write its call log.
+    from shefa.lab.scoring import isolate
+
+    isolated = isolate(work, None)
+    try:
+        voice = await registry.get_tts() if args.audio or args.speech else None
+        stt = await registry.get_stt() if args.speech else None
+        lab = Lab(
+            clinic_file=args.clinic,
+            work_dir=work,
+            voice=voice,
+            stt=stt,
+            patient_llm=await registry.get_llm(),
+        )
+        results = []
+        for scenario in scenarios:
+            print(f"  {scenario.id:<24} ", end="", flush=True)
+            result = await lab.run(scenario)
+            results.append(result)
+            failed = [c.name for c in result.checks if not c.ok]
+            failed += [c.name for t in result.turns for c in t.checks if not c.ok]
+            print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    finally:
+        isolated.restore()
     page = write_report(results, out, lab_meta(args.speech, args.audio))
     passed = sum(1 for result in results if result.passed)
     print(f"\n{passed}/{len(results)} scenarios passed. Report: {page}")

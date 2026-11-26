@@ -268,10 +268,16 @@ def _row(label: str, a: float | None, b: float | None, digits: int) -> str:
     return f"{label:<30}{_num(a, digits):>10}{_num(b, digits):>10}{diff:>10}"
 
 
+def _run_name(meta: dict[str, Any]) -> str:
+    """The model, and the engine that answered when the card says (cards before Task 11 do not)."""
+    name = str(meta.get("model", "?"))
+    return f"{name} ({meta['engine']} engine)" if meta.get("engine") else name
+
+
 def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
     """Headline numbers, then each hard check and judged dimension, as a, b and b - a."""
     a_meta, b_meta = a.get("meta", {}), b.get("meta", {})
-    lines = [f"a: {a_meta.get('model', '?')}", f"b: {b_meta.get('model', '?')}"]
+    lines = [f"a: {_run_name(a_meta)}", f"b: {_run_name(b_meta)}"]
     unlike = [
         key
         for key in (

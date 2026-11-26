@@ -345,3 +345,11 @@ def test_git_commit_is_marked_dirty_when_tracked_files_changed(monkeypatch):
 def test_git_commit_is_clean_without_changes_or_when_status_fails(monkeypatch):
     assert _git(monkeypatch, "")[0] == "abc1234"
     assert _git(monkeypatch, "", fail_status=True)[0] == "abc1234"
+
+
+def test_compare_names_the_engine_each_card_ran():
+    a, b = made(), made()
+    b["meta"]["engine"] = "agent"
+    lines = compare(a, b).splitlines()
+    assert "engine" not in lines[0]  # a card from before Task 11 says nothing about it
+    assert lines[1].endswith("(agent engine)")

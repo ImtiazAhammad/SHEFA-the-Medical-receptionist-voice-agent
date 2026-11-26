@@ -228,7 +228,7 @@ async def run_scorecard(
     previous_audit = getattr(audit, "_default_audit_store", None)
     # Lab calls write audit rows like real calls; they go to the bench's own file, never to
     # the clinic's database.
-    isolated = _isolate(work, getattr(args, "engine", None))
+    isolated = isolate(work, getattr(args, "engine", None))
     audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
     try:
         if agent is not None:
@@ -291,7 +291,7 @@ async def run_scorecard(
 
 
 class _Isolated:
-    """What `_isolate` changed, to put back as it was found."""
+    """What `isolate` changed, to put back as it was found."""
 
     def __init__(self, engine: str, undo: list[Callable[[], None]]) -> None:
         self.engine = engine
@@ -302,7 +302,7 @@ class _Isolated:
             step()
 
 
-def _isolate(work: Path, engine: str | None) -> _Isolated:
+def isolate(work: Path, engine: str | None) -> _Isolated:
     """Point the run at its own stores in `work` and set the engine (None: the configured one).
 
     The lab never reads production's prompts, knowledge base or call log and never writes to

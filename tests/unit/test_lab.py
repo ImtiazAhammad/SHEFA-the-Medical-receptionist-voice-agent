@@ -598,6 +598,49 @@ class TestLabCommand:
         assert made["voice"] is not None and made["stt"] is not None and made["reset"]
         assert ("2/2 scenarios passed" if passes else "NEEDS WORK  booked") in out
 
+    def test_run_uses_its_own_stores_and_puts_them_back(self, monkeypatch, tmp_path, capsys):
+        # Task 11: every typed turn now reads the call's config (the engine); `lab run` must not
+        # read production's config store or knowledge base, nor write its call log.
+        from shefa.brain import config as brain_config
+        from shefa.brain import knowledge
+        from shefa.lab import runner as lab_runner
+        from shefa.models.registry import registry
+
+        seen = {}
+        production = brain_config._default_config_store
+
+        class FakeLab:
+            def __init__(self, **kwargs):
+                pass
+
+            async def run(self, scenario):
+                seen["config"] = brain_config._default_config_store.path
+                seen["knowledge"] = knowledge._default_knowledge_store.path
+                seen["db_path"] = settings.storage.db_path
+                return ScenarioResult(scenario, turns=[_record()])
+
+        async def get(*args):
+            return object()
+
+        async def reset():
+            pass
+
+        monkeypatch.setattr(lab_runner, "Lab", FakeLab)
+        monkeypatch.setattr(registry, "get_llm", get)
+        monkeypatch.setattr(registry, "reset", reset)
+        old_path = settings.storage.db_path
+        out = tmp_path / "r"
+        cli.main(["lab", "run", "--scenarios", str(SHIPPED), "--only", "fee-question",
+                  "--out", str(out)])  # fmt: skip
+        work = out / ".work"
+        assert seen == {
+            "config": work / "config.db",
+            "knowledge": work / "knowledge.db",
+            "db_path": str(work / "platform.db"),
+        }
+        assert brain_config._default_config_store is production
+        assert settings.storage.db_path == old_path
+
     def test_meta_names_the_models_used(self, monkeypatch):
         monkeypatch.setattr(settings.pipeline.stt, "per_language", {"bn": "x"})
 

@@ -364,8 +364,9 @@ class _Entry:
             session.metadata.update(self.metadata)
             return
         cancelled = isinstance(exc, asyncio.CancelledError)
-        if cancelled and state.pending is not None and _asked_aside(state.pending) != self.pending:
-            # A read-back this turn began to say was cut off: nobody can say yes to half of it.
+        if state.pending is not None and _asked_aside(state.pending) != self.pending:
+            # A read-back this turn began to say was cut off or failed to play: nobody can say
+            # yes to something they did not hear whole.
             actions.drop_pending(session, state)
         state.mood, state.goal = self.words
         save(session, state)
