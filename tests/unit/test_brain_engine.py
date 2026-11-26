@@ -496,6 +496,7 @@ def test_state_is_saved_and_the_trace_has_exactly_the_listed_keys(knowledge):
         "safe",
         "route",
         "reply_source",  # added in Task 7b: "model", or "facility" when code answered
+        "facility",  # Task 7b fix round 1: the topic code answered, else None
         "ms",
     }
     assert trace["turn"] == 1
@@ -992,3 +993,69 @@ def test_a_router_angry_on_calm_words_is_angry_for_the_turn():
     llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "angry", "information"))
     _turn(session, FEE_QUESTION, llm, Recorder())
     assert session.metadata["brain_trace"][-1]["mood"] == "angry"
+
+
+# --- Task 7b fix round 1 -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def example_clinic():
+    from pathlib import Path
+
+    from shefa.clinic.loader import import_directory_file
+
+    root = Path(__file__).resolve().parents[2]
+    import_directory_file(default_clinic_store(), root / "configs" / "clinic.example.yaml")
+
+
+def test_e_days_push_is_dropped_for_a_question_naming_a_department(example_clinic):
+    said = "Which days does the child specialist see patients?"
+    session = _session(said)
+    llm = FakeLLM(
+        "Mondays, Wednesdays and Saturdays. What time would you like to come?",
+        route=route_json("none", "calm", "information"),
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["Mondays, Wednesdays and Saturdays."]
+    assert session.metadata["brain_trace"][-1]["verdicts"] == ["ok", "push"]
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "ডাক্তার রহমানের চেম্বার কখন বন্ধ হয়?",  # a doctor is named
+        "পুরনো ইসিজি নিয়ে আসতে হবে?",  # the directory's notes speak of ECGs
+        "ক্যান্টিন আছে? আর ডাক্তার রহমানের ফি কত?",  # a second question
+        "ক্যান্টিন আছে, ফি কত?",  # a fee asked too
+    ],
+)
+def test_only_a_pure_facility_question_is_answered_by_code(said, example_clinic):
+    session = _session(said)
+    llm = FakeLLM("জি, বলছি।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["reply_source"] == "model" and trace["facility"] is None
+    assert len(llm.calls) == 1
+
+
+def test_a_facility_entry_retrieval_missed_is_spoken_by_code():
+    store = default_knowledge_store()
+    store.add(
+        "default",
+        "hours",
+        text_bn="শনি থেকে বৃহস্পতি, সকাল নয়টা থেকে রাত নয়টা।",
+        text_en="Saturday to Thursday.",
+        tags=["zzz"],
+        author="test",
+    )
+    said = "শুক্রবারে কি বন্ধ থাকে?"
+    session = _session(said)
+    llm = FakeLLM("না, শুক্রবারে খোলা থাকে।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["শনি থেকে বৃহস্পতি, সকাল নয়টা থেকে রাত নয়টা।"]
+    assert llm.calls == []
+    trace = session.metadata["brain_trace"][-1]
+    assert (trace["reply_source"], trace["facility"]) == ("facility", "hours")

@@ -24,6 +24,7 @@ from shefa.bangla import WEEKDAYS_BN
 from shefa.brain import safe
 from shefa.brain.check import Grounds, Verdict, check_sentence
 from shefa.brain.config import call_config
+from shefa.brain.knowledge import default_knowledge_store
 from shefa.brain.prompt import DIRECTORY_HEADER, compose
 from shefa.brain.retrieve import retriever_for
 from shefa.brain.router import Route, route
@@ -162,24 +163,51 @@ def _grounds(
     return grounds
 
 
-def _unwritten_facility(said: str, hits: list[Hit], language: str) -> str | None:
-    """The facility the caller asks about when neither the clinic's facility facts (the guided
-    engine's source, `settings.facilities`) nor a knowledge hit of this turn covers it. An
-    emergency is never answered here: the router hands it over."""
+# Words that make a facility line ask something else too: a fee, a doctor, a booking.
+_OTHER_ASK = re.compile(
+    r"ফি|টাকা|খরচ|ভিজিট|ডাক্তার|ডাঃ|সিরিয়াল|অ্যাপয়েন্টমেন্ট|বুক"
+    r"|\b(?:fee|fees|cost|charge|price|doctor|dr|appointment|book|booking|serial)\b",
+    re.IGNORECASE,
+)
+_QUESTION_END = re.compile(r"[?।!]+|\.\s")
+
+
+def _pure_facility(said: str) -> bool:
+    """One question, about a facility only: "ক্যান্টিন আছে? আর ডাক্তার রহমানের ফি কত?" asks two."""
+    parts = [p for p in _QUESTION_END.split(said) if p.strip()]
+    return len(parts) == 1 and not _OTHER_ASK.search(said) and doctor_named(said) is None
+
+
+def _facility_reply(
+    said: str, hits: list[Hit], language: str, directory: str, clinic: str
+) -> tuple[str, str] | None:
+    """(topic, what code says) for a pure facility question the turn's facts do not cover.
+
+    The model answers when a knowledge hit or the clinic's facility facts (the guided engine's
+    source, `settings.facilities`) cover it, when the directory speaks of it (chamber hours, an
+    ECG or blood-test note), and when the line asks anything else or names a doctor. Otherwise
+    code answers: the clinic's knowledge entry for the topic when retrieval missed it, else "not
+    known". An emergency is never answered here: the router hands it over."""
     topic = facilities.asked_topic(said)
-    if topic is None:
+    if topic is None or not _pure_facility(said):
         return None
     lang = "en" if language == "en" else "bn"
     if ((settings.facilities.get(topic) or {}).get(lang) or "").strip():
         return None
     pattern = facilities.TOPICS[topic][0]
+    if pattern.search(directory):
+        return None
     for hit in hits:
         if hit.entry.topic == topic or pattern.search(hit.entry.text_bn + "\n" + hit.entry.text_en):
             return None
     spoken = Language.BANGLA if lang == "bn" else Language.ENGLISH
     if is_emergency(said, spoken):
         return None
-    return topic
+    for entry in default_knowledge_store().entries([clinic or "default"]):
+        if entry.topic == topic and (text := entry.text(lang).strip()):
+            return topic, text
+    text = facilities.answer(said, language, settings.facilities, during_booking=True) or ""
+    return topic, text
 
 
 def _history(session: CallSession, said: str) -> tuple[list[dict[str, str]], str]:
@@ -335,6 +363,7 @@ class Brain:
             "safe": None,
             "route": None,
             "reply_source": "model",
+            "facility": None,
             "ms": 0,
         }
         routing = _Routing(state, trace)
@@ -388,11 +417,11 @@ class Brain:
         trace["hits"] = [h.entry.id for h in hits]
         spoken: list[str] = []
 
-        if (topic := _unwritten_facility(said, hits, language)) is not None:
-            # Nothing the clinic wrote covers it: code says it does not know, the way the
-            # guided engine does, and the model never gets the chance to invent a "yes" or "no".
+        if (found := _facility_reply(said, hits, language, directory, clinic)) is not None:
+            # Code answers from what the clinic wrote, or says it does not know, the way the
+            # guided engine does: the model never gets the chance to invent a "yes" or "no".
             # No booking offer: the caller asked for information.
-            text = facilities.answer(said, language, settings.facilities, during_booking=True)
+            topic, text = found
             trace["reply_source"], trace["facility"] = "facility", topic
             if text:
                 await speak(text)
