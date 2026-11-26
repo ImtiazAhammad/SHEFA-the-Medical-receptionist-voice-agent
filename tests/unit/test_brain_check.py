@@ -150,8 +150,10 @@ def test_a_yes_backed_by_a_fact_passes():
 
 
 def test_a_yes_with_one_word_the_facts_do_not_hold_fails():
+    # Changed in Task 7b fix round 1: the closed-day rule now catches it first, as a fact.
     verdict = check("হ্যাঁ, শুক্রবার আমরা খোলা।", grounds("শুক্রবার বন্ধ"))
-    assert verdict.kind == "unsupported"
+    assert verdict.kind == "fact"
+    assert check("হ্যাঁ, এখানে এমআরআই আছে।", grounds("শুক্রবার বন্ধ")).kind == "unsupported"
 
 
 def test_parroting_the_caller_fails_as_unsupported():
@@ -568,7 +570,10 @@ def test_a_weekday_must_be_in_the_grounds():
 
 
 def test_a_weekday_range_in_the_grounds_covers_its_days():
-    assert check("শুক্রবার খোলা থাকে।", grounds("open Sat-Thu, closed Fri")).ok
+    # Changed in Task 7b fix round 1: "শুক্রবার খোলা থাকে" against "closed Fri" was asserted ok,
+    # but it is wrong (Friday is closed) and now fails as a fact; Monday in the range passes.
+    assert check("সোমবার খোলা থাকে।", grounds("open Sat-Thu, closed Fri")).ok
+    assert check("শুক্রবার খোলা থাকে।", grounds("open Sat-Thu, closed Fri")).kind == "fact"
     assert check("মঙ্গলবার খোলা থাকে।", grounds("open Sat-Thu")).ok
 
 

@@ -136,17 +136,26 @@ def _grounds(
     if directory:
         grounds.add(directory)
     for earlier in session.metadata.get("brain_grounds", []):
-        grounds.add_value(str(earlier))
-    for key in ("doctor", "date", "time", "period"):
-        if value := state.booking.get(key):
-            grounds.add_value(value)
+        # A tool result says whose it is ({"text": ..., "doctor": ...}); a bare string is nobody's.
+        if isinstance(earlier, dict):
+            doctor = str(earlier.get("doctor") or "")
+            grounds.add_value(str(earlier.get("text", "")), doctor=doctor)
+        else:
+            grounds.add_value(str(earlier))
+    # The booking so far is one value that belongs to its doctor: Dr Rahman's booked Sunday is
+    # not a day Dr Sultana sits.
+    slots = ("doctor", "date", "time", "period")
+    booking = [state.booking[k] for k in slots if state.booking.get(k)]
     try:
         booked_day = _date.fromisoformat(state.booking.get("date", ""))
     except ValueError:
         booked_day = None
     if booked_day is not None:
-        grounds.add_value(" ".join(_day_names(booked_day)))
-    grounds.add_value(" ".join([today.isoformat(), *_day_names(today)]))
+        booking.extend(_day_names(booked_day))
+    if booking:
+        grounds.add_value(" ".join(booking), doctor=state.booking.get("doctor", ""))
+    grounds.doctor = state.booking.get("doctor", "")
+    grounds.add_value(" ".join([today.isoformat(), *_day_names(today)]), today=True)
     if phone := _caller_phone(session):
         grounds.add_value(phone)
     grounds.add_value(EMERGENCY_NUMBER)

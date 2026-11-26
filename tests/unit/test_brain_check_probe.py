@@ -219,6 +219,24 @@ def test_a_time_not_in_the_facts_still_fails(ground, sentence, language):
     assert v.kind == "fact", (ground, sentence)
 
 
+@pytest.mark.parametrize("ground", GROUND_NINE_PM)
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "We close at 21:15.",
+        "আমরা ২১:১২ পর্যন্ত খোলা।",
+        "We are open until 21:20.",
+        "We are open until 21:30.",
+    ],
+)
+def test_clock_minutes_must_match_a_ground_time_with_the_directory_loaded(ground, sentence):
+    # Fix round 1: 15, 12 and 20 are directory numbers (years, 20:00); minutes are not numbers.
+    language = "en" if sentence.isascii() else "bn"
+    v = verdict(sentence, "কয়টা পর্যন্ত খোলা?", language=language, hits=(hit("hours", ground, ground),))
+    assert v.kind == "fact", (ground, sentence)
+    assert ":" in v.reason, v.reason  # the reason names the time, not a bare number
+
+
 @pytest.mark.parametrize(
     ("sentence", "said", "language"),
     [
@@ -284,10 +302,16 @@ def test_a_named_doctors_true_facts_pass(sentence):
     assert verdict(sentence, DAYS_Q, language=language).ok
 
 
-def test_no_doctor_or_several_keep_the_whole_grounds_check():
+def test_no_doctor_keeps_the_whole_grounds_and_several_split_by_clause():
     assert verdict("রবিবারে আমাদের ডাক্তাররা বসেন।", "কোন দিন খোলা?").ok
+    # Changed in fix round 1: this used to pass (whole grounds for several doctors), though
+    # Dr Sultana does not sit on Sunday. Each clause is now checked against the doctors it names.
     both = "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন।"
-    assert verdict(both, "রবিবারে কে বসেন?").ok
+    assert verdict(both, "রবিবারে কে বসেন?").kind == "fact"
+    assert verdict("ডাক্তার রহমান রবিবার ও ডাক্তার সুলতানা সোমবার বসেন।", "কে কবে বসেন?").ok
+    assert verdict("রবিবারে ডাক্তার হোসেন, ডাক্তার রহমান বসেন।", "রবিবারে কে বসেন?").ok  # d-sunday
+    nine = "ডাক্তার রহমান ও ডাক্তার সুলতানা সকাল ৯টায় বসেন।"  # 9 am is only Dr Hossain's
+    assert verdict(nine, "কখন বসেন?").kind == "fact"
 
 
 def test_the_calls_own_values_stay_in_scope_for_a_named_doctor():
@@ -450,3 +474,157 @@ def test_a_hit_topic_covers_a_facility_its_text_does_not_name():
     other = hit("snacks", "", "Snacks and tea are sold on the ground floor.")
     assert verdict(sentence, "canteen?", language="en", hits=(covered,)).ok
     assert verdict(sentence, "canteen?", language="en", hits=(other,)).kind == "unsupported"
+
+
+# --- fix round 1 (task-7b-review.md): adversarial sentences ---------------------------------------
+
+
+def clinic_with(name: str, **profile) -> dict:
+    loaded = yaml.safe_load(CLINIC_FILE.read_text(encoding="utf-8"))
+    for department in loaded["departments"]:
+        for doctor in department["doctors"]:
+            if doctor["name"] == name:
+                doctor["profile"].update(profile)
+    return loaded
+
+
+@pytest.mark.parametrize(
+    ("sentence", "said", "language"),
+    [
+        ("Yes, our follow-up fee is 500.", "Is your follow-up fee 500?", "en"),
+        ("রিপোর্ট দেখানোর ফি ২৫০ টাকা।", "রিপোর্ট দেখানোর ফি ২৫০?", "bn"),
+        ("হ্যালো, ফি ৫০০ টাকা।", "হ্যালো, ফি ৫০০ টাকা?", "bn"),
+        ("আসসালামু আলাইকুম, ফলো-আপ ফি ৫০০।", "আসসালামু আলাইকুম, ফলো-আপ ফি ৫০০?", "bn"),
+    ],
+)
+def test_the_callers_guess_given_back_with_filler_is_still_a_parrot(sentence, said, language):
+    v = verdict(sentence, said, language=language)
+    assert (v.kind, v.reason) == ("unsupported", "it only repeats the caller's own words"), v
+
+
+def test_an_invented_language_given_back_fails():
+    said = "ডাক্তার হোসেন কি হিন্দিতে কথা বলতে পারেন?"
+    assert not verdict("ডাক্তার হোসেন হিন্দিতে কথা বলেন।", said).ok
+
+
+def test_today_does_not_back_a_named_doctors_day():
+    # 2026-11-28 is a Saturday; Dr Rahman sits Sun/Tue/Thu.
+    assert verdict("হ্যাঁ, ডাক্তার রহমান আজ শনিবার বসেন।", "রহমান আজ বসেন?").kind == "fact"
+    assert verdict("Dr Rahman sits on Saturday.", "Rahman today?", language="en").kind == "fact"
+    assert verdict("হ্যাঁ, ডাক্তার সুলতানা আজ শনিবার বসেন।", "সুলতানা আজ বসেন?").ok
+    # Today said on its own beside a doctor's clause is still today.
+    assert verdict("আজ শনিবার, ডাক্তার সুলতানা সকাল দশটায় বসেন।", "সুলতানা আজ?").ok
+
+
+def test_another_doctors_booking_does_not_back_a_named_doctor():
+    booking = {"doctor": "Rahman", "date": "2026-11-29", "time": "18:30"}
+    said = "সুলতানা কবে?"
+    assert verdict("ডাক্তার সুলতানা রবিবার বসেন।", said, booking=booking).kind == "fact"
+    assert verdict("ডাক্তার সুলতানা সন্ধ্যা ৬টা ৩০ মিনিটে বসেন।", said, booking=booking).kind == "fact"
+    assert verdict("ডাক্তার রহমান রবিবার সন্ধ্যা ৬টা ৩০ মিনিটে।", said, booking=booking).ok
+
+
+def test_a_tool_result_carries_its_doctor():
+    from shefa.brain.check import Grounds
+
+    g = Grounds(texts=["Dr Sultana / ডাক্তার সুলতানা - Mon", "Dr Rahman / ডাক্তার রহমান - Sun"])
+    g.add_value("free at 17:00", doctor="Rahman")
+    v = check_sentence("ডাক্তার সুলতানা বিকেল ৫টায় খালি।", g, goal="booking", language="bn")
+    assert v.kind == "fact"
+    assert check_sentence("ডাক্তার রহমান বিকেল ৫টায় খালি।", g, goal="booking", language="bn").ok
+
+
+def test_a_doctor_named_without_a_title_is_scoped():
+    assert verdict("সুলতানা ম্যাডাম রবিবার বসেন।", DAYS_Q).kind == "fact"
+    assert verdict("Sultana sits on Sundays.", DAYS_Q, language="en").kind == "fact"
+    assert verdict("সুলতানা ম্যাডাম সোমবার বসেন।", DAYS_Q).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [("হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলেন।", "bn"), ("Yes, Dr Hossain speaks English.", "en")],
+)
+def test_a_language_yes_needs_that_doctors_own_codes(sentence, language):
+    clinic = clinic_with("Hossain", languages=["bn"])
+    v = verdict(sentence, "Hossain English?", language=language, clinic=clinic)
+    assert v.kind == "unsupported", v
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("হ্যাঁ, ডাক্তার রহমান মহিলা ডাক্তার।", "bn"),
+        ("Yes, Dr Rahman is a female doctor.", "en"),
+        ("হ্যাঁ, ডাক্তার হোসেন মহিলা।", "bn"),
+        ("হ্যাঁ, ডাক্তার সুলতানা পুরুষ ডাক্তার।", "bn"),
+        ("জি, ডাক্তার রহমান মহিলা ডাক্তার।", "bn"),
+        ("ডাক্তার রহমান একজন মহিলা ডাক্তার।", "bn"),
+        ("ডাক্তার হোসেন হিন্দিতে কথা বলেন।", "bn"),
+    ],
+)
+def test_a_gender_or_language_claim_for_the_wrong_doctor_fails(sentence, language):
+    assert verdict(sentence, "কে?", language=language).kind == "unsupported"
+
+
+def test_true_gender_and_language_claims_for_a_named_doctor_pass():
+    assert verdict("হ্যাঁ, ডাক্তার সুলতানা মহিলা ডাক্তার।", "সুলতানা?").ok
+    assert verdict("ডাক্তার হোসেন বাংলা ও ইংরেজিতে কথা বলেন।", "হোসেন?").ok
+    assert verdict("Dr Sultana is a female doctor.", "Sultana?", language="en").ok
+
+
+def test_a_pronoun_claim_is_judged_against_the_calls_doctor():
+    rahman = {"doctor": "Rahman"}
+    assert verdict("হ্যাঁ, উনি হিন্দিতে কথা বলেন।", "উনি হিন্দি?", booking=rahman).kind == "unsupported"
+    assert verdict("হ্যাঁ, উনি ইংরেজিতে কথা বলেন।", "উনি ইংরেজি?", booking=rahman).ok
+    # No doctor known: fail closed.
+    assert verdict("হ্যাঁ, উনি ইংরেজিতে কথা বলেন।", "উনি ইংরেজি?").kind == "unsupported"
+
+
+@pytest.mark.parametrize("sentence", ["ডাক্তার রহমানের ফি ७५० টাকা।", "ফি ٧٥٠ টাকা।", "ফি ७५० টাকা।"])
+def test_digits_of_other_scripts_fail(sentence):
+    v = verdict(sentence, "ফি কত?")
+    assert not v.ok and v.kind in ("fact", "language")
+
+
+def test_digits_of_other_scripts_are_read_as_numbers():
+    from shefa.brain.check import numbers_in
+
+    assert numbers_in("ফি ७५० টাকা") == {"750"}
+    assert numbers_in("ফি ٧٥٠") == {"750"}
+
+
+def test_a_day_with_the_also_ending_is_a_day():
+    assert verdict("ডাক্তার সুলতানা সোমবার বসেন, উনি রবিবারও বসেন।", DAYS_Q).kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("হ্যাঁ, শুক্রবার খোলা।", "bn"),
+        ("Yes, we are open on Friday.", "en"),
+        ("শুক্রবারে ক্লিনিক খোলা থাকে।", "bn"),
+    ],
+)
+def test_open_on_a_day_the_facts_say_is_closed_fails(sentence, language):
+    v = verdict(sentence, "শুক্রবার খোলা?", language=language, hits=(hit("hours"),))
+    assert v.kind == "fact", v
+
+
+def test_closed_on_the_closed_day_passes():
+    assert verdict("না, শুক্রবার বন্ধ।", "শুক্রবার খোলা?", hits=(hit("hours"),)).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [("ক্যান্টিন নিচতলায়।", "bn"), ("The canteen is on the ground floor.", "en")],
+)
+def test_a_facility_placed_with_no_fact_fails(sentence, language):
+    assert verdict(sentence, "canteen?", language=language).kind == "unsupported"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [("Would you like to come on Monday?", "en"), ("আপনি কি সোমবার আসবেন?", "bn")],
+)
+def test_more_when_to_come_forms_are_a_push(sentence, language):
+    assert verdict(sentence, "Which days?", language=language).kind == "push"

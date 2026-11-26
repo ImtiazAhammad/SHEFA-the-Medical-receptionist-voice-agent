@@ -31,9 +31,15 @@ _B = r"(?<![ঀ-৿])"
 _E = r"(?![ঀ-৿])"
 
 
+# Digits of other scripts ("७५०", "٧٥٠") say a number the Bangla voice cannot read; they are read
+# as ASCII so the number check sees them (the script rule refuses them too). Bengali digits stay.
+_OTHER_DIGITS = re.compile(r"(?![0-9০-৯])\d")
+
+
 def _norm(text: str) -> str:
     """NFC (so precomposed and split য় compare equal) without zero-width joiners."""
-    return unicodedata.normalize("NFC", text).replace("‌", "").replace("‍", "")
+    text = unicodedata.normalize("NFC", text).replace("‌", "").replace("‍", "")
+    return _OTHER_DIGITS.sub(lambda m: str(unicodedata.digit(m.group())), text)
 
 
 def _split(words: str) -> list[str]:
@@ -44,6 +50,13 @@ def _wordset(words: str) -> frozenset[str]:
     return frozenset(_norm(w) for w in words.split())
 
 
+@dataclass(frozen=True)
+class Value:
+    text: str
+    doctor: str = ""  # the doctor this value belongs to; "" for nobody's
+    today: bool = False  # today's date and weekday
+
+
 @dataclass
 class Grounds:
     """What a sentence may rest on this call. `caller` is only for the parrot rule: a caller's
@@ -52,10 +65,13 @@ class Grounds:
     texts: list[str] = field(default_factory=list)
     succeeded: set[str] = field(default_factory=set)
     caller: str = ""
-    # The call's own values (tool results, booking slots, today, the caller's phone, 999), also
-    # in `texts`. A line of them holds whichever doctor a sentence names unless it names another
-    # doctor; a directory or knowledge line holds only for the doctor it names.
-    values: list[str] = field(default_factory=list)
+    # The call's own values (tool results, the booking, today, the caller's phone, 999), also in
+    # `texts`. A value holds for a named doctor only when it is that doctor's (or nobody's, like
+    # the phone); today never says which days a doctor sits. A directory or knowledge line holds
+    # only for the doctor it names.
+    values: list[Value] = field(default_factory=list)
+    # The doctor the call is about ("উনি ইংরেজিতে কথা বলেন" is about this one).
+    doctor: str = ""
     # Facility topics a knowledge hit covers ("parking", "hours"): its text may not use the
     # caller's words for the topic ("9 am to 9 pm" says nothing of "opening hours").
     topics: set[str] = field(default_factory=set)
@@ -63,9 +79,9 @@ class Grounds:
     def add(self, text: str) -> None:
         self.texts.append(text)
 
-    def add_value(self, text: str) -> None:
+    def add_value(self, text: str, *, doctor: str = "", today: bool = False) -> None:
         self.texts.append(text)
-        self.values.append(text)
+        self.values.append(Value(text, doctor, today))
 
 
 @dataclass(frozen=True)
@@ -413,55 +429,120 @@ def _named(word: str, known: set[str]) -> bool:
     return any(fold(c) in known for c in candidates)
 
 
-def _doctors_named(sentence: str, known: set[str]) -> set[str]:
-    """The known doctors a sentence names after a title, as folded name words."""
-    found: set[str] = set()
+def _stems(word: str) -> list[str]:
+    word = _norm(word).lower().rstrip(".")
+    return [fold(word)] + [
+        fold(word[: -len(e)]) for e in _NAME_ENDINGS if word.endswith(e) and len(word) - len(e) >= 2
+    ]
+
+
+def _titled_names(text: str, *, endings: bool = True) -> list[str]:
+    """The folded name words after each title in the text, with each form a case ending may
+    hide ("ডাক্তার সুলতানার" -> সুলতানার, সুলতানা); `endings=False` keeps the words as written."""
+    found = []
     for regex, bangla in ((_BN_DOCTOR, True), (_EN_DOCTOR, False)):
-        for m in regex.finditer(sentence):
-            for word in _names_after(sentence, m.end(), bangla):
-                word = _norm(word).lower()
-                stems = [word] + [
-                    word[: -len(e)]
-                    for e in _NAME_ENDINGS
-                    if word.endswith(e) and len(word) - len(e) >= 2
-                ]
-                found.update(fold(c) for c in stems if fold(c) in known)
+        for m in regex.finditer(text):
+            for word in _names_after(text, m.end(), bangla):
+                found.extend(_stems(word) if endings else _stems(word)[:1])
     return found
 
 
-def _doctor_scope(sentence: str, grounds: Grounds, known: set[str]) -> list[str]:
-    """The grounds a sentence's days, times and numbers may rest on. A sentence that names one
-    doctor rests on the lines that name that doctor (directory line, knowledge entry, tool
-    result) and the call's own values: Sunday is not Dr Sultana's day because Dr Rahman sits
-    then. Naming no doctor, or several (where an English and a Bangla name of one doctor count
-    as one when one line holds both), keeps every ground."""
-    named = _doctors_named(sentence, known)
-    if not named:
-        return grounds.texts
-    values = {id(v) for v in grounds.values}
-    lines = [
-        line
-        for text in grounds.texts
-        if id(text) not in values
-        for line in text.splitlines()
-        if named & _ground_words([line])
-    ]
-    if any(not named <= _ground_words([line]) for line in lines):
-        return grounds.texts  # several doctors
-    own = [
-        line
-        for value in grounds.values
-        for line in value.splitlines()
-        if _doctors_named(line, known) <= named
-    ]
-    return lines + own
+@lru_cache(maxsize=512)
+def _line_doctors(line: str) -> frozenset[str]:
+    return frozenset(_titled_names(_norm(line), endings=False))
+
+
+def _doctor_groups(grounds: Grounds) -> list[frozenset[str]]:
+    """Each doctor of the facts as the set of their name words: a directory line holds both
+    spellings ("Dr Rahman / ডাক্তার রহমান"), so they are one doctor."""
+    values = {id(v.text) for v in grounds.values}
+    groups: list[set[str]] = []
+    for text in grounds.texts:
+        if id(text) in values:
+            continue
+        for line in text.splitlines():
+            names = set(_line_doctors(line))
+            if not names:
+                continue
+            for group in [g for g in groups if g & names]:
+                names |= group
+                groups.remove(group)
+            groups.append(names)
+    return [frozenset(g) for g in groups]
+
+
+def _doctors_in(text: str, groups: list[frozenset[str]]) -> set[frozenset[str]]:
+    """The known doctors a text names, with a title or without one ("সুলতানা ম্যাডাম")."""
+    stems = set(_titled_names(text))
+    for word in _words(text):
+        stems.update(_stems(word))
+    return {g for g in groups if g & stems}
+
+
+# A clause ends at a comma, a danda or a joiner: "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন" says
+# Sunday of Dr Sultana.
+_CLAUSE_SPLIT = re.compile(r",\s|;|।|[?!]|\s(?:ও|আর|এবং|and|but)\s", re.IGNORECASE)
+_TODAY_SAID = re.compile(_B + r"(?:আজ|আজকে)" + _E + r"|\btoday\b", re.IGNORECASE)
+
+
+def _clauses(text: str) -> list[str]:
+    return [c for c in _CLAUSE_SPLIT.split(text) if c.strip()]
+
+
+def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
+    """Each clause with the grounds its days, times and numbers may rest on.
+
+    A sentence that names no doctor rests on every ground. Otherwise each clause rests on the
+    lines of the doctors it names (a clause naming none takes the doctors of the clause before
+    it, or else the next one): their directory line, knowledge entries and tool results naming
+    them, and the call values that are theirs or nobody's. Today's weekday is not a doctor's
+    sitting day ("ডাক্তার রহমান আজ শনিবার বসেন" is wrong on a Saturday when he sits Sunday); a
+    clause of its own that says today ("আজ শনিবার, ...") may still name it."""
+    groups = _doctor_groups(grounds)
+    clauses = _clauses(text)
+    own = [_doctors_in(c, groups) for c in clauses]
+    if not any(own):
+        return [(text, grounds.texts)]
+    values = {id(v.text) for v in grounds.values}
+    out = []
+    for i, clause in enumerate(clauses):
+        doctors = own[i] or next(
+            (own[j] for j in [*range(i - 1, -1, -1), *range(i + 1, len(clauses))] if own[j]), set()
+        )
+        names = set().union(*doctors)
+        others = set().union(*(g for g in groups if g not in doctors))
+        lines = [
+            line
+            for t in grounds.texts
+            if id(t) not in values
+            for line in t.splitlines()
+            if names & _ground_words([line])
+        ]
+        for value in grounds.values:
+            if value.today:
+                if not own[i] and _TODAY_SAID.search(clause):
+                    lines.append(value.text)
+                continue
+            belongs = {fold(w) for w in _words(value.doctor)}
+            if value.doctor and not belongs & names:
+                continue
+            lines.extend(
+                line for line in value.text.splitlines() if not others & _ground_words([line])
+            )
+        out.append((clause, lines))
+    return out
+
+
+def _scope_lines(text: str, grounds: Grounds) -> list[str]:
+    """Every line any clause of the sentence may rest on."""
+    return [line for _clause, lines in _scopes(text, grounds) for line in lines]
 
 
 # --- days and times of day ---------------------------------------------------------------------
 
 _BN_DAYS = tuple(_norm(d) for d in _split("সোম মঙ্গল বুধ বৃহস্পতি শুক্র শনি রবি"))  # Monday first
 _EN_DAYS = _split("monday tuesday wednesday thursday friday saturday sunday")
-_BN_DAY_SAID = re.compile(_B + "(" + "|".join(_BN_DAYS) + ")বার(?:ের|এর|ে|র)?" + _E)
+_BN_DAY_SAID = re.compile(_B + "(" + "|".join(_BN_DAYS) + ")বার(?:ের|এর|ে|র)?(?:ও)?" + _E)
 _EN_DAY_SAID = re.compile(r"\b(" + "|".join(_EN_DAYS) + r")s?\b", re.IGNORECASE)
 # In grounds also "Mon/Wed/Sat", "সোম-বুধ" and ranges ("Sat-Thu").
 _DAY_NAME = (
@@ -577,11 +658,32 @@ def _hours_known(texts: list[str]) -> set[int]:
     return set().union(*(_ground_hours(t) for t in texts)) if texts else set()
 
 
+@lru_cache(maxsize=512)
+def _ground_clocks(text: str) -> frozenset[tuple[int, int]]:
+    """Every (hour, minute) the text names: "18:30", and a part of the day with an hour at :00."""
+    text = _norm(text)
+    found = {
+        (int(m.group(1)) % 24, int(m.group(2)))
+        for m in _CLOCK_HM.finditer(text.translate(_TO_ASCII))
+    }
+    found.update((hour, 0) for hour in _ground_hours(text))
+    return frozenset(found)
+
+
+_CLOCK_HM = re.compile(r"(?<![0-9])([0-9]{1,2}):([0-9]{2})")
+
+
 def _unknown_time(sentence: str, texts: list[str]) -> str | None:
-    grounded = _hours_known(texts)
-    for m in _CLOCK.finditer(sentence.translate(_TO_ASCII)):
-        if int(m.group(1)) % 24 not in grounded:
+    """A clock time is checked whole, hour and minute ("21:15" is not "21:00"); a part of the
+    day with an hour is checked by its hour."""
+    clocks = set().union(*(_ground_clocks(t) for t in texts)) if texts else set()
+    for m in _CLOCK_HM.finditer(sentence.translate(_TO_ASCII)):
+        hour, minute = int(m.group(1)), int(m.group(2))
+        if (hour % 24, minute) not in clocks and not (
+            hour <= 12 and ((hour + 12) % 24, minute) in clocks
+        ):
             return m.group()
+    grounded = _hours_known(texts)
     for phrase, hour_word, period in _said_times(sentence):
         hour = _hour(hour_word)
         if hour and not _hours_24(hour, _PERIODS[_norm(period).lower()]) & grounded:
@@ -589,18 +691,9 @@ def _unknown_time(sentence: str, texts: list[str]) -> str | None:
     return None
 
 
-def _without_grounded_clocks(sentence: str, texts: list[str]) -> str:
-    """The sentence with each clock time whose hour the facts name taken out, so "21:00" is not
-    read as a bare 21 against "রাত ৯টা"; its minutes stay to be checked unless they are 00."""
-    grounded = _hours_known(texts)
-    ascii_text = sentence.translate(_TO_ASCII)
-    out, at = [], 0
-    for m in _CLOCK.finditer(ascii_text):
-        if int(m.group(1)) % 24 in grounded:
-            minutes = m.group().rsplit(":", 1)[1]
-            out += [sentence[at : m.start()], "" if minutes == "00" else f" {minutes} "]
-            at = m.end()
-    return "".join([*out, sentence[at:]])
+def _without_clocks(sentence: str) -> str:
+    """The sentence without its clock times: they are checked as times, not as numbers."""
+    return _CLOCK_HM.sub(" ", sentence.translate(_TO_ASCII))
 
 
 # --- a "yes, we have it" -----------------------------------------------------------------------
@@ -638,7 +731,7 @@ def _backed_yes(sentence: str, known: set[str]) -> bool:
 # The directory writes a doctor's gender and languages as codes ("; female;", "speaks bn/en");
 # a true answer says them in words ("মহিলা ডাক্তার", "ইংরেজিতে কথা বলেন"). These words back a
 # yes-answer only; they never make a doctor's name.
-_GENDER_SLOT = re.compile(r"(?:^|;)\s*(female|male)\s*(?=;|$)", re.MULTILINE)
+_GENDER_SLOT = re.compile(r"(?:^|;| - )\s*(female|male)\s*(?=;|$)", re.MULTILINE)
 _SPEAKS_SLOT = re.compile(r"\bspeaks\s+([a-z]{2}(?:/[a-z]{2})*)")
 _CODE_WORDS = {
     "female": "female woman women lady ladies মহিলা নারী",
@@ -646,33 +739,88 @@ _CODE_WORDS = {
     "en": "english ইংরেজি ইংলিশ",
     "bn": "bangla bengali বাংলা",
 }
-_SPEAK_WORDS = "speak speaks speaking কথা বলেন বলে বলতে পারেন"
-# A yes about these is a fact about a doctor even without "we have": "হ্যাঁ, উনি হিন্দিতে কথা বলেন".
-_DIRECTORY_CLAIM = re.compile(
-    r"\bspeaks?\b|কথা বল|\b(?:female|male|lady|woman|man)\b|মহিলা|নারী|পুরুষ"
-    r"|ইংরেজি|ইংলিশ|বাংলা|হিন্দি|উর্দু|আরবি|\b(?:english|bangla|bengali|hindi|urdu|arabic)\b",
-    re.IGNORECASE,
-)
 _YES = re.compile(r"^\s*(?:জি\s*,?\s*|জ্বি\s*,?\s*)?(?:হ্যাঁ|হ্যা|yes)(?:[,।!.\s]|$)", re.IGNORECASE)
 
 
 @lru_cache(maxsize=512)
-def _code_words(text: str) -> frozenset[str]:
-    codes = [m.group(1) for m in _GENDER_SLOT.finditer(text)]
+def _codes(text: str) -> frozenset[str]:
+    """The gender and language codes a text's directory slots hold."""
+    found = {m.group(1) for m in _GENDER_SLOT.finditer(text)}
     for m in _SPEAKS_SLOT.finditer(text):
-        codes.extend(m.group(1).split("/"))
-    words = " ".join(_CODE_WORDS.get(c, "") for c in codes)
-    if _SPEAKS_SLOT.search(text):
-        words += " " + _SPEAK_WORDS
-    return frozenset(fold(w) for w in _words(words))
+        found.update(m.group(1).split("/"))
+    return frozenset(found)
 
 
-def _says_yes(stated: str, known: set[str]) -> bool:
-    """A yes that states a fact: the shared rule, or a yes about a named doctor's languages or
-    gender ("হ্যাঁ, আমি ইংরেজিতে কথা বলি" is SHEFA about itself, not a directory fact)."""
-    return unsupported_claim(stated) or bool(
-        _YES.search(stated) and _DIRECTORY_CLAIM.search(stated) and _doctors_named(stated, known)
-    )
+def _code_words(texts: list[str]) -> set[str]:
+    codes = set().union(*(_codes(t) for t in texts)) if texts else set()
+    return {fold(w) for c in codes for w in _words(_CODE_WORDS.get(c, ""))}
+
+
+# What a sentence says about a doctor's languages or gender, as the directory's codes.
+_LANGUAGE_SAID = {
+    "en": r"ইংরেজি|ইংলিশ|\benglish\b",
+    "bn": r"বাংলা(?!দেশ)|\bbangla\b|\bbengali\b",
+    "hi": r"হিন্দি|\bhindi\b",
+    "ur": r"উর্দু|\burdu\b",
+    "ar": r"আরবি|\barabic\b",
+}
+_GENDER_SAID = {
+    "female": r"মহিলা|নারী|\b(?:female|woman|women|lady|ladies)\b",
+    "male": r"পুরুষ|\b(?:male|man|men)\b",
+}
+_SPEAKS_SAID = re.compile(r"কথা বল|বলেন|বলতে|\bspeaks?\b|\btalks?\b", re.IGNORECASE)
+_PRONOUN = re.compile(
+    _B + r"(?:উনি|তিনি|ওনার|উনার|তাঁর|ওঁর|ওনাকে|উনাকে)" + _E + r"|\b(?:he|she|his|her)\b",
+    re.IGNORECASE,
+)
+_NEGATED_CLAIM = re.compile(
+    _B + r"(?:না|নন|নয়|নেই)" + _E + r"|\b(?:not|doesn't|don't|isn't|no)\b", re.IGNORECASE
+)
+
+
+def _claimed_codes(text: str) -> set[str]:
+    codes = {c for c, p in _GENDER_SAID.items() if re.search(p, text, re.IGNORECASE)}
+    if _SPEAKS_SAID.search(text):
+        codes |= {c for c, p in _LANGUAGE_SAID.items() if re.search(p, text, re.IGNORECASE)}
+    return codes
+
+
+def _doctor_claim(text: str, grounds: Grounds) -> Verdict | bool | None:
+    """A sentence about a doctor's languages or gender, judged against that doctor's own codes
+    ("হ্যাঁ, ডাক্তার রহমান মহিলা ডাক্তার।" fails when he is male). The doctor is the one named, or
+    for "উনি/he/she" the one the call is about; with none known it fails closed. None: no such
+    claim; True: a claim the facts back."""
+    claimed = _claimed_codes(text)
+    if not claimed:
+        return None
+    groups = _doctor_groups(grounds)
+    doctors = _doctors_in(text, groups)
+    if not doctors and _PRONOUN.search(text):
+        doctors = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
+        if not doctors:
+            return Verdict(
+                False, "unsupported", "it says what a doctor speaks or is, but no doctor is known"
+            )
+    if not doctors:
+        return None  # "হ্যাঁ, মহিলা ডাক্তার আছেন": the yes rule judges it
+    negated = bool(_NEGATED_CLAIM.search(text))
+    values = {id(v.text) for v in grounds.values}
+    for doctor in doctors:
+        lines = [
+            line
+            for t in grounds.texts
+            if id(t) not in values
+            for line in t.splitlines()
+            if doctor & _ground_words([line])
+        ]
+        codes = set().union(*(_codes(line) for line in lines)) if lines else set()
+        if any((c in codes) == negated for c in claimed):
+            return Verdict(
+                False,
+                "unsupported",
+                "it says what the doctor speaks or is, which their facts do not state",
+            )
+    return True
 
 
 # --- a parrot -------------------------------------------------------------------------------
@@ -682,29 +830,59 @@ _GREETING_OPEN = re.compile(
     r"|নমস্কার|আদাব|হ্যালো|hello|hi|good (?:morning|afternoon|evening))(?![ঀ-৿A-Za-z])[\s,।!.]*",
     re.IGNORECASE,
 )
+# What may follow a greeting given back: how SHEFA is, and thanks.
+_WELLBEING = re.compile(
+    r"^(?:(?:আমি\s+)?ভালো আছি|(?:আমি\s+)?ভাল আছি|আলহামদুলিল্লাহ(?:,?\s*ভালো আছি)?"
+    r"|I'?m (?:fine|good|well|doing well)|I am (?:fine|good|well)|fine|good|well)"
+    r"[\s,।.!]*(?:ধন্যবাদ|thank you|thanks)?[\s,।.!]*$",
+    re.IGNORECASE,
+)
 
 
-def _parrots(text: str, grounds: Grounds, known: set[str], ground_numbers: set[str]) -> bool:
-    """Only the caller's own words back: a near-copy of what they said that adds nothing from
-    the facts. A ground number or ground word the caller did not say, a backed yes, or a
-    greeting given back is an answer ("ডাক্তার রহমানের অভিজ্ঞতা 18 বছরের।" to "...কত বছরের?")."""
+def _day_set(text: str) -> set[int]:
+    return {
+        i
+        for regex in (_BN_DAY_SAID, _EN_DAY_SAID)
+        for m in regex.finditer(text)
+        if (i := _day_index(m.group(1))) is not None
+    }
+
+
+def _adds_a_fact(text: str, caller: str, grounds: Grounds, claim_ok: bool) -> bool:
+    """Something the facts hold that the caller did not say: a number, a day, a time, a doctor
+    (all already checked against the facts), or a yes on a doctor's codes the facts back. A
+    filler word ("our", "টাকা", "বলেন") is not a fact."""
+    if numbers_in(_without_clocks(text)) - numbers_in(_without_clocks(caller)):
+        return True
+    if _day_set(text) - _day_set(caller):
+        return True
+    said_times = {p for p, _h, _p in _said_times(text)} | set(
+        _CLOCK_HM.findall(text.translate(_TO_ASCII))
+    )
+    heard_times = {p for p, _h, _p in _said_times(caller)} | set(
+        _CLOCK_HM.findall(caller.translate(_TO_ASCII))
+    )
+    if said_times - heard_times:
+        return True
+    groups = _doctor_groups(grounds)
+    if _doctors_in(text, groups) - _doctors_in(caller, groups):
+        return True
+    return claim_ok and bool(_YES.search(text))
+
+
+def _parrots(text: str, grounds: Grounds, claim_ok: bool) -> bool:
+    """Only the caller's own words back: a near-copy of what they said that adds no fact
+    ("ডাক্তার রহমানের অভিজ্ঞতা 18 বছরের।" to "...কত বছরের?" adds 18). A greeting given back with
+    nothing but how SHEFA is after it answers; anything else after a greeting is judged alone."""
     caller = _norm(grounds.caller)
+    if m := _GREETING_OPEN.match(text):
+        rest = text[m.end() :].strip()
+        if not rest.strip(" ,।.!?") or _WELLBEING.match(rest):
+            return False
+        text, caller = rest, _GREETING_OPEN.sub("", caller, count=1).strip()
     if not parrots(text, caller):
         return False
-    if (numbers_in(text) - numbers_in(caller)) & ground_numbers:
-        return False
-    said = {fold(w) for w in _words(caller)}
-    if any(fold(w) not in said and _backed_word(w, known) for w in _words(text)):
-        return False
-    if _YES.search(text) and _backed_yes(text, known):
-        return False
-    if m := _GREETING_OPEN.match(text):
-        # A greeting given back, with "ভালো আছি" after it, answers; the caller's own question
-        # after it ("আসসালামু আলাইকুম, আপনার নাম কী?") still parrots.
-        rest = text[m.end() :].strip()
-        caller_rest = _GREETING_OPEN.sub("", caller, count=1)
-        return rest.endswith("?") and parrots(rest, caller_rest)
-    return True
+    return not _adds_a_fact(text, caller, grounds, claim_ok)
 
 
 # --- success claims and booking offers --------------------------------------------------------
@@ -766,7 +944,9 @@ _WHEN_TO_COME = re.compile(
     r"|(?:কখন|কবে|কোন দিনে?|কোন সময়ে?|কয়টায়|কোন বারে?)\s+(?:আপনি\s+)?"
     r"(?:আসতে চান|আসবেন|আসতে পারবেন|আসা যাবে|দেখাতে চান|দেখাবেন)"
     r"|কোন (?:দিনে?|সময়ে?) আপনার (?:মত|মতো|সুবিধা)"
-    r"|বুকিং (?:করতে|দিতে|নিতে) চা(?:ন|চ্ছেন|ইছেন)",
+    r"|বুকিং (?:করতে|দিতে|নিতে) চা(?:ন|চ্ছেন|ইছেন)"
+    r"|\b(?:would|do) you (?:like|want) to come\b|\b(?:can|will) you come\b"
+    r"|আপনি কি [^?।]{0,25}(?:আসবেন|আসতে পারবেন|আসতে চান)",
     re.IGNORECASE,
 )
 _ACTIONS = {
@@ -864,7 +1044,10 @@ def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
 # "has / has not": a sentence that names a facility and says whether the clinic has it.
 _HAS = re.compile(
     r"আছে|আছেন|নেই|নাই|পাবেন|পাওয়া যায়|খোলা|বন্ধ"
-    r"|\b(?:have|has|there is|there's|there are|no|available|open|closed)\b",
+    r"|\b(?:have|has|there is|there's|there are|no|available|open|closed)\b"
+    # where it is says it is there: "ক্যান্টিন নিচতলায়", "on the ground floor"
+    r"|তলায়|তলা|পাশে|নিচে|ভিতরে|ভেতরে|সামনে|পেছনে|বেসমেন্টে"
+    r"|\b(?:floor|next to|inside|behind|basement|is (?:on|in|at))\b",
     re.IGNORECASE,
 )
 # Saying the fact is not known is not a claim about the facility.
@@ -899,23 +1082,52 @@ def _uncovered_facility(stated: str, grounds: Grounds) -> str | None:
 # --- the language ------------------------------------------------------------------------------
 
 
-def _foreign_letter(sentence: str, language: str) -> str | None:
-    """A letter of a script the call's voice cannot read: anything but Bengali or Latin in a
-    Bangla reply ("सोमवार" read by the Bangla voice is noise), anything but Latin in an English
-    one (Bangla there is left to the shared rule, which allows a Bangla name). Digits and
-    punctuation (the danda is in the Devanagari block) are not letters."""
-    del language  # the same two scripts in either call; the share of each is fits_language's
+def _foreign_letter(sentence: str) -> str | None:
+    """A letter or digit of a script the voices cannot read ("सोमवार", "७५०"): anything but
+    Bengali, Latin or ASCII digits, in either call (how much Bangla an English reply may hold is
+    the shared rule's). Punctuation is not checked (the danda sits in the Devanagari block)."""
     for char in sentence:
-        if unicodedata.category(char)[0] not in "LM":
+        kind = unicodedata.category(char)
+        if kind[0] not in "LM" and kind != "Nd":
             continue
-        name = unicodedata.name(char, "")
-        if not name.startswith(("BENGALI", "LATIN", "COMBINING")):
+        if kind == "Nd" and char.isascii():
+            continue
+        if not unicodedata.name(char, "").startswith(("BENGALI", "LATIN", "COMBINING")):
             return char
     return None
 
 
-def _fits(sentence: str, language: str) -> bool:
-    return _foreign_letter(sentence, language) is None and fits_language(sentence, language)
+def _fits(raw: str, text: str, language: str) -> bool:
+    return _foreign_letter(raw) is None and fits_language(text, language)
+
+
+# --- an open day the facts say is closed -------------------------------------------------------
+
+_CLOSED_WORD = re.compile(r"বন্ধ|\bclosed\b|\bshut\b", re.IGNORECASE)
+_OPEN_WORD = re.compile(r"খোলা|খোলে|\bopen\b", re.IGNORECASE)
+_PIECE_END = re.compile(r"[,;।.]")
+
+
+@lru_cache(maxsize=512)
+def _closed_days(text: str) -> frozenset[int]:
+    """The days a ground text says are closed ("…খোলা, শুক্রবার বন্ধ", "closed on Friday")."""
+    days: set[int] = set()
+    for piece in _PIECE_END.split(_norm(text)):
+        if _CLOSED_WORD.search(piece):
+            days |= _ground_days(piece)
+    return frozenset(days)
+
+
+def _open_on_a_closed_day(text: str, texts: list[str]) -> str | None:
+    """"হ্যাঁ, শুক্রবার খোলা" when the facts say Friday is closed: every word of it is in the
+    facts, so only reading which day the facts close catches it."""
+    closed = set().union(*(_closed_days(t) for t in texts)) if texts else set()
+    for piece in _PIECE_END.split(text):
+        says_open = _OPEN_WORD.search(piece) and not _CLOSED_WORD.search(piece)
+        if says_open and not _NEGATED_CLAIM.search(piece):
+            for day in _day_set(piece) & closed:
+                return _EN_DAYS[day].capitalize()
+    return None
 
 
 # --- the check --------------------------------------------------------------------------------
@@ -943,17 +1155,21 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             )
     if claim := _claim(text, grounds.succeeded):
         return claim
-    scope = _doctor_scope(text, grounds, known)
-    scope_numbers = set().union(*(numbers_in(t) for t in scope)) if scope else set()
-    said_numbers = numbers_in(_without_grounded_clocks(text, scope))
-    for number in sorted(said_numbers - scope_numbers, key=int):
-        return Verdict(False, "fact", f"the number {number} is not in the facts")
+    for clause, scope in _scopes(text, grounds):
+        scope_numbers = set().union(*(numbers_in(t) for t in scope)) if scope else set()
+        for number in sorted(numbers_in(_without_clocks(clause)) - scope_numbers, key=int):
+            return Verdict(False, "fact", f"the number {number} is not in the facts")
+        if time := _unknown_time(clause, scope):
+            return Verdict(False, "fact", f"the time {time} is not in the facts")
+        if day := _unknown_day(clause, scope):
+            return Verdict(False, "fact", f"the day {day} is not in the facts")
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
-    if day := _unknown_day(text, scope):
-        return Verdict(False, "fact", f"the day {day} is not in the facts")
-    if time := _unknown_time(text, scope):
-        return Verdict(False, "fact", f"the time {time} is not in the facts")
+    if day := _open_on_a_closed_day(text, grounds.texts):
+        return Verdict(False, "fact", f"the facts say the clinic is closed on {day}")
+    claim_ok = _doctor_claim(text, grounds)
+    if isinstance(claim_ok, Verdict):
+        return claim_ok
     # A closing question asks rather than states ("Yes, how else can I help you?"), but what comes
     # before it still states: "হ্যাঁ, এমআরআই আছে, আসবেন?" is judged on "হ্যাঁ, এমআরআই আছে".
     stated = text.rsplit(",", 1)[0] if text.rstrip().endswith("?") else text
@@ -961,10 +1177,12 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
         return Verdict(
             False, "unsupported", f"it says what the clinic has about {topic}, which no fact states"
         )
-    yes_known = known | set().union(*(_code_words(t) for t in grounds.texts))
-    if _says_yes(stated, known) and not _backed_yes(stated, yes_known):
+    # A yes about named doctors rests on their own codes; one naming none on any doctor's.
+    named = _doctors_in(stated, _doctor_groups(grounds))
+    code_texts = _scope_lines(stated, grounds) if named else grounds.texts
+    if unsupported_claim(stated) and not _backed_yes(stated, known | _code_words(code_texts)):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
-    if grounds.caller and _parrots(text, grounds, yes_known, ground_numbers):
+    if grounds.caller and _parrots(text, grounds, claim_ok is True):
         return Verdict(False, "unsupported", "it only repeats the caller's own words")
     if goal == "information" and (m := _PUSH.search(text) or _WHEN_TO_COME.search(text)):
         return Verdict(
@@ -972,6 +1190,6 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             "push",
             f'it offers a booking ("{m.group()}") to a caller who only wants information',
         )
-    if not _fits(text, language):
+    if not _fits(sentence, text, language):
         return Verdict(False, "language", f"it is not in the call's language ({language})")
     return Verdict(True)
