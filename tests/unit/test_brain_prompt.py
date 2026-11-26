@@ -258,3 +258,13 @@ def test_an_uncut_history_keeps_the_greeting_first() -> None:
     history = [{"role": "assistant", "content": "GREETING"}, *_history(1)]
     kept = compose(CallState(), CONFIG, [], "", history)[1:]
     assert kept[0]["content"] == "GREETING"
+
+
+def test_budget_trimming_never_cuts_history_below_the_minimum(monkeypatch) -> None:
+    # Leading with the caller must not drop the clinic's last question the caller is answering
+    # ("হ্যাঁ" is meaningless without "shall I book 5 pm?").
+    monkeypatch.setattr(settings.brain, "prompt_budget_tokens", 450)
+    history = _history(5, size=300)  # user, assistant, user, assistant, user
+    kept = compose(CallState(), CONFIG, [], "", history)[1:]
+    assert [m["content"][:5] for m in kept] == ["turn3", "turn4"]
+    assert len(kept) == prompt.MIN_HISTORY

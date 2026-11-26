@@ -145,8 +145,11 @@ def compose(
         # The gemma2 template folds the system text into the first user turn: a cut history that
         # opens on an assistant turn puts a different reply before it each turn, and vLLM's
         # prefix cache misses (600-700 ms first token in the probe's longer call). An uncut
-        # history keeps the greeting: it is the same on every call.
-        while len(turns) < whole and len(turns) > 1 and turns[0]["role"] == "assistant":
+        # history keeps the greeting: it is the same on every call. Never below MIN_HISTORY: the
+        # clinic's last question is what a short answer ("হ্যাঁ") replies to.
+        while (
+            len(turns) < whole and len(turns) > MIN_HISTORY and turns[0]["role"] == "assistant"
+        ):
             turns.pop(0)
 
     lead_with_caller()
