@@ -451,6 +451,10 @@ async def bake(
             )
             return None
 
+    from shefa.config.settings import settings
+
+    # The engine every candidate is scored on (`run_scorecard` sets it for each run).
+    engine = getattr(args, "engine", None) or settings.pipeline.engine
     path = Path(args.out) / f"bakeoff-{_stamp()}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     state: dict[str, Any] = {"tts": None}
@@ -466,6 +470,7 @@ async def bake(
         result: dict[str, Any] = {
             "started": started,
             "tags": getattr(args, "tags", "") or "",
+            "engine": engine,
             "models": list(models),
             "with_voice": with_voice,
             "rounds": int(getattr(args, "rounds", None) or ROUNDS),

@@ -228,6 +228,7 @@ async def run_scorecard(
     previous_audit = getattr(audit, "_default_audit_store", None)
     # Lab calls write audit rows like real calls; they go to the bench's own file, never to
     # the clinic's database.
+    isolated = _isolate(work, getattr(args, "engine", None))
     audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
     try:
         if agent is not None:
@@ -268,6 +269,7 @@ async def run_scorecard(
             "speech": bool(args.speech),
             "tags": getattr(args, "tags", "") or "",
             "started": started,
+            "engine": isolated.engine,
         }
         card = scorecard.build(results, judged, meta)
         if human is not None:
@@ -282,9 +284,90 @@ async def run_scorecard(
             owned.append(registry._llm)  # noqa: SLF001 - the configured model this run caused
             registry.use_llm(None)
         audit.set_default_audit_store(previous_audit)
+        isolated.restore()
         for built in owned:
             with contextlib.suppress(Exception):
                 await built.close()
+
+
+class _Isolated:
+    """What `_isolate` changed, to put back as it was found."""
+
+    def __init__(self, engine: str, undo: list[Callable[[], None]]) -> None:
+        self.engine = engine
+        self._undo = undo
+
+    def restore(self) -> None:
+        for step in reversed(self._undo):
+            step()
+
+
+def _isolate(work: Path, engine: str | None) -> _Isolated:
+    """Point the run at its own stores in `work` and set the engine (None: the configured one).
+
+    The lab never reads production's prompts, knowledge base or call log and never writes to
+    them: the config store, the knowledge base (seeded fresh from the clinic's facilities and
+    the platform file) and the call log get files of their own, and `storage.db_path`, which
+    every default falls back to, points into `work` for the run. With no live rows in the
+    lab's config store, the engine is the setting `--engine` gave. The previous stores are read
+    from the module globals, never through `default_*_store()`, which would open the live file.
+    """
+    from shefa import call_log
+    from shefa.brain import config as brain_config
+    from shefa.brain import knowledge
+    from shefa.config.settings import settings
+
+    undo: list[Callable[[], None]] = []
+    try:
+        return _isolated(work, engine, undo, call_log, brain_config, knowledge, settings)
+    except BaseException:
+        _Isolated("", undo).restore()  # half done is put back before the error goes on
+        raise
+
+
+def _isolated(
+    work: Path,
+    engine: str | None,
+    undo: list[Callable[[], None]],
+    call_log: Any,
+    brain_config: Any,
+    knowledge: Any,
+    settings: Any,
+) -> _Isolated:
+    old_path, old_engine = settings.storage.db_path, settings.pipeline.engine
+
+    def put_back_settings() -> None:
+        settings.storage.db_path = old_path
+        settings.pipeline.engine = old_engine
+
+    undo.append(put_back_settings)
+    settings.storage.db_path = str(work / "platform.db")
+    if engine is not None:
+        settings.pipeline.engine = engine
+    for name in ("config.db", "knowledge.db", "calls.db"):
+        for leftover in work.glob(f"{name}*"):
+            leftover.unlink()  # every run starts from the files the lab itself seeds
+
+    old_config = brain_config._default_config_store  # noqa: SLF001 - put back as found
+    brain_config.set_default_config_store(brain_config.ConfigStore(work / "config.db"))
+    undo.append(lambda: brain_config.set_default_config_store(old_config))
+
+    old_knowledge = knowledge._default_knowledge_store  # noqa: SLF001
+    store = knowledge.KnowledgeStore(work / "knowledge.db")
+    knowledge.seed(store, clinic_id="", platform_file=knowledge.PLATFORM_FILE)
+    knowledge.set_default_knowledge_store(store)
+    undo.append(lambda: knowledge.set_default_knowledge_store(old_knowledge))
+
+    old_calls = call_log._store  # noqa: SLF001
+    calls = call_log.CallsStore(work / "calls.db")
+    call_log.set_default_calls_store(calls)
+
+    def put_back_calls() -> None:
+        call_log.set_default_calls_store(old_calls)
+        calls.close()
+
+    undo.append(put_back_calls)
+    return _Isolated(settings.pipeline.engine, undo)
 
 
 def _configured_label() -> str:

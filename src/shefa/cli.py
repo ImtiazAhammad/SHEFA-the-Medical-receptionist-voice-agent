@@ -169,6 +169,12 @@ def _add_bench_options(parser: argparse.ArgumentParser, tags_default: str) -> No
     )
     parser.add_argument("--out", default="data/bench", help="folder for scorecards and tables")
     parser.add_argument("--clinic", default="configs/clinic.example.yaml")
+    parser.add_argument(
+        "--engine",
+        choices=["agent", "guided"],
+        default=None,
+        help="which engine answers the calls for this run (default: pipeline.engine)",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

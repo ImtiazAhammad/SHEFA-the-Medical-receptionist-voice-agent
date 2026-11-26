@@ -1070,3 +1070,15 @@ def test_table_shows_each_models_gpu_delta_over_the_baseline():
     assert "+2500" in a_line  # 9000 - 6500
     assert "+" not in next(line for line in text.splitlines() if line.startswith("b "))
     assert "+2500" not in bakeoff.table(rows, "a", 400.0, 1200)  # no baseline, no delta
+
+
+async def test_bake_records_the_engine_it_ran(monkeypatch, tmp_path, probes):
+    monkeypatch.setattr(bakeoff, "model_available", fake_available({"a"}))
+
+    async def tts():
+        return 400.0
+
+    args = args_stub(tmp_path, engine="agent")
+    result = await bakeoff.bake(["a"], args, scorer=fake_scorer, tts_timer=tts)
+    saved = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    assert result["engine"] == saved["engine"] == "agent"

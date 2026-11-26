@@ -552,3 +552,110 @@ def test_the_transcript_shows_what_the_caller_said_and_what_shefa_heard():
     lines = scoring.transcript_of(result)
     assert lines[1] == ("patient", "রবিবার দশটায়")  # heard as said: shown once
     assert lines[3] == ("patient", "said: হ্যাঁ, রহমান  (SHEFA heard: হ্যাঁ, রমজান)")
+
+
+# --- Task 11: --engine and the lab's own stores ---------------------------------------------
+
+
+class BrainLLM:
+    """An agent model the brain can talk to: the router says "none", every reply is one line."""
+
+    def __init__(self):
+        self.replies = 0
+
+    def generate_stream(self, messages, tools=None, **kwargs):
+        return self._stream('{"tool":"none","mood":"calm","goal":"unknown"}'
+                            if "extra_body" in kwargs else "জি, বলুন।")  # fmt: skip
+
+    async def _stream(self, text):
+        if not text.startswith("{"):
+            self.replies += 1
+        yield text
+
+    async def generate(self, messages, tools=None, **kwargs):
+        return LLMResult(text="{}")
+
+    async def close(self):
+        pass
+
+
+async def run_engine(tmp_path, engine, agent=None, **over):
+    args = make_args(tmp_path, **over)
+    if engine is not None:
+        args.engine = engine
+    return await scoring.run_scorecard(
+        "agent-m",
+        args,
+        agent_llm=agent or BrainLLM(),
+        caller_llm=TextLLM("[END]"),
+        judge_llm=TextLLM(json.dumps(GOOD)),
+        today=date(2026, 11, 4),
+    )
+
+
+async def test_lab_score_engine_agent_runs_the_brain_and_records_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "engine", "guided")
+    agent = BrainLLM()
+    card = await run_engine(tmp_path, "agent", agent)
+    assert card["meta"]["engine"] == "agent"
+    assert agent.replies >= 2  # both scenarios were answered by the brain, not the guided path
+    assert settings.pipeline.engine == "guided"  # put back after the run
+
+
+async def test_without_engine_the_configured_one_is_recorded(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings.pipeline, "engine", "guided")
+    card = await run_engine(tmp_path, None, AgentLLM())
+    assert card["meta"]["engine"] == "guided"
+
+
+async def test_a_live_engine_row_in_production_does_not_change_a_lab_run(tmp_path):
+    from shefa.brain import config as brain_config
+    from shefa.brain import knowledge
+
+    production = brain_config.default_config_store()  # the isolated stand-in for data/shefa.db
+    production.publish(production.draft("engine", "guided", author="t"), author="t")
+    production_kb = knowledge.default_knowledge_store()
+    agent = BrainLLM()
+    card = await run_engine(tmp_path, "agent", agent)
+    assert card["meta"]["engine"] == "agent" and agent.replies >= 2
+    work = tmp_path / "bench" / ".work"
+    assert (work / "config.db").exists() and (work / "knowledge.db").exists()
+    # The lab's knowledge base was seeded from the platform file, not read from production.
+    assert knowledge.KnowledgeStore(work / "knowledge.db").entries(["platform"])
+    assert production_kb.all_entries() == []
+    # Put back as found.
+    assert brain_config.default_config_store() is production
+    assert knowledge.default_knowledge_store() is production_kb
+
+
+async def test_a_lab_run_opens_nothing_at_the_platform_database(tmp_path, monkeypatch):
+    from shefa import call_log
+    from shefa.brain import config as brain_config
+    from shefa.brain import knowledge
+    from shefa.store import audit
+
+    sentinel = tmp_path / "live" / "shefa.db"
+    monkeypatch.setattr(settings.storage, "db_path", str(sentinel))
+    # Nothing set: every default would fall back to `storage.db_path`, as in production.
+    brain_config.set_default_config_store(None)
+    knowledge.set_default_knowledge_store(None)
+    audit.set_default_audit_store(None)
+    call_log.set_default_calls_store(None)
+    agent = BrainLLM()
+    card = await run_engine(tmp_path, "agent", agent)
+    assert agent.replies >= 2 and card["meta"]["engine"] == "agent"
+    assert not sentinel.parent.exists()
+    assert settings.storage.db_path == str(sentinel)
+    assert brain_config._default_config_store is None  # noqa: SLF001 - restored as found
+    assert knowledge._default_knowledge_store is None  # noqa: SLF001
+
+
+class TestEngineFlag:
+    @pytest.mark.parametrize("command", [["score"], ["bakeoff", "m"]])
+    def test_engine_is_agent_or_guided_and_defaults_to_the_configured_one(self, command):
+        parse = cli.build_parser().parse_args
+        assert parse(["lab", *command]).engine is None
+        assert parse(["lab", *command, "--engine", "agent"]).engine == "agent"
+        assert parse(["lab", *command, "--engine", "guided"]).engine == "guided"
+        with pytest.raises(SystemExit):
+            parse(["lab", *command, "--engine", "banana"])
