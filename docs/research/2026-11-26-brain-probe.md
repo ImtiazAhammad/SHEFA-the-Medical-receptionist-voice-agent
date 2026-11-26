@@ -448,67 +448,66 @@ s-lang         -                  -                  calm/information           
 ## After Task 7b (final checker, after fix round 1)
 
 Date: 2026-11-26. `PYTHONUNBUFFERED=1 uv run python scripts/brain_probe.py --runs 1 --concurrent 1`
-(one sequential pass, then the 7-turn call) on the final code (ab3c5da). Raw run (untracked):
-`data/bench/brain-probe-20261126-101153.json`. Same setup as 8c. This replaces the numbers of the
-first 7b run (`brain-probe-20261126-085134.json`, measured before the review fixes: 4/90
-regenerations, p95 1239 ms), which no longer describe the checker.
+(one sequential pass, then the 7-turn call) on the final code (d2e7b19). Raw run (untracked):
+`data/bench/brain-probe-20261126-102428.json`. Same setup as 8c. Earlier 7b runs
+(`…-085134.json` before the review, `…-101153.json` before the fix round's second pass) no longer
+describe the checker and are not used here.
 
 What changed (Task 7b and its fix round): the checker passes true answers it refused (a near-copy
-of the question that adds a number, day, time or doctor; a backed doctor-code yes; a greeting
-given back), reads the directory's gender and language codes in words, matches times written
-in words and checks clock times hour and minute, checks each clause's days, times and numbers
-against the doctors it names (today never backs a doctor's day; call values carry their
-doctor), judges a doctor's language/gender claims on that doctor's own codes, refuses invented
-facility answers, letters and digits of other scripts, "open" on a day the facts close, and
-more "when would you like to come" pushes. The engine answers a pure facility question no
-fact of the turn covers by code (`reply_source: "facility"`): the clinic's knowledge entry for
-the topic when retrieval missed it, else "not known". A department named in a question is an
-information goal. A router `upset` no longer hides the word rules' `angry`.
+of the question that adds a number, day, time or doctor; a yes confirming a named doctor's
+checked day; a backed doctor-code yes; a greeting given back), reads the directory's gender and
+language codes in words, matches times written in words and checks clock times hour and minute,
+checks each clause's days, times and numbers against the doctors it names (today never backs a
+doctor's day; call values carry their doctor), judges a doctor's language/gender claims on that
+doctor's own codes, refuses invented facility answers, letters and digits of other scripts,
+"open" on a day the facts close, and more "when would you like to come" pushes. The engine
+answers a pure facility question no fact of the turn covers by code (`reply_source:
+"facility"`): the clinic's knowledge entry for the topic when retrieval missed it, else "not
+known". A department named in a question is an information goal. A router `upset` no longer
+hides the word rules' `angry`.
 
 | | 8c run 1 | 7b final |
 |---|---|---|
 | Regenerations | 9/90 (7 unsupported, 2 fact) | **5/90** (3 fact, 2 unsupported) |
-| First spoken p50 / p95, 59 non-tool turns | 599 / 1338 ms | 517 / **1998** ms |
-| same, 55 turns the model answered (4 code-answered left out) | - | 535 / 1998 ms |
-| p95 without regenerated turns | 1126 ms | **1068 ms** |
+| First spoken p50 / p95, 59 non-tool turns | 599 / 1338 ms | 512 / **1523** ms |
+| same, 55 turns the model answered (4 code-answered left out) | - | 532 / 1523 ms |
+| p95 without regenerated turns | 1126 ms | **1029 ms** |
 | Turns over 1100 ms | 9 | 6 |
-| Router call p50 / p95 | 525 / 612 ms | 527 / 586 ms |
-| Reply first token p50 / p95 | 80 / 120 ms | 78 / 132 ms |
-| First sentence finished p50 / p95 | 532 / 1126 ms | 533 / 1158 ms |
+| Router call p50 / p95 | 525 / 612 ms | 535 / 599 ms |
+| Reply first token p50 / p95 | 80 / 120 ms | 83 / 140 ms |
+| First sentence finished p50 / p95 | 532 / 1126 ms | 529 / 1143 ms |
 | Finished sentence held by the router | 0 / 276 ms, 23 turns | **0 / 0 ms, 0 turns** |
 | Router right / false | 30/31, 2/59 | 30/31, 2/59 (same misses) |
 
-The latency gate (p95 ≤ 1100 ms) fails on the three regenerated turns: with 59 turns the
-nearest-rank p95 is the 57th, so three slow turns set it. Without regenerated turns it passes
-(1068 ms). Over 1100 ms: k-rahman-time 2378, k-days 2044, m-confused 1998 (all regenerated, then
-the safe sentence), d-lady 1294 (regenerated), m-rude 1253 and k-parking 1160 (long Bangla first
-sentences at ~25 ms/token).
+The latency gate (p95 ≤ 1100 ms) fails on regenerated turns: with 59 turns the nearest-rank p95
+is the 57th, so three slow turns set it. Without regenerated turns it passes (1029 ms). Over
+1100 ms: k-rahman-time 2293, k-days 2151, m-confused 1523, d-lady 1320 (all regenerated),
+k-parking 1177 and m-chatty 1164 (long Bangla first sentences at ~25 ms/token).
 
 **Router hold after streaming (first measurement):** the tool field is known about 190–210 ms
-into the turn (whole answer ~527 ms), before every first sentence finished: no sentence waited.
+into the turn (whole answer ~535 ms), before every first sentence finished: no sentence waited.
 
 Regenerations by reason, and whether the refusal was right:
-- `fact` k-days, twice "ডাক্তার সুলতানা সোমবার, বুধবার এবং শনিবার দশটা থেকে তিনটা পর্যন্ত বসেন।" (3 is
-  not her hour; right).
-- `fact` k-rahman-time "ডাক্তার রহমান দুইটায় এবং চারটায় সন্ধ্যায় দুইটা থেকে ষটটা …", retry "…তুই,
-  বৃহস্পতিবার ও সোমবার…" (wrong times and Monday; right).
-- `fact` m-confused "হ্যাঁ, শিশু ডাক্তার শিশুদের এবং মেডিসিন ডাক্তার বড়দের দেখে।" ("ডাক্তার শিশুদের" read
-  as a doctor's name: the false refusal 8c already listed, still open).
-- `unsupported` d-lady "হ্যাঁ, আমাদের কয়েকজন মহিলা ডাক্তার আছেন।" ("several"; right; the retry passed).
-- `unsupported` e-lady "Yes, we do." (nothing to back it; still refused).
+- `fact` k-days: "…सोमবার … দুপুর ১০টা থেকে তিনটা…", then "…দশটা থেকে তিনটা…" (3 is not her hour;
+  right), ended in the safe sentence.
+- `fact` k-rahman-time: "ডাক্তার রহমান বৃহস্পতিবার ও সোমবার…" twice (Monday is wrong; right).
+- `fact` m-confused "হ্যাঁ, শিশু ডাক্তার শিশুদের দেখেন…" ("ডাক্তার শিশুদের" read as a doctor's name:
+  the false refusal 8c already listed, still open; the retry passed).
+- `unsupported` d-lady "হ্যাঁ, আমাদের কয়েকজন মহিলা ডাক্তার আছেন।" twice ("several"; right).
+- `unsupported` e-lady "Yes, we do." twice (nothing in it to back; arguable).
 
 The probe's cases:
 
 | case | 8c | 7b final |
 |---|---|---|
-| d-exp "…অভিজ্ঞতা ১৮ বছরের।" | refused (parrot) | passes |
-| d-english "হ্যাঁ, ডাক্তার হোসেন ইংরেজিতেও কথা বলেন।" | refused (parrot) | passes |
+| d-exp "…অভিজ্ঞতা আঠার বছরের।" | refused (parrot) | passes |
+| d-english "হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলে।" | refused (parrot) | passes |
 | s-salam "আসসালামু আলাইকুম, ভালো আছি।" | refused (parrot) | passes |
 | k-followup "…ফলো-আপ ফি চারশো টাকা।" | refused (parrot) | passes |
-| d-lady female doctor yes | refused | passes on the retry (first said "several") |
-| m-rushed, m-angry "রাত ৯টা", e-hours "nine in the evening" | refused (fact) | pass |
-| k-days wrong day/hour for Dr Sultana | passed (wrong) | refused (fact) |
-| e-days "What time would you like to come?" | spoken | goal now `information`; the model did not push this run (the engine test pins the drop) |
-| k-unknown, e-canteen, k-pharmacy | invented yes/no on some runs | code: "not known" in 10–15 ms |
-| k-friday, the long call's address | wrong "খোলা থাকে" / answered | code speaks the clinic's entry (retrieval missed it) in 7–11 ms |
-| s-thanks-ask "লিফট আছে।" (no fact) | spoken | refused after the first sentence |
+| m-rushed "রাত ৯টা", m-angry, e-hours "nine in the evening" | refused (fact) | pass |
+| k-days wrong hour / Devanagari for Dr Sultana | passed (wrong) | refused |
+| e-days "What time would you like to come?" | spoken | **dropped (push)**; goal `information` |
+| d-lady female doctor yes | refused | the model said "several" twice: refused, safe sentence |
+| k-unknown, e-canteen, k-pharmacy | invented yes/no on some runs | code: "not known" in 11–14 ms |
+| k-friday, the long call's address | wrong "খোলা থাকে" / answered | code speaks the clinic's entry (retrieval missed it) in 7–12 ms |
+| s-thanks-ask "ক্লিনিকে লিফট আছে।" (no fact) | spoken | refused after the first sentence |
