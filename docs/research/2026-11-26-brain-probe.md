@@ -444,3 +444,74 @@ s-lang         -                  -                  calm/information           
 3. The conduct prompt still names `hand_over` ("get hand_over with reason emergency"), a tool the
    reply can no longer call; the router covers emergencies (both emergency turns routed right).
 4. `_act` is still the stub: every routed turn speaks the repeat prompt. Task 9 fills it.
+
+## After Task 7b
+
+Date: 2026-11-26. `PYTHONUNBUFFERED=1 uv run python scripts/brain_probe.py --runs 1 --concurrent 1`
+(one sequential pass, then the 7-turn call). Raw run (untracked):
+`data/bench/brain-probe-20261126-085134.json`. Same setup as 8c. The first attempt at this run
+finished all 90 turns but crashed in the summary (a turn code answered cancels the router, whose
+record then has no end time); the script now skips such router records and reports first-spoken
+with and without the code-answered turns. Only the second, complete run is reported.
+
+What changed (Task 7b): the checker passes true answers it refused (parrot rule, directory codes
+in words, times in words), checks a named doctor's days/times/numbers against that doctor's
+lines, refuses invented has/has-not facility answers and letters of other scripts, and drops
+"when would you like to come" at an information caller. The engine answers a facility question
+no fact covers by code (`reply_source: "facility"`), and the router's `upset` no longer hides
+the word rules' `angry`.
+
+| | 8c run 1 | 7b |
+|---|---|---|
+| Regenerations | 9/90 (7 unsupported, 2 fact) | **4/90** (3 unsupported, 1 fact) |
+| First spoken p50 / p95, 59 non-tool turns | 599 / 1338 ms | **528 / 1239 ms** |
+| same, 54 turns the model answered (5 code-answered left out) | - | 544 / 1239 ms |
+| p95 without regenerated turns | 1126 ms | 1141 ms |
+| Turns over 1100 ms | 9 | 5 |
+| Router call p50 / p95 | 525 / 612 ms | 520 / 585 ms |
+| Reply first token p50 / p95 | 80 / 120 ms | 78 / 132 ms |
+| First sentence finished p50 / p95 | 532 / 1126 ms | 536 / 1151 ms |
+| Finished sentence held by the router | 0 / 276 ms, 23 turns | **0 / 0 ms, 0 turns** |
+| Router right / false | 30/31, 2/59 | 30/31, 2/59 (same misses) |
+
+The latency gate (p95 ≤ 1100 ms) still fails. Over 1100 ms: k-days 2562 (regenerated twice
+over, see below), d-lady 1293 (regenerated), and three long Bangla first sentences decoded at
+~25 ms/token: k-rahman-time 1239, m-rude 1224, k-parking 1141.
+
+**Router hold after streaming (first measurement):** the tool field is known about 210 ms into
+the turn (router whole answer ~520 ms), before every first sentence finished, so no sentence
+waited for the router in this run.
+
+Regenerations by reason:
+- `unsupported` d-lady "হ্যাঁ, আমাদের কয়েকজন মহিলা ডাক্তার আছেন।" ("several" lady doctors: the
+  directory has one; the retry "হ্যাঁ, আমাদের ক্লিনিকে মহিলা ডাক্তার আছেন।" passed).
+- `unsupported` e-lady "Yes, we do." (nothing in the sentence to back; still refused).
+- `unsupported` s-hello "হ্যাঁ, শুনতে পাচ্ছি।" (parrot of "হ্যালো, শুনতে পাচ্ছেন?"; a false refusal not in
+  7b's list).
+- `fact` k-days "ডাক্তার সুলতানা বুধবার, শনিবার এবং রবিবার ..." (Sunday: rightly refused now).
+
+The probe's cases:
+
+| case | 8c | 7b |
+|---|---|---|
+| d-exp "…অভিজ্ঞতা 18 বছরের।" | refused (parrot) | passes |
+| d-english "হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলেন।" | refused (parrot) | passes |
+| s-salam "আসসালামু আলাইকুম, ভালো আছি।" | refused (parrot) | passes |
+| k-followup "…ফলো-আপ ফি চারশো টাকা।" | refused (parrot) | passes |
+| d-lady female doctor yes | refused | passes on the retry (first said "several") |
+| m-rushed "রাত ৯টা", m-angry, e-hours "nine in the evening" | refused (fact) | pass |
+| k-days Sunday for Dr Sultana | passed (wrong) | refused (fact) |
+| k-days Devanagari "सोमবার" | passed run 3 (wrong) | dropped (language) |
+| k-unknown, e-canteen, k-pharmacy, s-thanks-ask (lift) | invented yes/no on some runs | code answers "not known" in 6–9 ms |
+| e-days "What time would you like to come?" | spoken | **still spoken**: the word rules call this line a booking (see below) |
+
+Found in this run:
+- k-days ended with only "কোন দিনের জন্য আপনার বুকিং করতে চান?" spoken (after the Sunday and the
+  Devanagari attempts were refused). "বুকিং করতে চান" is now a push too (fixed after the run).
+- e-days: `state.track`'s goal for "Which days does the child specialist see patients?" is
+  `booking` (`guided.wants_to_book` matches it), and a router `information` never replaces a
+  real goal, so the push rule does not run. The rule itself catches the sentence.
+- k-friday ("শুক্রবারে কি ক্লিনিক বন্ধ থাকে?") and the long call's "ঠিকানাটা একটু বলবেন?" got the
+  code's "not known" answer although the clinic's knowledge has hours and address: words-only
+  retrieval missed the entry that turn, and the brief counts only the turn's hits. In 8c the
+  model answered k-friday wrongly ("খোলা থাকে"), so this is safer but not right.

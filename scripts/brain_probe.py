@@ -557,6 +557,15 @@ def _tool_known_ms(row: dict[str, Any]) -> float:
     return float(tool_ms) if tool_ms is not None else row["router"]["done_ms"]
 
 
+def _router_ms(row: dict[str, Any]) -> float | None:
+    """How long the router call ran; None when it never finished (a turn code answered cancels
+    it, Task 7b)."""
+    router = row["router"]
+    if not router or router.get("done_ms") is None:
+        return None
+    return router["done_ms"] - router["called_ms"]
+
+
 def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]:
     tool_rows = [r for r in rows if r["expected"]]
     controls = [r for r in rows if not r["expected"]]
@@ -580,7 +589,9 @@ def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]
 
     first = [ms(r) for r in controls]
     clean = [ms(r) for r in controls if not r["trace"].get("regenerated")]
-    router_ms = [r["router"]["done_ms"] - r["router"]["called_ms"] for r in rows if r["router"]]
+    router_ms = [took for r in rows if (took := _router_ms(r)) is not None]
+    # Turns the model answered (Task 7b: code answers facilities no fact covers in a few ms).
+    by_model = [ms(r) for r in controls if r["trace"].get("reply_source", "model") == "model"]
     ttft = [r["first_chunk_ms"] for r in controls if r["first_chunk_ms"] is not None]
     ready = [r["sentence_ready_ms"] for r in controls if r["sentence_ready_ms"] is not None]
     decode = [
@@ -593,7 +604,9 @@ def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]
     held = [
         max(0.0, _tool_known_ms(r) - r["sentence_ready_ms"])
         for r in controls
-        if r["router"] and r["sentence_ready_ms"] is not None and not r["trace"].get("regenerated")
+        if _router_ms(r) is not None
+        and r["sentence_ready_ms"] is not None
+        and not r["trace"].get("regenerated")
     ]
     tokens = [r["prompt_tokens_est"] for r in rows]
     p95 = _pct(first, 0.95)
@@ -619,6 +632,9 @@ def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]
         "first_spoken_max_ms": max(first, default=None),
         "first_spoken_over_limit": sum(1 for v in first if v > LATENCY_LIMIT_MS),
         "first_spoken_p95_no_regen_ms": _pct(clean, 0.95) if clean else None,
+        "code_answered_turns": len(controls) - len(by_model),
+        "first_spoken_p50_model_ms": _median(by_model),
+        "first_spoken_p95_model_ms": _pct(by_model, 0.95),
         "router_ms_p50": _median(router_ms),
         "router_ms_p95": _pct(router_ms, 0.95),
         "first_chunk_ms_p50": _median(ttft),
@@ -650,7 +666,7 @@ def _table(rows: list[dict[str, Any]]) -> str:
     for r in rows:
         t = r["trace"]
         route = t.get("route") or {}
-        rtr = r["router"]["done_ms"] - r["router"]["called_ms"] if r["router"] else None
+        rtr = _router_ms(r)
 
         def f(v: float | None) -> str:
             return "-" if v is None else f"{v:.0f}"
