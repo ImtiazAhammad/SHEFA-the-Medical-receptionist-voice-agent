@@ -1315,3 +1315,31 @@ def test_n2_the_department_asked_next_judges_the_reply_over_the_calls_doctor(exa
     _turn(session, then, llm, speak)
     assert speak.said == [sultanas]  # Dr Rahman's days were refused for the children's doctor
     assert session.metadata["brain_trace"][-1]["verdicts"] == ["fact", "ok"]
+
+
+# --- Task 7b round 5 ------------------------------------------------------------------------------
+
+
+def test_clinic_hours_after_a_doctor_turn_are_the_clinics(example_clinic):
+    # The probe's long call, turn 6: Dr Rahman is the call's doctor, and the clinic's hours are
+    # judged by the clinic's lines (ruling a), not refused on his.
+    default_knowledge_store().add(
+        "default",
+        "hours",
+        text_bn="ক্লিনিক শনি থেকে বৃহস্পতিবার সকাল ৯টা থেকে রাত ৯টা পর্যন্ত খোলা, শুক্রবার বন্ধ।",
+        text_en="The clinic is open Saturday to Thursday, 9 am to 9 pm; closed on Friday.",
+        tags=["hours", "খোলা", "কয়টা"],
+        author="test",
+    )
+    first = "ডাক্তার রহমানের ফি কত?"
+    session = _session(first)
+    _turn(session, first, FakeLLM("ডাক্তার রহমানের ফি ৮০০ টাকা।", route=route_json()), Recorder())
+    session.add_turn("assistant", "ডাক্তার রহমানের ফি ৮০০ টাকা।")
+    then = "ক্লিনিক কয়টা পর্যন্ত খোলা?"
+    session.add_turn("user", then)
+    speak = Recorder()
+    llm = FakeLLM("ক্লিনিক রাত ৯টা পর্যন্ত খোলা।", route=route_json("none", "calm", "information"))
+    _turn(session, then, llm, speak)
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["reply_source"] == "model"
+    assert speak.said == ["ক্লিনিক রাত ৯টা পর্যন্ত খোলা।"]

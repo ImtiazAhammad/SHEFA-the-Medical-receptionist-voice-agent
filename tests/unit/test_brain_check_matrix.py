@@ -40,6 +40,13 @@ HOURS = (
 )
 WEEK_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 WEEK_BN = ("সোমবার", "মঙ্গলবার", "বুধবার", "বৃহস্পতিবার", "শুক্রবার", "শনিবার", "রবিবার")
+# Round 5: a Bangla reply also says the short day ("সোম") or the English name in Bangla letters.
+WEEK_BN_SHORT = ("সোম", "মঙ্গল", "বুধ", "বৃহস্পতি", "শুক্র", "শনি", "রবি")
+WEEK_BN_ENGLISH = ("মানডে", "টিউসডে", "ওয়েনসডে", "থার্সডে", "ফ্রাইডে", "স্যাটারডে", "সানডে")
+DAY_WORDINGS = {
+    "bn": {"full": WEEK_BN, "short": WEEK_BN_SHORT, "english": WEEK_BN_ENGLISH},
+    "en": {"full": WEEK_EN},
+}
 SHORT = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6}
 BN_DIGITS = str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯")
 
@@ -191,15 +198,20 @@ DAY_ASKS = {
 }
 
 
-@pytest.mark.parametrize("language", ["bn", "en"])
+@pytest.mark.parametrize(
+    ("language", "wording"), [("bn", "full"), ("bn", "short"), ("bn", "english"), ("en", "full")]
+)
 @pytest.mark.parametrize("form", FORMS)
 @pytest.mark.parametrize("day", range(7), ids=WEEK_EN)
 @pytest.mark.parametrize("doctor", DOCTORS, ids=lambda d: d.name)
-def test_a_sitting_day_passes_only_when_that_doctor_sits_that_day(doctor, day, form, language):
+def test_a_sitting_day_passes_only_when_that_doctor_sits_that_day(
+    doctor, day, form, language, wording
+):
+    said_day = DAY_WORDINGS[language][wording][day]
     if language == "en":
-        sentence = f"{_subject(form, doctor, 'en', owner=False)} sits on {WEEK_EN[day]}."
+        sentence = f"{_subject(form, doctor, 'en', owner=False)} sits on {said_day}."
     else:
-        sentence = _join(_subject(form, doctor, "bn", owner=False), WEEK_BN[day], "বসেন।")
+        sentence = _join(_subject(form, doctor, "bn", owner=False), said_day, "বসেন।")
     true = day in doctor.days
     _check(sentence, form, doctor, language, DAY_ASKS[language], true, "day")
 
@@ -306,18 +318,29 @@ def _wrong_hour(doctor: Doctor, wording: str) -> int:
     return 9 if doctor.start != 9 else 21
 
 
+# Round 5: the verb never decides which lines a time rests on ("sees patients" as "sits").
+VERBS = {
+    "sits": {"en": "sits from {words}", "bn": "{words} থেকে বসেন।"},
+    "sees_patients": {"en": "sees patients from {words}", "bn": "{words} থেকে রোগী দেখেন।"},
+}
+
+
 @pytest.mark.parametrize("language", ["bn", "en"])
 @pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("verb", list(VERBS))
 @pytest.mark.parametrize("wording", ["with_part_of_day", "bare_hour", "plain_number"])
 @pytest.mark.parametrize("true", [True, False], ids=["real", "wrong"])
 @pytest.mark.parametrize("doctor", DOCTORS, ids=lambda d: d.name)
-def test_a_start_time_passes_only_when_it_is_that_doctors(doctor, true, wording, form, language):
+def test_a_start_time_passes_only_when_it_is_that_doctors(
+    doctor, true, wording, verb, form, language
+):
     hour = doctor.start if true else _wrong_hour(doctor, wording)
     words = _time_words(hour, language, wording)
+    rest = VERBS[verb][language].format(words=words)
     if language == "en":
-        sentence = f"{_subject(form, doctor, 'en', owner=False)} sits from {words}."
+        sentence = f"{_subject(form, doctor, 'en', owner=False)} {rest}."
     else:
-        sentence = _join(_subject(form, doctor, "bn", owner=False), words, "থেকে বসেন।")
+        sentence = _join(_subject(form, doctor, "bn", owner=False), rest)
     what = "number" if wording == "plain_number" else "time"
     _check(sentence, form, doctor, language, TIME_ASKS[language], true, what)
 
@@ -398,13 +421,48 @@ def test_a_doctor_named_later_in_the_sentence_judges_a_clause_before_it():
     assert _verdict("রবিবার, মঙ্গলবার ও ডাক্তার রহমান বসেন।", "bn", "x", None).ok
 
 
-def test_the_clinic_is_the_subject_only_when_no_doctor_is_known():
-    # Rule order as written: the call's doctor (4) comes before the clinic (5).
-    assert _verdict("ক্লিনিক রাত ৯টা পর্যন্ত খোলা।", "bn", "ক্লিনিক কখন বন্ধ হয়?", None).ok
-    assert _verdict("The clinic is open until 9 pm.", "en", "When do you close?", None).ok
-    assert not _verdict("ক্লিনিক রাত ১০টা পর্যন্ত খোলা।", "bn", "ক্লিনিক কখন বন্ধ হয়?", None).ok
-    v = _verdict("ক্লিনিক রাত ৯টা পর্যন্ত খোলা।", "bn", "ক্লিনিক কখন বন্ধ হয়?", _by("Rahman"))
-    assert (v.ok, v.kind) == (False, "fact")
+# --- the clinic's hours (round 5: a clinic word outranks the caller's line and the call's doctor)
+
+CLINIC_HOURS = {
+    # (true, wrong) for the closing and the opening hour, per language.
+    ("bn", "closing"): ("ক্লিনিক রাত ৯টা পর্যন্ত খোলা।", "ক্লিনিক রাত ১০টা পর্যন্ত খোলা।"),
+    ("bn", "opening"): ("ক্লিনিক সকাল ৯টা থেকে খোলা।", "ক্লিনিক সকাল ৮টা থেকে খোলা।"),
+    ("en", "closing"): ("The clinic is open until 9 pm.", "The clinic is open until 10 pm."),
+    ("en", "opening"): ("The clinic opens at 9 am.", "The clinic opens at 4 pm."),
+}
+CLINIC_ASKS = {
+    ("bn", False): "ক্লিনিক কখন খোলা থাকে?",
+    ("bn", True): "ডাক্তার {name} কখন বসেন, আর ক্লিনিক কখন খোলা থাকে?",
+    ("en", False): "What are your hours?",
+    ("en", True): "When does Dr {name} sit, and what are your hours?",
+}
+
+
+@pytest.mark.parametrize("language", ["bn", "en"])
+@pytest.mark.parametrize("hour", ["closing", "opening"])
+@pytest.mark.parametrize("true", [True, False], ids=["real", "wrong"])
+@pytest.mark.parametrize("call", [None, *DOCTORS], ids=lambda d: d.name if d else "no_call_doctor")
+@pytest.mark.parametrize("caller_names", [False, True], ids=["plain_line", "line_names_doctor"])
+def test_a_clinic_hour_passes_only_when_the_clinic_keeps_it(
+    caller_names, call, true, hour, language
+):
+    sentence = CLINIC_HOURS[language, hour][0 if true else 1]
+    named = call or DOCTORS[0]
+    said = CLINIC_ASKS[language, caller_names].format(
+        name=named.name if language == "en" else named.name_bn
+    )
+    v = _verdict(sentence, language, said, call)
+    if true:
+        assert v.ok, (sentence, said, v)
+    else:
+        assert (v.ok, v.kind) == (False, "fact"), (sentence, said, v)
+        assert v.reason.startswith("the time "), v
+
+
+def test_a_clinic_word_after_a_named_doctor_is_that_doctors_clause():
+    # Ruling (a): the clinic only when no doctor is named in the clause or earlier.
+    v = _verdict("ডাক্তার রহমান রবিবার বসেন, ক্লিনিক সকাল ৯টা থেকে খোলা।", "bn", "x", None)
+    assert (v.ok, v.kind) == (False, "fact"), v
 
 
 def test_a_clinic_subject_never_rests_on_a_doctors_lines():
@@ -440,3 +498,84 @@ def test_n6_a_department_synonym_names_nobody_so_a_doctorless_reply_is_refused(s
     # N6 is parked: "child specialist" and "heart doctor" are not the directory's words.
     v = _verdict(sentence, "en", said, None)
     assert (v.ok, v.kind) == (False, "unsupported"), v
+
+
+# --- round 5 ----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("call", [None, "Rahman"])
+@pytest.mark.parametrize(
+    ("sentence", "ok"),
+    [
+        ("We are open Saturday to Thursday, from 9 am to 9 pm.", True),  # e-hours
+        ("We are open Saturday to Thursday, from 9 am to 10 pm.", False),
+        ("ক্লিনিক শনি থেকে বৃহস্পতিবার খোলা, সকাল ৯টা থেকে রাত ৯টা।", True),
+        ("ক্লিনিক শনি থেকে বৃহস্পতিবার খোলা, সকাল ৯টা থেকে রাত ১০টা।", False),
+        ("সকাল ৯টা থেকে রাত ৯টা, ক্লিনিক খোলা থাকে।", True),
+    ],
+)
+def test_a_clause_without_its_own_subject_takes_the_clinic_beside_it(sentence, ok, call):
+    language = "en" if sentence.isascii() else "bn"
+    v = _verdict(sentence, language, "x", _by(call) if call else None)
+    assert v.ok is ok, v
+    if not ok:
+        assert v.kind == "fact", v
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language", "call"),
+    [
+        ("Dr Rahman sees patients from nine.", "en", "Rahman"),
+        ("ডাক্তার রহমান ৯ থেকে রোগী দেখেন।", "bn", "Rahman"),
+        ("He sees patients from nine.", "en", "Rahman"),
+    ],
+)
+def test_a_clinic_hour_never_grounds_a_doctors_time_whatever_the_verb(sentence, language, call):
+    v = _verdict(sentence, language, "x", _by(call))
+    assert (v.ok, v.kind) == (False, "fact"), v
+
+
+def test_an_hour_with_no_doctor_known_is_refused():
+    v = _verdict("He comes at nine.", "en", "x", None)
+    assert (v.ok, v.kind) == (False, "unsupported"), v
+
+
+def test_a_clinic_fee_line_still_grounds_a_doctors_fee():
+    # Only the clinic lines' times are kept from a doctor; their fees and other numbers are not.
+    entry = Entry(2, "default", "fee", ("fee",), "রিপোর্ট দেখাতে ৩৫০ টাকা।", "Reports: 350.", True, 1)
+    store = default_clinic_store()
+    import_directory_file(store, CLINIC_FILE)
+    directory = directory_brief(store, "bn", header=DIRECTORY_HEADER)
+    state = CallState(language="bn", booking={"doctor": "Dr. Rahman"})
+    hits = [_hours_hit(), Hit(entry, 1.0, "words")]
+    g = engine._grounds(CallSession(call_sid="m"), state, hits, directory, "রিপোর্ট?", TODAY)
+    v = check_sentence("রিপোর্ট দেখাতে ৩৫০ টাকা।", g, goal="information", language="bn")
+    assert v.ok, v
+
+
+@pytest.mark.parametrize(
+    ("sentence", "ok"),
+    [
+        ("সোম, বুধ আর রবিবার বসেন।", False),  # Dr Rahman sits Tue/Thu/Sun
+        ("মঙ্গল, বৃহস্পতি আর রবিবার বসেন।", True),
+        ("ডাক্তার রহমান টুর্সডে, থার্সডে এবং সানডে বিকাল ৪টা থেকে ৮টা পর্যন্ত রোগী দেখেন।", True),
+        ("ডাক্তার রহমান মানডে, থার্সডে এবং সানডে বিকাল ৪টা থেকে ৮টা পর্যন্ত রোগী দেখেন।", False),
+        ("ডাক্তার রহমান সানডেতে বসেন।", True),
+        ("ডাক্তার রহমান স্যাটারডেতে বসেন।", False),
+    ],
+)
+def test_short_and_english_weekday_names_are_read_as_days(sentence, ok):
+    v = _verdict(sentence, "bn", "উনি কবে বসেন?", _by("Rahman"))
+    assert v.ok is ok, v
+    if not ok:
+        assert v.kind == "fact" and v.reason.startswith("the day "), v
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [("উনি ক্লিনিকে সোমবার বসেন।", "bn"), ("He sits at the clinic on Monday.", "en")],
+)
+def test_a_pronoun_with_a_clinic_word_is_still_the_doctors_clause(sentence, language):
+    # Dr Rahman never sits on Monday; the clinic is open then. "উনি/he" is a doctor.
+    v = _verdict(sentence, language, "x", _by("Rahman"))
+    assert (v.ok, v.kind) == (False, "fact"), v

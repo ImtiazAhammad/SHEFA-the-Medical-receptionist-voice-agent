@@ -553,7 +553,7 @@ _TODAY_ONLY_WORDS = re.compile(
 def _only_today(clause: str) -> bool:
     """The clause only says today's weekday: "আজ শনিবার", never "আজ শনিবার বসেন"."""
     rest = _TODAY_ONLY_WORDS.sub(" ", clause)
-    for regex in (_BN_DAY_SAID, _EN_DAY_SAID):
+    for regex in _DAYS_SAID:
         rest = regex.sub(" ", rest)
     return bool(_TODAY_SAID.search(clause)) and not re.sub(r"[\s,।.!?'’]+", "", rest)
 
@@ -582,34 +582,48 @@ class _Subject:
 
 
 def _subjects(text: str, grounds: Grounds) -> list[tuple[str, _Subject]]:
-    """Each clause with its one subject, the first of:
+    """Each clause with its one subject.
 
-    1. a doctor the clause names, with a title or without, or through a department;
-    2. the nearest doctor named earlier in the sentence (a pronoun clause too); for a clause
-       without a pronoun, else the nearest named later ("On Monday, Dr Rahman sits.");
-    3. a doctor or department the caller's current line names ("শিশু ডাক্তারের ফি কত?");
-    4. the call's doctor (`Grounds.doctor`);
-    5. the clinic, when the clause has a clinic word (খোলা, বন্ধ, ক্লিনিক, open, closed, ...);
-    6. else nobody: the clause's days, times and doctors' numbers are refused.
+    A clause has a subject of its own when it names doctors (by name, title or department), or
+    when it has a clinic word (খোলা, বন্ধ, ক্লিনিক, open, closed, clinic, hours), no pronoun, and
+    no doctor is named in it or earlier in the sentence: then it is the clinic's ("উনি ক্লিনিকে
+    সোমবার বসেন" is still a doctor's clause).
 
-    The caller's line only chooses whose facts a clause is checked against; it grounds none."""
+    - A clause with its own subject takes it.
+    - A pronoun clause ("উনি", "he") takes the nearest doctor named earlier, else a doctor or
+      department the caller's line names, else the call's doctor, else nobody.
+    - Any other clause takes the nearest subject of its own in the sentence, doctor or clinic:
+      earlier first, else later ("On Monday, Dr Rahman sits."; "We are open ..., from 9 am to 9
+      pm."); else the caller's line's doctor, else the call's doctor, else nobody.
+
+    Nobody: the clause's days, times and doctors' numbers are refused. The caller's line only
+    chooses whose facts a clause is checked against; it grounds none."""
     groups = _doctor_groups(grounds)
     departments = _departments(grounds, groups)
     clauses = _clauses(text)
     named = [_doctors_in(c, groups, departments) for c in clauses]
     caller = _doctors_in(grounds.caller, groups, departments) if grounds.caller else set()
     call = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
+    nobody = _Subject()
+    own: list[_Subject | None] = []
+    for i, clause in enumerate(clauses):
+        if named[i]:
+            own.append(_Subject(frozenset(named[i])))
+        elif _CLINIC_WORD.search(clause) and not any(named[:i]) and not _PRONOUN.search(clause):
+            own.append(_Subject(clinic=True))
+        else:
+            own.append(None)
+    fallback = _Subject(frozenset(caller or call)) if caller or call else nobody
     out = []
     for i, clause in enumerate(clauses):
-        earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), set())
-        later = (
-            set()
-            if _PRONOUN.search(clause)
-            else next((named[j] for j in range(i + 1, len(clauses)) if named[j]), set())
-        )
-        doctors = named[i] or earlier or later or caller or call
-        clinic = not doctors and bool(_CLINIC_WORD.search(clause))
-        out.append((clause, _Subject(frozenset(doctors), clinic)))
+        if (subject := own[i]) is None:
+            if _PRONOUN.search(clause):
+                earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), set())
+                subject = _Subject(frozenset(earlier)) if earlier else fallback
+            else:
+                near = [*range(i - 1, -1, -1), *range(i + 1, len(clauses))]
+                subject = next((own[j] for j in near if own[j] is not None), fallback)
+        out.append((clause, subject))
     return out
 
 
@@ -695,16 +709,17 @@ def _hour_words(plain: str) -> dict[str, str]:
     return found
 
 
-# A doctor's sitting claim: every number in it is a day's hour or a time, so it rests on the
-# doctor's own lines only ("Dr Rahman sits from nine" must not lean on the clinic's 9 am).
-_SITS = re.compile(
-    _B + r"(?:বসেন|বসবেন|থাকেন|থাকবেন)" + _E + r"|\bsits?\b|\b(?:is|are) available\b",
-    re.IGNORECASE,
-)
-
-
 def _numbers_of(texts: list[str]) -> set[str]:
     return set().union(*(numbers_in(t) for t in texts)) if texts else set()
+
+
+@lru_cache(maxsize=512)
+def _untimed_numbers(line: str) -> frozenset[str]:
+    """A clinic line's numbers without its times and hours: "সকাল ৯টা থেকে রাত ৯টা" gives no 9,
+    "রিপোর্ট দেখাতে ৩০০ টাকা" still gives 300. A doctor's time, however it is said ("sees
+    patients from nine"), never rests on the clinic's hours."""
+    plain = _without_clocks(_norm(line))
+    return frozenset(numbers_in(plain) - set(_hour_words(plain)))
 
 
 def _unsaid_subject(what: str) -> Verdict:
@@ -718,13 +733,11 @@ def _unsaid_subject(what: str) -> Verdict:
 def _clause_fault(clause: str, subject: _Subject, grounds: Grounds) -> Verdict | None:
     """The first number, time or day of the clause its subject's facts do not hold."""
     own, wider = _scope(clause, subject, grounds)
-    sitting = bool(_SITS.search(clause)) and not subject.clinic
-    if sitting:
-        wider = []
+    grounded = _numbers_of(own).union(*(_untimed_numbers(line) for line in wider))
     plain = _without_clocks(clause)
     hours = _hour_words(plain)
-    for number in sorted(numbers_in(plain) - set(hours) - _numbers_of(own + wider), key=int):
-        if not subject.resolved and (sitting or number in _numbers_of(_doctor_lines(grounds))):
+    for number in sorted(numbers_in(plain) - set(hours) - grounded, key=int):
+        if not subject.resolved and number in _numbers_of(_doctor_lines(grounds)):
             return Verdict(
                 False,
                 "unsupported",
@@ -756,8 +769,34 @@ def _doctor_lines(grounds: Grounds) -> list[str]:
 
 _BN_DAYS = tuple(_norm(d) for d in _split("সোম মঙ্গল বুধ বৃহস্পতি শুক্র শনি রবি"))  # Monday first
 _EN_DAYS = _split("monday tuesday wednesday thursday friday saturday sunday")
-_BN_DAY_SAID = re.compile(_B + "(" + "|".join(_BN_DAYS) + ")বার(?:ের|এর|ে|র)?(?:ও)?" + _E)
+# "সোমবার", and the short "সোম" a list says ("সোম, বুধ আর রবিবার").
+_BN_DAY_SAID = re.compile(_B + "(" + "|".join(_BN_DAYS) + ")(?:বার)?(?:ের|এর|ে|র)?(?:ও)?" + _E)
 _EN_DAY_SAID = re.compile(r"\b(" + "|".join(_EN_DAYS) + r")s?\b", re.IGNORECASE)
+# English day names in Bangla letters ("সানডে", "থার্সডে"); "টুর্সডে" is read as Tuesday.
+_BN_ENGLISH_DAYS = {
+    _norm(w): i
+    for i, words in enumerate(
+        (
+            "মানডে মন্ডে",
+            "টুসডে টিউসডে টিউজডে টুজডে টুর্সডে",
+            "ওয়েনসডে ওয়েন্সডে ওয়েডনেসডে ওয়েনেসডে",
+            "থার্সডে থার্জডে থাসডে",
+            "ফ্রাইডে",
+            "স্যাটারডে সাটারডে স্যাটার্ডে",
+            "সানডে সান্ডে",
+        )
+    )
+    for w in _split(words)
+}
+_BN_ENGLISH_DAY_SAID = re.compile(
+    _B
+    + "("
+    + "|".join(sorted(_BN_ENGLISH_DAYS, key=len, reverse=True))
+    + ")"
+    + "(?:তে|এ|র|ও)?"
+    + _E
+)
+_DAYS_SAID = (_BN_DAY_SAID, _BN_ENGLISH_DAY_SAID, _EN_DAY_SAID)
 # In grounds also "Mon/Wed/Sat", "সোম-বুধ" and ranges ("Sat-Thu").
 _DAY_NAME = (
     r"(?:(?i:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\b"
@@ -774,6 +813,8 @@ _DAY_ANY = re.compile(_DAY_NAME)
 
 
 def _day_index(word: str) -> int | None:
+    if word in _BN_ENGLISH_DAYS:
+        return _BN_ENGLISH_DAYS[word]
     low = word.lower()
     for i, (bn, en) in enumerate(zip(_BN_DAYS, _EN_DAYS, strict=True)):
         if low.startswith(bn) or low.startswith(en[:3]):
@@ -794,7 +835,7 @@ def _ground_days(text: str) -> frozenset[int]:
 
 def _unknown_day(sentence: str, texts: list[str]) -> str | None:
     grounded = set().union(*(_ground_days(t) for t in texts)) if texts else set()
-    for regex in (_BN_DAY_SAID, _EN_DAY_SAID):
+    for regex in _DAYS_SAID:
         for m in regex.finditer(sentence):
             if _day_index(m.group(1)) not in grounded:
                 return m.group()
@@ -1192,7 +1233,7 @@ _WELLBEING = re.compile(
 def _day_set(text: str) -> set[int]:
     return {
         i
-        for regex in (_BN_DAY_SAID, _EN_DAY_SAID)
+        for regex in _DAYS_SAID
         for m in regex.finditer(text)
         if (i := _day_index(m.group(1))) is not None
     }

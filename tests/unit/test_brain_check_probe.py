@@ -256,16 +256,16 @@ def test_probe_opening_hours_pass(sentence, said, language):
     assert v.ok, v.reason
 
 
-def test_e_hours_clause_after_the_comma_has_no_subject():
-    # Round 4, a known false refusal: the subject rule gives the clinic only to a clause with a
-    # clinic word, and "from nine in the morning ..." after the comma has none.
+def test_e_hours_clause_after_the_comma_takes_the_clinic():
+    # Round 4 refused this (no clinic word after the comma); round 5 ruling (b): a clause with no
+    # subject of its own takes the nearest one in the sentence, here the clinic.
     v = verdict(
         "We are open Saturday to Thursday, from nine in the morning to nine in the evening.",
         "What are your opening hours?",
         language="en",
         hits=(hit("hours"),),
     )
-    assert v.kind == "unsupported", v
+    assert v.ok, v
 
 
 def test_probe_wrong_closing_hour_fails():
@@ -275,8 +275,8 @@ def test_probe_wrong_closing_hour_fails():
         language="en",
         hits=(hit("hours"),),
     )
-    # Round 4: the clause after the comma has no clinic word, so no subject (unsupported).
-    assert not v.ok
+    # Round 5: the clause after the comma takes the clinic, and 5 pm is not its hour.
+    assert v.kind == "fact"
     v = verdict("The clinic is open 9 am to 5 pm.", "Hours?", language="en", hits=(hit("hours"),))
     assert v.kind == "fact"
 
