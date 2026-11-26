@@ -240,3 +240,21 @@ def test_directory_for_that_overshoots_is_shrunk_again_then_dropped(monkeypatch)
     assert calls[1] < calls[0]
     assert "ZZZZ" not in _system(messages)
     assert _tokens(messages) <= 500
+
+
+def test_a_cut_history_starts_with_the_caller_so_the_system_text_leads_the_prompt() -> None:
+    # The gemma2 template folds the system text into the first user turn. A cut history that
+    # starts with an assistant turn puts a different reply in front of it every turn, and the
+    # server's prefix cache misses (probe: 600-700 ms first token from the fourth turn on).
+    history = _history(9)  # turn0 (user) .. turn8; the last six start with turn3, an assistant
+    kept = compose(CallState(), CONFIG, [], "", history)[1:]
+    assert kept[0]["role"] == "user"
+    assert kept[0]["content"].startswith("turn4")
+    assert kept[-1]["content"].startswith("turn8")
+    assert len(kept) == 5
+
+
+def test_an_uncut_history_keeps_the_greeting_first() -> None:
+    history = [{"role": "assistant", "content": "GREETING"}, *_history(1)]
+    kept = compose(CallState(), CONFIG, [], "", history)[1:]
+    assert kept[0]["content"] == "GREETING"

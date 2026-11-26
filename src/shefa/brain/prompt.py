@@ -138,7 +138,18 @@ def compose(
         for m in history
         if m.get("role") in ("user", "assistant")
     ]
+    whole = len(turns)
     turns = turns[-settings.brain.history_turns :] if settings.brain.history_turns else []
+
+    def lead_with_caller() -> None:
+        # The gemma2 template folds the system text into the first user turn: a cut history that
+        # opens on an assistant turn puts a different reply before it each turn, and vLLM's
+        # prefix cache misses (600-700 ms first token in the probe's longer call). An uncut
+        # history keeps the greeting: it is the same on every call.
+        while len(turns) < whole and len(turns) > 1 and turns[0]["role"] == "assistant":
+            turns.pop(0)
+
+    lead_with_caller()
     kept = list(hits)
 
     def build(directory_text: str) -> list[dict[str, str]]:
@@ -149,6 +160,7 @@ def compose(
     # 1. history, oldest first, down to the last turns
     while _tokens(messages) > budget and len(turns) > MIN_HISTORY:
         turns.pop(0)
+        lead_with_caller()
         messages = build(directory)
     # 2. the directory: a smaller block that fits, else none
     if _tokens(messages) > budget and directory:
