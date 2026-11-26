@@ -127,11 +127,23 @@ _ASKS = re.compile(
 )
 
 
+# A caller saying what they need ("I need the heart doctor tomorrow, is that ok?") is booking.
+_NEEDS = re.compile(
+    r"\bI (?:need|want|would like|'d like)\b|\bI'd like\b|(?<![ঀ-৿])চাই(?![ঀ-৿])", re.IGNORECASE
+)
+
+
+_SEES = re.compile(r"\b(?:doctor|dr|specialist)\b|(?<![ঀ-৿])ডাক্তার", re.IGNORECASE)
+
+
 def _books(said: str) -> bool:
     """A booking request. `guided.wants_to_book` also counts a department said plainly; in a
     question ("Which days does the child specialist see patients?") that is information, unless
-    a booking verb is there too ("শিশু ডাক্তার দেখাতে চাই, কবে আসব?")."""
-    return wants_to_book(said) and (bool(START.search(said)) or not _ASKS.search(said))
+    a booking verb or a need is there too ("শিশু ডাক্তার দেখাতে চাই, কবে আসব?")."""
+    if _NEEDS.search(said) and _SEES.search(said):
+        return True
+    explicit = START.search(said) or _NEEDS.search(said)
+    return wants_to_book(said) and (bool(explicit) or not _ASKS.search(said))
 
 
 def _goal(said: str, current: str) -> str:
