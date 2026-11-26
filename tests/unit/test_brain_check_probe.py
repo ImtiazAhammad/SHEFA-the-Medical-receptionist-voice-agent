@@ -433,3 +433,20 @@ def test_asking_which_day_to_book_is_a_push():
     sentence = "কোন দিনের জন্য আপনার বুকিং করতে চান?"
     assert verdict(sentence, DAYS_Q).kind == "push"
     assert verdict("বুকিং দিতে চান?", DAYS_Q).kind == "push"
+
+
+@pytest.mark.parametrize(
+    "sentence", ["হ্যাঁ, আমি ইংরেজিতে কথা বলতে পারি।", "হ্যাঁ, আমি বাংলায় কথা বলি।", "Yes, I speak English."]
+)
+def test_a_yes_about_the_receptionists_own_language_is_not_a_doctor_fact(sentence):
+    # s-lang: "আপনি কি ইংরেজিতে কথা বলতে পারেন?" asks SHEFA, not a doctor.
+    language = "en" if sentence.isascii() else "bn"
+    assert verdict(sentence, "আপনি কি ইংরেজিতে কথা বলতে পারেন?", language=language).ok
+
+
+def test_a_hit_topic_covers_a_facility_its_text_does_not_name():
+    sentence = "There is a canteen on the ground floor."
+    covered = hit("canteen", "", "Snacks and tea are sold on the ground floor.")
+    other = hit("snacks", "", "Snacks and tea are sold on the ground floor.")
+    assert verdict(sentence, "canteen?", language="en", hits=(covered,)).ok
+    assert verdict(sentence, "canteen?", language="en", hits=(other,)).kind == "unsupported"

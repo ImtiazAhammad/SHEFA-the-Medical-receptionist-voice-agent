@@ -667,10 +667,11 @@ def _code_words(text: str) -> frozenset[str]:
     return frozenset(fold(w) for w in _words(words))
 
 
-def _says_yes(stated: str) -> bool:
-    """A yes that states a fact: the shared rule, or a yes about a doctor's languages/gender."""
+def _says_yes(stated: str, known: set[str]) -> bool:
+    """A yes that states a fact: the shared rule, or a yes about a named doctor's languages or
+    gender ("হ্যাঁ, আমি ইংরেজিতে কথা বলি" is SHEFA about itself, not a directory fact)."""
     return unsupported_claim(stated) or bool(
-        _YES.search(stated) and _DIRECTORY_CLAIM.search(stated)
+        _YES.search(stated) and _DIRECTORY_CLAIM.search(stated) and _doctors_named(stated, known)
     )
 
 
@@ -961,7 +962,7 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             False, "unsupported", f"it says what the clinic has about {topic}, which no fact states"
         )
     yes_known = known | set().union(*(_code_words(t) for t in grounds.texts))
-    if _says_yes(stated) and not _backed_yes(stated, yes_known):
+    if _says_yes(stated, known) and not _backed_yes(stated, yes_known):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
     if grounds.caller and _parrots(text, grounds, yes_known, ground_numbers):
         return Verdict(False, "unsupported", "it only repeats the caller's own words")
