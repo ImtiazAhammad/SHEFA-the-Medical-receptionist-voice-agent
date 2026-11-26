@@ -248,6 +248,10 @@ class VoicePipeline:
                 session.patient_name = outbound.patient_name or None
                 if outbound.on_answered is not None:
                     outbound.on_answered()
+            if not (outbound is not None and outbound.greeting):
+                # An outbound call's own opening says what it is about; any other call opens
+                # with the engine's greeting, after caller ID has said who is calling.
+                greeting = await self._opening(session, greeting)
             tts = await registry.get_tts()
             await speak_to(tts, greeting, session.language.value, put_playback)
             session.add_turn("assistant", greeting)
@@ -539,6 +543,66 @@ class VoicePipeline:
         return await asyncio.wait_for(work, timeout=settings.pipeline.turn_deadline_s)
 
     @staticmethod
+    def _engine(session: CallSession) -> str:
+        """Which engine talks on this call: "agent" only when the call's frozen config says
+        exactly that; anything else, a missing value or an unreadable config is "guided"."""
+        from shefa.brain.config import call_config
+
+        try:
+            held = call_config(session).get("engine")
+        except Exception:  # noqa: BLE001 - a config fault must not drop the call
+            logger.exception("Could not read the engine for %s; guided answers", session.call_sid)
+            return "guided"
+        return "agent" if held == "agent" else "guided"
+
+    async def _opening(self, session: CallSession, fixed: str) -> str:
+        """The call's greeting: the brain's generated one on the agent engine, else `fixed`.
+        Never later than `brain.greeting_timeout_s` (the model is fetched inside that time)."""
+        if self._engine(session) != "agent":
+            return fixed
+        from datetime import datetime
+
+        from shefa.brain import greeting as brain_greeting
+        from shefa.brain.config import call_config
+        from shefa.clinic import default_clinic_store
+        from shefa.clinic.store import CLINIC_TZ
+
+        language = session.language.value
+
+        async def generate() -> str:
+            llm = await registry.get_llm()
+            return await brain_greeting.greeting(
+                llm,
+                call_config(session),
+                clinic_name=default_clinic_store().clinic_name(language),
+                language=language,
+                now=datetime.now(CLINIC_TZ),
+                caller_name=self._caller_id_name(session),
+            )
+
+        try:
+            return await asyncio.wait_for(generate(), timeout=settings.brain.greeting_timeout_s)
+        except TimeoutError:
+            logger.warning("Greeting for %s was too slow; the fixed one is used", session.call_sid)
+            return fixed
+
+    @staticmethod
+    def _caller_id_name(session: CallSession) -> str | None:
+        """The name of the patient caller ID found, for the greeting; None for anyone else.
+        At the greeting nobody has spoken, so a patient here can only come from caller ID."""
+        if not session.patient_id:
+            return None
+        if session.patient_name:
+            return session.patient_name
+        from shefa.clinic import default_clinic_store
+
+        try:
+            patient = default_clinic_store().get_patient(int(session.patient_id))
+        except (ValueError, TypeError):
+            return None
+        return str((patient or {}).get("name") or "").strip() or None
+
+    @staticmethod
     def _default_greeting(session: CallSession) -> str:
         """Open in the clinic's primary language and return its greeting."""
         if settings.languages.primary in {lang.value for lang in Language}:
@@ -563,6 +627,7 @@ class VoicePipeline:
                 from shefa.clinic import default_clinic_store
 
                 session.patient_id = str(default_clinic_store().upsert_patient(phone))
+            greeting = await self._opening(session, greeting)
             session.add_turn("assistant", greeting)
             session.state = "active"
 
@@ -747,7 +812,10 @@ class VoicePipeline:
         put_playback: PlaybackSink,
     ) -> str:
         """The reply to the caller's turn; an info answer in the middle of a guided booking is
-        followed by the question the booking was waiting on."""
+        followed by the question the booking was waiting on. On the agent engine the brain
+        answers (`_brain_reply`)."""
+        if self._engine(session) == "agent":
+            return await self._brain_reply(llm, tts, session, put_playback)
         reply = await self._reply(llm, tts, session, put_playback)
         if session.metadata.pop("guided_resume", False) and session.metadata.get("guided"):
             again = guided.reprompt(session)
@@ -755,6 +823,85 @@ class VoicePipeline:
                 await self._emit(tts, again, session.language.value, put_playback)
                 reply = f"{reply} {again}".strip()
         return reply
+
+    async def _brain_reply(
+        self,
+        llm: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+    ) -> str:
+        """The brain's turn, spoken through this call's voice.
+
+        A model or connection failure before anything was said is answered by the guided path
+        instead (counted in `brain_fallbacks`); after something was said the turn ends there.
+        The next turn tries the brain again. A turn cut off (a barge-in) keeps in the history
+        what the brain kept: nothing, or the caller's line and what was said."""
+        import openai
+
+        from shefa.brain import actions as brain_actions
+        from shefa.brain import engine as brain_engine
+        from shefa.brain.state import load, save
+
+        # The same string the history keeps, so the brain's history and the pipeline's agree.
+        said = next((t.content for t in reversed(session.history) if t.role == "user"), "")
+        state = load(session)
+        if state.language != session.language.value:
+            state.language = session.language.value  # the call's language, as the pipeline heard it
+            save(session, state)
+        begun: list[str] = []
+        spoken: list[str] = []
+
+        async def speak(sentence: str) -> None:
+            begun.append(sentence)
+            await self._emit(tts, sentence, session.language.value, put_playback)
+            spoken.append(sentence)
+
+        traces = len(session.metadata.get("brain_trace", []))
+        try:
+            reply = await brain_engine.Brain().turn(session, said, llm, speak)
+        except asyncio.CancelledError:
+            if len(session.metadata.get("brain_trace", [])) == traces:
+                # The brain undid the turn: the caller's line goes too.
+                last = session.history[-1] if session.history else None
+                if last is not None and last.role == "user" and last.content == said:
+                    session.history.pop()
+            elif spoken:
+                session.add_turn("assistant", " ".join(spoken), session.language)
+            raise
+        except (TimeoutError, openai.APIError, ConnectionError, MalformedLLMOutputError) as exc:
+            if begun:
+                logger.warning(
+                    "Brain failed after speaking on %s (%s); the turn ends there",
+                    session.call_sid,
+                    type(exc).__name__,
+                )
+                self._void_guided_questions(session)
+                return " ".join(spoken)
+            logger.warning(
+                "Brain failed on %s (%s: %s); the guided engine answers this turn",
+                session.call_sid,
+                type(exc).__name__,
+                exc,
+            )
+            session.metadata["brain_fallbacks"] = session.metadata.get("brain_fallbacks", 0) + 1
+            # The caller hears the guided answer last: the brain's read-back or wait is void.
+            fresh = load(session)
+            if fresh.pending is not None:
+                brain_actions.drop_pending(session, fresh)
+                save(session, fresh)
+            session.metadata.pop(brain_actions.WAIT, None)
+            return await self._reply(llm, tts, session, put_playback)
+        self._void_guided_questions(session)
+        return reply
+
+    @staticmethod
+    def _void_guided_questions(session: CallSession) -> None:
+        """The brain answered last: a read-back, offer or booking step the guided engine left
+        from an earlier fallback turn is no longer the question the caller heard."""
+        for key in ("pending", "offer", "choices"):
+            session.metadata.pop(key, None)
+        guided.finish(session)
 
     async def _reply(
         self,

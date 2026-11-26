@@ -13,6 +13,7 @@ just stops there.
 from __future__ import annotations
 
 import asyncio
+import copy
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -326,6 +327,62 @@ class _Routing:
         self.labels()
 
 
+class _Entry:
+    """The session as a turn found it. A turn cut off (a barge-in) or failing before `finish`
+    either did nothing, and is undone, or did something, and is kept as it stood."""
+
+    def __init__(self, session: CallSession, state: CallState) -> None:
+        self.metadata = copy.deepcopy(session.metadata)
+        self.state = session.state
+        self.patient_id = session.patient_id
+        self.words = (state.mood, state.goal)
+        self.pending = _asked_aside(state.pending)
+
+    def _acted(self, session: CallSession) -> bool:
+        """A tool ran, a call-back was saved, a patient was made or the call changed state."""
+        now, then = session.metadata, self.metadata
+        return (
+            now.get("actions", []) != then.get("actions", [])
+            or now.get(actions.SUCCEEDED, []) != then.get(actions.SUCCEEDED, [])
+            or session.state != self.state
+            or session.patient_id != self.patient_id
+        )
+
+    def unwind(
+        self,
+        session: CallSession,
+        state: CallState,
+        trace: dict[str, Any],
+        heard: list[str],
+        exc: BaseException,
+        started: float,
+    ) -> None:
+        if not heard and not self._acted(session):
+            # Nothing said, nothing done: the turn leaves no trace (the pipeline drops the
+            # caller's line too, so both sides agree it never happened).
+            session.metadata.clear()
+            session.metadata.update(self.metadata)
+            return
+        cancelled = isinstance(exc, asyncio.CancelledError)
+        if cancelled and state.pending is not None and _asked_aside(state.pending) != self.pending:
+            # A read-back this turn began to say was cut off: nobody can say yes to half of it.
+            actions.drop_pending(session, state)
+        state.mood, state.goal = self.words
+        save(session, state)
+        trace["cancelled"] = cancelled
+        if not cancelled:
+            trace["error"] = f"{type(exc).__name__}: {exc}"[:200]
+        trace["ms"] = int((time.monotonic() - started) * 1000)
+        session.metadata.setdefault("brain_trace", []).append(trace)
+
+
+def _asked_aside(pending: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A read-back without its one-reminder flag: the same read-back, asked again or not."""
+    if pending is None:
+        return None
+    return copy.deepcopy({k: v for k, v in pending.items() if k != "asked"})
+
+
 class Brain:
     """The conversation engine for one turn at a time; holds nothing between calls (all call
     state lives on the session)."""
@@ -363,11 +420,22 @@ class Brain:
             "ms": 0,
         }
         routing = _Routing(state, trace)
+        # What the turn found, for a turn that never reaches `finish` (a barge-in, a failure).
+        entry = _Entry(session, state)
+        heard: list[str] = []
+
+        async def counted(text: str) -> None:
+            heard.append(text)  # counted from the start: the caller may have heard part of it
+            await speak(text)
+
         try:
             return await self._turn(
-                session, said, llm, speak, today, history, state, config, routing, trace,
+                session, said, llm, counted, today, history, state, config, routing, trace,
                 started,
             )
+        except BaseException as exc:
+            entry.unwind(session, state, trace, heard, exc, started)
+            raise
         finally:
             if routing.task is not None and not routing.task.done():
                 routing.task.cancel()

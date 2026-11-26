@@ -384,6 +384,11 @@ def _drop_pending(session: CallSession, state: CallState, grounds: Grounds | Non
         _forget(session, grounds, set(_preview_slots(pending["preview"])), read_back_only=True)
 
 
+def drop_pending(session: CallSession, state: CallState) -> None:
+    """Void the read-back the call is waiting on, and its slot's read-back facts."""
+    _drop_pending(session, state, None)
+
+
 def settles(
     session: CallSession, state: CallState, said: str, today: _date, grounds: Grounds | None
 ) -> str:
