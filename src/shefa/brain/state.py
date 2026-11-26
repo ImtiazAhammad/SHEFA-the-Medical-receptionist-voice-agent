@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from shefa.clinic import default_clinic_store
 from shefa.clinic.names import best_matches, rank_doctors, tokens
 from shefa.pipeline.grounding import parse_date, parse_period, parse_time
-from shefa.pipeline.guided import wants_to_book
+from shefa.pipeline.guided import START, wants_to_book
 
 if TYPE_CHECKING:
     from datetime import date
@@ -119,6 +119,21 @@ class CallState:
     turn: int = 0
 
 
+# A question ("which days", "কবে", "?"): a department named in one is asked about, not booked.
+_ASKS = re.compile(
+    r"\?|\b(?:which|when|what|where|who|how|does|do|is|are)\b"
+    r"|(?<![ঀ-৿])(?:কবে|কখন|কোন|কি|কী|কয়টা|কয়টায়|কত)(?![ঀ-৿])",
+    re.IGNORECASE,
+)
+
+
+def _books(said: str) -> bool:
+    """A booking request. `guided.wants_to_book` also counts a department said plainly; in a
+    question ("Which days does the child specialist see patients?") that is information, unless
+    a booking verb is there too ("শিশু ডাক্তার দেখাতে চাই, কবে আসব?")."""
+    return wants_to_book(said) and (bool(START.search(said)) or not _ASKS.search(said))
+
+
 def _goal(said: str, current: str) -> str:
     """The goal this turn names, or the current one when it names none."""
     if COMPLAINT_WORDS.search(said):
@@ -127,11 +142,12 @@ def _goal(said: str, current: str) -> str:
         return "change"
     if LOOKUP_WORDS.search(said):
         return "lookup"
-    if wants_to_book(said):
+    if _books(said):
         return "booking"
-    # A question about fees or times mid-booking does not end the booking: only a caller with no
-    # goal yet (or chatting) becomes an information caller.
-    if INFORMATION_WORDS.search(said) and current in ("unknown", "small_talk", "information"):
+    # A question about fees or times (or about a department) mid-booking does not end the
+    # booking: only a caller with no goal yet (or chatting) becomes an information caller.
+    asks = INFORMATION_WORDS.search(said) or wants_to_book(said)
+    if asks and current in ("unknown", "small_talk", "information"):
         return "information"
     # Chatter after a real goal does not undo it.
     if current in ("unknown", "small_talk") and SMALL_TALK_WORDS.search(said):

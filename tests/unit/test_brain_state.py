@@ -328,3 +328,41 @@ def test_doctor_named_is_public_and_the_old_name_still_works():
     from shefa.brain import state as state_module
 
     assert state_module.doctor_named is state_module._doctor_named
+
+
+# --- Task 7b fix round 1: a department named in a question is a question --------------------------
+
+
+@pytest.fixture
+def example_clinic():
+    from pathlib import Path
+
+    from shefa.clinic import default_clinic_store
+    from shefa.clinic.loader import import_directory_file
+
+    root = Path(__file__).resolve().parents[2]
+    import_directory_file(default_clinic_store(), root / "configs" / "clinic.example.yaml")
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Which days does the child specialist see patients?",  # e-days
+        "শিশু ডাক্তার কোন কোন দিন বসেন?",
+        "When does the cardiology doctor sit?",
+    ],
+)
+def test_a_department_named_in_a_question_stays_information(said, example_clinic):
+    assert track(CallState(), said, today=date(2026, 11, 28)).goal == "information"
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "শিশু ডাক্তার দেখাতে চাই",
+        "I want to book the child specialist on Monday",
+        "শিশু ডাক্তার দেখাতে চাই, কবে আসব?",
+    ],
+)
+def test_a_department_with_a_booking_verb_is_still_booking(said, example_clinic):
+    assert track(CallState(), said, today=date(2026, 11, 28)).goal == "booking"
