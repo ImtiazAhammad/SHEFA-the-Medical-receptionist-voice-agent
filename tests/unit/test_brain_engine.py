@@ -1173,3 +1173,43 @@ def test_joined_questions_are_not_a_pure_facility_question(said, example_clinic)
     _turn(session, said, llm, Recorder())
     assert session.metadata["brain_trace"][-1]["reply_source"] == "model"
 
+
+
+# --- Task 7b fix round 3 -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("said", "reply", "first"),
+    [
+        (
+            "I want to know which days the heart doctor sits.",
+            "Tuesdays, Thursdays and Sundays. What time would you like to come?",
+            "Tuesdays, Thursdays and Sundays.",
+        ),
+        (
+            "আমি জানতে চাই হৃদরোগের ডাক্তার কবে বসেন।",
+            "মঙ্গল, বৃহস্পতি আর রবিবার। কখন আসতে চান?",
+            "মঙ্গল, বৃহস্পতি আর রবিবার।",
+        ),
+    ],
+)
+def test_a_caller_who_wants_to_know_is_not_pushed(said, reply, first, example_clinic):
+    session = _session(said)
+    speak = Recorder()
+    _turn(session, said, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
+    assert speak.said == [first]
+
+
+@pytest.mark.parametrize(
+    ("then", "reply"),
+    [("৮০০ টাকা তো?", "জি, ৮০০ টাকা।"), ("ফলো-আপ ফি কি ৫০০?", "জি, ফলো-আপ ফি ৫০০ টাকা।")],
+)
+def test_a_fee_confirmed_for_the_calls_doctor_is_spoken(then, reply, example_clinic):
+    first = "ডাক্তার রহমানের ফি কত?"
+    session = _session(first)
+    _turn(session, first, FakeLLM("ডাক্তার রহমানের ফি ৮০০ টাকা।", route=route_json()), Recorder())
+    session.add_turn("assistant", "ডাক্তার রহমানের ফি ৮০০ টাকা।")
+    session.add_turn("user", then)
+    speak = Recorder()
+    _turn(session, then, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
+    assert speak.said == [reply]

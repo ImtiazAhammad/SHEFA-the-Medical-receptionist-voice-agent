@@ -505,10 +505,10 @@ def clinic_with(name: str, **profile) -> dict:
     ],
 )
 def test_the_callers_guess_given_back_with_filler_is_still_a_parrot(sentence, said, language):
-    # Changed in fix round 2: the echoed-guess rule now refuses these first (its own reason).
+    # Changed in fix rounds 2 and 3: a rule about a doctor's number said about no doctor now
+    # refuses these first, with its own reason.
     v = verdict(sentence, said, language=language)
     assert v.kind == "unsupported", v
-    assert "caller" in v.reason, v
 
 
 def test_an_invented_language_given_back_fails():
@@ -802,3 +802,92 @@ def test_ampersand_and_a_bare_comma_split_clauses(sentence, language):
 
 def test_shall_we_see_you_is_a_push():
     assert verdict("Shall we see you on Monday?", "Which days?", language="en").kind == "push"
+
+
+# --- fix round 3 (task-7b-rereview-2.md) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("ক্লিনিক ৯টা ১৫ মিনিট পর্যন্ত খোলা।", "bn"),
+        ("We close at 9.15.", "en"),
+        ("We close at nine fifteen.", "en"),
+        ("We close at quarter past nine at night.", "en"),
+        ("We close at half past nine at night.", "en"),
+        ("We close at quarter to nine at night.", "en"),
+        ("We close at half past nine.", "en"),
+    ],
+)
+def test_minutes_without_a_part_of_the_day_are_a_whole_time(sentence, language):
+    v = verdict(sentence, "কখন বন্ধ?", language=language, hits=(hit("hours"),))
+    assert v.kind == "fact", v
+
+
+def test_half_past_without_a_part_of_the_day_for_a_named_doctor_fails():
+    v = verdict("ডাক্তার রহমান সাড়ে ৮টা পর্যন্ত বসেন।", "কখন?")
+    assert v.kind == "fact", v
+
+
+def test_quarter_and_half_forms_that_are_grounded_pass():
+    tools = [{"text": "free at 18:30, 18:15 and 17:45", "doctor": "Rahman"}]
+    said = "কখন খালি?"
+    for sentence in (
+        "Dr Rahman is free at half past six.",
+        "Dr Rahman is free at quarter past six in the evening.",
+        "Dr Rahman is free at quarter to six.",
+        "ডাক্তার রহমান সাড়ে ৬টায় খালি।",
+        "ডাক্তার রহমান ৬টা ১৫ মিনিটে খালি।",
+    ):
+        language = "en" if sentence.isascii() else "bn"
+        assert verdict(sentence, said, language=language, tools=tools).ok, sentence
+
+
+def test_a_sentence_naming_no_doctor_is_scoped_to_the_calls_doctor():
+    rahman = {"doctor": "Rahman"}
+    said = "৮০০ টাকা তো?"
+    assert verdict("জি, ৮০০ টাকা।", said, booking=rahman).ok
+    assert verdict("জি, ফলো-আপ ফি ৫০০ টাকা।", "ফলো-আপ ফি কি ৫০০?", booking=rahman).ok
+    sultana = {"doctor": "Sultana"}
+    assert verdict("জি, ফলো-আপ ফি ৫০০ টাকা।", "ফলো-আপ ফি কি ৫০০?", booking=sultana).kind == "fact"
+
+
+def test_a_doctors_number_with_no_doctor_known_fails():
+    assert not verdict("ফলো-আপ ফি ৫০০ টাকা।", "ফলো-আপ ফি কত?").ok
+
+
+def test_a_department_names_its_doctors():
+    # Dr Hossain is the clinic's Medicine doctor (fee 700).
+    assert verdict("মেডিসিনের ডাক্তারের প্রথম ভিজিটের ফি ৭০০ টাকা।", "মেডিসিনের ফি?").ok
+    assert verdict("মেডিসিনের ডাক্তারের ফি ৮০০ টাকা।", "মেডিসিনের ফি?").kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("ডাক্তার সুলতানা সোমবার বসেন, উনার ফি ৮০০ টাকা।", "bn"),
+        ("Dr Sultana sits on Monday, and her fee is 800.", "en"),
+        ("Dr Sultana is a pediatrician; she sits on Sunday.", "en"),
+    ],
+)
+def test_a_pronoun_binds_to_the_doctor_just_named(sentence, language):
+    v = verdict(sentence, "?", language=language, booking={"doctor": "Rahman"})
+    assert v.kind == "fact", v
+
+
+def test_a_pronoun_after_a_named_doctor_with_her_true_fee_passes():
+    v = verdict(
+        "Dr Sultana sits on Monday, and her fee is 600.",
+        "?",
+        language="en",
+        booking={"doctor": "Rahman"},
+    )
+    assert v.ok, v
+
+
+def test_a_slash_splits_doctors():
+    assert verdict("Dr Rahman/Dr Sultana sit on Sunday.", "?", language="en").kind == "fact"
+
+
+def test_is_coming_on_monday_possible_is_a_push():
+    assert verdict("সোমবার কি আসা সম্ভব?", "কবে বসেন?").kind == "push"

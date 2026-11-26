@@ -466,7 +466,7 @@ def _doctor_groups(grounds: Grounds) -> list[frozenset[str]]:
         # Names in one piece of a line are one doctor ("Dr Rahman / ডাক্তার রহমান"); names
         # joined by ও/and are two ("ডাক্তার রহমান ও ডাক্তার সুলতানা দুজনেই …").
         for line in text.splitlines():
-            for piece in _CLAUSE_SPLIT.split(line):
+            for piece in _PIECE_SPLIT.split(line):
                 names = set(_line_doctors(piece))
                 if not names:
                     continue
@@ -477,21 +477,52 @@ def _doctor_groups(grounds: Grounds) -> list[frozenset[str]]:
     return [frozenset(g) for g in groups]
 
 
-def _doctors_in(text: str, groups: list[frozenset[str]]) -> set[frozenset[str]]:
-    """The known doctors a text names, with a title or without one ("সুলতানা ম্যাডাম")."""
+_Department = tuple[frozenset[str], set[frozenset[str]]]
+
+
+def _departments(grounds: Grounds, groups: list[frozenset[str]]) -> list[_Department]:
+    """Each department of the directory block (a short title line, then its "- Dr …" lines) as
+    its name words and its doctors: "মেডিসিনের ডাক্তার" names Dr Hossain."""
+    found: list[_Department] = []
+    for text in grounds.texts:
+        current: _Department | None = None
+        for line in text.splitlines():
+            if line.startswith("- "):
+                if current is not None:
+                    current[1].update(g for g in groups if g & _ground_words([line]))
+                continue
+            current = None
+            if line.strip() and len(line) < 60 and not line.startswith("#"):
+                current = (frozenset(_ground_words([line])), set())
+                found.append(current)
+    return [(words, doctors) for words, doctors in found if doctors]
+
+
+def _doctors_in(
+    text: str,
+    groups: list[frozenset[str]],
+    departments: list[_Department] | tuple[()] = (),
+) -> set[frozenset[str]]:
+    """The known doctors a text names, with a title or without one ("সুলতানা ম্যাডাম"), or
+    through their department ("মেডিসিনের ডাক্তার")."""
     stems = set(_titled_names(text))
     for word in _words(text):
         stems.update(_stems(word))
-    return {g for g in groups if g & stems}
+    found = {g for g in groups if g & stems}
+    for words, doctors in departments:
+        if words & stems:
+            found |= doctors
+    return found
 
 
 # A clause ends at a comma, a danda or a joiner: "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন" says
 # Sunday of Dr Sultana.
 # "two hundred and fifty" is one number, so "and" after hundred/thousand joins nothing.
-_CLAUSE_SPLIT = re.compile(
-    r",(?![0-9০-৯])\s*|;|।|[?!]|\s*&\s*|\s(?:ও|আর|এবং|but)\s|(?<!hundred)(?<!thousand)\sand\s",
-    re.IGNORECASE,
-)
+_JOINS = r",(?![0-9০-৯])\s*|;|।|[?!]|\s*&\s*|\s(?:ও|আর|এবং|but)\s|(?<!hundred)(?<!thousand)\sand\s"
+# "/" joins two doctors in a sentence ("Dr Rahman/Dr Sultana"); in a directory line it joins one
+# doctor's two spellings ("Dr Rahman / ডাক্তার রহমান"), so ground lines are cut without it.
+_CLAUSE_SPLIT = re.compile(_JOINS + r"|\s*/\s*", re.IGNORECASE)
+_PIECE_SPLIT = re.compile(_JOINS, re.IGNORECASE)
 _TODAY_SAID = re.compile(_B + r"(?:আজ|আজকে)" + _E + r"|\btoday\b", re.IGNORECASE)
 # What may sit in a clause that only says what day today is ("আজ শনিবার", "today is Saturday").
 _TODAY_ONLY_WORDS = re.compile(
@@ -519,30 +550,60 @@ def _clauses(text: str) -> list[str]:
     return [c for c in _CLAUSE_SPLIT.split(text) if c.strip()]
 
 
+def _clause_doctors(
+    text: str, grounds: Grounds
+) -> tuple[list[str], list[set[frozenset[str]]], bool]:
+    """The clauses, the doctors each is about, and whether those came from the call alone.
+
+    A clause names doctors (by name, title or department); "উনি/he/she" means the nearest
+    doctor named earlier in the sentence, else the call's doctor (none known: a doctor no fact
+    can back); any other clause takes its neighbour's. A sentence naming none is about the
+    call's doctor when there is one (empty: about no doctor)."""
+    groups = _doctor_groups(grounds)
+    departments = _departments(grounds, groups)
+    clauses = _clauses(text)
+    named = [_doctors_in(c, groups, departments) for c in clauses]
+    own: list[set[frozenset[str]]] = []
+    for i, clause in enumerate(clauses):
+        if named[i]:
+            own.append(named[i])
+        elif _PRONOUN.search(clause):
+            earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), None)
+            own.append(earlier or _call_doctor(grounds, groups))
+        else:
+            own.append(set())
+    if any(own):
+        filled = [
+            own[i]
+            or next(
+                (own[j] for j in [*range(i - 1, -1, -1), *range(i + 1, len(clauses))] if own[j]),
+                set(),
+            )
+            for i in range(len(clauses))
+        ]
+        return clauses, filled, False
+    call = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
+    return clauses, [set(call) for _c in clauses], bool(call)
+
+
 def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
     """Each clause with the grounds its days, times and numbers may rest on.
 
-    A sentence that names no doctor rests on every ground. Otherwise each clause rests on the
-    lines of the doctors it names (a clause naming none takes the doctors of the clause before
-    it, or else the next one): their directory line, knowledge entries and tool results naming
-    them, and the call values that are theirs or nobody's. Today's weekday is not a doctor's
-    sitting day ("ডাক্তার রহমান আজ শনিবার বসেন" is wrong on a Saturday when he sits Sunday); a
-    clause that only says what day today is ("আজ শনিবার, ...") may still name it. A clause with
-    "উনি/he/she" and no name is about the call's doctor; with none known nothing backs its facts."""
-    groups = _doctor_groups(grounds)
-    clauses = _clauses(text)
-    own = [
-        _doctors_in(c, groups) or (_call_doctor(grounds, groups) if _PRONOUN.search(c) else set())
-        for c in clauses
-    ]
-    if not any(own):
+    A sentence about no doctor rests on every ground. Otherwise each clause rests on the lines
+    of its doctors (see `_clause_doctors`): their directory line, knowledge entries and tool
+    results naming them, and the call values that are theirs or nobody's; one about the call's
+    doctor only because it names none ("জি, ৮০০ টাকা।") also on the clinic's lines that name no
+    doctor. Today's weekday is not a doctor's sitting day ("ডাক্তার রহমান আজ শনিবার বসেন" is wrong
+    on a Saturday when he sits Sunday); a clause that only says what day today is ("আজ শনিবার,
+    ...") may still name it."""
+    clauses, doctors_of, implicit = _clause_doctors(text, grounds)
+    if not any(doctors_of):
         return [(text, grounds.texts)]
+    groups = _doctor_groups(grounds)
+    everyone = set().union(*groups) if groups else set()
     values = {id(v.text) for v in grounds.values}
     out = []
-    for i, clause in enumerate(clauses):
-        doctors = own[i] or next(
-            (own[j] for j in [*range(i - 1, -1, -1), *range(i + 1, len(clauses))] if own[j]), set()
-        )
+    for clause, doctors in zip(clauses, doctors_of, strict=True):
         names = set().union(*doctors)
         others = set().union(*(g for g in groups if g not in doctors))
         lines = [
@@ -551,6 +612,7 @@ def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
             if id(t) not in values
             for line in t.splitlines()
             if names & _ground_words([line])
+            or (implicit and not everyone & _ground_words([line]))
         ]
         for value in grounds.values:
             if value.today:
@@ -567,23 +629,24 @@ def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
     return out
 
 
-def _echoed_guess(text: str, grounds: Grounds) -> str | None:
-    """A number the caller said, given back in a sentence about no doctor, that only the
-    directory holds: "Yes, the follow-up fee is 500 on Saturdays" to "Is the follow-up fee 500?"
-    is one doctor's fee, and which one the sentence never says. A clinic fact (knowledge entry,
-    tool result) may still confirm it ("রিপোর্ট দেখাতে ৩০০ টাকা")."""
-    if not grounds.caller:
-        return None
+def _doctors_number(text: str, grounds: Grounds) -> str | None:
+    """A number only a doctor's lines hold, in a sentence about no doctor with no doctor known
+    on the call: "ফলো-আপ ফি ৫০০ টাকা।" is one doctor's fee, and which one the sentence never
+    says. A clinic line (a knowledge entry, a tool result naming no doctor) may still hold it
+    ("রিপোর্ট দেখাতে ৩০০ টাকা")."""
+    _clauses_, doctors_of, _implicit = _clause_doctors(text, grounds)
+    if any(doctors_of):
+        return None  # checked against that doctor's own lines
     groups = _doctor_groups(grounds)
-    if any(
-        _doctors_in(c, groups) or _PRONOUN.search(c) for c in _clauses(text)
-    ):
-        return None  # scoped to a doctor: checked against that doctor's own lines
-    caller = _norm(grounds.caller)
-    echoed = numbers_in(_without_clocks(text)) & numbers_in(_without_clocks(caller))
-    facts = [t for t in grounds.texts if not (grounds.directory and t is grounds.directory)]
-    clinic = set().union(*(numbers_in(t) for t in facts)) if facts else set()
-    for number in sorted(echoed - clinic, key=int):
+    everyone = set().union(*groups) if groups else set()
+    clinic = {
+        n
+        for t in grounds.texts
+        for line in t.splitlines()
+        if not everyone & _ground_words([line])
+        for n in numbers_in(line)
+    }
+    for number in sorted(numbers_in(_without_clocks(text)) - clinic, key=int):
         return number
     return None
 
@@ -729,24 +792,93 @@ def _said_times(text: str) -> list[tuple[str, frozenset[int], int, tuple[int, in
         elif spoken:
             minute = _minute(spoken) or 0
         if half:
-            half = _norm(half)
-            if half == _norm("সাড়ে"):
-                minute = 30
-            elif half == _norm("সোয়া"):
-                minute = 15
-            else:  # পৌনে: a quarter to
-                hour, minute = (hour - 2) % 12 + 1, 45
+            hour, minute = _half_hour(_norm(half), hour)
         hours = frozenset(_hours_24(hour, _PERIODS[_norm(period).lower()]))
         said.append((m.group(), hours, minute, m.span()))
+
+    def free(span: tuple[int, int]) -> bool:
+        return not any(a < span[1] and span[0] < b for *_rest, (a, b) in said)
+
+    for m in _EN_QUARTER.finditer(text):
+        amount, relation, word, part, night, ampm = m.groups()
+        hour = _hour(word)
+        if hour is None:
+            continue
+        minute = 30 if amount.lower() == "half" else 15
+        if relation.lower() == "to":
+            hour, minute = (hour - 2) % 12 + 1, 45
+        kind = (part or night or (ampm.lower() + "m" if ampm else "")).lower()
+        said.append((m.group(), _readings(hour, kind), minute, m.span()))
     for m in _EN_TIME.finditer(text):
         word, digits, spoken, part, night, ampm = m.groups()
         hour = _hour(word)
-        if hour is None:
+        if hour is None or not free(m.span()):
             continue
         minute = int(digits) if digits else (_minute(spoken) or 0) if spoken else 0
         kind = (part or night or (ampm.lower() + "m")).lower()
         said.append((m.group(), frozenset(_hours_24(hour, kind)), minute, m.span()))
+    # Minutes said with no part of the day ("৯টা ১৫ মিনিট", "সাড়ে ৮টা", "9.15", "at nine fifteen")
+    # are still a time, read either way round the clock; the minutes are never a bare number.
+    for m in _BN_BARE_TIME.finditer(text):
+        half, digits, minutes, word, spoken = m.groups()
+        hour = _hour(digits or word)
+        if hour is None or not free(m.span()) or not (half or minutes or spoken):
+            continue
+        minute = 0
+        if minutes:
+            minute = int(minutes.translate(_TO_ASCII))
+        elif spoken:
+            minute = _minute(spoken) or 0
+            if not minute:
+                continue
+        if half:
+            hour, minute = _half_hour(_norm(half), hour)
+        if minute:  # a bare hour ("৯টা") is a number; a clock "10:00" is read elsewhere
+            said.append((m.group(), _readings(hour, ""), minute, m.span()))
+    for m in _EN_BARE_TIME.finditer(text):
+        dotted, dot_minutes, word, spoken = m.groups()
+        hour = _hour(dotted or word)
+        if hour is None or not free(m.span()):
+            continue
+        minute = int(dot_minutes) if dot_minutes else (_minute(spoken) or 0)
+        if minute:
+            said.append((m.group(), _readings(hour, ""), minute, m.span()))
     return said
+
+
+def _half_hour(half: str, hour: int) -> tuple[int, int]:
+    """সাড়ে ৮টা is 8:30, সোয়া ৮টা 8:15, পৌনে ৮টা 7:45."""
+    if half == _norm("সাড়ে"):
+        return hour, 30
+    if half == _norm("সোয়া"):
+        return hour, 15
+    return (hour - 2) % 12 + 1, 45
+
+
+def _readings(hour: int, kind: str) -> frozenset[int]:
+    """The 24-hour hours of a clock hour: by its part of the day, or with none both ways."""
+    if kind:
+        return frozenset(_hours_24(hour, kind))
+    return frozenset({hour % 12, hour % 12 + 12})
+
+
+_EN_QUARTER = re.compile(
+    r"\b(quarter|half)\s+(past|to)\s+([0-9]{1,2}|[A-Za-z]+)"
+    r"(?:\s*(?:in\s+the\s+(morning|afternoon|evening)\b|at\s+(night)\b|([ap])\.?\s?m\b\.?))?",
+    re.IGNORECASE,
+)
+_BN_BARE_TIME = re.compile(
+    _B
+    + r"(?:(সাড়ে|পৌনে|সোয়া)\s+)?"
+    + rf"(?:({_DIGITS_2})(?:\.([0-9০-৯]{{2}}))?(?:টা|টায়|টার|টাতে)?|([ঀ-৿]+?(?:টা|টায়|টার|টাতে)))"
+    + rf"(?:\s+({_DIGITS_2}|[ঀ-৿]+?)\s*মিনিট[ঀ-৿]*)?"
+    + _E
+)
+_EN_BARE_TIME = re.compile(
+    r"\b([0-9]{1,2})\.([0-9]{2})\b"
+    r"|\b(?:at|until|till|from|by|before|after)\s+([A-Za-z]+)\s+(fifteen|thirty|forty[- ]five)\b",
+    re.IGNORECASE,
+)
 
 
 _CLOCK_HM = re.compile(r"(?<![0-9])([0-9]{1,2}):([0-9]{2})")
@@ -1057,7 +1189,8 @@ _WHEN_TO_COME = re.compile(
     r"|বুকিং (?:করতে|দিতে|নিতে) চা(?:ন|চ্ছেন|ইছেন)"
     r"|\b(?:would|do) you (?:like|want) to come\b|\b(?:can|will) you come\b"
     r"|আপনি কি [^?।]{0,25}(?:আসবেন|আসতে পারবেন|আসতে চান)"
-    r"|\b(?:shall|should|can|could) we see you\b",
+    r"|\b(?:shall|should|can|could) we see you\b"
+    r"|(?:আসা|আসতে পারা) (?:কি )?(?:সম্ভব|যাবে)",
     re.IGNORECASE,
 )
 _ACTIONS = {
@@ -1277,11 +1410,11 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             return Verdict(False, "fact", f"the time {time} is not in the facts")
         if day := _unknown_day(clause, scope):
             return Verdict(False, "fact", f"the day {day} is not in the facts")
-    if number := _echoed_guess(text, grounds):
+    if number := _doctors_number(text, grounds):
         return Verdict(
             False,
             "unsupported",
-            f"it gives back the caller's number {number}, which no fact states for this",
+            f"it says {number}, which only a doctor's facts state, without saying which doctor",
         )
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
