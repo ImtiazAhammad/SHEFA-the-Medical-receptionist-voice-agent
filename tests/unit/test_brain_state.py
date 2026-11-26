@@ -371,3 +371,15 @@ def test_a_department_with_a_booking_verb_is_still_booking(said, example_clinic)
 def test_a_booker_asking_if_it_is_ok_is_still_booking(example_clinic):
     said = "I need the heart doctor tomorrow, is that ok?"
     assert track(CallState(), said, today=date(2026, 11, 28)).goal == "booking"
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "I want to know which days the heart doctor sits.",
+        "আমি জানতে চাই হৃদরোগের ডাক্তার কবে বসেন।",
+        "I'd like to ask about Dr Rahman's fee.",
+    ],
+)
+def test_wanting_to_know_is_information(said, example_clinic):
+    assert track(CallState(), said, today=date(2026, 11, 28)).goal == "information"
