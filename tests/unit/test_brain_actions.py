@@ -1102,7 +1102,7 @@ def test_a_contact_only_caller_is_not_identified_in_the_prompt(executor):
 
 ECHOED_QUESTIONS = [
     "is that right?", "is it ok?", "is that all right?", "right?", "okay?", "ঠিক আছে?", "এটাই?",
-    "জি?", "হ্যাঁ?",
+    "জি?", "হ্যাঁ?", "হ্যাঁ?।", "ঠিক আছে? ", "okay?.", "right?!",
 ]  # fmt: skip
 
 

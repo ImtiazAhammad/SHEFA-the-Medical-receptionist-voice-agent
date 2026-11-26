@@ -61,7 +61,11 @@ _CHANGE = re.compile(
 # A reply shaped as a question asks, it does not agree ("ঠিক আছে?", "is it ok?", "জি?"): one
 # re-ask. Read before the word splitter drops the "?".
 _QUESTION = re.compile(
-    r"\?\s*$|" + _B + r"(?:কি|কী|তো)" + _E + r"[\s।.!]*$|^\s*(?:is|are|does|do|did|can|will)\b",
+    r"\?[\s।.!]*$|"
+    + _B
+    + r"(?:কি|কী|তো)"
+    + _E
+    + r"[\s।.!]*$|^\s*(?:is|are|does|do|did|can|will)\b",
     re.IGNORECASE,
 )
 # "করে দিন না", "দিন না": a softening "না" after an imperative at the end of the line is a
