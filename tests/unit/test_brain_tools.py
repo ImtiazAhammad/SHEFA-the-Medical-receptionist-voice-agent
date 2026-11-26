@@ -560,3 +560,10 @@ def test_reschedule_of_the_only_booking_reads_the_time_against_its_doctor(clinic
     clinic.book(patient, doctor_id(clinic, "Rahman"), "2026-11-27", "09:00")
     resolved = run("reschedule_booking", {"day": "2026-11-29", "time": "৯টা"}, who=str(patient))
     assert resolved.args == {"new_date": "2026-11-29", "new_time": "09:00"}
+
+
+def test_book_takes_the_name_kept_for_the_identified_caller(clinic):
+    # Caller ID found the patient; the name on file is the booking's name, as in the guided engine.
+    patient = clinic.upsert_patient("01711000000", "Karim")
+    args = {"doctor": "Rahman", "day": "কাল", "time": "10:00"}
+    assert run("book", args, who=str(patient)).args["patient_name"] == "Karim"

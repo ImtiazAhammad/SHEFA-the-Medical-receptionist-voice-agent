@@ -329,6 +329,17 @@ def _free_times(args: dict[str, Any], state: CallState, today: date) -> Resolved
     return Resolved("free_times", "check_appointment_slots", out)
 
 
+def _kept_name(session: CallSession) -> str:
+    """The name on file for the identified caller (caller ID or a confirmed number)."""
+    if not session.patient_id:
+        return ""
+    try:
+        patient = default_clinic_store().get_patient(int(str(session.patient_id))) or {}
+    except (ValueError, LookupError):
+        return ""
+    return _text(patient.get("name"))
+
+
 def _book(
     args: dict[str, Any], session: CallSession, state: CallState, today: date
 ) -> Resolved | ToolProblem:
@@ -348,7 +359,12 @@ def _book(
     )
     if isinstance(clock, ToolProblem):
         return clock
-    name = _text(args.get("name")) or state.booking.get("name") or _text(session.patient_name)
+    name = (
+        _text(args.get("name"))
+        or state.booking.get("name")
+        or _text(session.patient_name)
+        or _kept_name(session)
+    )
     if not name:
         return ToolProblem("The patient's name is missing: ask the caller for it.")
     return Resolved(
