@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,10 +24,13 @@ from shefa.brain.state import GOALS, MOODS, CallState, summary
 from shefa.brain.tools import TOOL_NAMES
 from shefa.config.settings import settings
 
+logger = logging.getLogger(__name__)
+
 ROUTER_TOOLS = tuple(t for t in TOOL_NAMES if t != "find_doctors")
 HISTORY_TURNS = 4
 TURN_CHARS = 300  # one long earlier turn must not crowd out the caller's line
 MAX_TOKENS = 40
+WARN_EVERY_S = 60.0  # a router that fails every turn is logged once a minute, not every turn
 
 INSTRUCTIONS = """\
 You route one phone call turn at a clinic. Read the caller's last line and answer with JSON only:
@@ -107,17 +112,44 @@ def _read(text: str) -> Route:
     return Route(None if tool == "none" else tool, mood, goal)
 
 
+@dataclass
+class _Warned:
+    at: float | None = None
+    quiet: int = 0  # failures since the last warning
+
+
+_warned = _Warned()
+
+
+def _warn(error: str) -> None:
+    """Log a router failure, at most once per WARN_EVERY_S, with how many were not logged."""
+    now = time.monotonic()
+    if _warned.at is not None and now - _warned.at < WARN_EVERY_S:
+        _warned.quiet += 1
+        return
+    more = f" ({_warned.quiet} more since the last warning)" if _warned.quiet else ""
+    logger.warning("router gave no route, the turn is a plain reply: %s%s", error, more)
+    _warned.at, _warned.quiet = now, 0
+
+
 async def route(
     llm: Any,
     state: CallState,
     said: str,
     history: list[dict[str, Any]],
-    *,
-    language: str,
 ) -> Route:
     """Which tool this turn needs (None for a plain reply), and the caller's mood and goal.
 
-    Never raises: a failed router must not cost the caller an answer."""
+    Never raises: a failed router must not cost the caller an answer. Failures are logged
+    (rate-limited), since a server that stops accepting the output shape would otherwise turn
+    every turn into a plain reply without a word."""
+    found = await _ask(llm, state, said, history)
+    if found.error:
+        _warn(found.error)
+    return found
+
+
+async def _ask(llm: Any, state: CallState, said: str, history: list[dict[str, Any]]) -> Route:
     messages = [
         {"role": "system", "content": INSTRUCTIONS},
         {"role": "user", "content": _turn_text(state, said, history)},

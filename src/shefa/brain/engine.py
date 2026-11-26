@@ -236,8 +236,7 @@ class Brain:
         history, previous = _history(session, said)
         state = track(load(session), said, previous=previous, cues=cues, today=today)
         config = call_config(session)
-        language = state.language
-        router_task = asyncio.create_task(self._route(llm, state, said, history, language))
+        router_task = asyncio.create_task(self._route(llm, state, said, history))
         try:
             return await self._turn(
                 session, said, llm, speak, today, history, state, config, router_task,
@@ -248,11 +247,11 @@ class Brain:
                 router_task.cancel()
 
     async def _route(
-        self, llm: Any, state: CallState, said: str, history: list[dict[str, str]], language: str
+        self, llm: Any, state: CallState, said: str, history: list[dict[str, str]]
     ) -> tuple[Route, int]:
         began = time.monotonic()
         try:
-            found = await route(llm, state, said, history, language=language)
+            found = await route(llm, state, said, history)
         except Exception as exc:  # noqa: BLE001 - route() never raises; a failure is a plain reply
             found = Route(None, None, None, f"{type(exc).__name__}: {exc}"[:200])
         return found, int((time.monotonic() - began) * 1000)

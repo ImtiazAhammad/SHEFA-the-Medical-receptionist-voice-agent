@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from types import SimpleNamespace
 
@@ -33,7 +34,7 @@ class FakeLLM:
 
 def _route(llm, said="কাল বিকেলে রহমান স্যারের সিরিয়াল দিন", history=None, **kw):
     history = history if history is not None else [{"role": "user", "content": said}]
-    return asyncio.run(route(llm, CallState(), said, history, language="bn", **kw))
+    return asyncio.run(route(llm, CallState(), said, history, **kw))
 
 
 def _out(tool="none", mood="calm", goal="information") -> str:
@@ -140,3 +141,30 @@ def test_instructions_name_every_tool_and_say_questions_are_none() -> None:
         assert tool in router.INSTRUCTIONS
     assert "find_doctors" not in router.INSTRUCTIONS
     assert "ফি কত" in router.INSTRUCTIONS  # an information example routed to none
+
+
+@pytest.fixture
+def fresh_warnings(monkeypatch):
+    monkeypatch.setattr(router, "_warned", router._Warned())
+
+
+def test_a_failing_router_is_logged_but_not_on_every_turn(fresh_warnings, caplog, monkeypatch):
+    # A server that stops accepting the output shape fails every turn: one warning a minute says
+    # so without flooding the log.
+    clock = [1000.0]
+    monkeypatch.setattr(router.time, "monotonic", lambda: clock[0])
+    caplog.set_level(logging.WARNING, logger="shefa.brain.router")
+    for _ in range(5):
+        _route(FakeLLM(error=RuntimeError("structured_outputs rejected")))
+    assert len(caplog.records) == 1
+    assert "structured_outputs rejected" in caplog.records[0].getMessage()
+    clock[0] += router.WARN_EVERY_S + 1
+    _route(FakeLLM("not json"))
+    assert len(caplog.records) == 2
+    assert "4 more" in caplog.records[1].getMessage()
+
+
+def test_a_router_that_answers_logs_nothing(fresh_warnings, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="shefa.brain.router")
+    _route(FakeLLM(_out("book", "calm", "booking")))
+    assert caplog.records == []
