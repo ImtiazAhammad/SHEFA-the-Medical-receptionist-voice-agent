@@ -966,3 +966,133 @@ def test_a_no_to_a_booking_keeps_the_free_times_but_not_the_read_back(executor):
     texts = _slot_facts_in(session)
     assert any("is free on" in t for t in texts)
     assert not any("Read back" in t for t in texts)
+
+
+# --- fix round 2: the yes forms of the re-review -------------------------------------------------
+
+# The re-review's 23 refused yeses, verbatim (task-9-rereview-1.md, "Breaking strict_answer").
+REFUSED_YESES = [
+    "হ্যাঁ ভাই", "জি আপা", "জি স্যার", "ঠিক আছে ভাই", "জি, বুক করে ফেলুন", "হ্যাঁ, কনফার্ম",
+    "কনফার্ম করুন", "হ্যাঁ নিশ্চিত", "হ্যাঁ, ঠিকই আছে", "yes, that's right", "yes that is right",
+    "yes I confirm", "all right", "জী", "জ্বী", "হুম", "হুঁ", "alright", "haan", "ji", "hmm haan",
+    "হ্যাঁ, করে দিন না", "করে দিন না",
+]  # fmt: skip
+# The yeses it already took: the coordinator's seven, and the eight the re-review lists among
+# the non-yes lines as real agreement.
+ACCEPTED_YESES = [
+    "জি", "জি হ্যাঁ", "হ্যাঁ ঠিক আছে", "ঠিক আছে করে দিন", "ok", "yes please", "sure",
+    "ok do that one", "এটা দিন", "ওটা দিন", "please do", "yes, that one", "ok it works",
+    "ok, you do it", "book it",
+]  # fmt: skip
+# The non-yes lines the re-review names (it tried 35; these are the ones it lists).
+NOT_YESES = [
+    "বাতিল করুন", "অন্য দিন করুন", "পরে করুন", "ক্যানসেল করেন", "ডাক্তার সুলতানার কাছে দিন",
+    "অন্যটা", "আগেরটা", "the other one", "a different day", "my wife", "আমার মা", "পরশু",
+    "সকালে", "ঠিক আছে দেখি", "let me think", "yes wait", "জি দিন, তবে রাতে",
+]  # fmt: skip
+
+
+def _books_after(executor, line) -> bool:
+    """Whether the read-back books after `line`, directly or after one re-ask and "হ্যাঁ"."""
+    session, _, _ = read_back_booking(executor)
+    reply = "Sure, tell me." if line.isascii() else "জি, বলুন।"
+    speak = say(session, line, FakeLLM(reply, route=route_json()))
+    if not executor.ran and speak.said == [reask_text(load(session).language)]:
+        say(session, "হ্যাঁ", FakeLLM())
+    return [name for name, _ in executor.ran] == ["book_appointment"]
+
+
+@pytest.mark.parametrize("line", REFUSED_YESES + ACCEPTED_YESES)
+def test_a_real_yes_books_directly_or_after_one_re_ask(executor, line):
+    assert _books_after(executor, line)
+
+
+@pytest.mark.parametrize("line", NOT_YESES)
+def test_a_line_that_is_no_yes_never_books_on_its_own(executor, line):
+    session, _, _ = read_back_booking(executor)
+    reply = "Sure, tell me." if line.isascii() else "জি, বলুন।"
+    say(session, line, FakeLLM(reply, route=route_json()))
+    assert executor.ran == []
+
+
+@pytest.mark.parametrize("line", ["জি ভাই", "yes, that's right", "হুম", "করে দিন না"])
+def test_a_common_yes_books_at_once(executor, line):
+    session, _, _ = read_back_booking(executor)
+    say(session, line, FakeLLM())
+    assert [name for name, _ in executor.ran] == ["book_appointment"]
+
+
+def test_a_yes_with_an_unknown_word_is_asked_once(executor):
+    session, _, _ = read_back_booking(executor)
+    speak = say(session, "জি, ঠিক আছে দেখি", FakeLLM())
+    assert speak.said == [reask_text("bn")] and executor.ran == []
+
+
+@pytest.mark.parametrize("line", ["না", "না, থাক", "এটা চাই না", "দিন না, তবে কাল নয়"])
+def test_na_is_a_negation_except_after_an_imperative_at_the_end(executor, line):
+    session, _, _ = read_back_booking(executor)
+    say(session, line, FakeLLM("জি, বলুন।", route=route_json()))
+    assert executor.ran == []
+
+
+# --- fix round 2: the name wait, the offer, the number wait, the prompt ---------------------------
+
+
+@pytest.mark.parametrize("line", ["স্টাফ দিন", "রিসেপশনে দিন"])
+def test_a_staff_or_reception_request_while_a_name_is_awaited_hands_over(executor, line):
+    executor.results["transfer_to_human"] = {"transferred": True}
+    session = waiting_for_a_name(executor)
+    speak = say(session, line, FakeLLM())
+    assert executor.previewed == []
+    assert speak.said == [safe.connecting(language="bn")]
+
+
+def test_a_pause_is_not_a_name(executor):
+    session = waiting_for_a_name(executor)
+    say(session, "এক মিনিট", FakeLLM("জি, বলুন।", route=route_json()))
+    assert executor.previewed == [] and not load(session).booking.get("name")
+
+
+@pytest.mark.parametrize("line", ["মা", "আব্বা", "আমার মা"])
+def test_a_kinship_word_alone_asks_for_the_name_again(executor, line):
+    session = waiting_for_a_name(executor)
+    speak = say(session, line, FakeLLM())
+    assert speak.said == [guided.ask_name("bn", retry=True)]
+    assert executor.previewed == []
+    speak = say(session, "রহিমা খাতুন", FakeLLM())
+    assert "রহিমা খাতুন" in speak.said[0]
+
+
+def test_the_angry_offer_never_follows_a_lookup_question(executor):
+    session = stranger_session()
+    say(session, ANGRY, FakeLLM("দুঃখিত।", route=route_json()))
+    llm = FakeLLM("unused", route=route_json("lookup_booking", "angry", "lookup"))
+    speak = say(session, "ফালতু! আমার সিরিয়াল কবে?", llm)
+    assert safe.person_offer("bn") not in speak.said
+    assert "মোবাইল নম্বর" in speak.said[-1]
+
+
+def test_a_question_during_the_number_wait_is_answered_and_the_wait_stays(executor):
+    session = book_waiting_for_a_number(executor)
+    llm = FakeLLM("ডাক্তার রহমানের ফি ৮০০ টাকা।", route=route_json("none", "calm", "information"))
+    speak = say(session, "আচ্ছা ডাক্তার রহমানের ফি কত?", llm)
+    assert speak.said == ["ডাক্তার রহমানের ফি ৮০০ টাকা।"]
+    assert session.metadata["brain_wait"]["for"] == "phone"
+    speak = say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    assert speak.said == [f"আপনার নম্বর {guided.read_digits(PHONE, 'bn')}। ঠিক আছে?"]
+
+
+def test_a_contact_only_caller_is_not_identified_in_the_prompt(executor):
+    from shefa.brain.prompt import IDENTIFIED
+
+    session = book_waiting_for_a_number(executor)
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    say(session, "জি", FakeLLM())
+    assert session.patient_id is not None
+    llm = FakeLLM("জি, বলুন।", route=route_json())
+    say(session, "আর কিছু জানার ছিল", llm)
+    assert IDENTIFIED not in _system(llm.calls[0])
+    caller_id = identified_session()
+    llm = FakeLLM("জি, বলুন।", route=route_json())
+    say(caller_id, "আর কিছু জানার ছিল", llm)
+    assert IDENTIFIED in _system(llm.calls[0])

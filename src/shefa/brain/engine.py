@@ -35,7 +35,7 @@ from shefa.clinic.registry import current
 from shefa.clinic.store import clinic_today
 from shefa.config.settings import settings
 from shefa.models.base import Language
-from shefa.pipeline import facilities
+from shefa.pipeline import facilities, lookup
 from shefa.pipeline.grounding import parse_date, parse_time
 from shefa.pipeline.language_detector import is_emergency
 from shefa.pipeline.replycheck import tidy
@@ -424,14 +424,19 @@ class Brain:
             await speak(text)
             spoken.append(text)
 
+        def identified() -> bool:
+            # A patient made from a number the caller only said is no caller ID.
+            return bool(session.patient_id) and not session.metadata.get(actions.CONTACT_ONLY)
+
         def offer_now() -> bool:
             """The person offer is said now: never on an ended call, and never over the
-            question a read-back or a wait is waiting on."""
+            question a read-back, a wait or a lookup is waiting on."""
             return (
                 offer
                 and session.state not in actions.ENDED
                 and state.pending is None
                 and actions.WAIT not in session.metadata
+                and not lookup.active(session)
             )
 
         async def finish() -> str:
@@ -465,7 +470,7 @@ class Brain:
                     directory_for=lambda n: directory_brief(
                         store, language, max_chars=n, header=DIRECTORY_HEADER
                     ),
-                    identified=bool(session.patient_id),
+                    identified=identified(),
                 )
                 # Cut to one sentence only when the offer really follows.
                 out = await self._stream(
@@ -537,7 +542,7 @@ class Brain:
                 directory_for=lambda n: directory_brief(
                     store, language, max_chars=n, header=DIRECTORY_HEADER
                 ),
-                identified=bool(session.patient_id),
+                identified=identified(),
             )
             out = await self._stream(
                 llm, messages, grounds, state, speak, routing,

@@ -80,9 +80,27 @@ _RECEPTION = {
 # A line that is no name: a person asked for, a refusal, a deferral, a question, a verb.
 _NOT_A_NAME = re.compile(
     r"(?<![ঀ-৿])(?:পরে|আমি|বলব|বলবো|বলছি|চাই|করব|দেব|দিব|পারব|জানি|কেন|কী|কি|মানুষ|লোক)(?![ঀ-৿])"
-    r"|\?|\b(?:later|i|i'll|want|why|what|person|human|someone|tell)\b",
+    r"|মিনিট|দাঁড়ান|ওয়েট|স্টাফ|রিসেপশন"
+    r"|\?|\b(?:later|i|i'll|want|why|what|person|human|someone|tell|wait|minute|staff)\b",
     re.IGNORECASE,
 )
+# A person asked for in words the guided `is_human_request` list does not hold ("স্টাফ দিন",
+# "রিসেপশনে দিন"); heard only while a read-back, a wait or a lookup is open.
+_PERSON = re.compile(
+    r"(?<![ঀ-৿])(?:স্টাফ|রিসেপশন|মানুষ|অপারেটর|লোক)"
+    r"|\b(?:person|human|staff|reception|receptionist|operator|someone)\b",
+    re.IGNORECASE,
+)
+# Who the patient is to the caller, not their name: "মা", "আমার আব্বা". The name is asked again.
+_KIN = frozenset(
+    {
+        "মা", "আম্মা", "আম্মু", "বাবা", "আব্বা", "আব্বু", "ছেলে", "মেয়ে", "ভাই", "বোন", "স্ত্রী",
+        "স্বামী", "বউ", "নানা", "নানি", "দাদা", "দাদি", "চাচা", "চাচি", "খালা", "মামা",
+        "mother", "mom", "father", "dad", "son", "daughter", "wife", "husband", "brother",
+        "sister",
+    }
+)  # fmt: skip
+_KIN_FILLER = frozenset({"আমার", "my", "the", "রোগী", "আমি"})
 
 
 @dataclass(frozen=True)
@@ -325,7 +343,12 @@ def _spoken(language: str) -> Language:
 
 
 def _wants_person(said: str, language: str) -> bool:
-    return is_human_request(said, _spoken(language))
+    return is_human_request(said, _spoken(language)) or bool(_PERSON.search(said))
+
+
+def _kin_only(said: str) -> bool:
+    words = [w for w in re.split(r"[\s,.;:!?।]+", said.lower()) if w and w not in _KIN_FILLER]
+    return bool(words) and all(w in _KIN for w in words)
 
 
 def _is_name(said: str, state: CallState) -> str:
@@ -352,6 +375,8 @@ def _answer(pending: dict[str, Any], said: str, today: _date) -> str:
         return answer
     if answer == "change":
         return "void"
+    if answer == "unclear":  # a yes with a word outside the allow-list: asked once
+        return "void" if pending.get("asked") else "reask"
     # Counted the way the guided engine counts it.
     if not pending.get("asked") and len(said.split()) <= 3:
         return "reask"
@@ -411,6 +436,12 @@ def settles(
     if wait.get("for") == "phone":
         if guided.ABORT.search(said):
             return ""
+        # A question asked along the way ("ডাক্তার রহমানের ফি কত?") is answered by the model;
+        # the number is still awaited and no try is counted.
+        asks = "?" in said or guided.INFO_QUESTION.search(said)
+        if asks and not _digits(said):
+            session.metadata[WAIT] = wait
+            return ""
         # Two failed tries, whatever their length, end the wait; the second goes on as a
         # new request.
         if not is_bd_mobile(parse_spoken_digits(said)) and wait.get("misses", 0) + 1 >= (
@@ -420,6 +451,9 @@ def settles(
         session.metadata[WAIT] = wait
         return "phone"
     named = wait.get("for") == "name" and not guided.changes_request(said, today=today)
+    if named and _kin_only(said):
+        session.metadata[WAIT] = wait
+        return "name_again"
     if named and _is_name(said, state):
         session.metadata[WAIT] = wait
         return "name"
@@ -450,6 +484,8 @@ async def settle(
     if kind == "lookup":
         text = lookup.advance(session, said, today=today.isoformat()) or ""
         return await _say(speak, text) if text else ""
+    if kind == "name_again":
+        return await _say(speak, guided.ask_name(language, retry=True))
     pending = state.pending or {}
     if kind == "reask":
         pending["asked"] = True  # one reminder; after that the read-back is void

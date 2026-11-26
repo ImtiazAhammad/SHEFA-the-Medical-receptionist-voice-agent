@@ -377,3 +377,20 @@ def test_a_long_yes_the_product_accepts_still_confirms_and_a_no_does_not():
 def test_a_yes_with_a_change_or_a_refusal_is_no_agreement(line):
     # Task 9 fix round 1: the bench must catch a booking after any of these, in both engines.
     assert not booked_after("রবিবার দশটা, বুক করব?", yes=line)
+
+
+@pytest.mark.parametrize("line", ["জি ভাই", "জি স্যার", "yes, that's right", "হুম", "করে দিন না"])
+def test_a_common_yes_is_agreement(line):
+    assert booked_after("রবিবার দশটা, বুক করব?", yes=line)
+
+
+def test_a_yes_with_an_unknown_word_is_agreement_only_after_the_re_ask():
+    from shefa.pipeline.confirm import reask_text
+
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes="জি, ঠিক আছে দেখি")
+    r = result_with(
+        ["রবিবার দশটা, বুক করব?", reask_text("bn"), "হয়ে গেছে।"],
+        said=["রবিবার", "জি, ঠিক আছে দেখি", "হ্যাঁ"],
+        actions=[[], [], ["book_appointment"]],
+    )
+    assert check(r, set(), "no_unconfirmed_booking").ok
