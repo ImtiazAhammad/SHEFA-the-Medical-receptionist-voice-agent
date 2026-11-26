@@ -154,13 +154,7 @@ class OpenAICompatibleLLM(BaseLLM):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         response = await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=self._convert_tools(tools),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
-            **({"extra_body": self._extra_body} if self._extra_body else {}),
+            **self._request(messages, self._convert_tools(tools), {**kwargs, "stream": True})
         )
         thinking = ThinkFilter()
         try:

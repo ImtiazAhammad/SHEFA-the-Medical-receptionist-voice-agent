@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import date, datetime
-from types import SimpleNamespace
 
 import pytest
 
@@ -74,35 +73,59 @@ def route_json(tool: str = "none", mood: str = "calm", goal: str = "unknown") ->
 
 class FakeLLM:
     """Gives the scripted replies in order, three characters at a time. `route` is the router's
-    answer; without one the router call fails, and the turn goes on as a plain reply."""
+    answer, streamed the same way (the router's request is the one with an `extra_body`); without
+    one the router call fails, and the turn goes on as a plain reply. `route_delay` waits before
+    the router's first piece; `route_pause` waits after its tool field."""
 
     def __init__(
-        self, *replies: str, size: int = 3, route: str | None = None, route_delay: float = 0
+        self,
+        *replies: str,
+        size: int = 3,
+        route: str | None = None,
+        route_delay: float = 0,
+        route_pause: float = 0,
     ) -> None:
         self.replies = list(replies)
         self.size = size
         self.route = route
         self.route_delay = route_delay
-        self.routed = False
+        self.route_pause = route_pause
+        self.routed = False  # the tool field has been sent
+        self.route_done = False  # the whole router answer has been sent
         self.route_calls = 0
+        self.route_closed = 0
         self.calls: list[list[dict[str, str]]] = []
         self.closed = 0
 
-    async def generate(self, messages, tools=None, **kwargs):
-        self.route_calls += 1
-        if self.route_delay:
-            await asyncio.sleep(self.route_delay)
-        if self.route is None:
-            raise RuntimeError("no router scripted")
-        self.routed = True
-        return SimpleNamespace(text=self.route)
+    def generate_stream(self, messages, tools=None, **kwargs):
+        if "extra_body" in kwargs:
+            return self._route_stream()
+        return self._reply_stream(messages)
 
-    async def generate_stream(self, messages, tools=None, **kwargs):
+    async def _route_stream(self):
+        self.route_calls += 1
+        try:
+            if self.route_delay:
+                await asyncio.sleep(self.route_delay)
+            if self.route is None:
+                raise RuntimeError("no router scripted")
+            head_end = self.route.index(",") + 1 if "," in self.route else len(self.route)
+            yield self.route[:head_end]
+            self.routed = True
+            if self.route_pause:
+                await asyncio.sleep(self.route_pause)
+            yield self.route[head_end:]
+            self.route_done = True
+        finally:
+            self.route_closed += 1
+
+    async def _reply_stream(self, messages):
         self.calls.append(messages)
         reply = self.replies.pop(0) if self.replies else ""
         try:
             for i in range(0, len(reply), self.size):
                 yield reply[i : i + self.size]
+                await asyncio.sleep(0)
         finally:
             self.closed += 1
 
@@ -785,3 +808,76 @@ def test_reschedule_reads_the_new_day_and_time_from_the_line(rahman, acted_brain
     assert call.args == {"day": said, "time": said}
     _, (call, _) = _routed("Can you move my appointment?", "reschedule_booking", acted=acted_brain)
     assert call.args == {}
+
+
+# --- the streamed route: release on "none", timeout, cancel ------------------------------------
+
+
+def test_a_none_route_releases_the_reply_before_the_rest_of_the_router_answer():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM(
+        "ফি ৮০০ টাকা। আর কিছু?",
+        route=route_json("none", "calm", "information"),
+        route_pause=0.3,
+    )
+    heard_before_router_done = []
+
+    async def speak(text):
+        heard_before_router_done.append(not llm.route_done)
+
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert heard_before_router_done == [True, True]
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert (route["tool"], route["mood"], route["goal"]) == (None, "calm", "information")
+    assert route["tool_ms"] <= route["ms"]
+
+
+def test_a_malformed_router_stream_is_no_route():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route="I would say none")
+    speak = Recorder()
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert speak.said == ["ফি ৮০০ টাকা।"]
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert route["tool"] is None and route["error"]
+
+
+def test_a_router_timeout_lets_the_reply_go(monkeypatch):
+    monkeypatch.setattr(settings.brain, "router_timeout_s", 0.05)
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("book"), route_delay=2)
+    speak = Recorder()
+    _turn(session, FEE_QUESTION, llm, speak)
+    assert speak.said == ["ফি ৮০০ টাকা।"]
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert route["tool"] is None and route["error"] == "timeout"
+    assert session.metadata["brain_trace"][-1]["ms"] < 1000
+
+
+def test_cancelling_the_turn_while_sentences_are_held_speaks_nothing_and_leaks_no_task():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা। আর কিছু?", route=route_json(), route_delay=5)
+    speak = Recorder()
+
+    async def run():
+        turn = asyncio.create_task(Brain().turn(session, FEE_QUESTION, llm, speak, today=TODAY))
+        while not llm.calls:  # past retrieval: the reply stream is open
+            await asyncio.sleep(0.001)
+        for _ in range(20):  # let the first sentence finish and wait on the route
+            await asyncio.sleep(0)
+        assert not turn.done()
+        assert llm.closed == 0 and not speak.said  # the reply is open, its sentence held
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        for _ in range(5):
+            await asyncio.sleep(0)
+        left = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        return left, llm.closed, llm.route_closed
+
+    left, closed, route_closed = asyncio.run(run())
+    assert speak.said == []
+    assert left == []
+    assert closed == 1  # the reply stream was closed
+    assert route_closed == 1  # and the router's
+    assert "brain_trace" not in session.metadata

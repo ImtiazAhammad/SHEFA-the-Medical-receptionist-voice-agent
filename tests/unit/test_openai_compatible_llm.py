@@ -456,3 +456,25 @@ async def test_a_stream_closed_early_closes_the_response_so_the_server_stops(cal
     await stream.__anext__()
     await stream.aclose()
     assert response.closed == 1
+
+
+async def test_generate_stream_passes_per_request_settings() -> None:
+    # The brain's router streams with temperature 0, a few tokens and a server-enforced shape.
+    llm, completions = _llm(_ClosableStream([_chunk('{"tool":"none"}')]))
+    llm._extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    out = [
+        t
+        async for t in llm.generate_stream(
+            _MESSAGES,
+            temperature=0,
+            max_tokens=40,
+            extra_body={"structured_outputs": {"regex": "x"}},
+        )
+    ]
+    assert out == ['{"tool":"none"}']
+    sent = completions.calls[0]
+    assert (sent["temperature"], sent["max_tokens"], sent["stream"]) == (0, 40, True)
+    assert sent["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "structured_outputs": {"regex": "x"},
+    }

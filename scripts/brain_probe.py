@@ -286,7 +286,28 @@ class RecordingLLM:
         finally:
             c.router["done_ms"] = c.ms()
 
-    async def generate_stream(self, messages: list[dict[str, str]], **kwargs: Any):
+    def generate_stream(self, messages: list[dict[str, str]], **kwargs: Any):
+        # The router streams too; its request is the one with an extra body.
+        if "extra_body" in kwargs:
+            return self._router_stream(messages, **kwargs)
+        return self._reply_stream(messages, **kwargs)
+
+    async def _router_stream(self, messages: list[dict[str, str]], **kwargs: Any):
+        c = clock()
+        c.router = {"called_ms": c.ms(), "done_ms": None, "raw": "", "error": None}
+        stream = self.inner.generate_stream(messages, **kwargs)
+        try:
+            async for chunk in stream:
+                c.router["raw"] += chunk
+                yield chunk
+        except BaseException as error:
+            c.router["error"] = f"{type(error).__name__}: {error}"
+            raise
+        finally:
+            c.router["done_ms"] = c.ms()
+            await stream.aclose()
+
+    async def _reply_stream(self, messages: list[dict[str, str]], **kwargs: Any):
         c = clock()
         attempt: dict[str, Any] = {
             "prompt_tokens_est": _tokens(messages),
@@ -529,6 +550,13 @@ def _regen_reason(row: dict[str, Any]) -> str:
     return kinds[0] if kinds else "empty"
 
 
+def _tool_known_ms(row: dict[str, Any]) -> float:
+    """When the router's tool was known, in ms from the turn's start (the engine times it
+    from the start of `Brain.turn`, as the probe's clock does)."""
+    tool_ms = (row["trace"].get("route") or {}).get("tool_ms")
+    return float(tool_ms) if tool_ms is not None else row["router"]["done_ms"]
+
+
 def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]:
     tool_rows = [r for r in rows if r["expected"]]
     controls = [r for r in rows if not r["expected"]]
@@ -561,8 +589,9 @@ def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]
         if r["sentence_ready_ms"] is not None and r["first_chunk_ms"] is not None
     ]
     # How long a finished first sentence waited for the router (0 when the router was first).
+    # Since fix round 1 the reply waits only for the router's tool field (trace route.tool_ms).
     held = [
-        max(0.0, r["router"]["done_ms"] - r["sentence_ready_ms"])
+        max(0.0, _tool_known_ms(r) - r["sentence_ready_ms"])
         for r in controls
         if r["router"] and r["sentence_ready_ms"] is not None and not r["trace"].get("regenerated")
     ]

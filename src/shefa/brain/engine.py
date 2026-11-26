@@ -216,6 +216,59 @@ def _tool_args(name: str, said: str, state: CallState, today: _date) -> dict[str
     return {}
 
 
+class _Routing:
+    """The router's answer for one turn, as it arrives.
+
+    The tool comes first and is all the reply waits for: "none" lets held sentences go at once,
+    a tool cuts the reply off. Mood and goal follow; they steer the check of the sentences that
+    come after them, and the trace, for this turn only."""
+
+    def __init__(self, state: CallState, trace: dict[str, Any]) -> None:
+        self.state = state
+        self.trace = trace
+        self.began = time.monotonic()
+        self.tool_seen: asyncio.Future[str | None] = asyncio.get_running_loop().create_future()
+        self.tool_ms: int | None = None
+        self.task: asyncio.Task[tuple[Route, int]] | None = None
+        self.applied = False
+
+    def on_tool(self, tool: str | None) -> None:
+        if not self.tool_seen.done():
+            self.tool_ms = int((time.monotonic() - self.began) * 1000)
+            self.tool_seen.set_result(tool)
+
+    async def tool(self) -> str | None:
+        """The routed tool (None: a plain reply), waited for; no wait once it is known."""
+        return await asyncio.shield(self.tool_seen)
+
+    def routed_now(self) -> bool:
+        """True once the router has named a tool; never waits."""
+        return self.tool_seen.done() and self.tool_seen.result() is not None
+
+    def labels(self) -> None:
+        """Apply the router's mood and goal once its whole answer is in; never waits."""
+        if self.applied or self.task is None or not self.task.done() or self.task.cancelled():
+            return
+        found, ms = self.task.result()
+        self.applied = True
+        _apply_route(self.state, found)
+        self.trace["mood"], self.trace["goal"] = self.state.mood, self.state.goal
+        self.trace["route"] = {
+            "tool": found.tool,
+            "mood": found.mood,
+            "goal": found.goal,
+            "ms": ms,
+            "tool_ms": self.tool_ms,
+            **({"error": found.error} if found.error else {}),
+        }
+
+    async def finish(self) -> None:
+        """Wait for the rest of the answer (bounded by the router timeout) for the trace."""
+        if self.task is not None:
+            await asyncio.wait({self.task})
+        self.labels()
+
+
 class Brain:
     """The conversation engine for one turn at a time; holds nothing between calls (all call
     state lives on the session)."""
@@ -236,25 +289,44 @@ class Brain:
         history, previous = _history(session, said)
         state = track(load(session), said, previous=previous, cues=cues, today=today)
         config = call_config(session)
-        router_task = asyncio.create_task(self._route(llm, state, said, history))
+        trace: dict[str, Any] = {
+            "turn": state.turn,
+            "mood": state.mood,
+            "goal": state.goal,
+            "hits": [],
+            "tool": None,
+            "tool_args": None,
+            "verdicts": [],
+            "regenerated": False,
+            "safe": None,
+            "route": None,
+            "ms": 0,
+        }
+        routing = _Routing(state, trace)
+        routing.task = asyncio.create_task(self._route(llm, state, said, history, routing))
         try:
             return await self._turn(
-                session, said, llm, speak, today, history, state, config, router_task,
+                session, said, llm, speak, today, history, state, config, routing, trace,
                 started,
             )
         finally:
-            if not router_task.done():
-                router_task.cancel()
+            if not routing.task.done():
+                routing.task.cancel()
 
     async def _route(
-        self, llm: Any, state: CallState, said: str, history: list[dict[str, str]]
+        self,
+        llm: Any,
+        state: CallState,
+        said: str,
+        history: list[dict[str, str]],
+        routing: _Routing,
     ) -> tuple[Route, int]:
-        began = time.monotonic()
         try:
-            found = await route(llm, state, said, history)
+            found = await route(llm, state, said, history, on_tool=routing.on_tool)
         except Exception as exc:  # noqa: BLE001 - route() never raises; a failure is a plain reply
             found = Route(None, None, None, f"{type(exc).__name__}: {exc}"[:200])
-        return found, int((time.monotonic() - began) * 1000)
+        routing.on_tool(found.tool)  # no-op when the stream already told it
+        return found, int((time.monotonic() - routing.began) * 1000)
 
     async def _turn(
         self,
@@ -266,7 +338,8 @@ class Brain:
         history: list[dict[str, str]],
         state: CallState,
         config: dict[str, Any],
-        router_task: asyncio.Task[tuple[Route, int]],
+        routing: _Routing,
+        trace: dict[str, Any],
         started: float,
     ) -> str:
         language = state.language
@@ -277,41 +350,8 @@ class Brain:
         directory = directory_brief(store, language, header=DIRECTORY_HEADER)
         grounds = _grounds(session, state, hits, directory, said, today)
 
-        trace: dict[str, Any] = {
-            "turn": state.turn,
-            "mood": state.mood,
-            "goal": state.goal,
-            "hits": [h.entry.id for h in hits],
-            "tool": None,
-            "tool_args": None,
-            "verdicts": [],
-            "regenerated": False,
-            "safe": None,
-            "route": None,
-            "ms": 0,
-        }
+        trace["hits"] = [h.entry.id for h in hits]
         spoken: list[str] = []
-        known: list[Route] = []
-
-        async def decided() -> Route:
-            """The router's answer, waited for once; its mood and goal apply from then on."""
-            if not known:
-                found, ms = await router_task
-                _apply_route(state, found)
-                trace["mood"], trace["goal"] = state.mood, state.goal
-                trace["route"] = {
-                    "tool": found.tool,
-                    "mood": found.mood,
-                    "goal": found.goal,
-                    "ms": ms,
-                    **({"error": found.error} if found.error else {}),
-                }
-                known.append(found)
-            return known[0]
-
-        async def routed_now() -> bool:
-            """True once the router has named a tool; never waits."""
-            return router_task.done() and (await decided()).tool is not None
 
         async def say_fixed(text: str, kind: str) -> None:
             trace["safe"] = kind
@@ -334,13 +374,14 @@ class Brain:
                 ),
                 identified=bool(session.patient_id),
             )
-            out = await self._stream(llm, messages, grounds, state, speak, decided, routed_now)
+            out = await self._stream(llm, messages, grounds, state, speak, routing)
             trace["verdicts"].extend(out.verdicts)
             spoken.extend(out.spoken)
-            # Nothing is spoken, retried or replaced before the route is known.
-            found = await decided()
-            if found.tool is not None and not out.spoken:
-                call = ToolCall(found.tool, _tool_args(found.tool, said, state, today))
+            # Nothing is spoken, retried or replaced before the routed tool is known.
+            tool = await routing.tool()
+            routing.labels()
+            if tool is not None and not out.spoken:
+                call = ToolCall(tool, _tool_args(tool, said, state, today))
                 trace["tool"], trace["tool_args"] = call.name, dict(call.args)
                 said_now = await self._act(call, session, state, grounds, speak, today)
                 if said_now:
@@ -366,8 +407,7 @@ class Brain:
                 continue
             await say_fixed(_repeat_prompt(config, language), "empty")
 
-        if trace["route"] is None:
-            await decided()
+        await routing.finish()
         state.mood, state.goal = words  # the router's labels were for this turn only
         save(session, state)
         trace["ms"] = int((time.monotonic() - started) * 1000)
@@ -381,13 +421,12 @@ class Brain:
         grounds: Grounds,
         state: CallState,
         speak: Speak,
-        decided: Callable[[], Awaitable[Route]],
-        routed_now: Callable[[], Awaitable[bool]],
+        routing: _Routing,
     ) -> _Attempt:
         """Run one generation: speak each sentence that passes, stop where the rules say.
 
-        Each sentence first waits for the route (instant once it is known): a named tool stops
-        the stream with nothing of it spoken."""
+        Each sentence first waits for the routed tool (instant once it is known): a named tool
+        stops the stream with nothing of it spoken."""
         out = _Attempt()
         limit = None if state.asked_list else MAX_SENTENCES
 
@@ -399,9 +438,10 @@ class Brain:
             if _TOOL_LIKE.search(text):
                 out.tool_text = text
                 return False
-            if (await decided()).tool is not None and not out.spoken:
+            if (await routing.tool()) is not None and not out.spoken:
                 out.routed = True
                 return False
+            routing.labels()  # the router's goal for the check, if its answer is all in
             verdict = check_sentence(text, grounds, goal=state.goal, language=state.language)
             out.verdicts.append("ok" if verdict.ok else verdict.kind)
             if verdict.ok:
@@ -418,7 +458,7 @@ class Brain:
         stream = llm.generate_stream(messages)
         try:
             async for chunk in stream:
-                if not out.spoken and await routed_now():
+                if not out.spoken and routing.routed_now():
                     out.routed = True
                     return out
                 buffer += chunk

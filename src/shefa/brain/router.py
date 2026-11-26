@@ -17,6 +17,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,6 +86,12 @@ PATTERN = (
 )
 
 
+# The tool is the first field, so it is known after a few tokens; the engine needs only that to
+# let the held reply go or cut it off. Mood and goal follow.
+_TOOL_HEAD = re.compile(r'^\s*\{\s*"tool"\s*:\s*"([a-z_]+)"')
+OnTool = Callable[[str | None], None]
+
+
 def _turn_text(state: CallState, said: str, history: list[dict[str, Any]]) -> str:
     turns = [t for t in history if t.get("role") in ("user", "assistant")]
     if turns and turns[-1].get("role") == "user" and turns[-1].get("content") == said:
@@ -137,35 +144,66 @@ async def route(
     state: CallState,
     said: str,
     history: list[dict[str, Any]],
+    *,
+    on_tool: OnTool | None = None,
 ) -> Route:
     """Which tool this turn needs (None for a plain reply), and the caller's mood and goal.
 
-    Never raises: a failed router must not cost the caller an answer. Failures are logged
-    (rate-limited), since a server that stops accepting the output shape would otherwise turn
-    every turn into a plain reply without a word."""
-    found = await _ask(llm, state, said, history)
+    The answer streams: `on_tool` hears the tool (None for "none") the moment its field is
+    complete, before mood and goal arrive, and at most once; it never hears anything when the
+    tool cannot be read. Never raises: a failed router must not cost the caller an answer.
+    Failures are logged (rate-limited), since a server that stops accepting the output shape
+    would otherwise turn every turn into a plain reply without a word."""
+    found = await _ask(llm, state, said, history, on_tool)
     if found.error:
         _warn(found.error)
     return found
 
 
-async def _ask(llm: Any, state: CallState, said: str, history: list[dict[str, Any]]) -> Route:
+async def _ask(
+    llm: Any,
+    state: CallState,
+    said: str,
+    history: list[dict[str, Any]],
+    on_tool: OnTool | None,
+) -> Route:
     messages = [
         {"role": "system", "content": INSTRUCTIONS},
         {"role": "user", "content": _turn_text(state, said, history)},
     ]
-    try:
-        result = await asyncio.wait_for(
-            llm.generate(
-                messages,
-                temperature=0,
-                max_tokens=MAX_TOKENS,
-                extra_body={"structured_outputs": {"regex": PATTERN}},
-            ),
-            timeout=settings.brain.router_timeout_s,
+    told: list[str | None] = []
+    text = ""
+
+    async def read() -> None:
+        nonlocal text
+        stream = llm.generate_stream(
+            messages,
+            temperature=0,
+            max_tokens=MAX_TOKENS,
+            extra_body={"structured_outputs": {"regex": PATTERN}},
         )
+        try:
+            async for chunk in stream:
+                text += chunk
+                if told or (head := _TOOL_HEAD.match(text)) is None:
+                    continue
+                if head[1] in ROUTER_TOOLS or head[1] == "none":
+                    told.append(None if head[1] == "none" else head[1])
+                    if on_tool is not None:
+                        on_tool(told[0])
+        finally:
+            close = getattr(stream, "aclose", None)
+            if close is not None:
+                await close()
+
+    try:
+        await asyncio.wait_for(read(), timeout=settings.brain.router_timeout_s)
     except TimeoutError:
-        return Route(None, None, None, "timeout")
+        return Route(told[0] if told else None, None, None, "timeout")
     except Exception as exc:  # noqa: BLE001 - any failure is a plain reply, never a lost turn
-        return Route(None, None, None, f"{type(exc).__name__}: {exc}"[:200])
-    return _read(str(getattr(result, "text", "") or "").strip())
+        return Route(told[0] if told else None, None, None, f"{type(exc).__name__}: {exc}"[:200])
+    found = _read(text.strip())
+    if found.error and told:
+        # The tool was read (and acted on); only mood and goal are missing.
+        return Route(told[0], None, None, found.error)
+    return found
