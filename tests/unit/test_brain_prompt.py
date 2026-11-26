@@ -268,3 +268,11 @@ def test_budget_trimming_never_cuts_history_below_the_minimum(monkeypatch) -> No
     kept = compose(CallState(), CONFIG, [], "", history)[1:]
     assert [m["content"][:5] for m in kept] == ["turn3", "turn4"]
     assert len(kept) == prompt.MIN_HISTORY
+
+
+def test_the_conduct_prompt_names_no_tool():
+    # Task 7b: the reply has no tools since 8c; the router hands over. The conduct asks for
+    # plain speech instead of "get hand_over with reason emergency".
+    conduct = defaults()["prompt.conduct"]
+    assert "hand_over" not in conduct and "TOOL" not in conduct
+    assert "999" in conduct  # an emergency still gets the number, in words the caller hears
