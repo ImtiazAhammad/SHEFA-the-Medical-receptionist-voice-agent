@@ -368,9 +368,12 @@ def test_a_department_with_a_booking_verb_is_still_booking(said, example_clinic)
     assert track(CallState(), said, today=date(2026, 11, 28)).goal == "booking"
 
 
-def test_a_booker_asking_if_it_is_ok_is_still_booking(example_clinic):
+def test_a_need_without_a_booking_verb_is_left_to_the_router(example_clinic):
+    # Round 4: the words give booking only on an explicit booking verb. A wrong "booking" lets a
+    # push be spoken; a wrong "information" only drops one sentence, and the engine waits for
+    # the router's goal before it drops a push (test_brain_engine).
     said = "I need the heart doctor tomorrow, is that ok?"
-    assert track(CallState(), said, today=date(2026, 11, 28)).goal == "booking"
+    assert track(CallState(), said, today=date(2026, 11, 28)).goal == "information"
 
 
 @pytest.mark.parametrize(
@@ -379,6 +382,10 @@ def test_a_booker_asking_if_it_is_ok_is_still_booking(example_clinic):
         "I want to know which days the heart doctor sits.",
         "আমি জানতে চাই হৃদরোগের ডাক্তার কবে বসেন।",
         "I'd like to ask about Dr Rahman's fee.",
+        "I want the child doctor's schedule.",  # N4
+        "I need the heart doctor's days.",  # N4
+        "I need the heart doctor.",
+        "আমার একজন হৃদরোগের ডাক্তার লাগবে।",
     ],
 )
 def test_wanting_to_know_is_information(said, example_clinic):

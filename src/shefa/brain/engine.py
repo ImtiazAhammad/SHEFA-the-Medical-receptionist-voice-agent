@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from shefa.bangla import WEEKDAYS_BN
 from shefa.brain import safe
-from shefa.brain.check import Grounds, Verdict, check_sentence
+from shefa.brain.check import Grounds, Verdict, check_sentence, offers_booking
 from shefa.brain.config import call_config
 from shefa.brain.knowledge import default_knowledge_store
 from shefa.brain.prompt import DIRECTORY_HEADER, compose
@@ -311,6 +311,8 @@ class _Routing:
         self.tool_ms: int | None = None
         self.task: asyncio.Task[tuple[Route, int]] | None = None
         self.applied = False
+        # The goal the caller's words gave this turn: only an explicit booking verb says booking.
+        self.words_goal = state.goal
 
     def on_tool(self, tool: str | None) -> None:
         if not self.tool_seen.done():
@@ -382,6 +384,7 @@ class Brain:
             "route": None,
             "reply_source": "model",
             "facility": None,
+            "push_wait_ms": 0,
             "ms": 0,
         }
         routing = _Routing(state, trace)
@@ -552,6 +555,13 @@ class Brain:
                 out.routed = True
                 return False
             routing.labels()  # the router's goal for the check, if its answer is all in
+            if routing.words_goal != "booking" and offers_booking(text):
+                # The words say booking only on an explicit verb, so a booking push waits for
+                # the router's goal (bounded by its timeout) before it is dropped or spoken.
+                began = time.monotonic()
+                await routing.finish()
+                trace = routing.trace
+                trace["push_wait_ms"] += int((time.monotonic() - began) * 1000)
             verdict = check_sentence(text, grounds, goal=state.goal, language=state.language)
             out.verdicts.append("ok" if verdict.ok else verdict.kind)
             if verdict.ok:

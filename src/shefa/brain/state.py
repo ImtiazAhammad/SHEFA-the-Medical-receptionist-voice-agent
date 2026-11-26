@@ -119,32 +119,15 @@ class CallState:
     turn: int = 0
 
 
-# A question ("which days", "কবে", "?"): a department named in one is asked about, not booked.
-_ASKS = re.compile(
-    r"\?|\b(?:which|when|what|where|who|how|does|do|is|are)\b"
-    r"|(?<![ঀ-৿])(?:কবে|কখন|কোন|কি|কী|কয়টা|কয়টায়|কত)(?![ঀ-৿])",
-    re.IGNORECASE,
-)
-
-
-# A caller saying they need a doctor ("I need the heart doctor tomorrow, is that ok?") is booking.
-# The need must govern the doctor: "I want to know which days the heart doctor sits" and
-# "আমি জানতে চাই …" ask.
-_NEEDS = re.compile(
-    r"\bI(?: really)? (?:need|want|would like|'d like)\s+(?:to see\s+)?"
-    r"(?:(?:the|a|an|my)\s+)?(?:[a-z]+\s+){0,2}(?:doctor|specialist|dr\b)",
-    re.IGNORECASE,
-)
-
-
 def _books(said: str) -> bool:
-    """A booking request. `guided.wants_to_book` also counts a department said plainly; in a
-    question ("Which days does the child specialist see patients?") that is information, unless
-    a booking verb or a need is there too ("শিশু ডাক্তার দেখাতে চাই, কবে আসব?")."""
-    if _NEEDS.search(said):
-        return True
-    explicit = START.search(said)
-    return wants_to_book(said) and (bool(explicit) or not _ASKS.search(said))
+    """A booking request: only an explicit booking verb ("book", "appointment", "সিরিয়াল দিতে",
+    "দেখাতে চাই", the rest of `guided.START`) that `guided.wants_to_book` takes as a request.
+
+    A need or a department alone ("I need the heart doctor", "শিশু ডাক্তার") is not booking here.
+    The costs are not equal: a wrong "booking" lets a booking push be spoken to a caller who only
+    asked, a wrong "information" only drops that push, and the engine waits for the router's
+    goal before it drops one."""
+    return bool(START.search(said)) and wants_to_book(said)
 
 
 def _goal(said: str, current: str) -> str:

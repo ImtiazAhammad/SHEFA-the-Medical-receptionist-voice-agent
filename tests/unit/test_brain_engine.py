@@ -505,6 +505,7 @@ def test_state_is_saved_and_the_trace_has_exactly_the_listed_keys(knowledge):
         "route",
         "reply_source",  # added in Task 7b: "model", or "facility" when code answered
         "facility",  # Task 7b fix round 1: the topic code answered, else None
+        "push_wait_ms",  # Task 7b round 4: how long a push sentence waited for the router
         "ms",
     }
     assert trace["turn"] == 1
@@ -1226,6 +1227,72 @@ def test_a_fee_confirmed_for_the_calls_doctor_is_spoken(then, reply, example_cli
     speak = Recorder()
     _turn(session, then, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
     assert speak.said == [reply]
+
+
+# --- Task 7b round 4: booking only on an explicit verb; a push waits for the router --------------
+
+
+def test_a_need_without_a_booking_verb_is_booking_only_through_the_router(example_clinic):
+    said = "I need the heart doctor tomorrow, is that ok?"
+    session = _session(said)
+    reply = "Dr Rahman sits on Thursday. What time would you like to come?"
+    # The router's goal arrives well after its tool field: only the push wait lets it count.
+    llm = FakeLLM(reply, route=route_json("none", "calm", "booking"), route_pause=0.05)
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["Dr Rahman sits on Thursday.", "What time would you like to come?"]
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["goal"] == "booking"
+    assert trace["push_wait_ms"] > 0
+    assert session.metadata["brain"]["goal"] == "information"  # the words' goal is saved
+
+
+@pytest.mark.parametrize(
+    ("said", "reply", "first"),
+    [
+        (
+            "I want the child doctor's schedule.",
+            "Dr Sultana sits on Mondays. What time would you like to come?",
+            "Dr Sultana sits on Mondays.",
+        ),
+        (
+            "I need the heart doctor's days.",
+            "Dr Rahman sits on Sundays. Would you like to book an appointment?",
+            "Dr Rahman sits on Sundays.",
+        ),
+    ],
+)
+def test_a_want_or_need_for_a_doctors_facts_is_not_pushed(said, reply, first, example_clinic):
+    session = _session(said)
+    llm = FakeLLM(reply, route=route_json("none", "calm", "information"), route_pause=0.05)
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == [first]
+    trace = session.metadata["brain_trace"][-1]
+    assert (trace["goal"], trace["verdicts"]) == ("information", ["ok", "push"])
+
+
+def test_a_push_with_no_router_answer_keeps_the_words_goal(example_clinic):
+    said = "I want the child doctor's schedule."
+    session = _session(said)
+    llm = FakeLLM("Dr Sultana sits on Mondays. What time would you like to come?")
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["Dr Sultana sits on Mondays."]
+
+
+def test_a_booking_from_the_words_never_waits_for_the_router(example_clinic):
+    said = "ডাক্তার রহমানের সিরিয়াল দিতে চাই"
+    session = _session(said)
+    llm = FakeLLM(
+        "ডাক্তার রহমান রবিবার বসেন। সিরিয়াল দিয়ে দেব?",
+        route=route_json("none", "calm", "booking"),
+        route_pause=0.2,
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["ডাক্তার রহমান রবিবার বসেন।", "সিরিয়াল দিয়ে দেব?"]
+    assert session.metadata["brain_trace"][-1]["push_wait_ms"] == 0
 
 
 # --- Task 7b round 4: the subject resolver, end to end -----------------------------------------
