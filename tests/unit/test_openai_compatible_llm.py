@@ -435,3 +435,24 @@ async def test_per_request_settings_override_the_clients_and_extra_body_merges()
         "chat_template_kwargs": {"enable_thinking": False},
         "structured_outputs": {"regex": "x"},
     }
+
+
+class _ClosableStream(_AsyncStream):
+    def __init__(self, chunks: list[Any]) -> None:
+        super().__init__(chunks)
+        self.closed = 0
+
+    async def close(self) -> None:
+        self.closed += 1
+
+
+@pytest.mark.parametrize("call", ["generate_stream", "generate_events"])
+async def test_a_stream_closed_early_closes_the_response_so_the_server_stops(call) -> None:
+    # The brain closes a reply stream the moment the router names a tool or two sentences are
+    # out. Without closing the HTTP response vLLM kept generating for up to ~1.2 s (probe 8c).
+    response = _ClosableStream([_chunk("one. "), _chunk("two. "), _chunk("three.")])
+    llm, _ = _llm(response)
+    stream = getattr(llm, call)(_MESSAGES)
+    await stream.__anext__()
+    await stream.aclose()
+    assert response.closed == 1

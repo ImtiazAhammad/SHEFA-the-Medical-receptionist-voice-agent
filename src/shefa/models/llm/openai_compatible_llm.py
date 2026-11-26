@@ -28,6 +28,14 @@ def _lang_from_content(text: str) -> Language:
     return Language.BANGLA if bn_chars / max(len(text), 1) > 0.1 else Language.ENGLISH
 
 
+async def _close(response: Any) -> None:
+    close = getattr(response, "close", None)
+    if close is not None:
+        result = close()
+        if hasattr(result, "__await__"):
+            await result
+
+
 class OpenAICompatibleLLM(BaseLLM):
     def __init__(
         self,
@@ -155,12 +163,17 @@ class OpenAICompatibleLLM(BaseLLM):
             **({"extra_body": self._extra_body} if self._extra_body else {}),
         )
         thinking = ThinkFilter()
-        async for chunk in response:
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if delta and delta.content:
-                text = thinking.feed(delta.content)
-                if text:
-                    yield text
+        try:
+            async for chunk in response:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    text = thinking.feed(delta.content)
+                    if text:
+                        yield text
+        finally:
+            # A caller that stops reading early (the brain cuts a reply off) must close the
+            # response: the server only stops generating once the connection goes.
+            await _close(response)
         rest = thinking.flush()
         if rest:
             yield rest
@@ -205,6 +218,15 @@ class OpenAICompatibleLLM(BaseLLM):
             )
             stream = await self._create_stream(messages, None, **kwargs)
 
+        events = self._events(stream)
+        try:
+            async for event in events:
+                yield event
+        finally:
+            await events.aclose()
+            await _close(stream)  # the server only stops generating once the connection goes
+
+    async def _events(self, stream: Any) -> AsyncIterator[StreamEvent]:
         pending: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
         thinking = ThinkFilter()  # a model's written-out reasoning is never spoken
