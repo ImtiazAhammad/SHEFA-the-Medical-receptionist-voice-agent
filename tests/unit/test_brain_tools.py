@@ -516,3 +516,47 @@ def test_hand_over_with_an_odd_reason_still_hands_over():
     # A hand-over is never delayed over a word: an emergency must reach a person.
     resolved = run("hand_over", {"reason": "wants a human"}, who=None)
     assert resolved == Resolved("hand_over", "transfer_to_human", {"reason": "cannot_help"})
+
+
+# --- Task 9: clock times read against the doctor's hours ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("time", "clock"), [("4:30", "16:30"), ("10:30", "10:30"), ("9:30", "09:30")]
+)
+def test_a_bare_clock_is_read_inside_the_doctors_hours(time, clock):
+    # Rahman sits 09-12 and 16-19: "4:30" is half past four in the afternoon, not at night.
+    args = {"doctor": "Rahman", "day": "কাল", "time": time, "name": "Karim"}
+    assert run("book", args).args["time"] == clock
+
+
+def test_a_bare_clock_from_the_call_state_is_read_inside_the_doctors_hours():
+    state = CallState(booking={"time": "4:30"})
+    args = {"doctor": "Rahman", "day": "কাল", "name": "Karim"}
+    assert run("book", args, state=state).args["time"] == "16:30"
+
+
+def test_a_bare_clock_outside_the_doctors_hours_keeps_the_visit_hour_reading(clinic):
+    # Hossain sits 17-19: "6:15" is no slot of his, but 06:15 is no visiting hour either.
+    args = {"doctor": "Hossain", "day": "কাল", "time": "6:15", "name": "Karim"}
+    assert run("book", args).args["time"] == "18:15"
+
+
+def test_reschedule_reads_a_bare_hour_against_the_bookings_doctor(two_bookings):
+    # Rahman's booking: "৯টা" is nine in the morning (his open slot), not nine at night.
+    patient, first, _ = two_bookings
+    resolved = run(
+        "reschedule_booking", {"which": "Rahman", "day": "2026-11-29", "time": "৯টা"}, who=patient
+    )
+    assert resolved.args == {
+        "appointment_id": _id(first),
+        "new_date": "2026-11-29",
+        "new_time": "09:00",
+    }
+
+
+def test_reschedule_of_the_only_booking_reads_the_time_against_its_doctor(clinic):
+    patient = clinic.upsert_patient("01711000000", "Karim")
+    clinic.book(patient, doctor_id(clinic, "Rahman"), "2026-11-27", "09:00")
+    resolved = run("reschedule_booking", {"day": "2026-11-29", "time": "৯টা"}, who=str(patient))
+    assert resolved.args == {"new_date": "2026-11-29", "new_time": "09:00"}

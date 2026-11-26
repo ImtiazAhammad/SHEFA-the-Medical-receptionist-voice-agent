@@ -180,6 +180,32 @@ def _period(said: str, day_words: str, state: CallState) -> str | ToolProblem | 
     return f"{hours[0]}-{hours[1]}" if hours else None
 
 
+def _in_hours(clock: str, doctor_id: int, day: str) -> bool:
+    """Inside one of the doctor's chamber sessions on that day (booked or not)."""
+    weekday = date.fromisoformat(day).weekday()
+    rows = default_clinic_store().doctor_schedule(doctor_id)
+    return any(
+        r["weekday"] == weekday and r["start_time"] <= clock < r["end_time"] for r in rows
+    )
+
+
+def _narrow(
+    options: list[str], doctor_id: int | None, day: str | None, state: CallState
+) -> list[str]:
+    """The readings of an hour that fit: visiting hours, the part of the day the call named,
+    the doctor's hours that day, then the doctor's open slots. A filter that would leave nothing
+    is skipped."""
+    options = [c for c in options if _VISIT_HOURS[0] <= int(c[:2]) < _VISIT_HOURS[1]]
+    if len(options) > 1 and (hours := _period_hours(state.booking.get("period", ""))):
+        options = [c for c in options if in_period(c, hours)] or options
+    if len(options) > 1 and doctor_id is not None and day is not None:
+        options = [c for c in options if _in_hours(c, doctor_id, day)] or options
+    if len(options) > 1 and doctor_id is not None and day is not None:
+        open_times = {s["time"] for s in default_clinic_store().available_slots(doctor_id, day)}
+        options = [c for c in options if c in open_times] or options
+    return options
+
+
 def _time(
     said: str, day_words: str, doctor_id: int | None, day: str | None, state: CallState
 ) -> str | ToolProblem:
@@ -188,7 +214,14 @@ def _time(
         return ToolProblem("No time given: ask the caller what time.")
     digits = said.translate(_BN_DIGITS)
     if (clock := _CLOCK.fullmatch(digits)) is not None:
-        return f"{int(clock[1]):02d}:{clock[2]}"
+        # "4:30" said aloud is half past four in the afternoon at a clinic that opens at 16:00:
+        # an hour from 1 to 11 has a second reading 12 hours on, and the doctor's hours pick.
+        hour, minute = int(clock[1]), clock[2]
+        literal = f"{hour:02d}:{minute}"
+        if not 1 <= hour <= 11:
+            return literal
+        options = _narrow([literal, f"{hour + 12:02d}:{minute}"], doctor_id, day, state)
+        return options[0] if len(options) == 1 else literal
     # "৫টা" with "কাল বিকেলে" in the day reads as five in the afternoon.
     if (found := parse_time(said) or parse_time(f"{day_words} {said}")) is not None:
         return found
@@ -197,12 +230,7 @@ def _time(
         return ToolProblem(f'Cannot read the time "{said}": ask the caller what time.')
     hour = int(bare[1])
     options = [f"{h:02d}:00" for h in (hour, hour + 12 if hour < 12 else None) if h is not None]
-    options = [c for c in options if _VISIT_HOURS[0] <= int(c[:2]) < _VISIT_HOURS[1]]
-    if len(options) > 1 and (hours := _period_hours(state.booking.get("period", ""))):
-        options = [c for c in options if in_period(c, hours)] or options
-    if len(options) > 1 and doctor_id is not None and day is not None:
-        open_times = {s["time"] for s in default_clinic_store().available_slots(doctor_id, day)}
-        options = [c for c in options if c in open_times] or options
+    options = _narrow(options, doctor_id, day, state)
     if len(options) == 1:
         return options[0]
     return ToolProblem(f'Is "{said}" in the morning or evening? Ask the caller.')
@@ -336,6 +364,18 @@ def _book(
     )
 
 
+def _booking_doctor(target: dict[str, str], session: CallSession, today: date) -> int | None:
+    """The doctor of the appointment being moved: the one named, else the caller's only one."""
+    upcoming = default_clinic_store().appointments_for_patient(
+        int(str(session.patient_id)), upcoming_from=today.isoformat()
+    )
+    if target.get("appointment_id"):
+        upcoming = [
+            a for a in upcoming if str(a["appointment_id"]) == str(target["appointment_id"])
+        ]
+    return int(upcoming[0]["doctor_id"]) if len(upcoming) == 1 else None
+
+
 def _reschedule(
     args: dict[str, Any], session: CallSession, state: CallState, today: date
 ) -> Resolved | ToolProblem:
@@ -346,7 +386,8 @@ def _reschedule(
     day = _day(day_words, today)
     if isinstance(day, ToolProblem):
         return day
-    clock = _time(_text(args.get("time")), day_words, None, day, state)
+    doctor_id = _booking_doctor(target, session, today)
+    clock = _time(_text(args.get("time")), day_words, doctor_id, day, state)
     if isinstance(clock, ToolProblem):
         return clock
     return Resolved(
