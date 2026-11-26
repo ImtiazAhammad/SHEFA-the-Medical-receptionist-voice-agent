@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 from shefa.clinic.brief import directory_brief
 from shefa.lab.runner import CheckResult
 from shefa.pipeline.actions import numbers_in
-from shefa.pipeline.confirm import leading_yes, yes_no
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -154,15 +153,13 @@ def _grounded(result: ScenarioResult, facts: set[str]) -> CheckResult:
 
 
 def _caller_agreed(line: str) -> bool:
-    """A yes by the product's own rule for going ahead with a read-back booking: a clear yes,
-    or a longer reply that starts with yes and asks for nothing different ("হ্যাঁ, বুক করেন,
-    আর আমার নম্বরটা নেবেন না?"); see `VoicePipeline`'s pending-action branch."""
-    from shefa.pipeline import guided
+    """A yes by the brain's strict rule (`shefa.brain.confirm`): a clear yes that asks for no
+    other day, time, part of the day or doctor, and holds no "but" and no refusal or negation
+    anywhere. The guided engine accepts more ("হ্যাঁ, শুক্রবার" books there); the bench judges
+    both engines by the strict rule, so a booking after such a reply fails this check."""
+    from shefa.brain.confirm import strict_answer
 
-    answer = yes_no(line)
-    if answer is None and leading_yes(line) and not guided.changes_request(line):
-        return True
-    return answer is True
+    return strict_answer(line) == "yes"
 
 
 def _asked_to_confirm(turns: list, index: int) -> bool:

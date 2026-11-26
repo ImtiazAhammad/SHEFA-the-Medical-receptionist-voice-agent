@@ -2,7 +2,7 @@
 bookings, cancellations and moves are read back and run only on the next turn's "yes", and
 call-backs, hand-overs and the end of the call do what they say.
 
-The executor is faked (`engine.execute_tool` / `engine.preview_action`), so no test reaches the
+The executor is faked (`actions.execute_tool` / `actions.preview_action`), so no test reaches the
 clinic's book or the telephony layer; the model and the router are the scripted fake of the
 engine tests.
 """
@@ -14,7 +14,8 @@ from datetime import datetime
 
 import pytest
 
-from shefa.brain import engine, safe
+from shefa.brain import actions as brain_actions
+from shefa.brain import safe
 from shefa.brain.engine import Brain
 from shefa.brain.greeting import closing
 from shefa.brain.state import CallState, load, save
@@ -22,7 +23,7 @@ from shefa.call_log import default_calls_store
 from shefa.clinic import default_clinic_store
 from shefa.clinic import store as clinic_store
 from shefa.clinic.store import CLINIC_TZ
-from shefa.config.settings import settings
+from shefa.models.base import Language
 from shefa.pipeline import guided
 from shefa.pipeline.confirm import declined_text, read_back, reask_text
 from shefa.session.manager import CallSession
@@ -84,8 +85,8 @@ class FakeExecutor:
 @pytest.fixture
 def executor(monkeypatch):
     fake = FakeExecutor()
-    monkeypatch.setattr(engine, "execute_tool", fake.execute)
-    monkeypatch.setattr(engine, "preview_action", fake.preview)
+    monkeypatch.setattr(brain_actions, "execute_tool", fake.execute)
+    monkeypatch.setattr(brain_actions, "preview_action", fake.preview)
     return fake
 
 
@@ -288,8 +289,10 @@ def test_review_focus_1_a_yes_with_a_change_books_nothing_and_voids_the_read_bac
 
 
 def test_a_yes_that_goes_on_without_a_change_still_books(executor):
+    # Fix round 1: the strict rule. "হ্যাঁ, বুক করে দিন" books; a long yes that holds a negation
+    # anywhere ("…লাগবে না তো?") no longer does (see the next test).
     session, _, _ = read_back_booking(executor)
-    say(session, "হ্যাঁ, বুক করে দিন, আমার নম্বর লাগবে না তো?", FakeLLM())
+    say(session, "হ্যাঁ, বুক করে দিন", FakeLLM())
     assert [name for name, _ in executor.ran] == ["book_appointment"]
 
 
@@ -404,50 +407,25 @@ def test_reschedule_records_the_new_slot(executor):
 # --- identity and the name -----------------------------------------------------------------------
 
 
-def test_an_unidentified_caller_is_asked_for_the_number_then_it_is_read_back(executor):
-    executor.results["list_my_appointments"] = {"appointments": []}
-    session = CallSession(call_sid="CA-act")
-    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
-    llm = FakeLLM("unused", route=route_json("lookup_booking", "calm", "lookup"))
-    speak = say(session, "আমার সিরিয়াল কবে?", llm)
-    assert speak.said == [guided.ask_phone("bn")]
-    speak = say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
-    assert speak.said == [f"আপনার নম্বর {guided.read_digits(PHONE, 'bn')}। ঠিক আছে?"]
-    assert session.patient_id is None and executor.ran == []
-    llm = FakeLLM("আপনার কোনো আসন্ন সিরিয়াল নেই।")
-    speak = say(session, "হ্যাঁ", llm)
-    assert session.patient_id is not None
-    assert [name for name, _ in executor.ran] == ["list_my_appointments"]
-    assert "Result of lookup_booking:" in _system(llm.calls[0])
-    assert speak.said == ["আপনার কোনো আসন্ন সিরিয়াল নেই।"]
-
-
 def test_the_number_line_keeps_the_booking_the_caller_built(executor):
     executor.previews["book_appointment"] = BOOK_PREVIEW
-    session = CallSession(call_sid="CA-act")
-    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
+    session = stranger_session()
     llm = FakeLLM("unused", route=route_json("book", "calm", "booking"))
     say(session, "আমার নাম করিম, " + BOOK_LINE, llm)
     before = dict(load(session).booking)
     say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
     assert load(session).booking == before
     speak = say(session, "জি", FakeLLM())
-    # Identified, the booking is resolved again and read back (still nothing booked).
     assert executor.previewed and executor.ran == []
     assert "করিম" in speak.said[0]
-    assert default_clinic_store().get_patient(int(session.patient_id))["name"] == "করিম"
 
 
 def test_a_wrong_number_is_asked_again(executor):
-    session = CallSession(call_sid="CA-act")
-    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
-    say(session, "আমার সিরিয়াল কবে?", FakeLLM("unused", route=route_json("lookup_booking")))
+    session = book_waiting_for_a_number(executor)
     say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
     speak = say(session, "না", FakeLLM())
     assert speak.said == ["ঠিক আছে, নম্বরটা আবার বলুন।"]
     assert session.patient_id is None
-    speak = say(session, "১২৩৪৫", FakeLLM())
-    assert speak.said == [guided.ask_phone("bn", retry=True)]
 
 
 def test_a_missing_name_is_asked_and_the_bare_answer_books_on(executor):
@@ -478,26 +456,25 @@ def test_request_callback_is_stored_and_the_model_may_say_so(executor):
 
 
 def test_hand_over_for_an_emergency_speaks_the_emergency_text_and_escalates(executor):
-    executor.results["transfer_to_human"] = {"transferred": True, "reason": "emergency"}
+    order = []
+    executor.results["transfer_to_human"] = lambda args: (
+        order.append("transfer") or {"transferred": True}
+    )
     session = identified_session()
     llm = FakeLLM("unused", route=route_json("hand_over", "anxious", "unknown"))
-    speak = say(session, "আমার বাবার বুকে খুব ব্যথা হচ্ছে, শ্বাস নিতে পারছে না", llm)
-    assert speak.said == [settings.escalation.transfer_greeting["bn"]]
+
+    async def speak(text):
+        order.append(text)
+
+    say(session, "আমার বাবার বুকে খুব ব্যথা হচ্ছে, শ্বাস নিতে পারছে না", llm, speak)
+    # The 999 line first, then the transfer, then the connecting line.
+    assert order == [safe.emergency_text("bn"), "transfer", safe.connecting(language="bn")]
+    assert "৯৯৯" in order[0] and "স্থানান্তর" not in order[0]
     assert session.state == "escalated"
     assert session.metadata["handover_reason"] == "emergency"
     assert executor.ran == [("transfer_to_human", {"reason": "emergency"})]
     assert session.metadata["actions"] == ["transfer_to_human"]
     assert len(llm.calls) == 1  # the turn ends there
-
-
-def test_hand_over_on_request_speaks_the_handover_text(executor):
-    executor.results["transfer_to_human"] = {"transferred": True}
-    session = identified_session()
-    llm = FakeLLM("unused", route=route_json("hand_over", "calm", "unknown"))
-    speak = say(session, "আমি একজন মানুষের সাথে কথা বলতে চাই", llm)
-    assert speak.said == [guided.handover_text("bn")]
-    assert session.state == "escalated"
-    assert session.metadata["handover_reason"] == "asked_for_person"
 
 
 def test_end_call_speaks_the_closing_and_completes(executor):
@@ -550,6 +527,8 @@ def test_a_calm_turn_between_resets_the_angry_count(executor):
     say(session, "আচ্ছা ঠিক আছে", FakeLLM("জি, বলুন।", route=route_json()))
     speak = say(session, ANGRY, FakeLLM("দুঃখিত।", route=route_json()))
     assert safe.person_offer("bn") not in speak.said
+    speak = say(session, ANGRY, FakeLLM("দুঃখিত।", route=route_json()))
+    assert safe.person_offer("bn") in speak.said  # two in a row again: now it is offered
 
 
 # --- what a settle turn must never swallow -------------------------------------------------------
@@ -562,10 +541,13 @@ def test_an_emergency_during_a_read_back_reaches_the_hand_over(executor):
     session, _, _ = read_back_booking(executor)
     llm = FakeLLM("unused", route=route_json("hand_over", "anxious", "unknown"))
     speak = say(session, EMERGENCY, llm)
-    assert speak.said == [settings.escalation.transfer_greeting["bn"]]
+    assert speak.said == [safe.emergency_text("bn"), safe.connecting(language="bn")]
     assert declined_text("bn") not in speak.said
     assert load(session).pending is None
     assert [name for name, _ in executor.ran] == ["transfer_to_human"]
+
+
+# --- booking context (ruling f, amended) ---------------------------------------------------------
 
 
 def test_an_emergency_while_a_name_is_awaited_is_not_taken_as_the_name(executor):
@@ -581,22 +563,9 @@ def test_an_emergency_while_a_name_is_awaited_is_not_taken_as_the_name(executor)
 
 
 def test_a_number_said_in_words_is_read_back(executor):
-    session = CallSession(call_sid="CA-act")
-    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
-    say(session, "আমার সিরিয়াল কবে?", FakeLLM("unused", route=route_json("lookup_booking")))
+    session = book_waiting_for_a_number(executor)
     speak = say(session, "zero one seven one two three four five six seven eight", FakeLLM())
     assert speak.said == [f"Your number is {guided.read_digits(PHONE, 'en')}. Is that right?"]
-
-
-def test_a_number_that_fails_twice_lets_the_turn_go_on(executor):
-    session = CallSession(call_sid="CA-act")
-    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
-    say(session, "আমার সিরিয়াল কবে?", FakeLLM("unused", route=route_json("lookup_booking")))
-    assert say(session, "১২৩৪৫", FakeLLM()).said == [guided.ask_phone("bn", retry=True)]
-    assert say(session, "১২৩৪৫", FakeLLM()).said == [guided.ask_phone("bn", retry=True)]
-    llm = FakeLLM("জি, বলুন।", route=route_json())
-    assert say(session, "১২৩৪৫", llm).said == ["জি, বলুন।"]
-    assert "brain_wait" not in session.metadata
 
 
 def test_an_information_caller_whose_tool_reply_fails_is_not_pushed_to_book(executor):
@@ -610,3 +579,390 @@ def test_an_information_caller_whose_tool_reply_fails_is_not_pushed_to_book(exec
     llm = FakeLLM("unused", bad, bad, route=route_json("free_times", "calm", "information"))
     speak = say(session, FREE_LINE, llm)
     assert speak.said == [unsure("bn")]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "হ্যাঁ, তবে বিকেলে",
+        "হ্যাঁ, শুক্রবার",
+        "yes but Friday",
+        "হ্যাঁ, কিন্তু আমি আসতে পারব না",
+        "yes but actually I cannot come then",
+        "হ্যাঁ, তবে বিকেলে হলে ভালো",
+        "হ্যাঁ, বুক করেন, আর আমার নম্বরটা নেবেন না?",
+    ],
+)
+def test_a_yes_with_a_change_or_a_refusal_books_nothing_and_goes_on_as_a_request(executor, line):
+    session, _, _ = read_back_booking(executor)
+    reply = "Sure, tell me." if line.isascii() else "জি, বলুন।"
+    llm = FakeLLM(reply, route=route_json("none", "calm", "booking"))
+    speak = say(session, line, llm)
+    assert executor.ran == []
+    assert load(session).pending is None
+    assert llm.route_calls == 1 and len(llm.calls) == 1  # a router and model turn follows
+    assert speak.said == [reply]
+
+
+@pytest.mark.parametrize("line", ["না, থাক", "না না, এখন বুক করার দরকার নেই"])
+def test_a_pure_refusal_is_a_no(executor, line):
+    session, _, _ = read_back_booking(executor)
+    speak = say(session, line, FakeLLM())
+    assert speak.said == [declined_text("bn")]
+    assert executor.ran == [] and load(session).pending is None
+
+
+def test_a_person_request_during_a_read_back_hands_over(executor):
+    executor.results["transfer_to_human"] = {"transferred": True}
+    session, _, _ = read_back_booking(executor)
+    speak = say(session, "মানুষ", FakeLLM())
+    assert speak.said == [safe.connecting(language="bn")]
+    assert reask_text("bn") not in speak.said
+    assert [name for name, _ in executor.ran] == ["transfer_to_human"]
+    assert session.state == "escalated"
+
+
+# --- forgetting what no longer stands ------------------------------------------------------------
+
+
+def _slot_facts_in(session) -> list[str]:
+    return [e["text"] for e in session.metadata.get("brain_grounds", []) if "18:00" in e["text"]]
+
+
+def test_a_no_forgets_the_read_back_slot(executor):
+    session, _, _ = read_back_booking(executor)
+    assert _slot_facts_in(session)
+    say(session, "না", FakeLLM())
+    assert _slot_facts_in(session) == []
+
+
+def test_a_void_forgets_the_read_back_slot(executor):
+    session, _, _ = read_back_booking(executor)
+    say(session, "yes but Friday", FakeLLM("Sure.", route=route_json()))
+    assert _slot_facts_in(session) == []
+
+
+def test_a_failed_booking_forgets_the_slot(executor):
+    session, _, _ = read_back_booking(executor)
+    executor.results["book_appointment"] = {"error": "18:00 on 2026-11-26 was just taken"}
+    say(session, "হ্যাঁ", FakeLLM())
+    assert _slot_facts_in(session) == []
+    llm = FakeLLM("ডাক্তার রহমান কাল সন্ধ্যা ৬টায় খালি।", "জি, বলুন।", route=route_json())
+    speak = say(session, "আর কখন খালি আছে?", llm)
+    assert speak.said == ["জি, বলুন।"]  # 18:00 grounds nothing any more
+
+
+def test_a_cancel_takes_back_the_booking_and_its_facts(executor):
+    session, _, _ = read_back_booking(executor)
+    say(session, "হ্যাঁ", FakeLLM())
+    executor.previews["cancel_appointment"] = CANCEL_PREVIEW
+    executor.results["cancel_appointment"] = {"success": True, "appointment_id": "42"}
+    llm = FakeLLM("unused", route=route_json("cancel_booking", "calm", "change"))
+    say(session, "আমার সিরিয়ালটা বাতিল করুন", llm)
+    say(session, "হ্যাঁ", FakeLLM())
+    assert _slot_facts_in(session) == []
+    claim = "আপনার সিরিয়াল বুক হয়েছে।"
+    llm = FakeLLM(claim, claim, route=route_json())
+    speak = say(session, "আমার সিরিয়ালটা আছে তো?", llm)
+    assert claim not in speak.said
+
+
+# --- identity: a spoken number is never an identity ---------------------------------------------
+
+
+def stranger_session() -> CallSession:
+    session = CallSession(call_sid="CA-act", language=Language.BANGLA)
+    session.add_turn("assistant", "শেফা ক্লিনিকে স্বাগতম।")
+    return session
+
+
+@pytest.fixture
+def rahims_booking():
+    clinic = default_clinic_store()
+    patient = clinic.upsert_patient(PHONE, "রহিম")
+    clinic.book(patient, rahman_id(), TOMORROW, "18:00")
+    return patient
+
+
+@pytest.mark.parametrize(
+    ("line", "tool"),
+    [("আমার সিরিয়ালটা বাতিল করুন", "cancel_booking"),
+     ("আমার সিরিয়ালটা রবিবার বিকেল ৫টায় সরিয়ে দিন", "reschedule_booking")],
+)  # fmt: skip
+def test_a_stranger_with_another_patients_number_cancels_or_moves_nothing(
+    executor, rahims_booking, line, tool
+):
+    session = stranger_session()
+    first = say(session, line, FakeLLM("unused", route=route_json(tool, "calm", "change")))
+    assert first.said == [brain_actions.reception_text("bn")]
+    heard = [*first.said]
+    for said in ("০১৭১২৩৪৫৬৭৮", "হ্যাঁ", "হ্যাঁ"):
+        heard += say(session, said, FakeLLM("জি, বলুন।", route=route_json())).said
+    assert executor.ran == [] and executor.previewed == []
+    assert session.patient_id is None
+    assert not any("রহমান" in h or "৬টা" in h or "বৃহস্পতি" in h for h in heard)
+
+
+def test_lookup_without_caller_id_needs_the_number_and_the_name(executor, rahims_booking):
+    session = stranger_session()
+    llm = FakeLLM("unused", route=route_json("lookup_booking", "calm", "lookup"))
+    speak = say(session, "আমার সিরিয়াল কবে?", llm)
+    assert "মোবাইল নম্বর" in speak.said[0]
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    wrong = say(session, "করিম", FakeLLM())
+    assert "খুঁজে পাইনি" in wrong.said[0] and "রহমান" not in wrong.said[0]
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    right = say(session, "রহিম", FakeLLM())
+    assert "রহমান" in right.said[0]
+    assert session.patient_id is None  # a lookup proves less than caller ID
+    assert executor.ran == []
+
+
+def test_a_new_booking_takes_the_spoken_number_as_its_contact(executor):
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = stranger_session()
+    llm = FakeLLM("unused", route=route_json("book", "calm", "booking"))
+    speak = say(session, "আমার নাম করিম, " + BOOK_LINE, llm)
+    assert speak.said == [guided.ask_phone("bn")]
+    speak = say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    assert speak.said == [f"আপনার নম্বর {guided.read_digits(PHONE, 'bn')}। ঠিক আছে?"]
+    speak = say(session, "জি", FakeLLM())
+    assert "করিম" in speak.said[0] and executor.ran == []
+    assert default_clinic_store().get_patient(int(session.patient_id))["name"] == "করিম"
+
+
+def test_the_contact_number_of_a_new_booking_does_not_open_that_patients_bookings(
+    executor, rahims_booking
+):
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = stranger_session()
+    say(session, "আমার নাম করিম, " + BOOK_LINE, FakeLLM("unused", route=route_json("book")))
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    say(session, "জি", FakeLLM())
+    say(session, "না", FakeLLM())  # no to the booking read-back
+    llm = FakeLLM("unused", route=route_json("cancel_booking", "calm", "change"))
+    speak = say(session, "আমার সিরিয়ালটা বাতিল করুন", llm)
+    assert speak.said == [brain_actions.reception_text("bn")]
+    llm = FakeLLM("unused", route=route_json("lookup_booking", "calm", "lookup"))
+    speak = say(session, "আমার সিরিয়াল কবে?", llm)
+    assert "মোবাইল নম্বর" in speak.said[0]
+    assert all(name != "list_my_appointments" for name, _ in executor.ran)
+
+
+def book_waiting_for_a_number(executor) -> CallSession:
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = stranger_session()
+    say(session, "আমার নাম করিম, " + BOOK_LINE, FakeLLM("unused", route=route_json("book")))
+    return session
+
+
+def test_a_no_with_new_digits_takes_the_new_number(executor):
+    session = book_waiting_for_a_number(executor)
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    speak = say(session, "না, ০১৮১২৩৪৫৬৭৮", FakeLLM())
+    assert speak.said == [f"আপনার নম্বর {guided.read_digits('01812345678', 'bn')}। ঠিক আছে?"]
+
+
+@pytest.mark.parametrize("bad", ["১২৩৪৫", "আমার নম্বর মনে নেই"])
+def test_two_failed_tries_of_any_length_end_the_number_wait(executor, bad):
+    session = book_waiting_for_a_number(executor)
+    assert say(session, bad, FakeLLM()).said == [guided.ask_phone("bn", retry=True)]
+    llm = FakeLLM("জি, বলুন।", route=route_json())
+    assert say(session, bad, llm).said == ["জি, বলুন।"]
+    assert "brain_wait" not in session.metadata
+
+
+# --- the name wait -------------------------------------------------------------------------------
+
+
+def waiting_for_a_name(executor) -> CallSession:
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = identified_session(name="")
+    llm = FakeLLM("unused", "রোগীর নামটা বলবেন?", route=route_json("book", "calm", "booking"))
+    say(session, BOOK_LINE, llm)
+    return session
+
+
+def test_a_person_request_while_a_name_is_awaited_hands_over(executor):
+    executor.results["transfer_to_human"] = {"transferred": True}
+    session = waiting_for_a_name(executor)
+    speak = say(session, "মানুষের সাথে কথা বলব", FakeLLM())
+    assert executor.previewed == []
+    assert speak.said == [safe.connecting(language="bn")]
+    assert session.state == "escalated"
+
+
+@pytest.mark.parametrize("line", ["আমি পরে বলব", "নাম কেন লাগবে?", "থাক, লাগবে না"])
+def test_a_deferral_question_or_refusal_is_not_taken_as_the_name(executor, line):
+    session = waiting_for_a_name(executor)
+    say(session, line, FakeLLM("জি, বলুন।", route=route_json()))
+    assert executor.previewed == []
+    assert not load(session).booking.get("name")
+
+
+def test_a_no_to_the_named_read_back_clears_the_name(executor):
+    session = waiting_for_a_name(executor)
+    say(session, "করিম উদ্দিন", FakeLLM())
+    assert load(session).booking["name"] == "করিম উদ্দিন"
+    assert "patient_name" not in session.metadata  # written only on the yes
+    say(session, "না", FakeLLM())
+    assert not load(session).booking.get("name")
+    assert "patient_name" not in session.metadata
+
+
+def test_the_patient_name_is_kept_on_the_yes(executor):
+    session = waiting_for_a_name(executor)
+    executor.results["book_appointment"] = BOOKED
+    say(session, "করিম উদ্দিন", FakeLLM())
+    say(session, "হ্যাঁ", FakeLLM())
+    assert session.metadata["patient_name"] == "করিম উদ্দিন"
+
+
+# --- call-back, hand-over ------------------------------------------------------------------------
+
+
+def test_a_callback_with_no_number_on_file_asks_for_one_first(executor):
+    session = stranger_session()
+    llm = FakeLLM("unused", route=route_json("request_callback"))
+    speak = say(session, "পরে আমাকে একটু ফোন দিবেন রিপোর্টের ব্যাপারে", llm)
+    assert speak.said == [guided.ask_phone("bn")]
+    assert default_calls_store().list_callbacks() == []
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    reply = "ঠিক আছে, আমাদের স্টাফ আপনাকে ফোন করবেন।"
+    llm = FakeLLM(reply)
+    speak = say(session, "জি", llm)
+    assert speak.said == [reply]
+    callbacks = default_calls_store().list_callbacks()
+    assert len(callbacks) == 1 and callbacks[0]["phone"] == PHONE
+    assert session.patient_id is None  # a call-back number identifies nobody
+
+
+def test_a_twice_failed_reply_after_a_callback_speaks_the_plain_safe_line(executor):
+    from shefa.pipeline.clinic_questions import unsure
+
+    session = identified_session()
+    bad = "ডাক্তার রহমান কাল ৯টায় ফোন করবেন।"
+    llm = FakeLLM("unused", bad, bad, route=route_json("request_callback", "calm", "unknown"))
+    speak = say(session, "পরে আমাকে একটু ফোন দিবেন", llm)
+    assert speak.said == [unsure("bn")]
+
+
+def test_hand_over_on_request_transfers_first_then_says_so(executor):
+    executor.results["transfer_to_human"] = {"transferred": True}
+    session = identified_session()
+    llm = FakeLLM("unused", route=route_json("hand_over", "calm", "unknown"))
+    speak = say(session, "আমি একজন মানুষের সাথে কথা বলতে চাই", llm)
+    assert speak.said == [safe.connecting(language="bn")]
+    assert session.state == "escalated"
+    assert session.metadata["handover_reason"] == "asked_for_person"
+
+
+@pytest.mark.parametrize(
+    ("line", "mood", "first"),
+    [("আমার বাবার বুকে খুব ব্যথা হচ্ছে, শ্বাস নিতে পারছে না", "anxious", "emergency"),
+     ("আমি একজন মানুষের সাথে কথা বলতে চাই", "calm", None)],
+)  # fmt: skip
+def test_a_failed_transfer_is_never_announced(executor, line, mood, first):
+    executor.results["transfer_to_human"] = {"transferred": False, "error": "no target"}
+    session = identified_session()
+    speak = say(session, line, FakeLLM("unused", route=route_json("hand_over", mood, "unknown")))
+    expected = [safe.transfer_failed("bn")]
+    if first:
+        expected.insert(0, safe.emergency_text("bn"))
+    assert speak.said == expected
+    assert safe.connecting(language="bn") not in speak.said
+    assert "hand_over" not in session.metadata.get(brain_actions.SUCCEEDED, [])
+
+
+def test_an_information_caller_naming_a_doctor_gets_the_plain_safe_line(executor):
+    from shefa.pipeline.clinic_questions import unsure
+
+    session = identified_session()
+    bad = "ডাক্তার রহমান কাল ৯টায় বসেন।"
+    llm = FakeLLM(bad, bad, route=route_json("none", "calm", "information"))
+    speak = say(session, "ডাক্তার রহমান কবে বসেন?", llm)
+    assert speak.said == [unsure("bn")]
+
+
+def test_a_booking_slot_on_the_call_makes_a_booking_context(executor):
+    session = identified_session()
+    save(session, CallState(goal="unknown", booking={"date": TOMORROW}))
+    bad = "ডাক্তার রহমান কাল ৯টায় বসেন।"
+    llm = FakeLLM(bad, bad, route=route_json("none", "calm", "unknown"))
+    speak = say(session, "আচ্ছা দেখি তাহলে", llm)
+    assert speak.said == [safe.booking_sentence("bn")]
+
+
+# --- the angry offer -----------------------------------------------------------------------------
+
+
+def test_the_angry_offer_never_cuts_the_question_a_wait_needs(executor):
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = identified_session(name="")
+    say(session, ANGRY, FakeLLM("দুঃখিত।", route=route_json()))
+    llm = FakeLLM("unused", "দুঃখিত। রোগীর নামটা বলবেন?", route=route_json("book", "angry", "booking"))
+    speak = say(session, "ফালতু! " + BOOK_LINE, llm)
+    assert speak.said == ["দুঃখিত।", "রোগীর নামটা বলবেন?"]
+    assert "brain_wait" in session.metadata
+
+
+@pytest.fixture(autouse=True)
+def _fresh_lookup_lockout():
+    from shefa.pipeline import lookup
+
+    lookup._failures.clear()
+    yield
+    lookup._failures.clear()
+
+
+@pytest.mark.parametrize("line", ["বাতিল করুন", "অন্য দিন করুন", "পরে করুন", "ক্যানসেল করেন"])
+def test_a_bare_imperative_that_asks_for_something_else_books_nothing(executor, line):
+    session, _, _ = read_back_booking(executor)
+    say(session, line, FakeLLM("জি, বলুন।", route=route_json()))
+    assert executor.ran == []
+
+
+def test_a_contact_number_never_reads_out_the_name_on_file(executor, rahims_booking):
+    executor.previews["book_appointment"] = BOOK_PREVIEW
+    session = stranger_session()
+    llm = FakeLLM("unused", route=route_json("book", "calm", "booking"))
+    say(session, BOOK_LINE, llm)
+    say(session, "০১৭১২৩৪৫৬৭৮", FakeLLM())
+    llm = FakeLLM("রোগীর নামটা বলবেন?")
+    speak = say(session, "জি", llm)
+    assert not any("রহিম" in h for h in speak.said)
+    assert "Tool problem: The patient's name is missing" in _system(llm.calls[0])
+
+
+def test_a_patient_who_shares_a_doctors_name_is_taken_and_the_doctor_stays(executor):
+    session = waiting_for_a_name(executor)
+    speak = say(session, "সুলতানা বেগম", FakeLLM())
+    state = load(session)
+    assert state.booking["name"] == "সুলতানা বেগম"
+    assert state.booking["doctor"] == "Dr. Rahman"
+    assert "সুলতানা বেগম" in speak.said[0]
+
+
+def test_a_no_to_a_cancel_read_back_keeps_the_facts_of_the_booking(executor):
+    executor.results["list_my_appointments"] = {
+        "appointments": [{"appointment_id": "7", "date": TOMORROW, "time": "18:00",
+                          "doctor": "Rahman", "doctor_bn": "রহমান"}]
+    }  # fmt: skip
+    executor.previews["cancel_appointment"] = CANCEL_PREVIEW
+    session = identified_session()
+    llm = FakeLLM("unused", "জি, কাল সন্ধ্যা ৬টায়।", route=route_json("lookup_booking"))
+    say(session, "আমার সিরিয়াল কবে?", llm)
+    say(session, "বাতিল করুন", FakeLLM("unused", route=route_json("cancel_booking")))
+    say(session, "না", FakeLLM())
+    assert any("The caller's appointment" in t for t in _slot_facts_in(session))
+
+
+def test_a_no_to_a_booking_keeps_the_free_times_but_not_the_read_back(executor):
+    executor.results["check_appointment_slots"] = free_tomorrow("18:00", "18:15")
+    session = identified_session()
+    say(session, FREE_LINE, FakeLLM("unused", "জি, বলছি।", route=route_json("free_times")))
+    read_back_booking(executor, session)
+    say(session, "না", FakeLLM())
+    texts = _slot_facts_in(session)
+    assert any("is free on" in t for t in texts)
+    assert not any("Read back" in t for t in texts)

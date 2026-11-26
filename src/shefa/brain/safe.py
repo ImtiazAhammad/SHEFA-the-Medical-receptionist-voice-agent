@@ -40,6 +40,22 @@ _PERSON_OFFER = {
     "bn": "চাইলে 'মানুষ' বলুন, আমাদের একজন স্টাফের সাথে কথা বলিয়ে দেব।",
     "en": "If you would rather talk to someone, just say 'person'.",
 }
+# The hand-over. The emergency line comes before the transfer, so it promises none; "connecting"
+# is said only once the transfer went through, the fallback when it did not (the escalated call
+# is queued for a call-back, so that promise holds).
+_EMERGENCY = {
+    "bn": "কেউ বিপদে থাকলে এখনই ৯৯৯-এ ফোন করুন।",
+    "en": "If anyone is in danger, please call 999 now.",
+}
+_CONNECTING = {
+    "bn": "আপনাকে আমাদের একজন স্টাফের সাথে সংযোগ দিচ্ছি, একটু অপেক্ষা করুন।",
+    "en": "I am connecting you to a person now. Please hold.",
+}
+_TRANSFER_FAILED = {
+    "bn": "লাইনটা এখন দেওয়া যাচ্ছে না। জরুরি হলে এখনই ৯৯৯-এ ফোন করুন, আমাদের স্টাফ আপনাকে ফোন করবেন।",
+    "en": "I can't put you through right now. If it is urgent, call 999 now; our staff will "
+    "call you back.",
+}
 # Kinds that keep their own sentence in a booking turn too: each says something truer than the
 # booking line would.
 _OWN_KIND = frozenset({"medical", "privacy", "claim"})
@@ -55,6 +71,18 @@ def booking_sentence(language: str) -> str:
 
 def person_offer(language: str) -> str:
     return _pick(_PERSON_OFFER, language)
+
+
+def emergency_text(language: str) -> str:
+    return _pick(_EMERGENCY, language)
+
+
+def connecting(language: str) -> str:
+    return _pick(_CONNECTING, language)
+
+
+def transfer_failed(language: str) -> str:
+    return _pick(_TRANSFER_FAILED, language)
 
 
 def sentence(kind: str, language: str, *, booking: bool = False) -> str:

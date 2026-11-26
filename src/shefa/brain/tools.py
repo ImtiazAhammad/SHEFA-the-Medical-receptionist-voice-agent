@@ -330,8 +330,10 @@ def _free_times(args: dict[str, Any], state: CallState, today: date) -> Resolved
 
 
 def _kept_name(session: CallSession) -> str:
-    """The name on file for the identified caller (caller ID or a confirmed number)."""
-    if not session.patient_id:
+    """The name on file for a caller identified by caller ID. A patient made from a number the
+    caller only said aloud (`brain.actions.CONTACT_ONLY`) may be someone else: their name is
+    never read out, so it is asked for."""
+    if not session.patient_id or session.metadata.get("brain_contact_only"):
         return ""
     try:
         patient = default_clinic_store().get_patient(int(str(session.patient_id))) or {}

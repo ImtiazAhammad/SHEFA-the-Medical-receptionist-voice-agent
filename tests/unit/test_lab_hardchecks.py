@@ -355,6 +355,25 @@ def test_a_list_request_needs_the_whole_word():
 
 def test_a_long_yes_the_product_accepts_still_confirms_and_a_no_does_not():
     ask = "রবিবার দশটা, বুক করব?"
-    assert booked_after(ask, yes="হ্যাঁ, বুক করেন, আর আমার নম্বরটা নেবেন না?")
+    assert booked_after(ask, yes="হ্যাঁ, বুক করে দিন")
+    # Changed in Task 9 fix round 1: the strict rule (a negation anywhere voids a yes) also
+    # refuses this long yes; a booking after it is now an unconfirmed booking.
+    assert not booked_after(ask, yes="হ্যাঁ, বুক করেন, আর আমার নম্বরটা নেবেন না?")
     assert not booked_after(ask, yes="না")
     assert not booked_after(ask, yes="হ্যাঁ, তবে মঙ্গলবার বিকেলে দিন, ডাক্তার রহমানের কাছে")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "হ্যাঁ, তবে বিকেলে",
+        "হ্যাঁ, শুক্রবার",
+        "yes but Friday",
+        "হ্যাঁ, কিন্তু আমি আসতে পারব না",
+        "yes but actually I cannot come then",
+        "হ্যাঁ, তবে বিকেলে হলে ভালো",
+    ],
+)
+def test_a_yes_with_a_change_or_a_refusal_is_no_agreement(line):
+    # Task 9 fix round 1: the bench must catch a booking after any of these, in both engines.
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes=line)
