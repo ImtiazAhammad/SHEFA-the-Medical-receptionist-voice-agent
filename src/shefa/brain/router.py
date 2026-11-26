@@ -154,8 +154,16 @@ async def route(
     tool cannot be read. Never raises: a failed router must not cost the caller an answer.
     Failures are logged (rate-limited), since a server that stops accepting the output shape
     would otherwise turn every turn into a plain reply without a word."""
-    found = await _ask(llm, state, said, history, on_tool)
-    if found.error:
+    told: list[str | None] = []
+
+    def tell(tool: str | None) -> None:
+        told.append(tool)
+        if on_tool is not None:
+            on_tool(tool)
+
+    found = await _ask(llm, state, said, history, tell)
+    # A timeout once the tool was read only lost mood and goal: the turn was decided, no failure.
+    if found.error and not (told and found.error == "timeout"):
         _warn(found.error)
     return found
 

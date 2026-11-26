@@ -269,3 +269,14 @@ def test_the_router_stream_is_closed_on_timeout(monkeypatch) -> None:
     assert found.error == "timeout"
     assert seen == []
     assert llm.closed == 1
+
+
+def test_a_timeout_after_the_tool_was_read_is_not_logged(fresh_warnings, caplog, monkeypatch):
+    # The tool decided the turn; only mood and goal were late. That is no router failure.
+    monkeypatch.setattr(settings.brain, "router_timeout_s", 0.05)
+    caplog.set_level(logging.WARNING, logger="shefa.brain.router")
+    for tool in ("none", "book"):
+        found, seen = _streamed(FakeLLM(_out(tool), pause_after='{"tool":"' + tool, pause=1))
+        assert found.error == "timeout"
+        assert seen == [(None if tool == "none" else tool, False)]
+    assert caplog.records == []

@@ -381,6 +381,10 @@ class Brain:
             tool = await routing.tool()
             routing.labels()
             if tool is not None and not out.spoken:
+                if tool == "hand_over":
+                    # Its reason reads the mood, which follows the tool field: wait for the rest
+                    # (bounded by the router timeout; the word rules' mood if it never comes).
+                    await routing.finish()
                 call = ToolCall(tool, _tool_args(tool, said, state, today))
                 trace["tool"], trace["tool_args"] = call.name, dict(call.args)
                 said_now = await self._act(call, session, state, grounds, speak, today)

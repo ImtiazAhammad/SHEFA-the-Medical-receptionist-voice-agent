@@ -881,3 +881,14 @@ def test_cancelling_the_turn_while_sentences_are_held_speaks_nothing_and_leaks_n
     assert closed == 1  # the reply stream was closed
     assert route_closed == 1  # and the router's
     assert "brain_trace" not in session.metadata
+
+
+def test_hand_over_waits_for_the_router_mood_for_its_reason(acted_brain):
+    # The tool field comes first; the mood after it decides "angry". Built before it arrived,
+    # the reason would fall back to the calm words' "asked_for_person".
+    said = "Can I talk to someone at the desk?"
+    session = _session(said)
+    llm = FakeLLM("unused", route=route_json("hand_over", "angry", "complaint"), route_pause=0.2)
+    _turn(session, said, llm, Recorder())
+    call, _state = acted_brain.calls[-1]
+    assert call.args == {"reason": "angry"}
