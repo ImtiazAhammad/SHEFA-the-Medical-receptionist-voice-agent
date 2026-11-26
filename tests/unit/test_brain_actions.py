@@ -1096,3 +1096,60 @@ def test_a_contact_only_caller_is_not_identified_in_the_prompt(executor):
     llm = FakeLLM("জি, বলুন।", route=route_json())
     say(caller_id, "আর কিছু জানার ছিল", llm)
     assert IDENTIFIED in _system(llm.calls[0])
+
+
+# --- fix round 3 ----------------------------------------------------------------------------------
+
+ECHOED_QUESTIONS = [
+    "is that right?", "is it ok?", "is that all right?", "right?", "okay?", "ঠিক আছে?", "এটাই?",
+    "জি?", "হ্যাঁ?",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("line", ECHOED_QUESTIONS)
+def test_a_question_echoed_back_is_asked_once_and_a_clear_yes_then_books(executor, line):
+    session, _, _ = read_back_booking(executor)
+    speak = say(session, line, FakeLLM())
+    assert executor.ran == []
+    assert speak.said == [reask_text(load(session).language)]
+    say(session, "yes" if line.isascii() else "হ্যাঁ", FakeLLM())
+    assert [name for name, _ in executor.ran] == ["book_appointment"]
+
+
+@pytest.mark.parametrize("line", ["ঠিক আছে তো", "হ্যাঁ, বুক হবে কি", "does that work", "are you sure"])
+def test_a_question_tag_or_opener_never_books_on_its_own(executor, line):
+    session, _, _ = read_back_booking(executor)
+    reply = "Sure, tell me." if line.isascii() else "জি, বলুন।"
+    say(session, line, FakeLLM(reply, route=route_json()))
+    assert executor.ran == []
+
+
+def test_a_name_that_starts_like_a_person_word_is_taken_as_the_name(executor):
+    session = waiting_for_a_name(executor)
+    speak = say(session, "লোকমান হোসেন", FakeLLM())
+    assert session.state != "escalated"
+    assert "লোকমান হোসেন" in speak.said[0]
+
+
+@pytest.mark.parametrize("line", ["লোকের সাথে কথা বলব", "স্টাফের সাথে কথা বলব"])
+def test_a_person_word_with_a_case_ending_still_hands_over(executor, line):
+    executor.results["transfer_to_human"] = {"transferred": True}
+    session = waiting_for_a_name(executor)
+    say(session, line, FakeLLM())
+    assert session.state == "escalated"
+
+
+@pytest.mark.parametrize("line", ["ঠিক আছে, ডাক্তার করিমের কাছে দিন", "হ্যাঁ, আমার মা", "yes, my wife"])
+def test_another_doctor_or_patient_voids_the_read_back(executor, line):
+    session, _, _ = read_back_booking(executor)
+    reply = "Sure, tell me." if line.isascii() else "জি, বলুন।"
+    speak = say(session, line, FakeLLM(reply, route=route_json()))
+    assert speak.said == [reply]  # a new request through the model, not a re-ask
+    assert load(session).pending is None and executor.ran == []
+
+
+@pytest.mark.parametrize("line", ["জি ভাই", "হ্যাঁ আপা"])
+def test_an_honorific_is_still_a_yes(executor, line):
+    session, _, _ = read_back_booking(executor)
+    say(session, line, FakeLLM())
+    assert [name for name, _ in executor.ran] == ["book_appointment"]

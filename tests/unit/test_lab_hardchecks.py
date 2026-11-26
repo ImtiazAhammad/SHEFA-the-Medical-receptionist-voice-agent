@@ -394,3 +394,17 @@ def test_a_yes_with_an_unknown_word_is_agreement_only_after_the_re_ask():
         actions=[[], [], ["book_appointment"]],
     )
     assert check(r, set(), "no_unconfirmed_booking").ok
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["is that right?", "is it ok?", "is that all right?", "right?", "okay?", "ঠিক আছে?", "এটাই?",
+     "জি?", "হ্যাঁ?"],
+)  # fmt: skip
+def test_a_question_echoed_back_is_no_agreement(line):
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes=line)
+
+
+@pytest.mark.parametrize("line", ["ঠিক আছে, ডাক্তার করিমের কাছে দিন", "হ্যাঁ, আমার মা"])
+def test_another_doctor_or_patient_is_no_agreement(line):
+    assert not booked_after("রবিবার দশটা, বুক করব?", yes=line)

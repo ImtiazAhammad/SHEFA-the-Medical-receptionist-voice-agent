@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 from shefa import summary as call_summary
 from shefa.bangla import WEEKDAYS_BN
 from shefa.brain import safe
-from shefa.brain.confirm import strict_answer
+from shefa.brain.confirm import KIN, strict_answer
 from shefa.brain.greeting import closing
 from shefa.brain.state import _doctor_label
 from shefa.brain.tools import CONFIRMED, NOT_IDENTIFIED, Resolved, ToolCall, ToolProblem, resolve
@@ -87,19 +87,13 @@ _NOT_A_NAME = re.compile(
 # A person asked for in words the guided `is_human_request` list does not hold ("স্টাফ দিন",
 # "রিসেপশনে দিন"); heard only while a read-back, a wait or a lookup is open.
 _PERSON = re.compile(
-    r"(?<![ঀ-৿])(?:স্টাফ|রিসেপশন|মানুষ|অপারেটর|লোক)"
+    # Whole words, with only these case endings: "লোকের" asks for a person, "লোকমান" is a name.
+    r"(?<![ঀ-৿])(?:স্টাফ|রিসেপশন|মানুষ|অপারেটর|লোক)(?:দের|ের|এর|কে|ে|টা|জন)?(?![ঀ-৿])"
     r"|\b(?:person|human|staff|reception|receptionist|operator|someone)\b",
     re.IGNORECASE,
 )
 # Who the patient is to the caller, not their name: "মা", "আমার আব্বা". The name is asked again.
-_KIN = frozenset(
-    {
-        "মা", "আম্মা", "আম্মু", "বাবা", "আব্বা", "আব্বু", "ছেলে", "মেয়ে", "ভাই", "বোন", "স্ত্রী",
-        "স্বামী", "বউ", "নানা", "নানি", "দাদা", "দাদি", "চাচা", "চাচি", "খালা", "মামা",
-        "mother", "mom", "father", "dad", "son", "daughter", "wife", "husband", "brother",
-        "sister",
-    }
-)  # fmt: skip
+_KIN = KIN
 _KIN_FILLER = frozenset({"আমার", "my", "the", "রোগী", "আমি"})
 
 

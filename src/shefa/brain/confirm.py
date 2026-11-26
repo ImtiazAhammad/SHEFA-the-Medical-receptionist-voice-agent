@@ -39,12 +39,31 @@ _NEGATION = re.compile(
     re.IGNORECASE,
 )  # fmt: skip
 _WORDS = re.compile(r"[\s,.;:!?।()\"-]+")
-# Words that ask for something else even beside a yes: another one, a cancel, later.
+# Who the patient is to the caller. Beside "আমার"/"my" ("হ্যাঁ, আমার মা") it names another
+# patient; alone, ভাই and আপা are also honorifics ("জি ভাই" is a yes).
+KIN = frozenset(
+    {
+        "মা", "আম্মা", "আম্মু", "বাবা", "আব্বা", "আব্বু", "ছেলে", "মেয়ে", "ভাই", "বোন", "স্ত্রী",
+        "স্বামী", "বউ", "নানা", "নানি", "দাদা", "দাদি", "চাচা", "চাচি", "খালা", "মামা",
+        "mother", "mom", "father", "dad", "son", "daughter", "wife", "husband", "brother",
+        "sister",
+    }
+)  # fmt: skip
+_KIN_WORDS = "|".join(sorted(KIN, key=len, reverse=True))
+# Words that ask for something else even beside a yes: another one, a cancel, later, a doctor
+# (one the directory does not know is still another doctor), another patient.
 _CHANGE = re.compile(
-    _B + r"(?:অন্য|বাতিল|ক্যানসেল|ক্যান্সেল|পরে|আগের)"
-    + r"|\b(?:other|another|different|cancel|later|earlier)\b",
+    _B + r"(?:অন্য|বাতিল|ক্যানসেল|ক্যান্সেল|পরে|আগের|ডাক্তার|ডাঃ|ডা\.)"
+    + r"|\b(?:other|another|different|cancel|later|earlier|doctor|dr)\b"
+    + r"|(?:আমার|\bmy)\s+(?:" + _KIN_WORDS + r")" + _E,
     re.IGNORECASE,
 )  # fmt: skip
+# A reply shaped as a question asks, it does not agree ("ঠিক আছে?", "is it ok?", "জি?"): one
+# re-ask. Read before the word splitter drops the "?".
+_QUESTION = re.compile(
+    r"\?\s*$|" + _B + r"(?:কি|কী|তো)" + _E + r"[\s।.!]*$|^\s*(?:is|are|does|do|did|can|will)\b",
+    re.IGNORECASE,
+)
 # "করে দিন না", "দিন না": a softening "না" after an imperative at the end of the line is a
 # "please", not a refusal. Anywhere else "না" stays a negation.
 _SOFT_NA = re.compile(_B + r"((?:দিন|দেন|করুন|করেন|ফেলুন|ফেলেন))\s+না" + _E + r"[\s।.!?]*$")
@@ -93,6 +112,8 @@ def strict_answer(line: str, *, today: date | None = None) -> str | None:
     if said_yes:
         if negated or _CONTRAST.search(text):
             return "change"
+        if _QUESTION.search(line):
+            return "unclear"
         return "yes" if all(w in _YES_WORDS for w in words) else "unclear"
     # Only a refusal: "না", "না, থাক", "না না, এখন দরকার নেই".
     if plain is False or (negated and _NEGATION.match(words[0])):
