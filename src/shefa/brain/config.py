@@ -59,6 +59,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS config_one_live
     ON config_versions(scope, key) WHERE status = 'live';
 """
 
+BUSY_TIMEOUT_S = 5.0  # how long a locked file is waited for, unless the caller says less
+
 _COLUMNS = "id, scope, key, value_json, status, author, created_at, note"
 
 
@@ -89,17 +91,19 @@ def _row(row: tuple[Any, ...]) -> dict[str, Any]:
 class ConfigStore:
     """The `config_versions` table of one SQLite file."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, busy_timeout_s: float | None = None) -> None:
+        """`busy_timeout_s` bounds only this first connection (a call's quick read); every
+        later one waits the usual time."""
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with self._connect(busy_timeout_s) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self, busy_timeout_s: float | None = None) -> sqlite3.Connection:
         # One short connection per call: nothing is shared between request threads.
-        conn = sqlite3.connect(str(self.path), check_same_thread=False, timeout=5.0)
-        return conn
+        timeout = BUSY_TIMEOUT_S if busy_timeout_s is None else busy_timeout_s
+        return sqlite3.connect(str(self.path), check_same_thread=False, timeout=timeout)
 
     def draft(
         self,
@@ -158,9 +162,11 @@ class ConfigStore:
             ).fetchall()
         return [_row(r) for r in rows]
 
-    def live_values(self, scope: str = "platform") -> dict[str, Any]:
+    def live_values(
+        self, scope: str = "platform", *, busy_timeout_s: float | None = None
+    ) -> dict[str, Any]:
         """Every live value of a scope; an unreadable one is left out (and logged)."""
-        with closing(self._connect()) as conn:
+        with closing(self._connect(busy_timeout_s)) as conn:
             rows = conn.execute(
                 f"SELECT {_COLUMNS} FROM config_versions WHERE scope = ? AND status = 'live'",
                 (scope,),
@@ -171,11 +177,11 @@ class ConfigStore:
 _default_config_store: ConfigStore | None = None
 
 
-def default_config_store() -> ConfigStore:
+def default_config_store(*, busy_timeout_s: float | None = None) -> ConfigStore:
     """The process-wide store in the platform database, built lazily from config."""
     global _default_config_store
     if _default_config_store is None:
-        _default_config_store = ConfigStore(settings.storage.db_path)
+        _default_config_store = ConfigStore(settings.storage.db_path, busy_timeout_s=busy_timeout_s)
     return _default_config_store
 
 
@@ -206,18 +212,21 @@ def _clear_cache() -> None:
         _cache.clear()
 
 
-def snapshot(clinic_id: str = "") -> dict[str, Any]:
-    """Defaults, overlaid by the platform's live values, overlaid by the clinic's."""
+def snapshot(clinic_id: str = "", *, busy_timeout_s: float | None = None) -> dict[str, Any]:
+    """Defaults, overlaid by the platform's live values, overlaid by the clinic's.
+
+    `busy_timeout_s` bounds how long a locked file is waited for (a call's first read gives up
+    quickly rather than hold a worker); the cache below still applies."""
     now = time.monotonic()
     with _cache_lock:
         hit = _cache.get(clinic_id)
         if hit is not None and now - hit[0] < settings.brain.config_cache_s:
             return copy.deepcopy(hit[1])
-    store = default_config_store()
+    store = default_config_store(busy_timeout_s=busy_timeout_s)
     merged = defaults()
-    merged.update(store.live_values("platform"))
+    merged.update(store.live_values("platform", busy_timeout_s=busy_timeout_s))
     if clinic_id and valid_id(clinic_id):
-        merged.update(store.live_values(clinic_id))
+        merged.update(store.live_values(clinic_id, busy_timeout_s=busy_timeout_s))
     with _cache_lock:
         _cache[clinic_id] = (now, merged)
     return copy.deepcopy(merged)

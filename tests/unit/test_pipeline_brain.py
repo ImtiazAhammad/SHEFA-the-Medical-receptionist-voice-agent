@@ -635,11 +635,12 @@ def locked_platform(tmp_path, monkeypatch):
     brain_config.set_default_config_store(None)
 
     async def release() -> None:
-        """Let the writer go and wait for the read that timed out, still in its thread."""
+        """Let the writer go and wait for the read that timed out, still in its worker."""
+        from shefa.pipeline import voice_pipeline
+
         writer.rollback()
-        deadline = time.monotonic() + 6
-        while brain_config._default_config_store is None and time.monotonic() < deadline:
-            await asyncio.sleep(0.02)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(voice_pipeline._CONFIG_EXECUTOR, lambda: None)
 
     yield SimpleNamespace(path=path, release=release)
     writer.rollback()
@@ -676,7 +677,7 @@ async def test_a_failed_config_read_never_flips_the_call_later(monkeypatch):
     class Broken:
         reads = 0
 
-        def live_values(self, scope="platform"):
+        def live_values(self, scope="platform", **kw):
             Broken.reads += 1
             raise sqlite3.DatabaseError("malformed")
 
@@ -894,3 +895,84 @@ async def test_the_turn_deadline_keeps_the_callers_line_on_a_spoken_call(agent, 
     session = await pipe.session_for("SID-DEADLINE")
     assert session.history[-1].role == "user"
     assert session.history[-1].content == "আর কিছু না, ধন্যবাদ"
+
+
+# --- fix round 2 -------------------------------------------------------------------------------
+
+
+async def test_a_burst_of_calls_on_a_locked_database_never_starves_the_shared_workers(
+    locked_platform, monkeypatch
+):
+    """Re-review B: Whisper, Piper and retrieval use the loop's default executor; the config
+    reads of 40 new calls on a locked file must not fill it."""
+    reads = []
+    real = brain_config.snapshot
+
+    def counted(clinic_id="", **kw):
+        reads.append(clinic_id)
+        return real(clinic_id, **kw)
+
+    monkeypatch.setattr(brain_config, "snapshot", counted)
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    pipe = VoicePipeline()
+    calls = [CallSession(call_sid=f"CA-burst-{i}") for i in range(40)]
+    loop = asyncio.get_running_loop()
+    began = time.monotonic()
+    burst = asyncio.gather(*(pipe._engine_ready(c) for c in calls))
+    await asyncio.sleep(0.05)
+    await asyncio.wait_for(loop.run_in_executor(None, lambda: None), timeout=0.3)
+    engines = await burst
+    assert engines == ["guided"] * 40
+    assert time.monotonic() - began < 1.5
+    assert all(c.metadata["brain_config"] == {"engine": "guided"} for c in calls)
+    assert len(reads) == 1  # one read in flight for all of them
+    await locked_platform.release()
+
+
+async def test_a_stuck_config_read_frees_its_worker_quickly(locked_platform, monkeypatch):
+    from shefa.pipeline import voice_pipeline
+
+    monkeypatch.setattr(settings.pipeline, "engine", "agent")
+    await VoicePipeline()._engine_ready(CallSession(call_sid="CA-stuck"))
+    loop = asyncio.get_running_loop()
+    began = time.monotonic()
+    await loop.run_in_executor(voice_pipeline._CONFIG_EXECUTOR, lambda: None)  # lock still held
+    assert time.monotonic() - began < 1.5  # SQLite gave up within its short busy timeout
+    await locked_platform.release()
+
+
+async def test_a_turn_deadline_during_the_transfer_ends_the_voice_loop(agent, monkeypatch):
+    """Re-review A: the call is escalated by a transfer that was cut off; no next turn."""
+
+    class TransferCutOff(FakeBrain):
+        async def turn(self, session, said, llm, speak, **kw):
+            FakeBrain.seen.append((said, said))
+            session.state = "escalated"  # what the executor does when the transfer is cut off
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(brain_engine, "Brain", TransferCutOff)
+    monkeypatch.setattr(settings.pipeline, "turn_deadline_s", 0.2)
+    monkeypatch.setattr(registry, "_stt", _STT())
+    monkeypatch.setattr(registry, "_tts", _SilentVoice())
+    pipe = VoicePipeline()
+
+    async def no_wait(delay):
+        return None
+
+    pipe._sleep = no_wait
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    task = asyncio.create_task(pipe.process_audio_stream("SID-XFER", queue, _sink))
+    for _ in range(10):
+        await queue.put(_pcm(200.0, 0))
+    for _ in range(12):
+        await queue.put(_pcm(3000.0, 1))
+        await asyncio.sleep(0.01)
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=5)  # the loop leaves by itself
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    session = await pipe.session_for("SID-XFER")
+    assert session.state == "escalated"
+    assert len(FakeBrain.seen) == 1

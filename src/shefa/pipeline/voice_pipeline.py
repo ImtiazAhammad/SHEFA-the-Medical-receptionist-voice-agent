@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -118,6 +120,35 @@ async def _discard(_frame: AudioFrame) -> None:  # pragma: no cover - never hand
 # a setting: it only bounds a read that normally takes milliseconds, so a locked or broken
 # platform database costs a call this much once, never a dead line.
 CONFIG_READ_TIMEOUT_S = 0.5
+# The reads get a worker of their own and one read at a time: a burst of new calls on a locked
+# file must never fill the loop's default executor, which speech recognition, the voice and
+# retrieval share. SQLite waits no longer than the call does, so a stuck read frees the worker.
+_CONFIG_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="shefa-config")
+_config_reads: dict[str, asyncio.Future[dict[str, Any]]] = {}
+
+
+def _quick_snapshot(clinic: str) -> dict[str, Any]:
+    from shefa.brain import config as brain_config
+
+    return brain_config.snapshot(clinic, busy_timeout_s=CONFIG_READ_TIMEOUT_S)
+
+
+def _shared_read(clinic: str) -> asyncio.Future[dict[str, Any]]:
+    """The config read in flight for `clinic` on this loop, or a new one."""
+    loop = asyncio.get_running_loop()
+    read = _config_reads.get(clinic)
+    if read is None or read.done() or read.get_loop() is not loop:
+        read = loop.run_in_executor(_CONFIG_EXECUTOR, _quick_snapshot, clinic)
+        _config_reads[clinic] = read
+
+        def finished(done: asyncio.Future[dict[str, Any]]) -> None:
+            if _config_reads.get(clinic) is done:
+                del _config_reads[clinic]
+            if not done.cancelled():
+                done.exception()  # seen: every waiter may have given up already
+
+        read.add_done_callback(finished)
+    return read
 
 # States a conversation cannot continue from: a human has it, or it was closed.
 ENDED_STATES = frozenset({"escalated", "escaped", "terminated", "completed"})
@@ -578,12 +609,11 @@ class VoicePipeline:
 
     @staticmethod
     async def _read_config(session: CallSession, timeout: float) -> dict[str, Any]:
-        from shefa.brain.config import snapshot
         from shefa.clinic.registry import current
 
         clinic = current()
         try:
-            held = await asyncio.wait_for(asyncio.to_thread(snapshot, clinic), timeout=timeout)
+            held = await asyncio.wait_for(asyncio.shield(_shared_read(clinic)), timeout=timeout)
         except TimeoutError:
             logger.warning("Config read for %s took too long; a guided call", session.call_sid)
             return {"engine": "guided"}
@@ -592,7 +622,7 @@ class VoicePipeline:
             return {"engine": "guided"}
         if held.get("engine") != "agent":
             return {"engine": "guided"}
-        return held
+        return copy.deepcopy(held)  # one read serves many calls; each keeps its own copy
 
     async def _opening(self, session: CallSession, fixed: str) -> str:
         """The call's greeting: the brain's generated one on the agent engine, else `fixed`.
@@ -1417,7 +1447,12 @@ class VoicePipeline:
 
         ``max_transfer_attempts`` is read from config here, so the setting
         that drives the terminal transition is actually consumed (D-ENG12).
+        A call the failed turn already ended (a transfer cut off half-way) is left at once.
         """
+        if session.state in ENDED_STATES:
+            logger.info("Turn failed on %s, which is already %s", call_sid, session.state)
+            await self._session_manager.save(session)
+            return True
         failures = self._failures.get(call_sid, 0) + 1
         self._failures[call_sid] = failures
         max_attempts = settings.escalation.max_transfer_attempts
