@@ -653,13 +653,31 @@ def test_router_mood_and_goal_override_the_word_rules():
     _turn(session, FEE_QUESTION, llm, Recorder())
     trace = session.metadata["brain_trace"][-1]
     assert (trace["mood"], trace["goal"]) == ("angry", "complaint")
+    # Changed in fix round 1: the router's labels are for this turn only; the call keeps the
+    # word rules' mood and goal.
     saved = session.metadata["brain"]
-    assert (saved["mood"], saved["goal"], saved["angry_turns"]) == ("angry", "complaint", 1)
+    assert (saved["mood"], saved["goal"], saved["angry_turns"]) == ("calm", "information", 0)
+
+
+def test_a_wrong_router_goal_does_not_stick_to_the_next_turn():
+    # One misrouted "change" must not switch off the push check for the rest of the call.
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "calm", "change"))
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["goal"] == "change"
+    session.add_turn("assistant", "ফি ৮০০ টাকা।")
+    session.add_turn("user", "পার্কিং আছে?")
+    # no router answer this time: the words decide
+    llm = FakeLLM("ক্লিনিকের পেছনে পার্কিং আছে। সিরিয়াল দিয়ে দেব?")
+    speak = Recorder()
+    _turn(session, "পার্কিং আছে?", llm, speak)
+    assert session.metadata["brain_trace"][-1]["goal"] == "information"
+    assert speak.said == ["ক্লিনিকের পেছনে পার্কিং আছে।"]
 
 
 def test_the_router_goal_steers_the_push_check():
-    # The words alone track "booking" (a doctor and a day), the router hears a question: the push
-    # sentence is dropped because the check runs with the router's goal.
+    # The words alone give goal "unknown" here, so the push rule would not run; the router hears
+    # a question, and the push sentence is dropped because the check runs with the router's goal.
     said = "রহমান স্যার কাল বসবেন?"
     session = _session(said)
     llm = FakeLLM(

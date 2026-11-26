@@ -168,14 +168,15 @@ def _history(session: CallSession, said: str) -> tuple[list[dict[str, str]], str
     return turns, previous
 
 
-def _apply_route(state: CallState, before: CallState, found: Route) -> None:
-    """The router's mood and goal for this turn; the word rules stay where it gave none.
+def _apply_route(state: CallState, found: Route) -> None:
+    """The router's mood and goal for this turn only; the word rules stay where it gave none.
 
-    A question along the way never replaces a real goal, and "unknown" or small talk tells
-    nothing new, so those keep the goal the words gave."""
+    The turn restores the word rules' mood and goal before saving, so one wrong label never
+    sticks to the call (a saved "change" would switch the push check off for good). A question
+    along the way never replaces a real goal, and "unknown" or small talk tells nothing new, so
+    those keep the goal the words gave."""
     if found.mood is not None:
         state.mood = found.mood
-        state.angry_turns = before.angry_turns + 1 if found.mood == "angry" else 0
     goal = found.goal
     if goal is None or goal == "unknown":
         return
@@ -233,14 +234,13 @@ class Brain:
         started = time.monotonic()
         today = today or clinic_today()
         history, previous = _history(session, said)
-        before = load(session)
-        state = track(before, said, previous=previous, cues=cues, today=today)
+        state = track(load(session), said, previous=previous, cues=cues, today=today)
         config = call_config(session)
         language = state.language
         router_task = asyncio.create_task(self._route(llm, state, said, history, language))
         try:
             return await self._turn(
-                session, said, llm, speak, today, history, before, state, config, router_task,
+                session, said, llm, speak, today, history, state, config, router_task,
                 started,
             )
         finally:
@@ -265,13 +265,13 @@ class Brain:
         speak: Speak,
         today: _date,
         history: list[dict[str, str]],
-        before: CallState,
         state: CallState,
         config: dict[str, Any],
         router_task: asyncio.Task[tuple[Route, int]],
         started: float,
     ) -> str:
         language = state.language
+        words = (state.mood, state.goal)
         clinic = current()
         hits = await asyncio.to_thread(lambda: retriever_for(clinic).search(said))
         store = default_clinic_store()
@@ -298,7 +298,7 @@ class Brain:
             """The router's answer, waited for once; its mood and goal apply from then on."""
             if not known:
                 found, ms = await router_task
-                _apply_route(state, before, found)
+                _apply_route(state, found)
                 trace["mood"], trace["goal"] = state.mood, state.goal
                 trace["route"] = {
                     "tool": found.tool,
@@ -369,6 +369,7 @@ class Brain:
 
         if trace["route"] is None:
             await decided()
+        state.mood, state.goal = words  # the router's labels were for this turn only
         save(session, state)
         trace["ms"] = int((time.monotonic() - started) * 1000)
         session.metadata.setdefault("brain_trace", []).append(trace)
