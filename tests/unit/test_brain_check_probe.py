@@ -312,3 +312,117 @@ def test_a_tool_result_for_another_doctor_is_out_of_scope():
     assert check_sentence("ডাক্তার সুলতানা সন্ধ্যা ৬টায় খালি।", g, goal="booking", language="bn").ok
     v = check_sentence("ডাক্তার সুলতানা বিকেল ৫টায় খালি।", g, goal="booking", language="bn")
     assert v.kind == "fact"
+
+
+# --- 5. facilities the clinic has not written ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("না, আমাদের ক্লিনিকে ক্যান্টিন নেই।", "bn"),  # k-unknown
+        ("হ্যাঁ, আমাদের ক্লিনিকে একটি ক্যান্টিন আছে।", "bn"),
+        ("We do have a small canteen here at the clinic.", "en"),  # e-canteen run 2
+        ("There is no pharmacy in the clinic.", "en"),
+        ("ক্লিনিকে লিফট আছে, তৃতীয় তলায় যেতে পারবেন।", "bn"),
+    ],
+)
+def test_a_facility_claim_no_fact_covers_fails(sentence, language):
+    v = verdict(sentence, "ক্যান্টিন আছে?", language=language)
+    assert v.kind == "unsupported", v
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("ক্যান্টিন নিয়ে আমার কাছে নিশ্চিত তথ্য নেই।", "bn"),
+        ("ক্যান্টিন আছে কিনা আমি জানি না।", "bn"),
+        ("I don't have information about a canteen.", "en"),
+        ("I'm not sure whether there is a canteen.", "en"),
+        ("ক্যান্টিন খুঁজছেন?", "bn"),
+    ],
+)
+def test_saying_it_is_not_known_is_not_a_facility_claim(sentence, language):
+    assert verdict(sentence, "ক্যান্টিন আছে?", language=language).ok
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language", "said"),
+    [
+        ("হ্যাঁ, ক্লিনিকের বেসমেন্টে গাড়ি পার্কিং আছে।", "bn", "পার্কিং আছে?"),
+        ("Yes, there is free parking in the basement.", "en", "Is there parking?"),
+        ("না, শুক্রবার ক্লিনিক বন্ধ থাকে।", "bn", "শুক্রবার খোলা?"),
+        ("We are closed on Friday.", "en", "Are you open on Fridays?"),
+    ],
+)
+def test_a_facility_claim_the_facts_cover_passes(sentence, language, said):
+    hits = (hit("parking"), hit("hours"))
+    assert verdict(sentence, said, language=language, hits=hits).ok
+
+
+def test_a_facility_covered_only_by_its_topic_passes():
+    # The English hours text never says "opening hours"; the hit's topic still covers it.
+    hours = hit("hours", "", "Open Saturday to Thursday, 9 am to 9 pm; closed on Friday.")
+    assert verdict(
+        "Yes, we are open on Saturday.", "are you open?", language="en", hits=(hours,)
+    ).ok
+
+
+# --- 6. other scripts in a reply ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "ডাক্তার সুলতানা सोमवार, বুধবার এবং শনিবার দিন বসেন।",  # k-days run 3: Devanagari
+        "ডাক্তার সুলতানা সোমবার বসেন شكرا।",
+        "ডাক্তার সুলতানা সোমবার বসেন спасибо।",
+    ],
+)
+def test_another_script_in_a_bangla_reply_fails_language(sentence):
+    assert verdict(sentence, DAYS_Q).kind == "language"
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "ডাক্তার সুলতানা সোমবার বসেন।",
+        "ডাক্তার সুলতানার ডিগ্রি MBBS এবং DCH।",
+        "ডাক্তার সুলতানা ১০:০০ থেকে 13:00 পর্যন্ত বসেন।",
+    ],
+)
+def test_bengali_latin_digits_and_the_danda_pass_in_a_bangla_reply(sentence):
+    assert verdict(sentence, DAYS_Q).ok
+
+
+def test_another_script_in_an_english_reply_fails_language():
+    assert verdict("Dr Sultana sits on सोमवार.", DAYS_Q, language="en").kind == "language"
+    assert verdict("Dr Sultana sits on Monday.", DAYS_Q, language="en").ok
+    # A Bangla name inside an English sentence stays allowed, as before.
+    assert verdict("Say 'মানুষ' if you would like to talk to a person.", DAYS_Q, language="en").ok
+
+
+# --- 7. a booking push at an information caller -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [
+        ("What time would you like to come?", "en"),  # e-days
+        ("Which day would you like to come in?", "en"),
+        ("When would you like to visit?", "en"),
+        ("When can you come?", "en"),
+        ("What day suits you to see the doctor?", "en"),
+        ("কখন আসতে চান?", "bn"),
+        ("কোন দিন আসবেন?", "bn"),
+        ("আপনি কবে আসতে চান?", "bn"),
+        ("কয়টায় আসবেন?", "bn"),
+        ("কোন দিনে আপনার মত?", "bn"),  # k-days run 1
+        ("কোন দিন আপনার সুবিধা?", "bn"),
+    ],
+)
+def test_asking_when_to_come_is_a_push_at_an_information_caller(sentence, language):
+    v = verdict(sentence, "Which days does the child specialist see patients?", language=language)
+    assert v.kind == "push"
+    said = "সিরিয়াল চাই"
+    assert verdict(sentence, said, language=language, goal="booking").ok

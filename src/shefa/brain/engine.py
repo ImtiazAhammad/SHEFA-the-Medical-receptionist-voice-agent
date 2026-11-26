@@ -35,6 +35,7 @@ from shefa.clinic.registry import current
 from shefa.clinic.store import clinic_today
 from shefa.config.settings import settings
 from shefa.models.base import Language
+from shefa.pipeline import facilities
 from shefa.pipeline.grounding import parse_date, parse_time
 from shefa.pipeline.language_detector import is_emergency
 from shefa.pipeline.replycheck import tidy
@@ -131,6 +132,7 @@ def _grounds(
     grounds = Grounds(caller=said)
     for hit in hits:
         grounds.add(hit.entry.text(state.language))
+        grounds.topics.add(hit.entry.topic)
     if directory:
         grounds.add(directory)
     for earlier in session.metadata.get("brain_grounds", []):
@@ -151,6 +153,26 @@ def _grounds(
     return grounds
 
 
+def _unwritten_facility(said: str, hits: list[Hit], language: str) -> str | None:
+    """The facility the caller asks about when neither the clinic's facility facts (the guided
+    engine's source, `settings.facilities`) nor a knowledge hit of this turn covers it. An
+    emergency is never answered here: the router hands it over."""
+    topic = facilities.asked_topic(said)
+    if topic is None:
+        return None
+    lang = "en" if language == "en" else "bn"
+    if ((settings.facilities.get(topic) or {}).get(lang) or "").strip():
+        return None
+    pattern = facilities.TOPICS[topic][0]
+    for hit in hits:
+        if hit.entry.topic == topic or pattern.search(hit.entry.text_bn + "\n" + hit.entry.text_en):
+            return None
+    spoken = Language.BANGLA if lang == "bn" else Language.ENGLISH
+    if is_emergency(said, spoken):
+        return None
+    return topic
+
+
 def _history(session: CallSession, said: str) -> tuple[list[dict[str, str]], str]:
     """The turns for the prompt, ending with what the caller just said, and the caller's turn
     before this one. The pipeline usually appends the caller's turn before generating."""
@@ -169,13 +191,16 @@ def _history(session: CallSession, said: str) -> tuple[list[dict[str, str]], str
 
 
 def _apply_route(state: CallState, found: Route) -> None:
-    """The router's mood and goal for this turn only; the word rules stay where it gave none.
+    """The router's mood and goal for this turn only; the word rules stay where it gave none,
+    and the word rules' "angry" stands over any router mood.
 
     The turn restores the word rules' mood and goal before saving, so one wrong label never
     sticks to the call (a saved "change" would switch the push check off for good). A question
     along the way never replaces a real goal, and "unknown" or small talk tells nothing new, so
     those keep the goal the words gave."""
-    if found.mood is not None:
+    # The router never says "angry" (rude and angry callers come back "upset"), so angry words
+    # keep the turn angry: either side saying angry is enough.
+    if found.mood is not None and state.mood != "angry":
         state.mood = found.mood
     goal = found.goal
     if goal is None or goal == "unknown":
@@ -300,6 +325,7 @@ class Brain:
             "regenerated": False,
             "safe": None,
             "route": None,
+            "reply_source": "model",
             "ms": 0,
         }
         routing = _Routing(state, trace)
@@ -352,6 +378,23 @@ class Brain:
 
         trace["hits"] = [h.entry.id for h in hits]
         spoken: list[str] = []
+
+        if (topic := _unwritten_facility(said, hits, language)) is not None:
+            # Nothing the clinic wrote covers it: code says it does not know, the way the
+            # guided engine does, and the model never gets the chance to invent a "yes" or "no".
+            # No booking offer: the caller asked for information.
+            text = facilities.answer(said, language, settings.facilities, during_booking=True)
+            trace["reply_source"], trace["facility"] = "facility", topic
+            if text:
+                await speak(text)
+                spoken.append(text)
+            if routing.task is not None:
+                routing.task.cancel()
+            state.mood, state.goal = words
+            save(session, state)
+            trace["ms"] = int((time.monotonic() - started) * 1000)
+            session.metadata.setdefault("brain_trace", []).append(trace)
+            return " ".join(spoken)
 
         async def say_fixed(text: str, kind: str) -> None:
             trace["safe"] = kind

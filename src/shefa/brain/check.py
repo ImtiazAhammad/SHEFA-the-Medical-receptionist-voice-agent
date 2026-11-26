@@ -17,6 +17,7 @@ from functools import lru_cache
 
 from shefa.bangla import bn_number
 from shefa.clinic.names import fold, tokens
+from shefa.pipeline.facilities import TOPICS, asked_topic
 from shefa.pipeline.replycheck import (
     fits_language,
     gives_medical_advice,
@@ -55,6 +56,9 @@ class Grounds:
     # in `texts`. A line of them holds whichever doctor a sentence names unless it names another
     # doctor; a directory or knowledge line holds only for the doctor it names.
     values: list[str] = field(default_factory=list)
+    # Facility topics a knowledge hit covers ("parking", "hours"): its text may not use the
+    # caller's words for the topic ("9 am to 9 pm" says nothing of "opening hours").
+    topics: set[str] = field(default_factory=set)
 
     def add(self, text: str) -> None:
         self.texts.append(text)
@@ -753,6 +757,15 @@ _PUSH = re.compile(
     r"|\bmake an appointment\b",
     re.IGNORECASE,
 )
+# Asking when the caller will come is asking them to book ("What time would you like to come?").
+_WHEN_TO_COME = re.compile(
+    r"\b(?:what|which) (?:time|day|date)\b[^.?!]{0,30}\b(?:come|visit|see the doctor)\b"
+    r"|\bwhen (?:would|do|will|can|could) you (?:like to |want to |prefer to )?(?:come|visit)\b"
+    r"|(?:কখন|কবে|কোন দিনে?|কোন সময়ে?|কয়টায়|কোন বারে?)\s+(?:আপনি\s+)?"
+    r"(?:আসতে চান|আসবেন|আসতে পারবেন|আসা যাবে|দেখাতে চান|দেখাবেন)"
+    r"|কোন (?:দিনে?|সময়ে?) আপনার (?:মত|মতো|সুবিধা)",
+    re.IGNORECASE,
+)
 _ACTIONS = {
     "book": "the booking was made",
     "cancel_booking": "the booking was cancelled",
@@ -843,6 +856,65 @@ def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
     return None
 
 
+# --- facilities -------------------------------------------------------------------------------
+
+# "has / has not": a sentence that names a facility and says whether the clinic has it.
+_HAS = re.compile(
+    r"আছে|আছেন|নেই|নাই|পাবেন|পাওয়া যায়|খোলা|বন্ধ"
+    r"|\b(?:have|has|there is|there's|there are|no|available|open|closed)\b",
+    re.IGNORECASE,
+)
+# Saying the fact is not known is not a claim about the facility.
+_NOT_KNOWN = re.compile(
+    r"জানা নেই|জানি না|তথ্য নেই|নিশ্চিত নই|নিশ্চিত না|বলতে পারছি না|বলতে পারব না"
+    r"|\bdon't know\b|\bdo not know\b|\bnot sure\b|\bno (?:confirmed )?information\b"
+    r"|\b(?:don't|do not) have (?:any |confirmed )?information\b|\bcan(?:'t|not) say\b"
+    r"|\bnot certain\b",
+    re.IGNORECASE,
+)
+
+
+# Ground texts state some topics without the caller's words for them: "open Sat-Thu, closed
+# Fri" is about opening hours.
+_COVERS = {"hours": re.compile(r"\b(?:open|closed)\b|খোলা|বন্ধ", re.IGNORECASE)}
+
+
+def _uncovered_facility(stated: str, grounds: Grounds) -> str | None:
+    """The facility a has/has-not sentence speaks of when no fact covers it: "না, আমাদের
+    ক্লিনিকে ক্যান্টিন নেই" with nothing about a canteen is as invented as a "yes"."""
+    if stated.rstrip().endswith("?") or _NOT_KNOWN.search(stated) or not _HAS.search(stated):
+        return None
+    topic = asked_topic(stated)
+    if topic is None or topic in grounds.topics:
+        return None
+    patterns = [TOPICS[topic][0], *([_COVERS[topic]] if topic in _COVERS else [])]
+    if any(p.search(text) for p in patterns for text in grounds.texts):
+        return None
+    return topic
+
+
+# --- the language ------------------------------------------------------------------------------
+
+
+def _foreign_letter(sentence: str, language: str) -> str | None:
+    """A letter of a script the call's voice cannot read: anything but Bengali or Latin in a
+    Bangla reply ("सोमवार" read by the Bangla voice is noise), anything but Latin in an English
+    one (Bangla there is left to the shared rule, which allows a Bangla name). Digits and
+    punctuation (the danda is in the Devanagari block) are not letters."""
+    del language  # the same two scripts in either call; the share of each is fits_language's
+    for char in sentence:
+        if unicodedata.category(char)[0] not in "LM":
+            continue
+        name = unicodedata.name(char, "")
+        if not name.startswith(("BENGALI", "LATIN", "COMBINING")):
+            return char
+    return None
+
+
+def _fits(sentence: str, language: str) -> bool:
+    return _foreign_letter(sentence, language) is None and fits_language(sentence, language)
+
+
 # --- the check --------------------------------------------------------------------------------
 
 
@@ -882,17 +954,21 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
     # A closing question asks rather than states ("Yes, how else can I help you?"), but what comes
     # before it still states: "হ্যাঁ, এমআরআই আছে, আসবেন?" is judged on "হ্যাঁ, এমআরআই আছে".
     stated = text.rsplit(",", 1)[0] if text.rstrip().endswith("?") else text
+    if topic := _uncovered_facility(stated, grounds):
+        return Verdict(
+            False, "unsupported", f"it says what the clinic has about {topic}, which no fact states"
+        )
     yes_known = known | set().union(*(_code_words(t) for t in grounds.texts))
     if _says_yes(stated) and not _backed_yes(stated, yes_known):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
     if grounds.caller and _parrots(text, grounds, yes_known, ground_numbers):
         return Verdict(False, "unsupported", "it only repeats the caller's own words")
-    if goal == "information" and (m := _PUSH.search(text)):
+    if goal == "information" and (m := _PUSH.search(text) or _WHEN_TO_COME.search(text)):
         return Verdict(
             False,
             "push",
             f'it offers a booking ("{m.group()}") to a caller who only wants information',
         )
-    if not fits_language(text, language):
+    if not _fits(text, language):
         return Verdict(False, "language", f"it is not in the call's language ({language})")
     return Verdict(True)

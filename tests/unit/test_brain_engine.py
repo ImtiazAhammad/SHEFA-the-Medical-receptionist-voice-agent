@@ -184,7 +184,9 @@ def test_a_third_sentence_is_not_spoken():
 
 
 def test_with_a_list_asked_for_the_third_sentence_is_spoken():
-    said = "আপনাদের কোন কোন সেবা আছে?"
+    # Changed in Task 7b: "পার্কিং আছে" now needs a fact about parking, so the caller names it
+    # and the parking entry is found.
+    said = "আপনাদের কোন কোন সেবা আছে, পার্কিং আছে?"
     session = _session(said)
     llm = FakeLLM("জি। পার্কিং আছে। আর কিছু জানতে চান?")
     speak = Recorder()
@@ -233,9 +235,11 @@ def test_a_failure_after_something_was_spoken_stops_without_regenerating():
 
 
 def test_an_unknown_question_with_an_invented_answer_ends_in_unsure():
-    said = "আপনাদের ক্যান্টিন কয়টায় খোলে?"
+    # Changed in Task 7b: a canteen question no fact covers is now answered by code, so the
+    # unknown question is one about a doctor's habits.
+    said = "ডাক্তার সাহেব সকালে কয়টায় আসেন?"
     session = _session(said)
-    llm = FakeLLM("ক্যান্টিন সকাল ৭টায় খোলে।", "ক্যান্টিন সকাল ৮টায় খোলে।")
+    llm = FakeLLM("উনি সকাল ৭টায় আসেন।", "উনি সকাল ৮টায় আসেন।")
     speak = Recorder()
     _turn(session, said, llm, speak)
     assert speak.said == [unsure("bn")]
@@ -491,6 +495,7 @@ def test_state_is_saved_and_the_trace_has_exactly_the_listed_keys(knowledge):
         "regenerated",
         "safe",
         "route",
+        "reply_source",  # added in Task 7b: "model", or "facility" when code answered
         "ms",
     }
     assert trace["turn"] == 1
@@ -892,3 +897,98 @@ def test_hand_over_waits_for_the_router_mood_for_its_reason(acted_brain):
     _turn(session, said, llm, Recorder())
     call, _state = acted_brain.calls[-1]
     assert call.args == {"reason": "angry"}
+
+
+# --- facilities the clinic has not written (Task 7b) --------------------------------------------
+
+
+def test_a_facility_no_fact_covers_is_answered_by_code_without_the_model():
+    from shefa.pipeline import facilities
+
+    said = "আপনাদের ক্লিনিকে কি কোনো ক্যান্টিন আছে?"
+    session = _session(said)
+    llm = FakeLLM("না, আমাদের ক্লিনিকে ক্যান্টিন নেই।", route=route_json())
+    speak = Recorder()
+    spoken = _turn(session, said, llm, speak)
+    expected = facilities.answer(said, "bn", {}, during_booking=True)
+    assert speak.said == [expected] and spoken == expected
+    assert "সিরিয়াল" not in expected  # no booking offer at an information caller
+    assert llm.calls == []
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["reply_source"] == "facility"
+    assert trace["facility"] == "canteen"
+    assert session.metadata["brain"]["turn"] == 1
+
+
+def test_a_facility_in_english_is_answered_in_english():
+    from shefa.pipeline import facilities
+
+    said = "Is there a canteen in the clinic?"
+    session = _session(said)
+    speak = Recorder()
+    _turn(session, said, FakeLLM("We do have a canteen."), speak)
+    assert speak.said == [facilities.answer(said, "en", {}, during_booking=True)]
+
+
+def test_a_facility_the_clinic_wrote_goes_to_the_model(monkeypatch):
+    monkeypatch.setattr(settings, "facilities", {"canteen": {"bn": "নিচতলায় ক্যান্টিন আছে।"}})
+    said = "আপনাদের ক্লিনিকে কি কোনো ক্যান্টিন আছে?"
+    session = _session(said)
+    llm = FakeLLM("জি, বলছি।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["জি, বলছি।"]
+    assert session.metadata["brain_trace"][-1]["reply_source"] == "model"
+
+
+def test_a_facility_a_knowledge_hit_covers_goes_to_the_model():
+    said = "পার্কিং আছে?"
+    session = _session(said)
+    llm = FakeLLM("ক্লিনিকের পেছনে পার্কিং আছে।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["ক্লিনিকের পেছনে পার্কিং আছে।"]
+    assert session.metadata["brain_trace"][-1]["reply_source"] == "model"
+
+
+def test_an_emergency_naming_a_facility_is_not_answered_by_code(acted_brain):
+    said = "আমার বাবা অজ্ঞান হয়ে গেছেন, অ্যাম্বুলেন্স লাগবে!"
+    session = _session(said)
+    llm = FakeLLM("unused", route=route_json("hand_over", "anxious", "change"))
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["ACTED"]
+    assert session.metadata["brain_trace"][-1]["reply_source"] == "model"
+
+
+# --- the call's mood when the router says upset (Task 7b) ---------------------------------------
+
+
+def test_angry_words_keep_the_turn_angry_when_the_router_says_upset():
+    said = "ফালতু!!"
+    session = _session(said)
+    llm = FakeLLM("দুঃখিত।", route=route_json("none", "upset", "complaint"))
+    _turn(session, said, llm, Recorder())
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["mood"] == "angry"
+    assert trace["route"]["mood"] == "upset"
+    saved = session.metadata["brain"]
+    assert (saved["mood"], saved["angry_turns"]) == ("angry", 1)
+
+
+def test_two_angry_turns_count_up_while_the_router_says_upset():
+    session = _session("ফালতু!!")
+    _turn(session, "ফালতু!!", FakeLLM("দুঃখিত।", route=route_json("none", "upset")), Recorder())
+    session.add_turn("assistant", "দুঃখিত।")
+    session.add_turn("user", "বাজে সার্ভিস!!")
+    llm = FakeLLM("দুঃখিত।", route=route_json("none", "upset"))
+    _turn(session, "বাজে সার্ভিস!!", llm, Recorder())
+    assert session.metadata["brain"]["angry_turns"] == 2
+    assert session.metadata["brain_trace"][-1]["mood"] == "angry"
+
+
+def test_a_router_angry_on_calm_words_is_angry_for_the_turn():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json("none", "angry", "information"))
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["mood"] == "angry"
