@@ -1,10 +1,13 @@
-"""Compose the model's prompt: persona, conduct, tools, the caller's state, facts, recent turns.
+"""Compose the model's prompt: persona, conduct, the directory, then this turn's cues and facts.
 
 One leading system message (gemma2 reads that best; see `_speak_tool_result`), then the last few
-user/assistant turns. Prompt text holds literal braces (`TOOL {"name": ...}`), so sections are
-joined as plain strings, never run through `format`. Persona, conduct, tools and the cues are
-never trimmed; history, the directory and the hits give way, in that order, when the budget is
-short.
+user/assistant turns. What stays the same for the whole call comes first (persona, conduct, the
+directory, whether the caller is identified) so vLLM's prefix cache reuses it from turn to turn;
+the 8b probe saw a 68 ms first token on a cached prompt against ~350 ms when the directory came
+after the per-turn parts. The tool protocol is not here: the router (`shefa.brain.router`)
+decides tools. Prompt text can hold literal braces, so sections are joined as plain strings, never
+run through `format`. Persona, conduct and the cues are never trimmed; history, the directory and
+the hits give way, in that order, when the budget is short.
 """
 
 from __future__ import annotations
@@ -55,6 +58,21 @@ GOAL_CUES: dict[str, str] = {
     "unknown": "",
 }
 
+# The brain's directory header: the clinic's own (shefa.clinic.brief.HEADER) also tells the model
+# to "offer to book", which pushed information callers toward a booking.
+DIRECTORY_HEADER = (
+    "## Clinic directory\n"
+    "This is the ONLY source of facts about our doctors. Answer questions about doctors, "
+    "departments, rooms, fees and who sees which problem from it, and never add to it. "
+    "'sees' lists the problems a doctor treats: when a patient describes a problem, name the "
+    "department or doctor whose list fits, and never diagnose. Urgent symptoms are emergencies, "
+    "not a directory question.\n"
+)
+IDENTIFIED = (
+    "The caller is already identified by their phone number: never ask for their number or name "
+    "to look them up."
+)
+
 MIN_HISTORY = 2  # the last turns kept however short the budget is
 MIN_HITS = 2
 _SEP = "\n\n"
@@ -78,18 +96,21 @@ def _system(
     hits: list[Hit],
     directory: str,
     extras: list[str],
+    identified: bool,
 ) -> str:
-    sections = [config["prompt.persona"], config["prompt.conduct"], config["prompt.tools"]]
+    # The same for the whole call: the prefix the server can cache.
+    sections = [config["prompt.persona"], config["prompt.conduct"], directory]
+    if identified:
+        sections.append(IDENTIFIED)
+    # This turn's parts.
+    sections.append("Language: reply in " + ("Bangla" if state.language == "bn" else "English"))
     cues = [c for c in (MOOD_CUES.get(state.mood, ""), GOAL_CUES.get(state.goal, "")) if c]
     if cues:
         sections.append("Caller now: " + " ".join(cues))
-    sections.append("Language: reply in " + ("Bangla" if state.language == "bn" else "English"))
     known = summary(state)
     if known:
         sections.append("Known so far: " + known)
     sections.append(_facts(hits, state.language))
-    if directory:
-        sections.append(directory)
     sections.extend(extras)
     return _SEP.join(s for s in sections if s)
 
@@ -105,8 +126,10 @@ def compose(
     correction: str = "",
     boundary_note: str = "",
     directory_for: Callable[[int], str] | None = None,
+    identified: bool = False,
 ) -> list[dict[str, str]]:
-    """The messages for the model; `directory_for(max_chars)` gives a smaller directory block."""
+    """The messages for the model; `directory_for(max_chars)` gives a smaller directory block;
+    `identified` says the caller is known by caller ID."""
     budget = settings.brain.prompt_budget_tokens
     # The correction goes last so the model reads the reason for the retry right before replying.
     extras = [e for e in (tool_note, boundary_note, correction) if e]
@@ -119,7 +142,7 @@ def compose(
     kept = list(hits)
 
     def build(directory_text: str) -> list[dict[str, str]]:
-        system = _system(state, config, kept, directory_text, extras)
+        system = _system(state, config, kept, directory_text, extras, identified)
         return [{"role": "system", "content": system}, *turns]
 
     messages = build(directory)

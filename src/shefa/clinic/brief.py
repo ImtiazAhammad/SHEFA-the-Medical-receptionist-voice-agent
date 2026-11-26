@@ -83,9 +83,15 @@ def _doctor_line(store: ClinicStore, doctor: dict[str, Any], language: str, *, f
 
 
 def directory_brief(
-    store: ClinicStore, language: str = "en", *, max_chars: int = DEFAULT_MAX_CHARS
+    store: ClinicStore,
+    language: str = "en",
+    *,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    header: str = HEADER,
 ) -> str:
     """The directory block for ``language``; the empty string when the clinic has no doctors.
+
+    ``header`` replaces the instruction line on top (the brain gives its own).
 
     If the full block would exceed ``max_chars`` the optional detail (what each doctor sees,
     fees, notes) is dropped first so a large clinic still fits the model's context.
@@ -94,7 +100,7 @@ def directory_brief(
     if not doctors:
         return ""
     for full in (True, False):
-        lines = [HEADER]
+        lines = [header]
         for department in store.departments():
             members = [d for d in doctors if d["department_id"] == department["id"]]
             if not members:

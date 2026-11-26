@@ -24,7 +24,7 @@ from shefa.bangla import WEEKDAYS_BN
 from shefa.brain import safe
 from shefa.brain.check import Grounds, Verdict, check_sentence
 from shefa.brain.config import call_config
-from shefa.brain.prompt import compose
+from shefa.brain.prompt import DIRECTORY_HEADER, compose
 from shefa.brain.retrieve import retriever_for
 from shefa.brain.router import Route, route
 from shefa.brain.state import Cues, _doctor_named, load, save, track
@@ -275,7 +275,7 @@ class Brain:
         clinic = current()
         hits = await asyncio.to_thread(lambda: retriever_for(clinic).search(said))
         store = default_clinic_store()
-        directory = directory_brief(store, language)
+        directory = directory_brief(store, language, header=DIRECTORY_HEADER)
         grounds = _grounds(session, state, hits, directory, said, today)
 
         trace: dict[str, Any] = {
@@ -330,7 +330,10 @@ class Brain:
                 directory,
                 history,
                 correction=correction,
-                directory_for=lambda n: directory_brief(store, language, max_chars=n),
+                directory_for=lambda n: directory_brief(
+                    store, language, max_chars=n, header=DIRECTORY_HEADER
+                ),
+                identified=bool(session.patient_id),
             )
             out = await self._stream(llm, messages, grounds, state, speak, decided, routed_now)
             trace["verdicts"].extend(out.verdicts)

@@ -345,6 +345,31 @@ def test_a_broken_tool_line_is_regenerated_with_the_plain_words_correction():
     assert session.metadata["brain_trace"][-1]["regenerated"] is True
 
 
+def test_the_reply_prompt_carries_no_tool_protocol():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।")
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    assert "TOOL {" not in _system(llm.calls[0])
+
+
+def test_the_brain_directory_never_says_offer_to_book_and_knows_the_caller():
+    from shefa.brain.prompt import IDENTIFIED
+    from shefa.clinic.brief import HEADER
+
+    clinic = default_clinic_store()
+    dept = clinic.add_department("Cardiology", "হৃদরোগ")
+    clinic.add_doctor("Rahman", dept, name_bn="রহমান")
+    session = _session(FEE_QUESTION)
+    session.patient_id = str(clinic.upsert_patient("01712345678"))
+    llm = FakeLLM("ফি ৮০০ টাকা।")
+    _turn(session, FEE_QUESTION, llm, Recorder())
+    system = _system(llm.calls[0])
+    assert "Rahman" in system
+    assert "offer to book" not in system
+    assert "offer to book" in HEADER  # the guided engine's directory keeps its own wording
+    assert IDENTIFIED in system
+
+
 def test_a_word_that_starts_like_tool_is_spoken():
     said = "Is there parking?"
     session = _session(said)

@@ -7,7 +7,7 @@ import math
 from shefa.brain import prompt
 from shefa.brain.config import defaults
 from shefa.brain.knowledge import Entry
-from shefa.brain.prompt import GOAL_CUES, MOOD_CUES, compose
+from shefa.brain.prompt import _SEP, GOAL_CUES, IDENTIFIED, MOOD_CUES, compose
 from shefa.brain.retrieve import Hit
 from shefa.brain.state import CallState
 from shefa.config.settings import settings
@@ -66,26 +66,54 @@ def test_angry_and_information_cues_appear() -> None:
 
 
 def test_layout_and_language() -> None:
-    state = CallState(language="en", booking={"doctor": "Dr. Rahman"})
+    # Changed in 8c: call-constant parts first (persona, conduct, directory) so the server's prefix
+    # cache reuses them; the per-turn parts after; the tool protocol is no longer in the reply.
+    state = CallState(language="en", mood="angry", booking={"doctor": "Dr. Rahman"})
     text = _system(compose(state, CONFIG, [_hit(7)], "DIRECTORY-BLOCK", [], tool_note="NOTE"))
     order = [
         "PERSONA-TEXT",
         "CONDUCT-TEXT",
-        "TOOL {",
+        "DIRECTORY-BLOCK",
         "Language: reply in English",
+        "Caller now:",
         "Known so far:",
         "Facts you may use:",
-        "DIRECTORY-BLOCK",
         "NOTE",
     ]
     positions = [text.index(p) for p in order]
     assert positions == sorted(positions)
+    assert "TOOL {" not in text
     assert "Language: reply in Bangla" in _system(compose(CallState(), CONFIG, [], "", []))
 
 
+def test_the_fixed_prefix_is_identical_across_turns_of_one_call() -> None:
+    first = _system(compose(CallState(), CONFIG, [_hit(1)], "DIR", _history(2)))
+    second = _system(
+        compose(
+            CallState(language="en", mood="angry", goal="information", booking={"date": "x"}),
+            CONFIG,
+            [_hit(5, en="other fact")],
+            "DIR",
+            _history(4),
+            correction="FIX",
+        )
+    )
+    prefix = _SEP.join(["PERSONA-TEXT", "CONDUCT-TEXT", "DIR"]) + _SEP
+    assert first.startswith(prefix)
+    assert second.startswith(prefix)
+
+
+def test_an_identified_caller_is_never_asked_for_number_or_name() -> None:
+    text = _system(compose(CallState(), CONFIG, [], "DIR", [], identified=True))
+    assert IDENTIFIED in text
+    assert text.index("DIR") < text.index(IDENTIFIED) < text.index("Language:")
+    assert IDENTIFIED not in _system(compose(CallState(), CONFIG, [], "DIR", []))
+
+
 def test_braces_in_prompt_text_survive() -> None:
-    text = _system(compose(CallState(), CONFIG, [], "dir {x}", []))
-    assert '{"name": "<tool>", "args": {...}}' in text
+    config = dict(CONFIG, **{"prompt.persona": 'say {"x": 1}'})
+    text = _system(compose(CallState(), config, [], "dir {x}", []))
+    assert 'say {"x": 1}' in text
     assert "dir {x}" in text
 
 
@@ -160,7 +188,7 @@ def test_over_budget_trims_history_then_directory_then_hits(monkeypatch) -> None
     text = _system(messages)
     assert "PERSONA-TEXT" in text
     assert "CONDUCT-TEXT" in text
-    assert "TOOL {" in text
+    assert "TOOL {" not in text
     assert [m["content"][:5] for m in messages[1:]] == ["turn8", "turn9"]
     assert asked  # the directory was shrunk, not kept whole
     assert big_dir not in text
