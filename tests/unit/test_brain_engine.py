@@ -245,7 +245,8 @@ def test_an_unknown_question_with_an_invented_answer_ends_in_unsure():
     assert speak.said == [unsure("bn")]
     trace = session.metadata["brain_trace"][-1]
     assert trace["hits"] == []
-    assert trace["safe"] == "fact"
+    # Round 4: no doctor is known, so the time has no subject: "unsupported", the same safe line.
+    assert trace["safe"] == "unsupported"
 
 
 def test_an_invented_doctor_name_after_a_title_fails_as_a_fact():
@@ -418,16 +419,21 @@ def test_the_callers_words_never_ground_a_fact():
     assert speak.said == [unsure("bn")]
 
 
-def test_booking_today_and_earlier_tool_results_ground_a_reply():
+def test_booking_today_and_earlier_tool_results_ground_a_reply(example_clinic):
     # Changed in Task 7b fix round 2: the booking's slots (the caller's words) ground nothing,
     # so the doctor and Thursday now come from the tool result that returned them.
+    # Changed in round 4: a day or time needs a subject, and a doctor is one only when the
+    # directory knows them, so the example clinic is loaded and the tool result says whose it is
+    # (as `brain_grounds` entries do).
     said = "রহমান স্যারের সিরিয়াল চাই"
     session = _session(said)
     save(
         session,
         CallState(goal="booking", booking={"doctor": "ডা. রহমান", "date": "2026-11-26"}),
     )
-    session.metadata["brain_grounds"] = ["ডা. রহমান free 2026-11-26 at 17:00"]
+    session.metadata["brain_grounds"] = [
+        {"text": "ডা. রহমান free 2026-11-26 at 17:00", "doctor": "Rahman"}
+    ]
     llm = FakeLLM("আজ বুধবার, ডা. রহমান বৃহস্পতিবার বিকেল ৫টায় খালি আছেন।")
     speak = Recorder()
     _turn(session, said, llm, speak)
@@ -1013,14 +1019,18 @@ def example_clinic():
 def test_e_days_push_is_dropped_for_a_question_naming_a_department(example_clinic):
     said = "Which days does the child specialist see patients?"
     session = _session(said)
+    # Round 4: the reply names the doctor. "child specialist" is no directory word (N6, parked),
+    # so a reply naming nobody has no subject and is refused (pinned in
+    # test_brain_check_matrix), which would stop the stream before the push is checked.
     llm = FakeLLM(
-        "Mondays, Wednesdays and Saturdays. What time would you like to come?",
+        "Dr Sultana sits on Mondays, Wednesdays and Saturdays. What time would you like to come?",
         route=route_json("none", "calm", "information"),
     )
     speak = Recorder()
     _turn(session, said, llm, speak)
-    assert speak.said == ["Mondays, Wednesdays and Saturdays."]
-    assert session.metadata["brain_trace"][-1]["verdicts"] == ["ok", "push"]
+    assert speak.said == ["Dr Sultana sits on Mondays, Wednesdays and Saturdays."]
+    trace = session.metadata["brain_trace"][-1]
+    assert (trace["goal"], trace["verdicts"]) == ("information", ["ok", "push"])
 
 
 @pytest.mark.parametrize(
@@ -1182,9 +1192,10 @@ def test_joined_questions_are_not_a_pure_facility_question(said, example_clinic)
     ("said", "reply", "first"),
     [
         (
+            # Round 4: the reply names the doctor; "heart doctor" is no directory word (N6).
             "I want to know which days the heart doctor sits.",
-            "Tuesdays, Thursdays and Sundays. What time would you like to come?",
-            "Tuesdays, Thursdays and Sundays.",
+            "Dr Rahman sits on Tuesdays, Thursdays and Sundays. What time would you like to come?",
+            "Dr Rahman sits on Tuesdays, Thursdays and Sundays.",
         ),
         (
             "আমি জানতে চাই হৃদরোগের ডাক্তার কবে বসেন।",
@@ -1198,6 +1209,8 @@ def test_a_caller_who_wants_to_know_is_not_pushed(said, reply, first, example_cl
     speak = Recorder()
     _turn(session, said, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
     assert speak.said == [first]
+    trace = session.metadata["brain_trace"][-1]
+    assert (trace["goal"], trace["verdicts"]) == ("information", ["ok", "push"])
 
 
 @pytest.mark.parametrize(
@@ -1213,3 +1226,25 @@ def test_a_fee_confirmed_for_the_calls_doctor_is_spoken(then, reply, example_cli
     speak = Recorder()
     _turn(session, then, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
     assert speak.said == [reply]
+
+
+# --- Task 7b round 4: the subject resolver, end to end -----------------------------------------
+
+
+def test_n2_the_department_asked_next_judges_the_reply_over_the_calls_doctor(example_clinic):
+    first = "ডাক্তার রহমানের ফি কত?"
+    session = _session(first)
+    _turn(session, first, FakeLLM("ডাক্তার রহমানের ফি ৮০০ টাকা।", route=route_json()), Recorder())
+    assert session.metadata["brain"]["booking"]["doctor"] == "Dr. Rahman"
+    session.add_turn("assistant", "ডাক্তার রহমানের ফি ৮০০ টাকা।")
+    # A day, not a fee: this file's knowledge entry says a doctor's visit costs 800, a clinic
+    # line that rightly backs any doctor's fee of 800 (the brief's row 2).
+    then = "শিশু ডাক্তার কবে বসেন?"
+    session.add_turn("user", then)
+    speak = Recorder()
+    rahmans = "মঙ্গলবার, বৃহস্পতিবার আর রবিবার বসেন।"
+    sultanas = "সোমবার, বুধবার আর শনিবার বসেন।"
+    llm = FakeLLM(rahmans, sultanas, route=route_json("none", "calm", "information"))
+    _turn(session, then, llm, speak)
+    assert speak.said == [sultanas]  # Dr Rahman's days were refused for the children's doctor
+    assert session.metadata["brain_trace"][-1]["verdicts"] == ["fact", "ok"]

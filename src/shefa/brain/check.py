@@ -317,11 +317,33 @@ def numbers_in(text: str) -> set[str]:
 
 _APOSTROPHE = re.compile("(?<=[ঀ-৿])['\u2019](?=[ঀ-৿])")  # "ছ'টা" is ছটা
 
+# "সাড়ে ৩ হাজার" is 3500 and "সাড়ে তিনশো" 350; "দেড়শো" 150, "আড়াই হাজার" 2500. A half before
+# a hundred or a thousand is a number, never the time 3:30.
+_SARE, _DER, _ARAI = (_norm(w) for w in ("সাড়ে", "দেড়", "আড়াই"))
+_HUNDRED_WORDS = "|".join(_norm(w) for w in ("হাজার", "শত", "শো", "শ"))
+_HALF_NUMBER = re.compile(
+    _B
+    + rf"(?:{_SARE}\s+([0-9]+|[ঀ-৿]+?)\s*|({_DER}|{_ARAI})\s*)({_HUNDRED_WORDS})"
+    + _E
+)
+
+
+def _halves(text: str) -> str:
+    def value(m: re.Match[str]) -> str:
+        count, half, unit = m.groups()
+        size = 1000 if unit == _BN_THOUSAND else 100
+        if half:
+            return f" {size * (3 if half == _DER else 5) // 2} "
+        n = int(count) if count.isdigit() else _BN_UNITS.get(count)
+        return f" {n * size + size // 2} " if n else m.group()
+
+    return _HALF_NUMBER.sub(value, text)
+
 
 # Ground texts repeat for every sentence of a turn and the word regex is large: remember them.
 @lru_cache(maxsize=512)
 def _numbers(text: str) -> frozenset[str]:
-    text = _APOSTROPHE.sub("", _norm(text).translate(_TO_ASCII))
+    text = _halves(_APOSTROPHE.sub("", _norm(text).translate(_TO_ASCII)))
     found = {str(n) for n in _spoken(text)}
     for m in _CLOCK.finditer(text):
         hour = int(m.group(1))
@@ -528,10 +550,6 @@ _TODAY_SAID = re.compile(_B + r"(?:আজ|আজকে)" + _E + r"|\btoday\b", r
 _TODAY_ONLY_WORDS = re.compile(
     _B + r"(?:আজ|আজকে|তো|হলো|হল)" + _E + r"|\b(?:today|is|it's|it is)\b", re.IGNORECASE
 )
-# A doctor the call is about, meant without a name: one the facts cannot have named.
-_CALL_DOCTOR_UNKNOWN = frozenset({"\0unknown doctor"})
-
-
 def _only_today(clause: str) -> bool:
     """The clause only says today's weekday: "আজ শনিবার", never "আজ শনিবার বসেন"."""
     rest = _TODAY_ONLY_WORDS.sub(" ", clause)
@@ -540,120 +558,198 @@ def _only_today(clause: str) -> bool:
     return bool(_TODAY_SAID.search(clause)) and not re.sub(r"[\s,।.!?'’]+", "", rest)
 
 
-def _call_doctor(grounds: Grounds, groups: list[frozenset[str]]) -> set[frozenset[str]]:
-    """The doctor "উনি/he/she" means: the call's doctor, else one no fact can back."""
-    found = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
-    return found or {_CALL_DOCTOR_UNKNOWN}
-
-
 def _clauses(text: str) -> list[str]:
     return [c for c in _CLAUSE_SPLIT.split(text) if c.strip()]
 
 
-def _clause_doctors(
-    text: str, grounds: Grounds
-) -> tuple[list[str], list[set[frozenset[str]]], bool]:
-    """The clauses, the doctors each is about, and whether those came from the call alone.
+# --- whose fact a clause states -----------------------------------------------------------------
 
-    A clause names doctors (by name, title or department); "উনি/he/she" means the nearest
-    doctor named earlier in the sentence, else the call's doctor (none known: a doctor no fact
-    can back); any other clause takes its neighbour's. A sentence naming none is about the
-    call's doctor when there is one (empty: about no doctor)."""
+# A clause about the clinic itself names it, or what it is open for.
+_CLINIC_WORD = re.compile(r"খোলা|বন্ধ|ক্লিনিক|\b(?:open|closed|clinic|hours)\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class _Subject:
+    """Whose facts one clause is checked against: doctors (one, or a department's), the clinic,
+    or nobody known (`resolved` false)."""
+
+    doctors: frozenset[frozenset[str]] = frozenset()
+    clinic: bool = False
+
+    @property
+    def resolved(self) -> bool:
+        return bool(self.doctors) or self.clinic
+
+
+def _subjects(text: str, grounds: Grounds) -> list[tuple[str, _Subject]]:
+    """Each clause with its one subject, the first of:
+
+    1. a doctor the clause names, with a title or without, or through a department;
+    2. the nearest doctor named earlier in the sentence (a pronoun clause too); for a clause
+       without a pronoun, else the nearest named later ("On Monday, Dr Rahman sits.");
+    3. a doctor or department the caller's current line names ("শিশু ডাক্তারের ফি কত?");
+    4. the call's doctor (`Grounds.doctor`);
+    5. the clinic, when the clause has a clinic word (খোলা, বন্ধ, ক্লিনিক, open, closed, ...);
+    6. else nobody: the clause's days, times and doctors' numbers are refused.
+
+    The caller's line only chooses whose facts a clause is checked against; it grounds none."""
     groups = _doctor_groups(grounds)
     departments = _departments(grounds, groups)
     clauses = _clauses(text)
     named = [_doctors_in(c, groups, departments) for c in clauses]
-    own: list[set[frozenset[str]]] = []
-    for i, clause in enumerate(clauses):
-        if named[i]:
-            own.append(named[i])
-        elif _PRONOUN.search(clause):
-            earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), None)
-            own.append(earlier or _call_doctor(grounds, groups))
-        else:
-            own.append(set())
-    if any(own):
-        filled = [
-            own[i]
-            or next(
-                (own[j] for j in [*range(i - 1, -1, -1), *range(i + 1, len(clauses))] if own[j]),
-                set(),
-            )
-            for i in range(len(clauses))
-        ]
-        return clauses, filled, False
+    caller = _doctors_in(grounds.caller, groups, departments) if grounds.caller else set()
     call = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
-    return clauses, [set(call) for _c in clauses], bool(call)
-
-
-def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
-    """Each clause with the grounds its days, times and numbers may rest on.
-
-    A sentence about no doctor rests on every ground. Otherwise each clause rests on the lines
-    of its doctors (see `_clause_doctors`): their directory line, knowledge entries and tool
-    results naming them, and the call values that are theirs or nobody's; one about the call's
-    doctor only because it names none ("জি, ৮০০ টাকা।") also on the clinic's lines that name no
-    doctor. Today's weekday is not a doctor's sitting day ("ডাক্তার রহমান আজ শনিবার বসেন" is wrong
-    on a Saturday when he sits Sunday); a clause that only says what day today is ("আজ শনিবার,
-    ...") may still name it."""
-    clauses, doctors_of, implicit = _clause_doctors(text, grounds)
-    if not any(doctors_of):
-        return [(text, grounds.texts)]
-    groups = _doctor_groups(grounds)
-    everyone = set().union(*groups) if groups else set()
-    values = {id(v.text) for v in grounds.values}
     out = []
-    for clause, doctors in zip(clauses, doctors_of, strict=True):
-        names = set().union(*doctors)
-        others = set().union(*(g for g in groups if g not in doctors))
-        lines = [
-            line
-            for t in grounds.texts
-            if id(t) not in values
-            for line in t.splitlines()
-            if names & _ground_words([line])
-            or (implicit and not everyone & _ground_words([line]))
-        ]
-        for value in grounds.values:
-            if value.today:
-                if _only_today(clause):
-                    lines.append(value.text)
-                continue
-            belongs = {fold(w) for w in _words(value.doctor)}
-            if value.doctor and not belongs & names:
-                continue
-            lines.extend(
-                line for line in value.text.splitlines() if not others & _ground_words([line])
-            )
-        out.append((clause, lines))
+    for i, clause in enumerate(clauses):
+        earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), set())
+        later = (
+            set()
+            if _PRONOUN.search(clause)
+            else next((named[j] for j in range(i + 1, len(clauses)) if named[j]), set())
+        )
+        doctors = named[i] or earlier or later or caller or call
+        clinic = not doctors and bool(_CLINIC_WORD.search(clause))
+        out.append((clause, _Subject(frozenset(doctors), clinic)))
     return out
 
 
-def _doctors_number(text: str, grounds: Grounds) -> str | None:
-    """A number only a doctor's lines hold, in a sentence about no doctor with no doctor known
-    on the call: "ফলো-আপ ফি ৫০০ টাকা।" is one doctor's fee, and which one the sentence never
-    says. A clinic line (a knowledge entry, a tool result naming no doctor) may still hold it
-    ("রিপোর্ট দেখাতে ৩০০ টাকা")."""
-    _clauses_, doctors_of, _implicit = _clause_doctors(text, grounds)
-    if any(doctors_of):
-        return None  # checked against that doctor's own lines
+def _fact_lines(grounds: Grounds) -> list[tuple[str, set[str]]]:
+    """Each line of the clinic's own texts (directory, knowledge hits) with its words."""
+    values = {id(v.text) for v in grounds.values}
+    return [
+        (line, _ground_words([line]))
+        for t in grounds.texts
+        if id(t) not in values
+        for line in t.splitlines()
+    ]
+
+
+def _own_lines(grounds: Grounds, names: set[str]) -> list[str]:
+    """The clinic's lines that name one of these doctors' name words."""
+    return [line for line, words in _fact_lines(grounds) if names & words]
+
+
+def _scope(clause: str, subject: _Subject, grounds: Grounds) -> tuple[list[str], list[str]]:
+    """(own, wider): what the clause's days, times and hours may rest on, and what its other
+    numbers may rest on besides.
+
+    - A doctor subject: own is that doctor's lines and the call values that are theirs or
+      nobody's; wider is the clinic's lines that name no doctor (a knowledge fee).
+    - The clinic: own is the lines naming no doctor and nobody's values; wider adds nothing.
+    - Nobody: own is empty, so any day, time or hour fails; wider is the lines naming no doctor
+      and nobody's values (999, the caller's phone, a clinic price).
+
+    Today's weekday is no doctor's sitting day; it backs only a clause that just says what day
+    today is ("আজ শনিবার, ...")."""
     groups = _doctor_groups(grounds)
     everyone = set().union(*groups) if groups else set()
-    clinic = {
-        n
-        for t in grounds.texts
-        for line in t.splitlines()
-        if not everyone & _ground_words([line])
-        for n in numbers_in(line)
-    }
-    for number in sorted(numbers_in(_without_clocks(text)) - clinic, key=int):
-        return number
+    names = set().union(*subject.doctors)
+    lines = _fact_lines(grounds)
+    clinic = [line for line, words in lines if not everyone & words]
+    if subject.doctors:
+        own, wider = [line for line, words in lines if names & words], clinic
+    elif subject.clinic:
+        own, wider = clinic, []
+    else:
+        own, wider = [], clinic
+    others = set().union(*(g for g in groups if g not in subject.doctors))
+    values = own if subject.resolved else wider
+    for value in grounds.values:
+        if value.today:
+            if _only_today(clause):
+                own.append(value.text)
+            continue
+        if value.doctor and not {fold(w) for w in _words(value.doctor)} & names:
+            continue
+        values.extend(
+            line for line in value.text.splitlines() if not others & _ground_words([line])
+        )
+    return own, wider
+
+
+# A clock hour said bare ("৯টায়", "at 9", "four o'clock") is a time, not a fee: it rests on the
+# subject's own lines, never on the clinic's hours.
+_HOUR_ENDINGS = "|".join(_norm(e) for e in _split("টায় টার টাতে টা"))
+_BN_HOUR_WORD = re.compile(_B + rf"(([0-9]{{1,2}}|[ঀ-৿]+?)(?:{_HOUR_ENDINGS})){_E}")
+_EN_HOUR_WORD = re.compile(
+    r"\b((?:[0-9]{1,2}|[A-Za-z]+)\s+o'?clock)\b"
+    r"|\b(?:at|from|until|till|by)\s+([0-9]{1,2})\b(?![:.]?[0-9])",
+    re.IGNORECASE,
+)
+
+
+def _hour_words(plain: str) -> dict[str, str]:
+    """Each bare clock hour of a clause with its times removed, as number -> words said."""
+    found: dict[str, str] = {}
+    for m in _BN_HOUR_WORD.finditer(plain):
+        stem = m.group(2)
+        # The stem itself is the number ("৯", "ছয়", "ছ"): "তিনঘণ্টা" is three hours, no clock.
+        if not (stem.isdigit() or _bn_stem(stem, True) or _clock_stem(stem)):
+            continue
+        for n in numbers_in(m.group(1)):
+            found.setdefault(n, m.group(1))
+    for m in _EN_HOUR_WORD.finditer(plain):
+        word = m.group(1) or m.group(2)
+        for n in numbers_in(word):
+            found.setdefault(n, word)
+    return found
+
+
+# A doctor's sitting claim: every number in it is a day's hour or a time, so it rests on the
+# doctor's own lines only ("Dr Rahman sits from nine" must not lean on the clinic's 9 am).
+_SITS = re.compile(
+    _B + r"(?:বসেন|বসবেন|থাকেন|থাকবেন)" + _E + r"|\bsits?\b|\b(?:is|are) available\b",
+    re.IGNORECASE,
+)
+
+
+def _numbers_of(texts: list[str]) -> set[str]:
+    return set().union(*(numbers_in(t) for t in texts)) if texts else set()
+
+
+def _unsaid_subject(what: str) -> Verdict:
+    return Verdict(
+        False,
+        "unsupported",
+        f"it says {what} without saying which doctor (or that it is the clinic)",
+    )
+
+
+def _clause_fault(clause: str, subject: _Subject, grounds: Grounds) -> Verdict | None:
+    """The first number, time or day of the clause its subject's facts do not hold."""
+    own, wider = _scope(clause, subject, grounds)
+    sitting = bool(_SITS.search(clause)) and not subject.clinic
+    if sitting:
+        wider = []
+    plain = _without_clocks(clause)
+    hours = _hour_words(plain)
+    for number in sorted(numbers_in(plain) - set(hours) - _numbers_of(own + wider), key=int):
+        if not subject.resolved and (sitting or number in _numbers_of(_doctor_lines(grounds))):
+            return Verdict(
+                False,
+                "unsupported",
+                f"it says {number}, which only a doctor's facts state, without saying which doctor",
+            )
+        return Verdict(False, "fact", f"the number {number} is not in the facts")
+    own_numbers = _numbers_of(own)
+    for number, words in sorted(hours.items()):
+        if number not in own_numbers:
+            return _unsaid_subject(words) if not subject.resolved else _fact("time", words)
+    if time := _unknown_time(clause, own):
+        return _unsaid_subject(time) if not subject.resolved else _fact("time", time)
+    if day := _unknown_day(clause, own):
+        return _unsaid_subject(day) if not subject.resolved else _fact("day", day)
     return None
 
 
-def _scope_lines(text: str, grounds: Grounds) -> list[str]:
-    """Every line any clause of the sentence may rest on."""
-    return [line for _clause, lines in _scopes(text, grounds) for line in lines]
+def _fact(what: str, said: str) -> Verdict:
+    return Verdict(False, "fact", f"the {what} {said} is not in the facts")
+
+
+def _doctor_lines(grounds: Grounds) -> list[str]:
+    groups = _doctor_groups(grounds)
+    everyone = set().union(*groups) if groups else set()
+    return [line for line, words in _fact_lines(grounds) if everyone & words]
 
 
 # --- days and times of day ---------------------------------------------------------------------
@@ -777,12 +873,31 @@ def _minute(word: str) -> int | None:
     return None
 
 
+_BEFORE_HUNDREDS = re.compile(rf"\s*(?:{_HUNDRED_WORDS}){_E}")
+# দেড়টা is 1:30 and আড়াইটা 2:30.
+_HALF_HOURS = {_DER: (1, 30), _ARAI: (2, 30)}
+_HOUR_SUFFIXES = tuple(_norm(e) for e in _split("টায় টার টাতে টা"))
+
+
+def _half_hour_word(word: str | None) -> tuple[int, int] | None:
+    for ending in _HOUR_SUFFIXES:
+        if word and word.endswith(ending) and word[: -len(ending)] in _HALF_HOURS:
+            return _HALF_HOURS[word[: -len(ending)]]
+    return None
+
+
 def _said_times(text: str) -> list[tuple[str, frozenset[int], int, tuple[int, int]]]:
     """(phrase, its 24-hour hours, its minute, its span) for each time said with a part of the
     day; an hour and minute no reading makes plausible give no hours."""
     said = []
     for m in _BN_TIME.finditer(text):
         period, half, digits, minutes, word, spoken = m.groups()
+        if half and _BEFORE_HUNDREDS.match(text, m.end()):
+            continue  # "সাড়ে ৩ হাজার" is a number
+        if halves := _half_hour_word(word):
+            hours = frozenset(_hours_24(halves[0], _PERIODS[_norm(period).lower()]))
+            said.append((m.group(), hours, halves[1], m.span()))
+            continue
         hour = _hour(digits or word)
         if hour is None:
             continue
@@ -821,6 +936,11 @@ def _said_times(text: str) -> list[tuple[str, frozenset[int], int, tuple[int, in
     # are still a time, read either way round the clock; the minutes are never a bare number.
     for m in _BN_BARE_TIME.finditer(text):
         half, digits, minutes, word, spoken = m.groups()
+        if not free(m.span()) or (half and _BEFORE_HUNDREDS.match(text, m.end())):
+            continue
+        if halves := _half_hour_word(word):
+            said.append((m.group(), _readings(halves[0], ""), halves[1], m.span()))
+            continue
         hour = _hour(digits or word)
         if hour is None or not free(m.span()) or not (half or minutes or spoken):
             continue
@@ -1041,15 +1161,8 @@ def _doctor_claim(text: str, grounds: Grounds) -> Verdict | bool | None:
     if not doctors:
         return None  # "হ্যাঁ, মহিলা ডাক্তার আছেন": the yes rule judges it
     negated = bool(_NEGATED_CLAIM.search(text))
-    values = {id(v.text) for v in grounds.values}
     for doctor in doctors:
-        lines = [
-            line
-            for t in grounds.texts
-            if id(t) not in values
-            for line in t.splitlines()
-            if doctor & _ground_words([line])
-        ]
+        lines = _own_lines(grounds, set(doctor))
         codes = set().union(*(_codes(line) for line in lines)) if lines else set()
         if any((c in codes) == negated for c in claimed):
             return Verdict(
@@ -1193,6 +1306,14 @@ _WHEN_TO_COME = re.compile(
     r"|(?:আসা|আসতে পারা) (?:কি )?(?:সম্ভব|যাবে)",
     re.IGNORECASE,
 )
+
+
+def offers_booking(sentence: str) -> bool:
+    """The sentence asks the caller to book or to say when they will come."""
+    text = _norm(sentence)
+    return bool(_PUSH.search(text) or _WHEN_TO_COME.search(text))
+
+
 _ACTIONS = {
     "book": "the booking was made",
     "cancel_booking": "the booking was cancelled",
@@ -1402,20 +1523,9 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             )
     if claim := _claim(text, grounds.succeeded):
         return claim
-    for clause, scope in _scopes(text, grounds):
-        scope_numbers = set().union(*(numbers_in(t) for t in scope)) if scope else set()
-        for number in sorted(numbers_in(_without_clocks(clause)) - scope_numbers, key=int):
-            return Verdict(False, "fact", f"the number {number} is not in the facts")
-        if time := _unknown_time(clause, scope):
-            return Verdict(False, "fact", f"the time {time} is not in the facts")
-        if day := _unknown_day(clause, scope):
-            return Verdict(False, "fact", f"the day {day} is not in the facts")
-    if number := _doctors_number(text, grounds):
-        return Verdict(
-            False,
-            "unsupported",
-            f"it says {number}, which only a doctor's facts state, without saying which doctor",
-        )
+    for clause, subject in _subjects(text, grounds):
+        if fault := _clause_fault(clause, subject, grounds):
+            return fault
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
     if day := _open_on_a_closed_day(text, grounds.texts):
@@ -1432,7 +1542,7 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
         )
     # A yes about named doctors rests on their own codes; one naming none on any doctor's.
     named = _doctors_in(stated, _doctor_groups(grounds))
-    code_texts = _scope_lines(stated, grounds) if named else grounds.texts
+    code_texts = _own_lines(grounds, set().union(*named)) if named else grounds.texts
     if unsupported_claim(stated) and not _backed_yes(stated, known | _code_words(code_texts)):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
     if grounds.caller and _parrots(text, grounds, claim_ok is True):

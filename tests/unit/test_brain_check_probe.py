@@ -226,7 +226,7 @@ def test_a_time_not_in_the_facts_still_fails(ground, sentence, language):
 @pytest.mark.parametrize(
     "sentence",
     [
-        "We close at 21:15.",
+        "The clinic closes at 21:15.",  # round 4: "We close" has no clinic word
         "আমরা ২১:১২ পর্যন্ত খোলা।",
         "We are open until 21:20.",
         "We are open until 21:30.",
@@ -249,16 +249,23 @@ def test_clock_minutes_must_match_a_ground_time_with_the_directory_loaded(ground
             "ক্লিনিক কয়টায় খোলে বলেন।",
             "bn",
         ),
-        (
-            "We are open Saturday to Thursday, from nine in the morning to nine in the evening.",
-            "What are your opening hours?",
-            "en",
-        ),
     ],
 )
 def test_probe_opening_hours_pass(sentence, said, language):
     v = verdict(sentence, said, language=language, hits=(hit("hours"),))
     assert v.ok, v.reason
+
+
+def test_e_hours_clause_after_the_comma_has_no_subject():
+    # Round 4, a known false refusal: the subject rule gives the clinic only to a clause with a
+    # clinic word, and "from nine in the morning ..." after the comma has none.
+    v = verdict(
+        "We are open Saturday to Thursday, from nine in the morning to nine in the evening.",
+        "What are your opening hours?",
+        language="en",
+        hits=(hit("hours"),),
+    )
+    assert v.kind == "unsupported", v
 
 
 def test_probe_wrong_closing_hour_fails():
@@ -268,6 +275,9 @@ def test_probe_wrong_closing_hour_fails():
         language="en",
         hits=(hit("hours"),),
     )
+    # Round 4: the clause after the comma has no clinic word, so no subject (unsupported).
+    assert not v.ok
+    v = verdict("The clinic is open 9 am to 5 pm.", "Hours?", language="en", hits=(hit("hours"),))
     assert v.kind == "fact"
 
 
@@ -305,8 +315,10 @@ def test_a_named_doctors_true_facts_pass(sentence):
     assert verdict(sentence, DAYS_Q, language=language).ok
 
 
-def test_no_doctor_keeps_the_whole_grounds_and_several_split_by_clause():
-    assert verdict("রবিবারে আমাদের ডাক্তাররা বসেন।", "কোন দিন খোলা?").ok
+def test_no_doctor_is_refused_and_several_split_by_clause():
+    # Round 4: a day with no doctor and no clinic word has no subject; it used to rest on the
+    # whole grounds.
+    assert verdict("রবিবারে আমাদের ডাক্তাররা বসেন।", "কোন দিন খোলা?").kind == "unsupported"
     # Changed in fix round 1: this used to pass (whole grounds for several doctors), though
     # Dr Sultana does not sit on Sunday. Each clause is now checked against the doctors it names.
     both = "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন।"
@@ -638,7 +650,9 @@ def test_a_facility_placed_with_no_fact_fails(sentence, language):
     [("Would you like to come on Monday?", "en"), ("আপনি কি সোমবার আসবেন?", "bn")],
 )
 def test_more_when_to_come_forms_are_a_push(sentence, language):
-    assert verdict(sentence, "Which days?", language=language).kind == "push"
+    # Round 4: the call is about Dr Sultana (Mondays), so the day has a subject.
+    sultana = {"doctor": "Sultana"}
+    assert verdict(sentence, "Which days?", language=language, booking=sultana).kind == "push"
 
 
 # --- fix round 1, second pass ---------------------------------------------------------------------
@@ -654,8 +668,8 @@ def test_english_number_words_joined_by_and_stay_one_number_in_a_named_doctor_se
 def test_a_clock_time_with_minutes_does_not_ground_the_whole_hour():
     from shefa.brain.check import Grounds
 
-    g = Grounds()
-    g.add_value("18:30")
+    g = Grounds(texts=["- Dr Rahman / ডাক্তার রহমান - Sun"], doctor="Rahman")
+    g.add_value("18:30", doctor="Rahman")  # a tool result; round 4: a time needs a subject
     assert check_sentence("We meet at 18:00.", g, goal="x", language="en").kind == "fact"
     assert check_sentence("We meet at 18:30.", g, goal="x", language="en").ok
 
@@ -768,7 +782,7 @@ def test_a_pronoun_clause_is_scoped_to_the_calls_doctor():
     assert verdict("উনি শনিবার আর সোমবার বসেন।", said, booking=rahman).kind == "fact"
     assert verdict("উনার ফি ৬০০ টাকা।", said, booking=rahman).kind == "fact"
     assert verdict("উনি রবিবার, মঙ্গলবার ও বৃহস্পতিবার বসেন।", said, booking=rahman).ok
-    assert verdict("উনি শনিবার বসেন।", "কবে?").kind == "fact"  # no doctor known: fail closed
+    assert verdict("উনি শনিবার বসেন।", "কবে?").kind == "unsupported"  # no doctor known
 
 
 @pytest.mark.parametrize(
@@ -801,7 +815,9 @@ def test_ampersand_and_a_bare_comma_split_clauses(sentence, language):
 
 
 def test_shall_we_see_you_is_a_push():
-    assert verdict("Shall we see you on Monday?", "Which days?", language="en").kind == "push"
+    sultana = {"doctor": "Sultana"}  # round 4: the day needs a subject
+    v = verdict("Shall we see you on Monday?", "Which days?", language="en", booking=sultana)
+    assert v.kind == "push"
 
 
 # --- fix round 3 (task-7b-rereview-2.md) ---------------------------------------------------------
@@ -811,13 +827,13 @@ def test_shall_we_see_you_is_a_push():
     ("sentence", "language"),
     [
         ("ক্লিনিক ৯টা ১৫ মিনিট পর্যন্ত খোলা।", "bn"),
-        ("We close at 9.15.", "en"),
-        ("We close at nine fifteen.", "en"),
-        ("We close at quarter past nine at night.", "en"),
-        ("We close at half past nine at night.", "en"),
-        ("We close at quarter to nine at night.", "en"),
-        ("We close at half past nine.", "en"),
-    ],
+        ("The clinic closes at 9.15.", "en"),
+        ("The clinic closes at nine fifteen.", "en"),
+        ("The clinic closes at quarter past nine at night.", "en"),
+        ("The clinic closes at half past nine at night.", "en"),
+        ("The clinic closes at quarter to nine at night.", "en"),
+        ("The clinic closes at half past nine.", "en"),
+    ],  # round 4: "The clinic", since "We close" has no clinic word, so no subject
 )
 def test_minutes_without_a_part_of_the_day_are_a_whole_time(sentence, language):
     v = verdict(sentence, "কখন বন্ধ?", language=language, hits=(hit("hours"),))
@@ -890,4 +906,66 @@ def test_a_slash_splits_doctors():
 
 
 def test_is_coming_on_monday_possible_is_a_push():
-    assert verdict("সোমবার কি আসা সম্ভব?", "কবে বসেন?").kind == "push"
+    sultana = {"doctor": "Sultana"}  # round 4: the day needs a subject
+    assert verdict("সোমবার কি আসা সম্ভব?", "কবে বসেন?", booking=sultana).kind == "push"
+
+
+# --- Task 7b round 4: N7 and N3 ----------------------------------------------------------------
+
+
+def _norm_nfd(text: str) -> str:
+    import unicodedata
+
+    return unicodedata.normalize("NFD", text)
+
+
+@pytest.mark.parametrize("decompose", [False, True], ids=["nfc", "nfd"])
+def test_n7_half_thousands_and_hundreds_are_numbers_not_times(decompose):
+    from shefa.brain.check import numbers_in
+
+    form = _norm_nfd if decompose else str
+    assert numbers_in(form("সাড়ে ৩ হাজার টাকা")) == {"3500"}
+    assert numbers_in(form("সাড়ে তিন হাজার টাকা")) == {"3500"}
+    assert numbers_in(form("সাড়ে তিনশো টাকা")) == {"350"}
+    assert numbers_in(form("দেড়শো টাকা")) == {"150"}
+    assert numbers_in(form("আড়াইশো টাকা")) == {"250"}
+    assert numbers_in(form("দেড় হাজার টাকা")) == {"1500"}
+    assert numbers_in(form("আড়াই হাজার টাকা")) == {"2500"}
+
+
+def test_n7_a_true_half_thousand_fee_passes():
+    entry = hit("fee", "অপারেশনের প্যাকেজ ৩৫০০ টাকা।", "The operation package is 3500 taka.")
+    assert verdict("অপারেশনের প্যাকেজ সাড়ে ৩ হাজার টাকা।", "প্যাকেজ কত?", hits=(entry,)).ok
+    v = verdict("অপারেশনের প্যাকেজ সাড়ে ৪ হাজার টাকা।", "প্যাকেজ কত?", hits=(entry,))
+    assert v.kind == "fact"
+
+
+def _sultana_until(end: str) -> dict:
+    loaded = yaml.safe_load(CLINIC_FILE.read_text(encoding="utf-8"))
+    for department in loaded["departments"]:
+        for doctor in department["doctors"]:
+            if doctor["name"] == "Sultana":
+                doctor["schedule"][0]["end"] = end
+    return loaded
+
+
+@pytest.mark.parametrize("decompose", [False, True], ids=["nfc", "nfd"])
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "ডাক্তার সুলতানা দুপুর আড়াইটা পর্যন্ত বসেন।",
+        "ডাক্তার সুলতানা আড়াইটা পর্যন্ত বসেন।",
+    ],
+)
+def test_n3_half_past_two_is_a_time_checked_whole(sentence, decompose):
+    sentence = _norm_nfd(sentence) if decompose else sentence
+    assert verdict(sentence, "কতক্ষণ বসেন?").kind == "fact"  # she ends at 13:00
+    assert verdict(sentence, "কতক্ষণ বসেন?", clinic=_sultana_until("14:30")).ok
+
+
+@pytest.mark.parametrize("decompose", [False, True], ids=["nfc", "nfd"])
+def test_n3_half_past_one_is_a_time_checked_whole(decompose):
+    sentence = "ডাক্তার সুলতানা দুপুর দেড়টা পর্যন্ত বসেন।"
+    sentence = _norm_nfd(sentence) if decompose else sentence
+    assert verdict(sentence, "কতক্ষণ বসেন?").kind == "fact"
+    assert verdict(sentence, "কতক্ষণ বসেন?", clinic=_sultana_until("13:30")).ok

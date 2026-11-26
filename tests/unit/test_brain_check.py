@@ -24,6 +24,14 @@ def check(sentence: str, g: Grounds | None = None, *, goal: str = "unknown", lan
     return check_sentence(sentence, g or grounds(), goal=goal, language=language)
 
 
+def sultanas(text: str, *, succeeded: set[str] | None = None) -> Grounds:
+    """`text` as Dr Sultana's directory line, on a call about her. Since round 4 a day or time
+    with no subject is refused, so a test about how days and times are read gives them one."""
+    g = grounds(f"- Dr Sultana / ডাক্তার সুলতানা - {text}", succeeded=succeeded)
+    g.doctor = "Dr. Sultana"
+    return g
+
+
 # --- numbers_in ------------------------------------------------------------------------------
 
 
@@ -94,7 +102,7 @@ def test_the_callers_guess_never_grounds_a_fact():
 
 
 def test_a_clock_time_grounds_the_spoken_evening_hour_only():
-    g = grounds("evening slots from 18:00")
+    g = sultanas("evening slots from 18:00")
     assert check("সন্ধ্যা ছয়টায় আসুন।", g).ok
     assert check("সাতটায় আসুন।", g).kind == "fact"
 
@@ -581,14 +589,14 @@ def test_a_weekday_range_in_the_grounds_covers_its_days():
 
 
 def test_a_clock_hour_with_a_period_word_must_match_the_period():
-    g = grounds("evening slots from 18:00")
+    g = sultanas("evening slots from 18:00")
     assert check("সকাল ছয়টায় আসুন।", g).kind == "fact"
     assert check("সন্ধ্যা ছয়টায় আসুন।", g).ok
     assert check("সন্ধ্যা ৬টায় আসুন।", g).ok
     assert check("Come at six in the morning.", g, language="en").kind == "fact"
     assert check("Come at 6 in the evening.", g, language="en").ok
-    assert check("সকাল দশটায় আসুন।", grounds(DIRECTORY_LINE)).ok
-    assert check("রাত দশটায় আসুন।", grounds(DIRECTORY_LINE)).kind == "fact"
+    assert check("সকাল দশটায় আসুন।", sultanas(DIRECTORY_LINE)).ok
+    assert check("রাত দশটায় আসুন।", sultanas(DIRECTORY_LINE)).kind == "fact"
 
 
 # --- review fix round 2 -----------------------------------------------------------------------
@@ -633,9 +641,9 @@ def test_a_second_titled_doctor_is_still_checked():
     ],
 )
 def test_past_and_other_success_claims(sentence, tool, language):
-    g = grounds("Monday")
+    g = sultanas("Monday")
     assert check(sentence, g, language=language).kind == "claim"
-    assert check(sentence, grounds("Monday", succeeded={tool}), language=language).ok
+    assert check(sentence, sultanas("Monday", succeeded={tool}), language=language).ok
 
 
 @pytest.mark.parametrize(
@@ -660,11 +668,11 @@ def test_questions_and_nothing_are_not_claims(sentence, language):
     ],
 )
 def test_more_morning_forms_fail_against_an_evening_time(sentence, language):
-    assert check(sentence, grounds("slots from 18:00"), language=language).kind == "fact"
+    assert check(sentence, sultanas("slots from 18:00"), language=language).kind == "fact"
 
 
 def test_pm_forms_pass_against_an_evening_time():
-    g = grounds("slots from 18:00")
+    g = sultanas("slots from 18:00")
     assert check("Come at 6 pm.", g, language="en").ok
     assert check("Come at 6 p.m.", g, language="en").ok
 
@@ -686,7 +694,10 @@ def test_colloquial_clock_hours(text, value):
 
 
 def test_a_colloquial_hour_needs_grounds():
-    assert check("ছটায় আসুন।").kind == "fact"
+    # Round 4: with no doctor known a clock hour has no subject (unsupported); with one, it must
+    # be on that doctor's own lines.
+    assert check("ছটায় আসুন।").kind == "unsupported"
+    assert check("ছটায় আসুন।", sultanas("days: Mon 10:00-13:00")).kind == "fact"
 
 
 @pytest.mark.parametrize("text", ["নয়ন আসবেন", "নয়ন", "বার বার বলছি"])
@@ -780,7 +791,7 @@ def test_glued_durations_need_grounds(sentence):
     ],
 )
 def test_questions_and_offers_are_not_claims(sentence, language):
-    assert check(sentence, grounds("Monday"), goal="booking", language=language).ok
+    assert check(sentence, sultanas("Monday"), goal="booking", language=language).ok
 
 
 @pytest.mark.parametrize(
@@ -875,4 +886,4 @@ def test_only_second_person_endings_unglue_a_bangla_claim(sentence):
     ],
 )
 def test_a_governing_question_or_offer_still_exempts(sentence, language):
-    assert check(sentence, grounds("Monday"), goal="booking", language=language).ok
+    assert check(sentence, sultanas("Monday"), goal="booking", language=language).ok
