@@ -445,78 +445,97 @@ s-lang         -                  -                  calm/information           
    reply can no longer call; the router covers emergencies (both emergency turns routed right).
 4. `_act` is still the stub: every routed turn speaks the repeat prompt. Task 9 fills it.
 
-## After Task 7b (final checker, after fix round 3)
+## After Task 7b (final checker, after fix round 4)
 
 Date: 2026-11-26. `PYTHONUNBUFFERED=1 uv run python scripts/brain_probe.py --runs 1 --concurrent 1`
-(one sequential pass, then the 7-turn call) on the final code (4bc2e8e). Raw run (untracked):
-`data/bench/brain-probe-20261126-133226.json`. Same setup as 8c. Earlier 7b runs (`…-085134`,
-`…-101153`, `…-102428`, `…-120648`) predate later review rounds and no longer describe the checker.
+(one sequential pass, then the 7-turn call) on 94e389d. Raw run (untracked):
+`data/bench/brain-probe-20261126-180525.json`. Same setup as 8c. Earlier 7b runs (`…-085134`,
+`…-101153`, `…-102428`, `…-120648`, `…-133226`) predate round 4 and no longer describe the checker.
 
-What changed (Task 7b and its three fix rounds), in brief:
+What changed (Task 7b and its four fix rounds), in brief:
 - Only clinic-authored text (directory, knowledge) and tool results ground a fact: the booking
   slots `track` reads from the caller ("আজ", "শনিবার", "১০টায়") never do.
 - True answers the checker refused now pass (a near-copy of the question that adds a checked
   number, day, time or doctor; a greeting given back; directory codes said in words; times
   written in words).
-- Each clause's days, times and numbers are checked against the doctors it names, or for
-  "উনি/he/she" the nearest doctor named before it, else the call's doctor; a sentence naming
-  no doctor is the call's doctor's; a department names its doctors; today's weekday backs only
-  "আজ শনিবার" on its own.
-- Times are checked whole, with spoken minutes (সাড়ে/সোয়া/পৌনে, "১৫ মিনিট", "9.15", "half past
-  nine"), with or without a part of the day, and only plausible readings of each part of the day.
-- A doctor's language/gender claims rest on that doctor's codes; a number only a doctor's
-  lines hold, said about no doctor with none known on the call, fails.
+- Round 4: one subject per clause, the first of: a doctor the clause names (or a department);
+  the nearest doctor named earlier in the sentence (else later, for a clause without a pronoun);
+  a doctor or department in the caller's current line; the call's doctor; the clinic, only with
+  a clinic word (খোলা/বন্ধ/ক্লিনিক/open/closed/clinic/hours); else nobody. A doctor's days, times,
+  bare hours ("৯টায়", "4 o'clock") and every number of a sitting claim (বসেন/sits/is available/
+  থাকেন) rest on that doctor's own lines; other numbers also on clinic lines naming no doctor;
+  with nobody, days and times are refused and numbers rest on clinic lines and 999/the phone.
+  Proved by a generated matrix (every doctor x day, fee, start time x six subject forms x bn/en,
+  each with the clinic hours entry in the grounds).
+- Round 4: the words say `booking` only on an explicit booking verb; a sentence that offers a
+  booking on any other turn waits for the router's goal (`push_wait_ms` in the trace).
+- Times are checked whole, with spoken minutes, দেড়টা/আড়াইটা, with or without a part of the day;
+  "সাড়ে ৩ হাজার" is 3500.
 - Refused too: invented facility answers, letters and digits of other scripts, "open" on a day
-  the facts close, more "when would you like to come" pushes.
-- The engine answers a pure facility question no fact of the turn covers by code
-  (`reply_source: "facility"`): the clinic's entry when retrieval missed it (in the call's
-  language only; ambulance after the 999 lead-in), else "not known". A department named in a
-  question is an information goal. A router `upset` no longer hides the word rules' `angry`.
+  the facts close, more "when would you like to come" pushes. The engine answers a pure facility
+  question no fact of the turn covers by code (`reply_source: "facility"`).
 
-| | 8c run 1 | 7b final |
+| | 8c run 1 | 7b round 3 | 7b round 4 |
+|---|---|---|---|
+| Regenerations | 9/90 (7 unsupported, 2 fact) | 6/90 (3 fact, 3 unsupported) | **5/90** (4 unsupported, 1 fact) |
+| First spoken p50 / p95, 59 non-tool turns | 599 / 1338 ms | 585 / 1407 ms | 546 / **1229** ms |
+| same, 55 turns the model answered | - | 610 / 1407 ms | 567 / 1229 ms |
+| p95 without regenerated turns | 1126 ms | 978 ms | 1043 ms |
+| Turns over 1100 ms | 9 | 6 | **4** |
+| Router call p50 / p95 | 525 / 612 ms | 536 / 603 ms | 538 / 606 ms |
+| Reply first token p50 / p95 | 80 / 120 ms | 80 / 133 ms | 81 / 134 ms |
+| First sentence finished p50 / p95 | 532 / 1126 ms | 607 / 1105 ms | 542 / 1115 ms |
+| Finished sentence held by the router | 0 / 276 ms, 23 turns | 0 / 0 ms, 0 turns | 0 / 0 ms, 0 turns |
+| Push sentence held for the router's goal | - | - | 1 sentence (e-sugar), 0 ms |
+| Router right / false | 30/31, 2/59 | 30/31, 2/59 | 30/31, 2/59 (same misses) |
+
+The latency gate (p95 ≤ 1100 ms) still fails. With 59 turns the nearest-rank p95 is the 57th
+turn, so the three slowest set it. The four turns over 1100 ms:
+- m-confused, 1723 ms: regenerated. "শিশুদের" was read as an unknown doctor's name. This is
+  the old `_unknown_doctor` false refusal, parked.
+- k-rahman-time, 1244 ms: no regeneration. The first sentence is 79 characters of Bangla, and
+  it took 1240 ms to decode at about 26 ms a token.
+- d-lady, 1229 ms: both attempts were refused ("একজন" / "কয়েকজন মহিলা ডাক্তার"), so the
+  safe line was spoken.
+- k-parking, 1221 ms: no regeneration. A 69-character first sentence.
+
+Without the regenerated turns, p95 is 1043 ms: decode of long Bangla first sentences.
+
+**Push wait:** one push sentence came on a non-booking turn: e-sugar's "Would you like to book
+an appointment?", which was dropped. By the time it was ready the router had already answered,
+so it waited 0 ms. Every turn's `push_wait_ms` was 0. The wait only costs time when a push is
+the first sentence and comes before the router's answer (about 540 ms into the turn). The
+engine test with a 50 ms router pause measures that case.
+
+Regenerations by reason, and whether each refusal was right:
+- `unsupported` e-hours: "We are open Saturday to Thursday, from 9 am to 9 pm." This is a
+  **false refusal from round 4**. The clause after the comma has no clinic word, so it has no
+  subject. The retry ("…, nine to nine.") passed.
+- `unsupported` d-lady: twice, then the safe line. "একজন" and "কয়েকজন" are not in the facts.
+  The second refusal is right; the first is arguable.
+- `unsupported` e-lady: "Yes, we do." twice (nothing in it to back; arguable).
+- `unsupported` s-hello: "হ্যাঁ, শুনতে পাচ্ছি।" (the parrot false refusal, still open; the retry
+  passed).
+- `fact` m-confused: as above.
+
+Found in this run, not fixed:
+- k-rahman-time spoke "ডাক্তার রহমান টুর্সডে, থার্সডে এবং সানডে …". The checker does not read
+  English weekday names written in Bangla letters, and "টুর্সডে" is not a day. This false pass
+  predates round 4.
+- Long call, turn 6, "ক্লিনিক কয়টা পর্যন্ত খোলা?": the unsure line was spoken after 2227 ms.
+  The call's doctor is Rahman, from turn 1. Under the rule order as written (the call's doctor
+  before the clinic), a clinic-hours sentence is judged by his lines and refused. The long call
+  does not record its checks, so this cause is inferred: a test pins the rule
+  (`test_the_clinic_is_the_subject_only_when_no_doctor_is_known`).
+
+The probe's cases on round 4:
+
+| case | 7b round 3 | 7b round 4 |
 |---|---|---|
-| Regenerations | 9/90 (7 unsupported, 2 fact) | **6/90** (3 fact, 3 unsupported) |
-| First spoken p50 / p95, 59 non-tool turns | 599 / 1338 ms | 585 / **1407** ms |
-| same, 55 turns the model answered (4 code-answered left out) | - | 610 / 1407 ms |
-| p95 without regenerated turns | 1126 ms | **978 ms** |
-| Turns over 1100 ms | 9 | 6 |
-| Router call p50 / p95 | 525 / 612 ms | 536 / 603 ms |
-| Reply first token p50 / p95 | 80 / 120 ms | 80 / 133 ms |
-| First sentence finished p50 / p95 | 532 / 1126 ms | 607 / 1105 ms |
-| Finished sentence held by the router | 0 / 276 ms, 23 turns | 0 / 0 ms, 0 turns |
-| Router right / false | 30/31, 2/59 | 30/31, 2/59 (same misses) |
-
-The latency gate (p95 ≤ 1100 ms) fails on regenerated turns: with 59 turns the nearest-rank p95
-is the 57th, so three slow turns set it. Without regenerated turns it passes (978 ms). Over
-1100 ms: k-rahman-time 2265, k-days 2083, m-confused 1407, d-lady 1344 (regenerated), m-rude 1270
-and m-angry 1111 (long Bangla first sentences at ~25 ms/token).
-
-**Router hold after streaming (first measurement):** the tool field is known about 190–210 ms
-into the turn (whole answer ~536 ms); no sentence waited for it in this run.
-
-Regenerations by reason, and whether the refusal was right:
-- `fact` k-days "ডাক্তার সুলতানা सोमবার … দশটা থেকে তিনটা…" twice (3 is not her hour, and Devanagari;
-  right), then the safe sentence.
-- `fact` k-rahman-time "ডাক্তার রহমান বৃহস্পতিবার ও সোমবার…" (Monday; right); the retry passed.
-- `fact` m-confused "হ্যাঁ, শিশু ডাক্তার এবং মেডিসিন ডাক্তার আলাদা।" ("the doctor's name আলাদা": the old
-  false refusal, still open).
-- `unsupported` d-lady "হ্যাঁ, আমাদের কয়েকজন মহিলা ডাক্তার আছেন।" ("several"; right; the retry passed).
-- `unsupported` e-lady "Yes, we do." twice (nothing in it to back; arguable).
-- `unsupported` s-hello "হ্যাঁ, শুনতে পাচ্ছি।" (parrot of "হ্যালো, শুনতে পাচ্ছেন?": a false refusal;
-  the retry passed).
-
-The probe's cases:
-
-| case | 8c | 7b final |
-|---|---|---|
-| d-exp "…অভিজ্ঞতা 18 বছরের।" | refused (parrot) | passes |
-| d-english "হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলেন।" | refused (parrot) | passes |
-| s-salam "আসসালামু আলাইকুম, ভালো আছি।" | refused (parrot) | passes |
-| k-followup "…ফলো-আপ ফি চারশো টাকা।" | refused (parrot) | passes |
-| m-rushed, m-angry "রাত ৯টা", e-hours "nine at night" | refused (fact) | pass |
-| k-days wrong hour for Dr Sultana | passed (wrong) | refused (fact) |
-| e-days | pushed "What time would you like to come?" | goal `information`; no push this run (engine test pins the drop) |
-| d-lady female doctor yes | refused | passes on the retry (first said "several") |
-| k-hossain-fee "মেডিসিনের ডাক্তারের … ৭০০ টাকা।" | passed | passes (the department names Dr Hossain) |
-| k-unknown, e-canteen, k-pharmacy | invented yes/no on some runs | code: "not known" in 10–15 ms |
-| k-friday, the long call's address | wrong "খোলা থাকে" / answered | code speaks the clinic's entry (retrieval missed it) in 7–11 ms |
+| d-exp, d-english, s-salam, k-followup (old parrots) | pass | pass |
+| m-rushed "আমরা সকাল ৯টা থেকে রাত ৯টা পর্যন্ত খোলা।" | passes | passes (clinic word) |
+| e-hours | passes | first attempt refused (above); retry passes |
+| e-days | no push this run | goal `information`; "Dr Sultana sees patients on Monday, Wednesday and Saturday." |
+| e-sugar push "Would you like to book an appointment?" | - | dropped (goal `information`) |
+| d-lady female doctor yes | passes on the retry | both attempts refused |
+| k-unknown, e-canteen, k-pharmacy | code: "not known" | code: "not known" |
