@@ -387,6 +387,12 @@ _EN_NOT_A_NAME = frozenset(
 _NAME_ENDINGS = tuple(_norm(e) for e in ("েরও", "কেও", "ের", "এর", "কে", "র", "ও", "'s"))
 
 
+def has_doctor_title(text: str) -> bool:
+    """True when the text uses a doctor's title ("Dr. Karim", "ডাক্তার রহমান"): the greeting names
+    no doctor at all, so a title is enough to refuse it."""
+    return bool(_BN_DOCTOR.search(text) or _EN_DOCTOR.search(text))
+
+
 def _names_after(sentence: str, title_end: int, bangla: bool) -> list[str]:
     """The name words after a title, honorifics left out: "ডাক্তার মোঃ করিম" -> ["করিম"],
     "ডাক্তার সুলতানা ও করিম আজ" -> ["সুলতানা", "করিম"], "Dr Sultana Ahmed sits" -> both.

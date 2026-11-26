@@ -1,1 +1,1 @@
-Say one warm welcome sentence that names the clinic and fits the time of day. Use the caller's name only if it is given. Do not ask about doctors and do not state any fact.
+Say one warm welcome sentence. It may hold only a greeting that fits the part of the day, the clinic name, and the caller's name if one is given. Make no other claim: nothing about hours, doctors, fees, services, waiting or what you can do, and no numbers.

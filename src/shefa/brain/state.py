@@ -113,7 +113,9 @@ class CallState:
     boundaries: int = 0
     last_offer: str = ""
     pending: dict[str, Any] | None = None
-    # what finished: {"kind": "booked", "doctor": "Dr. Rahman", "date": ..., "time": ...}
+    # what finished: {"kind": a brain tool name ("book", "reschedule_booking", "cancel_booking"),
+    # "doctor": "Dr. Rahman", "date": ISO date, "time": "HH:MM"}; "doctor_bn" (the directory's
+    # Bangla name) is optional beside "doctor"
     done: list[dict[str, Any]] = field(default_factory=list)
     asked_list: bool = False
     turn: int = 0

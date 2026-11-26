@@ -887,3 +887,17 @@ def test_only_second_person_endings_unglue_a_bangla_claim(sentence):
 )
 def test_a_governing_question_or_offer_still_exempts(sentence, language):
     assert check(sentence, sultanas("Monday"), goal="booking", language=language).ok
+
+
+def test_has_doctor_title_sees_a_title_in_either_script_and_nothing_else() -> None:
+    from shefa.brain.check import has_doctor_title
+
+    assert has_doctor_title("Dr. Rahman is in today")
+    assert has_doctor_title("dr karim")
+    assert has_doctor_title("the doctor Karim is here")
+    assert has_doctor_title("ডাক্তার রহমান আছেন")
+    assert has_doctor_title("ডা. করিম")
+    assert not has_doctor_title("Good morning, welcome to SHEFA Clinic.")
+    assert not has_doctor_title("শেফা ক্লিনিকে স্বাগতম।")
+    assert not has_doctor_title("the doctor sees children")
+    assert not has_doctor_title("ডাক্তারের কাছে")

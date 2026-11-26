@@ -13,17 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from shefa.brain.check import _BN_DOCTOR, _EN_DOCTOR, Grounds, check_sentence, numbers_in
+from shefa.brain.check import Grounds, check_sentence, has_doctor_title, numbers_in
 from shefa.clinic.store import CLINIC_TZ
 from shefa.config.settings import settings
 from shefa.pipeline.replycheck import tidy
 from shefa.spoken import of, spoken_date, spoken_doctor, spoken_time
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from shefa.brain.state import CallState
 
 logger = logging.getLogger(__name__)
@@ -63,6 +62,8 @@ def _facts(clinic_name: str, language: str, now: datetime, caller_name: str | No
 
 async def _first_sentence(llm: Any, messages: list[dict[str, str]]) -> str:
     """The model's first sentence; the stream is closed as soon as it is whole."""
+    # Lazy on purpose: the voice pipeline pulls in numpy and the audio stack (engine.py does the
+    # same), and nothing else here needs it.
     from shefa.pipeline.voice_pipeline import split_complete_sentences
 
     text = ""
@@ -88,7 +89,7 @@ def _welcome_fault(welcome: str, clinic_name: str, language: str) -> str:
         return "not words"
     if numbers_in(welcome) - numbers_in(clinic_name):
         return "a number"
-    if _BN_DOCTOR.search(welcome) or _EN_DOCTOR.search(welcome):
+    if has_doctor_title(welcome):
         return "a doctor"
     verdict = check_sentence(
         welcome, Grounds(texts=[clinic_name]), goal="unknown", language=language
@@ -140,23 +141,51 @@ _THANKS = {
 }
 
 
+def _slot(entry: dict[str, Any]) -> tuple[str, str, str]:
+    """Who, which day, which time, in the form two entries are compared by."""
+    doctor = spoken_doctor(str(entry.get("doctor") or ""), "en").lower()
+    return doctor, str(entry.get("date") or "").strip(), str(entry.get("time") or "").strip()
+
+
+def _valid(entry: dict[str, Any]) -> bool:
+    """A doctor, an ISO date and an HH:MM time: anything else is never read out."""
+    if not entry.get("doctor"):
+        return False
+    try:
+        date.fromisoformat(str(entry.get("date")))
+        datetime.strptime(str(entry.get("time")), "%H:%M")
+    except ValueError:
+        return False
+    return True
+
+
+def _standing(state: CallState) -> dict[str, Any] | None:
+    """The call's last booking or move, unless a later cancel of the same slot took it back.
+    Only the last one is considered: when it is gone, no earlier one is said to stand (a move
+    cancelled leaves nothing true to say about the booking it replaced)."""
+    for at in range(len(state.done) - 1, -1, -1):
+        entry = state.done[at]
+        if entry.get("kind") not in _CLOSING_KINDS:
+            continue
+        if any(
+            later.get("kind") == "cancel_booking" and _slot(later) == _slot(entry)
+            for later in state.done[at + 1 :]
+        ):
+            return None
+        return entry if _valid(entry) else None
+    return None
+
+
 def closing(state: CallState, language: str) -> str:
     """One sentence summing up the last booking or move of the call, then a goodbye; a plain
-    thank-you when the call left no appointment."""
-    last = next(
-        (
-            e
-            for e in reversed(state.done)
-            if e.get("kind") in _CLOSING_KINDS
-            and e.get("doctor")
-            and e.get("date")
-            and e.get("time")
-        ),
-        None,
-    )
+    thank-you when the call left no appointment standing."""
+    last = _standing(state)
     if last is None:
         return _THANKS.get(language) or _THANKS["en"]
-    doctor = spoken_doctor(str(last["doctor"]), language)
+    name = str(last["doctor"])
+    if language == "bn":
+        name = str(last.get("doctor_bn") or "").strip() or name
+    doctor = spoken_doctor(name, language)
     day = spoken_date(str(last["date"]), language)
     if language == "bn":
         when = spoken_time(str(last["time"]), "bn", at=True)

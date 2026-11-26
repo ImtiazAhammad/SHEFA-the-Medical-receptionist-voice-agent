@@ -215,3 +215,10 @@ def test_the_default_store_is_built_from_the_platform_database(tmp_path, monkeyp
         assert str(s.path) == str(tmp_path / "plat.db")
     finally:
         set_default_config_store(None)
+
+
+def test_the_greeting_prompt_allows_only_a_greeting_the_hour_and_the_names() -> None:
+    text = defaults()["prompt.greeting"].lower()
+    for allowed in ("part of the day", "clinic name", "caller's name"):
+        assert allowed in text
+    assert "no other" in text and "claim" in text  # nothing about hours, doctors, fees or services

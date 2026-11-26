@@ -201,6 +201,58 @@ def test_a_bangla_doctor_name_takes_the_possessive_ending() -> None:
     assert closing(state_with(entry), "bn").startswith("আপনার সিরিয়াল ডাক্তার রহমানের কাছে ")
 
 
+def test_a_bangla_call_uses_the_directorys_bangla_name_when_the_entry_has_one() -> None:
+    entry = {**BOOKED, "doctor_bn": "রহমান"}
+    assert closing(state_with(entry), "bn").startswith("আপনার সিরিয়াল ডাক্তার রহমানের কাছে ")
+    # an English call keeps the Latin name; a missing or empty doctor_bn falls back to it
+    assert "Dr. Rahman" in closing(state_with(entry), "en")
+    for blank in ({}, {"doctor_bn": ""}):
+        text = closing(state_with({**BOOKED, **blank}), "bn")
+        assert text.startswith("আপনার সিরিয়াল ডাক্তার Rahman-এর কাছে ")
+
+
+def cancel_of(entry: dict) -> dict:
+    return {**entry, "kind": "cancel_booking"}
+
+
+def test_a_booking_the_caller_then_cancelled_is_not_summed_up() -> None:
+    assert closing(state_with(BOOKED, cancel_of(BOOKED)), "en") == (
+        "Thank you for calling. Take care."
+    )
+    assert closing(state_with(BOOKED, cancel_of(BOOKED)), "bn") == ("ফোন করার জন্য ধন্যবাদ, ভালো থাকবেন।")
+
+
+def test_a_move_the_caller_then_cancelled_is_not_summed_up() -> None:
+    # the first booking was moved away, so it does not stand either
+    done = state_with(BOOKED, MOVED, cancel_of(MOVED))
+    assert closing(done, "en") == "Thank you for calling. Take care."
+
+
+def test_a_cancel_of_another_slot_leaves_the_booking_standing() -> None:
+    other = {**BOOKED, "time": "09:00"}
+    assert "Dr. Rahman" in closing(state_with(BOOKED, cancel_of(other)), "en")
+
+
+def test_a_booking_made_after_a_cancel_is_summed_up() -> None:
+    later = {**BOOKED, "date": "2026-11-28"}
+    text = closing(state_with(BOOKED, cancel_of(BOOKED), later), "en")
+    assert "Saturday 28 November" in text
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"date": "bad"},
+        {"date": "2026-13-45"},
+        {"time": "x"},
+        {"time": "25:00"},
+        {"time": "4pm"},
+    ],
+)
+def test_an_entry_with_a_malformed_date_or_time_is_not_summed_up(bad: dict) -> None:
+    assert closing(state_with({**BOOKED, **bad}), "en") == "Thank you for calling. Take care."
+
+
 def test_an_entry_missing_its_facts_is_not_summed_up() -> None:
     half = {"kind": "book", "doctor": "Dr. Rahman", "date": "", "time": ""}
     assert closing(state_with(half), "en") == "Thank you for calling. Take care."
