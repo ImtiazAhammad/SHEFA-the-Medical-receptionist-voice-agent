@@ -361,3 +361,13 @@ missed_calls:
   delay_minutes: 3
   retry_minutes: 30
   max_attempts: 2
+
+brain:
+  # What the generated greeting always says after its welcome sentence: that this is an automated
+  # assistant, that the call is written down, how to reach a person. Fixed text, never generated.
+  # It is languages.default_greeting without its first (welcome) sentence, and it must stay true:
+  # if you switch transcripts off (storage.keep_transcripts: false) remove the "written down"
+  # sentence here too.
+  disclosure:
+    en: "I am an automated assistant, and what you say on this call is written down to help with your booking. Say person at any time to speak with someone. How may I help you today?"
+    bn: "আমি একটি স্বয়ংক্রিয় সহকারী, আপনার বুকিংয়ের সুবিধার জন্য এই কলের কথা লিখে রাখা হয়। যেকোনো সময় মানুষ বললে আপনাকে একজন কর্মীর সাথে কথা বলিয়ে দেব। আমি কীভাবে সাহায্য করতে পারি?"

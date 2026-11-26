@@ -130,7 +130,11 @@ def test_the_brain_settings_have_the_agreed_defaults():
     assert (b.kb_max_hits, b.kb_min_words_score, b.kb_min_meaning_score) == (4, 1.2, 0.83)
     assert b.embedding_model == "intfloat/multilingual-e5-small"
     assert (b.config_cache_s, b.history_turns) == (5.0, 6)
-    assert (b.greeting_timeout_s, b.prompt_budget_tokens, b.disclosure) == (1.5, 3000, {})
+    assert (b.greeting_timeout_s, b.prompt_budget_tokens) == (1.5, 3000)
+    # The disclosure is the default greeting without its welcome sentence, so they cannot drift.
+    for lang, text in b.disclosure.items():
+        assert settings.languages.default_greeting[lang].endswith(" " + text)
+    assert set(b.disclosure) == {"bn", "en"}
 
 
 def test_the_snapshot_layers_clinic_over_platform_over_defaults(store):
