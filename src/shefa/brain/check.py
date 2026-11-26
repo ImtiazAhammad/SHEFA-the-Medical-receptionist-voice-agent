@@ -51,9 +51,17 @@ class Grounds:
     texts: list[str] = field(default_factory=list)
     succeeded: set[str] = field(default_factory=set)
     caller: str = ""
+    # The call's own values (tool results, booking slots, today, the caller's phone, 999), also
+    # in `texts`. A line of them holds whichever doctor a sentence names unless it names another
+    # doctor; a directory or knowledge line holds only for the doctor it names.
+    values: list[str] = field(default_factory=list)
 
     def add(self, text: str) -> None:
         self.texts.append(text)
+
+    def add_value(self, text: str) -> None:
+        self.texts.append(text)
+        self.values.append(text)
 
 
 @dataclass(frozen=True)
@@ -401,6 +409,50 @@ def _named(word: str, known: set[str]) -> bool:
     return any(fold(c) in known for c in candidates)
 
 
+def _doctors_named(sentence: str, known: set[str]) -> set[str]:
+    """The known doctors a sentence names after a title, as folded name words."""
+    found: set[str] = set()
+    for regex, bangla in ((_BN_DOCTOR, True), (_EN_DOCTOR, False)):
+        for m in regex.finditer(sentence):
+            for word in _names_after(sentence, m.end(), bangla):
+                word = _norm(word).lower()
+                stems = [word] + [
+                    word[: -len(e)]
+                    for e in _NAME_ENDINGS
+                    if word.endswith(e) and len(word) - len(e) >= 2
+                ]
+                found.update(fold(c) for c in stems if fold(c) in known)
+    return found
+
+
+def _doctor_scope(sentence: str, grounds: Grounds, known: set[str]) -> list[str]:
+    """The grounds a sentence's days, times and numbers may rest on. A sentence that names one
+    doctor rests on the lines that name that doctor (directory line, knowledge entry, tool
+    result) and the call's own values: Sunday is not Dr Sultana's day because Dr Rahman sits
+    then. Naming no doctor, or several (where an English and a Bangla name of one doctor count
+    as one when one line holds both), keeps every ground."""
+    named = _doctors_named(sentence, known)
+    if not named:
+        return grounds.texts
+    values = {id(v) for v in grounds.values}
+    lines = [
+        line
+        for text in grounds.texts
+        if id(text) not in values
+        for line in text.splitlines()
+        if named & _ground_words([line])
+    ]
+    if any(not named <= _ground_words([line]) for line in lines):
+        return grounds.texts  # several doctors
+    own = [
+        line
+        for value in grounds.values
+        for line in value.splitlines()
+        if _doctors_named(line, known) <= named
+    ]
+    return lines + own
+
+
 # --- days and times of day ---------------------------------------------------------------------
 
 _BN_DAYS = tuple(_norm(d) for d in _split("সোম মঙ্গল বুধ বৃহস্পতি শুক্র শনি রবি"))  # Monday first
@@ -486,9 +538,14 @@ def _hours_24(hour: int, period: str) -> set[int]:
 
 @lru_cache(maxsize=512)
 def _ground_hours(text: str) -> frozenset[int]:
-    return frozenset(
-        int(m.group(1)) % 24 for m in _CLOCK.finditer(_norm(text).translate(_TO_ASCII))
-    )
+    """Every 24-hour hour the text names: "21:00", "২১:০০", and a part of the day with an hour
+    ("রাত ৯টা", "রাত নয়টা", "9 pm", "nine in the evening")."""
+    text = _norm(text)
+    hours = {int(m.group(1)) % 24 for m in _CLOCK.finditer(text.translate(_TO_ASCII))}
+    for _phrase, hour_word, period in _said_times(text):
+        if hour := _hour(hour_word):
+            hours |= _hours_24(hour, _PERIODS[_norm(period).lower()])
+    return frozenset(hours)
 
 
 def _hour(word: str) -> int | None:
@@ -499,21 +556,47 @@ def _hour(word: str) -> int | None:
     return None
 
 
-def _unknown_time(sentence: str, texts: list[str]) -> str | None:
-    grounded = set().union(*(_ground_hours(t) for t in texts)) if texts else set()
+def _said_times(text: str) -> list[tuple[str, str, str]]:
+    """(phrase, hour word, part of the day) for each time said with a part of the day."""
     said: list[tuple[str, str, str]] = [
-        (m.group(), m.group(2), m.group(1)) for m in _BN_TIME.finditer(sentence)
+        (m.group(), m.group(2), m.group(1)) for m in _BN_TIME.finditer(text)
     ]
-    for m in _EN_TIME.finditer(sentence):
+    for m in _EN_TIME.finditer(text):
         hour, period = next(
             (h, p) for h, p in zip(m.groups()[::2], m.groups()[1::2], strict=True) if h
         )
         said.append((m.group(), hour, period + "m" if len(period) == 1 else period))
-    for phrase, hour_word, period in said:
+    return said
+
+
+def _hours_known(texts: list[str]) -> set[int]:
+    return set().union(*(_ground_hours(t) for t in texts)) if texts else set()
+
+
+def _unknown_time(sentence: str, texts: list[str]) -> str | None:
+    grounded = _hours_known(texts)
+    for m in _CLOCK.finditer(sentence.translate(_TO_ASCII)):
+        if int(m.group(1)) % 24 not in grounded:
+            return m.group()
+    for phrase, hour_word, period in _said_times(sentence):
         hour = _hour(hour_word)
         if hour and not _hours_24(hour, _PERIODS[_norm(period).lower()]) & grounded:
             return phrase
     return None
+
+
+def _without_grounded_clocks(sentence: str, texts: list[str]) -> str:
+    """The sentence with each clock time whose hour the facts name taken out, so "21:00" is not
+    read as a bare 21 against "রাত ৯টা"; its minutes stay to be checked unless they are 00."""
+    grounded = _hours_known(texts)
+    ascii_text = sentence.translate(_TO_ASCII)
+    out, at = [], 0
+    for m in _CLOCK.finditer(ascii_text):
+        if int(m.group(1)) % 24 in grounded:
+            minutes = m.group().rsplit(":", 1)[1]
+            out += [sentence[at : m.start()], "" if minutes == "00" else f" {minutes} "]
+            at = m.end()
+    return "".join([*out, sentence[at:]])
 
 
 # --- a "yes, we have it" -----------------------------------------------------------------------
@@ -525,11 +608,98 @@ _YES_FILLER = _wordset(
 )
 
 
+# Endings a word takes in a yes-answer that the facts write bare: "ইংরেজিতে", "বাংলায়".
+_PLACE_ENDINGS = tuple(_norm(e) for e in ("তে", "য়"))
+
+
+def _backed_word(word: str, known: set[str]) -> bool:
+    if _named(word, known):
+        return True
+    word = _norm(word).lower()
+    return any(
+        word.endswith(e) and len(word) - len(e) >= 2 and _named(word[: -len(e)], known)
+        for e in _PLACE_ENDINGS
+    )
+
+
 def _backed_yes(sentence: str, known: set[str]) -> bool:
     """Every content word of the yes-sentence appears in a ground text: "হ্যাঁ, পার্কিং আছে"
     with a parking fact is true, but "হ্যাঁ, শুক্রবার খোলা" with "শুক্রবার বন্ধ" is not."""
     words = [w for w in _words(sentence) if w not in _YES_FILLER]
-    return bool(words) and all(_named(w, known) for w in words)
+    return bool(words) and all(_backed_word(w, known) for w in words)
+
+
+# --- the directory's codes, in the words a caller hears ------------------------------------
+
+# The directory writes a doctor's gender and languages as codes ("; female;", "speaks bn/en");
+# a true answer says them in words ("মহিলা ডাক্তার", "ইংরেজিতে কথা বলেন"). These words back a
+# yes-answer only; they never make a doctor's name.
+_GENDER_SLOT = re.compile(r"(?:^|;)\s*(female|male)\s*(?=;|$)", re.MULTILINE)
+_SPEAKS_SLOT = re.compile(r"\bspeaks\s+([a-z]{2}(?:/[a-z]{2})*)")
+_CODE_WORDS = {
+    "female": "female woman women lady ladies মহিলা নারী",
+    "male": "male man men পুরুষ",
+    "en": "english ইংরেজি ইংলিশ",
+    "bn": "bangla bengali বাংলা",
+}
+_SPEAK_WORDS = "speak speaks speaking কথা বলেন বলে বলতে পারেন"
+# A yes about these is a fact about a doctor even without "we have": "হ্যাঁ, উনি হিন্দিতে কথা বলেন".
+_DIRECTORY_CLAIM = re.compile(
+    r"\bspeaks?\b|কথা বল|\b(?:female|male|lady|woman|man)\b|মহিলা|নারী|পুরুষ"
+    r"|ইংরেজি|ইংলিশ|বাংলা|হিন্দি|উর্দু|আরবি|\b(?:english|bangla|bengali|hindi|urdu|arabic)\b",
+    re.IGNORECASE,
+)
+_YES = re.compile(r"^\s*(?:জি\s*,?\s*|জ্বি\s*,?\s*)?(?:হ্যাঁ|হ্যা|yes)(?:[,।!.\s]|$)", re.IGNORECASE)
+
+
+@lru_cache(maxsize=512)
+def _code_words(text: str) -> frozenset[str]:
+    codes = [m.group(1) for m in _GENDER_SLOT.finditer(text)]
+    for m in _SPEAKS_SLOT.finditer(text):
+        codes.extend(m.group(1).split("/"))
+    words = " ".join(_CODE_WORDS.get(c, "") for c in codes)
+    if _SPEAKS_SLOT.search(text):
+        words += " " + _SPEAK_WORDS
+    return frozenset(fold(w) for w in _words(words))
+
+
+def _says_yes(stated: str) -> bool:
+    """A yes that states a fact: the shared rule, or a yes about a doctor's languages/gender."""
+    return unsupported_claim(stated) or bool(
+        _YES.search(stated) and _DIRECTORY_CLAIM.search(stated)
+    )
+
+
+# --- a parrot -------------------------------------------------------------------------------
+
+_GREETING_OPEN = re.compile(
+    r"^\s*(?:আসসালামু আলাইকুম|আস্সালামু আলাইকুম|ওয়ালাইকুম আসসালাম|ওয়া আলাইকুমুস সালাম|সালাম"
+    r"|নমস্কার|আদাব|হ্যালো|hello|hi|good (?:morning|afternoon|evening))(?![ঀ-৿A-Za-z])[\s,।!.]*",
+    re.IGNORECASE,
+)
+
+
+def _parrots(text: str, grounds: Grounds, known: set[str], ground_numbers: set[str]) -> bool:
+    """Only the caller's own words back: a near-copy of what they said that adds nothing from
+    the facts. A ground number or ground word the caller did not say, a backed yes, or a
+    greeting given back is an answer ("ডাক্তার রহমানের অভিজ্ঞতা 18 বছরের।" to "...কত বছরের?")."""
+    caller = _norm(grounds.caller)
+    if not parrots(text, caller):
+        return False
+    if (numbers_in(text) - numbers_in(caller)) & ground_numbers:
+        return False
+    said = {fold(w) for w in _words(caller)}
+    if any(fold(w) not in said and _backed_word(w, known) for w in _words(text)):
+        return False
+    if _YES.search(text) and _backed_yes(text, known):
+        return False
+    if m := _GREETING_OPEN.match(text):
+        # A greeting given back, with "ভালো আছি" after it, answers; the caller's own question
+        # after it ("আসসালামু আলাইকুম, আপনার নাম কী?") still parrots.
+        rest = text[m.end() :].strip()
+        caller_rest = _GREETING_OPEN.sub("", caller, count=1)
+        return rest.endswith("?") and parrots(rest, caller_rest)
+    return True
 
 
 # --- success claims and booking offers --------------------------------------------------------
@@ -698,20 +868,24 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             )
     if claim := _claim(text, grounds.succeeded):
         return claim
-    for number in sorted(numbers_in(text) - ground_numbers, key=int):
+    scope = _doctor_scope(text, grounds, known)
+    scope_numbers = set().union(*(numbers_in(t) for t in scope)) if scope else set()
+    said_numbers = numbers_in(_without_grounded_clocks(text, scope))
+    for number in sorted(said_numbers - scope_numbers, key=int):
         return Verdict(False, "fact", f"the number {number} is not in the facts")
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
-    if day := _unknown_day(text, grounds.texts):
+    if day := _unknown_day(text, scope):
         return Verdict(False, "fact", f"the day {day} is not in the facts")
-    if time := _unknown_time(text, grounds.texts):
+    if time := _unknown_time(text, scope):
         return Verdict(False, "fact", f"the time {time} is not in the facts")
     # A closing question asks rather than states ("Yes, how else can I help you?"), but what comes
     # before it still states: "হ্যাঁ, এমআরআই আছে, আসবেন?" is judged on "হ্যাঁ, এমআরআই আছে".
     stated = text.rsplit(",", 1)[0] if text.rstrip().endswith("?") else text
-    if unsupported_claim(stated) and not _backed_yes(stated, known):
+    yes_known = known | set().union(*(_code_words(t) for t in grounds.texts))
+    if _says_yes(stated) and not _backed_yes(stated, yes_known):
         return Verdict(False, "unsupported", "it says yes to something the facts do not state")
-    if grounds.caller and parrots(text, _norm(grounds.caller)):
+    if grounds.caller and _parrots(text, grounds, yes_known, ground_numbers):
         return Verdict(False, "unsupported", "it only repeats the caller's own words")
     if goal == "information" and (m := _PUSH.search(text)):
         return Verdict(

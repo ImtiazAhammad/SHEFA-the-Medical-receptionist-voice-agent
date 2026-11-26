@@ -134,20 +134,20 @@ def _grounds(
     if directory:
         grounds.add(directory)
     for earlier in session.metadata.get("brain_grounds", []):
-        grounds.add(str(earlier))
+        grounds.add_value(str(earlier))
     for key in ("doctor", "date", "time", "period"):
         if value := state.booking.get(key):
-            grounds.add(value)
+            grounds.add_value(value)
     try:
         booked_day = _date.fromisoformat(state.booking.get("date", ""))
     except ValueError:
         booked_day = None
     if booked_day is not None:
-        grounds.add(" ".join(_day_names(booked_day)))
-    grounds.add(" ".join([today.isoformat(), *_day_names(today)]))
+        grounds.add_value(" ".join(_day_names(booked_day)))
+    grounds.add_value(" ".join([today.isoformat(), *_day_names(today)]))
     if phone := _caller_phone(session):
-        grounds.add(phone)
-    grounds.add(EMERGENCY_NUMBER)
+        grounds.add_value(phone)
+    grounds.add_value(EMERGENCY_NUMBER)
     return grounds
 
 
