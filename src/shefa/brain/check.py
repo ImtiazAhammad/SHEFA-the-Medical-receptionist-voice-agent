@@ -460,14 +460,17 @@ def _doctor_groups(grounds: Grounds) -> list[frozenset[str]]:
     for text in grounds.texts:
         if id(text) in values:
             continue
+        # Names in one piece of a line are one doctor ("Dr Rahman / ডাক্তার রহমান"); names
+        # joined by ও/and are two ("ডাক্তার রহমান ও ডাক্তার সুলতানা দুজনেই …").
         for line in text.splitlines():
-            names = set(_line_doctors(line))
-            if not names:
-                continue
-            for group in [g for g in groups if g & names]:
-                names |= group
-                groups.remove(group)
-            groups.append(names)
+            for piece in _CLAUSE_SPLIT.split(line):
+                names = set(_line_doctors(piece))
+                if not names:
+                    continue
+                for group in [g for g in groups if g & names]:
+                    names |= group
+                    groups.remove(group)
+                groups.append(names)
     return [frozenset(g) for g in groups]
 
 
@@ -481,7 +484,10 @@ def _doctors_in(text: str, groups: list[frozenset[str]]) -> set[frozenset[str]]:
 
 # A clause ends at a comma, a danda or a joiner: "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন" says
 # Sunday of Dr Sultana.
-_CLAUSE_SPLIT = re.compile(r",\s|;|।|[?!]|\s(?:ও|আর|এবং|and|but)\s", re.IGNORECASE)
+# "two hundred and fifty" is one number, so "and" after hundred/thousand joins nothing.
+_CLAUSE_SPLIT = re.compile(
+    r",\s|;|।|[?!]|\s(?:ও|আর|এবং|but)\s|(?<!hundred)(?<!thousand)\sand\s", re.IGNORECASE
+)
 _TODAY_SAID = re.compile(_B + r"(?:আজ|আজকে)" + _E + r"|\btoday\b", re.IGNORECASE)
 
 
@@ -666,7 +672,9 @@ def _ground_clocks(text: str) -> frozenset[tuple[int, int]]:
         (int(m.group(1)) % 24, int(m.group(2)))
         for m in _CLOCK_HM.finditer(text.translate(_TO_ASCII))
     }
-    found.update((hour, 0) for hour in _ground_hours(text))
+    for _phrase, hour_word, period in _said_times(text):
+        if hour := _hour(hour_word):
+            found.update((h, 0) for h in _hours_24(hour, _PERIODS[_norm(period).lower()]))
     return frozenset(found)
 
 
@@ -865,9 +873,14 @@ def _adds_a_fact(text: str, caller: str, grounds: Grounds, claim_ok: bool) -> bo
     if said_times - heard_times:
         return True
     groups = _doctor_groups(grounds)
-    if _doctors_in(text, groups) - _doctors_in(caller, groups):
+    doctors = _doctors_in(text, groups)
+    if doctors - _doctors_in(caller, groups):
         return True
-    return claim_ok and bool(_YES.search(text))
+    if not _YES.search(text):
+        return False
+    # "হ্যাঁ, ডাক্তার রহমান রবিবার বসেন" to "…কি রবিবার বসেন?": the day was checked against his own
+    # lines, so the yes confirms a fact, not a guess.
+    return claim_ok or bool(doctors and (_day_set(text) or said_times))
 
 
 def _parrots(text: str, grounds: Grounds, claim_ok: bool) -> bool:
@@ -1047,7 +1060,9 @@ _HAS = re.compile(
     r"|\b(?:have|has|there is|there's|there are|no|available|open|closed)\b"
     # where it is says it is there: "ক্যান্টিন নিচতলায়", "on the ground floor"
     r"|তলায়|তলা|পাশে|নিচে|ভিতরে|ভেতরে|সামনে|পেছনে|বেসমেন্টে"
-    r"|\b(?:floor|next to|inside|behind|basement|is (?:on|in|at))\b",
+    r"|\b(?:floor|next to|inside|behind|basement|is (?:on|in|at))\b"
+    # that it can be had: "ভিডিও কলে দেখানো যায়", "you can see a doctor on a video call"
+    r"|যায়|যাবে|সম্ভব|পারবেন|\b(?:can|possible)\b",
     re.IGNORECASE,
 )
 # Saying the fact is not known is not a claim about the facility.

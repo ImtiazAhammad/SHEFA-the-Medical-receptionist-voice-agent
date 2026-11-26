@@ -163,10 +163,12 @@ def _grounds(
     return grounds
 
 
-# Words that make a facility line ask something else too: a fee, a doctor, a booking.
+# Words that make a facility line ask something else too: a fee or a booking. A named doctor
+# is caught by `doctor_named`; the bare word "doctor" ("ভিডিও কলে ডাক্তার দেখানো যায়?") is not
+# another question.
 _OTHER_ASK = re.compile(
-    r"ফি|টাকা|খরচ|ভিজিট|ডাক্তার|ডাঃ|সিরিয়াল|অ্যাপয়েন্টমেন্ট|বুক"
-    r"|\b(?:fee|fees|cost|charge|price|doctor|dr|appointment|book|booking|serial)\b",
+    r"ফি|টাকা|খরচ|ভিজিট|সিরিয়াল|অ্যাপয়েন্টমেন্ট|বুক"
+    r"|\b(?:fee|fees|cost|charge|price|appointment|book|booking|serial)\b",
     re.IGNORECASE,
 )
 _QUESTION_END = re.compile(r"[?।!]+|\.\s")

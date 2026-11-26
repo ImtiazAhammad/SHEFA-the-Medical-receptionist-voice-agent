@@ -1059,3 +1059,14 @@ def test_a_facility_entry_retrieval_missed_is_spoken_by_code():
     assert llm.calls == []
     trace = session.metadata["brain_trace"][-1]
     assert (trace["reply_source"], trace["facility"]) == ("facility", "hours")
+
+
+@pytest.mark.parametrize(
+    "said", ["ভিডিও কলে ডাক্তার দেখানো যায়?", "Can I see a doctor on a video call?"]
+)
+def test_a_facility_question_with_the_bare_word_doctor_is_answered_by_code(said):
+    session = _session(said)
+    llm = FakeLLM("ভিডিও কলে ডাক্তার দেখানো যায়।", route=route_json())
+    _turn(session, said, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["facility"] == "video"
+    assert llm.calls == []

@@ -628,3 +628,46 @@ def test_a_facility_placed_with_no_fact_fails(sentence, language):
 )
 def test_more_when_to_come_forms_are_a_push(sentence, language):
     assert verdict(sentence, "Which days?", language=language).kind == "push"
+
+
+# --- fix round 1, second pass ---------------------------------------------------------------------
+
+
+def test_english_number_words_joined_by_and_stay_one_number_in_a_named_doctor_sentence():
+    said = "fee?"
+    assert verdict("Dr Hossain's report fee is two hundred and fifty taka.", said, language="en").ok
+    v = verdict("Dr Sultana's fee is six hundred and twelve taka.", said, language="en")
+    assert v.kind == "fact"  # 600 and 12 are on her line, 612 is not
+
+
+def test_a_clock_time_with_minutes_does_not_ground_the_whole_hour():
+    from shefa.brain.check import Grounds
+
+    g = Grounds()
+    g.add_value("18:30")
+    assert check_sentence("We meet at 18:00.", g, goal="x", language="en").kind == "fact"
+    assert check_sentence("We meet at 18:30.", g, goal="x", language="en").ok
+
+
+def test_two_doctors_on_one_knowledge_line_stay_two_doctors():
+    both = hit("kids", "ডাক্তার রহমান ও ডাক্তার সুলতানা দুজনেই শিশু দেখেন।")
+    assert verdict("ডাক্তার সুলতানা রবিবার বসেন।", "সুলতানা?", hits=(both,)).kind == "fact"
+
+
+def test_a_true_number_in_devanagari_digits_fails_language():
+    assert verdict("ডাক্তার রহমানের ফি ८०० টাকা।", "ফি?").kind == "language"
+
+
+def test_a_yes_confirming_a_named_doctors_day_is_not_a_parrot():
+    said = "ডাক্তার রহমান কি রবিবার বসেন?"
+    assert verdict("হ্যাঁ, ডাক্তার রহমান রবিবার বসেন।", said).ok
+    assert verdict("হ্যাঁ, ডাক্তার সুলতানা রবিবার বসেন।", "ডাক্তার সুলতানা কি রবিবার বসেন?").kind == "fact"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "language"),
+    [("ভিডিও কলে ডাক্তার দেখানো যায়।", "bn"), ("You can see a doctor on a video call.", "en")],
+)
+def test_a_facility_said_possible_with_no_fact_fails_as_a_facility_claim(sentence, language):
+    v = verdict(sentence, "video?", language=language)
+    assert (v.kind, "video" in v.reason) == ("unsupported", True), v
