@@ -426,3 +426,10 @@ def test_asking_when_to_come_is_a_push_at_an_information_caller(sentence, langua
     assert v.kind == "push"
     said = "সিরিয়াল চাই"
     assert verdict(sentence, said, language=language, goal="booking").ok
+
+
+def test_asking_which_day_to_book_is_a_push():
+    # k-days in the 7b re-run: the only sentence the caller heard.
+    sentence = "কোন দিনের জন্য আপনার বুকিং করতে চান?"
+    assert verdict(sentence, DAYS_Q).kind == "push"
+    assert verdict("বুকিং দিতে চান?", DAYS_Q).kind == "push"

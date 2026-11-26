@@ -757,13 +757,15 @@ _PUSH = re.compile(
     r"|\bmake an appointment\b",
     re.IGNORECASE,
 )
-# Asking when the caller will come is asking them to book ("What time would you like to come?").
+# Asking when the caller will come is asking them to book ("What time would you like to come?"),
+# and so is "বুকিং করতে চান?", which `_PUSH` (written for "বুক করতে চান") misses.
 _WHEN_TO_COME = re.compile(
     r"\b(?:what|which) (?:time|day|date)\b[^.?!]{0,30}\b(?:come|visit|see the doctor)\b"
     r"|\bwhen (?:would|do|will|can|could) you (?:like to |want to |prefer to )?(?:come|visit)\b"
     r"|(?:কখন|কবে|কোন দিনে?|কোন সময়ে?|কয়টায়|কোন বারে?)\s+(?:আপনি\s+)?"
     r"(?:আসতে চান|আসবেন|আসতে পারবেন|আসা যাবে|দেখাতে চান|দেখাবেন)"
-    r"|কোন (?:দিনে?|সময়ে?) আপনার (?:মত|মতো|সুবিধা)",
+    r"|কোন (?:দিনে?|সময়ে?) আপনার (?:মত|মতো|সুবিধা)"
+    r"|বুকিং (?:করতে|দিতে|নিতে) চা(?:ন|চ্ছেন|ইছেন)",
     re.IGNORECASE,
 )
 _ACTIONS = {
