@@ -72,6 +72,9 @@ class Grounds:
     values: list[Value] = field(default_factory=list)
     # The doctor the call is about ("উনি ইংরেজিতে কথা বলেন" is about this one).
     doctor: str = ""
+    # The directory block, also in `texts`: a doctor's note ("bring the old ECG") says nothing
+    # about which services the clinic has.
+    directory: str = ""
     # Facility topics a knowledge hit covers ("parking", "hours"): its text may not use the
     # caller's words for the topic ("9 am to 9 pm" says nothing of "opening hours").
     topics: set[str] = field(default_factory=set)
@@ -486,9 +489,30 @@ def _doctors_in(text: str, groups: list[frozenset[str]]) -> set[frozenset[str]]:
 # Sunday of Dr Sultana.
 # "two hundred and fifty" is one number, so "and" after hundred/thousand joins nothing.
 _CLAUSE_SPLIT = re.compile(
-    r",\s|;|।|[?!]|\s(?:ও|আর|এবং|but)\s|(?<!hundred)(?<!thousand)\sand\s", re.IGNORECASE
+    r",(?![0-9০-৯])\s*|;|।|[?!]|\s*&\s*|\s(?:ও|আর|এবং|but)\s|(?<!hundred)(?<!thousand)\sand\s",
+    re.IGNORECASE,
 )
 _TODAY_SAID = re.compile(_B + r"(?:আজ|আজকে)" + _E + r"|\btoday\b", re.IGNORECASE)
+# What may sit in a clause that only says what day today is ("আজ শনিবার", "today is Saturday").
+_TODAY_ONLY_WORDS = re.compile(
+    _B + r"(?:আজ|আজকে|তো|হলো|হল)" + _E + r"|\b(?:today|is|it's|it is)\b", re.IGNORECASE
+)
+# A doctor the call is about, meant without a name: one the facts cannot have named.
+_CALL_DOCTOR_UNKNOWN = frozenset({"\0unknown doctor"})
+
+
+def _only_today(clause: str) -> bool:
+    """The clause only says today's weekday: "আজ শনিবার", never "আজ শনিবার বসেন"."""
+    rest = _TODAY_ONLY_WORDS.sub(" ", clause)
+    for regex in (_BN_DAY_SAID, _EN_DAY_SAID):
+        rest = regex.sub(" ", rest)
+    return bool(_TODAY_SAID.search(clause)) and not re.sub(r"[\s,।.!?'’]+", "", rest)
+
+
+def _call_doctor(grounds: Grounds, groups: list[frozenset[str]]) -> set[frozenset[str]]:
+    """The doctor "উনি/he/she" means: the call's doctor, else one no fact can back."""
+    found = _doctors_in(grounds.doctor, groups) if grounds.doctor else set()
+    return found or {_CALL_DOCTOR_UNKNOWN}
 
 
 def _clauses(text: str) -> list[str]:
@@ -503,10 +527,14 @@ def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
     it, or else the next one): their directory line, knowledge entries and tool results naming
     them, and the call values that are theirs or nobody's. Today's weekday is not a doctor's
     sitting day ("ডাক্তার রহমান আজ শনিবার বসেন" is wrong on a Saturday when he sits Sunday); a
-    clause of its own that says today ("আজ শনিবার, ...") may still name it."""
+    clause that only says what day today is ("আজ শনিবার, ...") may still name it. A clause with
+    "উনি/he/she" and no name is about the call's doctor; with none known nothing backs its facts."""
     groups = _doctor_groups(grounds)
     clauses = _clauses(text)
-    own = [_doctors_in(c, groups) for c in clauses]
+    own = [
+        _doctors_in(c, groups) or (_call_doctor(grounds, groups) if _PRONOUN.search(c) else set())
+        for c in clauses
+    ]
     if not any(own):
         return [(text, grounds.texts)]
     values = {id(v.text) for v in grounds.values}
@@ -526,7 +554,7 @@ def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
         ]
         for value in grounds.values:
             if value.today:
-                if not own[i] and _TODAY_SAID.search(clause):
+                if _only_today(clause):
                     lines.append(value.text)
                 continue
             belongs = {fold(w) for w in _words(value.doctor)}
@@ -537,6 +565,27 @@ def _scopes(text: str, grounds: Grounds) -> list[tuple[str, list[str]]]:
             )
         out.append((clause, lines))
     return out
+
+
+def _echoed_guess(text: str, grounds: Grounds) -> str | None:
+    """A number the caller said, given back in a sentence about no doctor, that only the
+    directory holds: "Yes, the follow-up fee is 500 on Saturdays" to "Is the follow-up fee 500?"
+    is one doctor's fee, and which one the sentence never says. A clinic fact (knowledge entry,
+    tool result) may still confirm it ("রিপোর্ট দেখাতে ৩০০ টাকা")."""
+    if not grounds.caller:
+        return None
+    groups = _doctor_groups(grounds)
+    if any(
+        _doctors_in(c, groups) or _PRONOUN.search(c) for c in _clauses(text)
+    ):
+        return None  # scoped to a doctor: checked against that doctor's own lines
+    caller = _norm(grounds.caller)
+    echoed = numbers_in(_without_clocks(text)) & numbers_in(_without_clocks(caller))
+    facts = [t for t in grounds.texts if not (grounds.directory and t is grounds.directory)]
+    clinic = set().union(*(numbers_in(t) for t in facts)) if facts else set()
+    for number in sorted(echoed - clinic, key=int):
+        return number
+    return None
 
 
 def _scope_lines(text: str, grounds: Grounds) -> list[str]:
@@ -596,47 +645,55 @@ def _unknown_day(sentence: str, texts: list[str]) -> str | None:
 # A clock hour said with a part of the day names a 24-hour time: "সকাল ছয়টায়" is 06, "সন্ধ্যা
 # ছয়টায়" is 18. That hour must be a time in the grounds ("18:00").
 _PERIOD_KINDS = (
-    ("সকাল সকালে ভোর ভোরে morning am", "am"),
-    ("দুপুর দুপুরে বিকাল বিকেল বিকালে বিকেলে সন্ধ্যা সন্ধ্যায় afternoon evening pm", "pm"),
+    ("সকাল সকালে ভোর ভোরে morning", "morning"),
+    ("am", "am"),
+    ("দুপুর দুপুরে", "noon"),
+    ("বিকাল বিকেল বিকালে বিকেলে afternoon", "afternoon"),
+    ("সন্ধ্যা সন্ধ্যায় evening", "evening"),
+    ("pm", "pm"),
     ("রাত রাতে night", "night"),
 )
 _PERIODS = {_norm(w): kind for words, kind in _PERIOD_KINDS for w in _split(words)}
-_HOUR_WORD = r"([0-9০-৯]{1,2}|[ঀ-৿]+|[A-Za-z]+)"
+_BN_PERIOD = "|".join(k for k in _PERIODS if not k.isascii())
+_DIGITS_2 = r"[0-9০-৯]{1,2}"
+# "রাত ৯টা", "রাত সাড়ে নয়টা", "রাত ৯টা ১৫ মিনিট", "রাত ৯.১৫", "সন্ধ্যা ১:০০".
 _BN_TIME = re.compile(
     _B
     + "("
-    + "|".join(k for k in _PERIODS if not k.isascii())
+    + _BN_PERIOD
     + ")"
     + _E
-    + r"\s+(?:(?:সাড়ে|পৌনে|সোয়া)\s+)?"
-    + _HOUR_WORD
+    + r"\s+(?:(সাড়ে|পৌনে|সোয়া)\s+)?"
+    + rf"(?:({_DIGITS_2})(?:[:.]([0-9০-৯]{{2}}))?(?:টা|টায়|টার|টাতে)?|([ঀ-৿]+))"
+    + rf"(?:\s+({_DIGITS_2}|[ঀ-৿]+?)\s*মিনিট[ঀ-৿]*)?"
 )
+# "9 pm", "9.15 pm", "9:15pm", "nine fifteen at night", "six in the evening".
 _EN_TIME = re.compile(
-    r"\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+in\s+the\s+(morning|afternoon|evening)\b"
-    r"|\b" + _HOUR_WORD + r"(?:\s+o'clock)?\s+at\s+(night)\b"
-    r"|\b" + _HOUR_WORD + r"(?::[0-9]{2})?\s*([ap])\.?\s?m\b\.?",
+    r"\b([0-9]{1,2}|[A-Za-z]+)(?:[:.]([0-9]{2})|\s+(fifteen|thirty|forty[- ]five|[0-9]{2}))?"
+    r"(?:\s+o'clock)?\s*(?:in\s+the\s+(morning|afternoon|evening)\b|at\s+(night)\b"
+    r"|([ap])\.?\s?m\b\.?)",
     re.IGNORECASE,
 )
+_EN_MINUTES = {"fifteen": 15, "thirty": 30, "forty-five": 45, "forty five": 45}
 
 
-def _hours_24(hour: int, period: str) -> set[int]:
-    if period == "am":
+def _hours_24(hour: int, kind: str) -> set[int]:
+    """The 24-hour hours a part of the day makes of a clock hour, only where the reading is
+    plausible: "রাত ৪টা" is 04:00 (not 16:00), "রাত ১২টা" midnight, "সন্ধ্যা ১টা" no time at all."""
+    if kind == "am":
         return {hour % 12}
-    if period == "pm":
+    if kind == "pm":
         return {hour % 12 + 12}
-    return {hour % 12 + 12, hour % 12} if hour <= 4 or hour == 12 else {hour % 12 + 12}
-
-
-@lru_cache(maxsize=512)
-def _ground_hours(text: str) -> frozenset[int]:
-    """Every 24-hour hour the text names: "21:00", "২১:০০", and a part of the day with an hour
-    ("রাত ৯টা", "রাত নয়টা", "9 pm", "nine in the evening")."""
-    text = _norm(text)
-    hours = {int(m.group(1)) % 24 for m in _CLOCK.finditer(text.translate(_TO_ASCII))}
-    for _phrase, hour_word, period in _said_times(text):
-        if hour := _hour(hour_word):
-            hours |= _hours_24(hour, _PERIODS[_norm(period).lower()])
-    return frozenset(hours)
+    if kind == "morning":
+        return {hour} if 4 <= hour <= 12 else set()
+    if kind == "noon":
+        return {12} if hour == 12 else ({hour + 12} if 1 <= hour <= 4 else set())
+    if kind == "afternoon":
+        return {12} if hour == 12 else ({hour + 12} if 1 <= hour <= 6 else set())
+    if kind == "evening":
+        return {hour + 12} if 4 <= hour <= 9 else set()
+    # night
+    return {0} if hour == 12 else ({hour} if hour <= 4 else {hour + 12})
 
 
 def _hour(word: str) -> int | None:
@@ -647,61 +704,101 @@ def _hour(word: str) -> int | None:
     return None
 
 
-def _said_times(text: str) -> list[tuple[str, str, str]]:
-    """(phrase, hour word, part of the day) for each time said with a part of the day."""
-    said: list[tuple[str, str, str]] = [
-        (m.group(), m.group(2), m.group(1)) for m in _BN_TIME.finditer(text)
-    ]
+def _minute(word: str) -> int | None:
+    word = _norm(word).translate(_TO_ASCII).lower()
+    if word in _EN_MINUTES:
+        return _EN_MINUTES[word]
+    part = _part(word) if word else None
+    if part and part.kind in (_UNIT, _TENS, _DIGITS_RUN) and part.value < 60:
+        return part.value
+    return None
+
+
+def _said_times(text: str) -> list[tuple[str, frozenset[int], int, tuple[int, int]]]:
+    """(phrase, its 24-hour hours, its minute, its span) for each time said with a part of the
+    day; an hour and minute no reading makes plausible give no hours."""
+    said = []
+    for m in _BN_TIME.finditer(text):
+        period, half, digits, minutes, word, spoken = m.groups()
+        hour = _hour(digits or word)
+        if hour is None:
+            continue
+        minute = 0
+        if minutes:
+            minute = int(minutes.translate(_TO_ASCII))
+        elif spoken:
+            minute = _minute(spoken) or 0
+        if half:
+            half = _norm(half)
+            if half == _norm("সাড়ে"):
+                minute = 30
+            elif half == _norm("সোয়া"):
+                minute = 15
+            else:  # পৌনে: a quarter to
+                hour, minute = (hour - 2) % 12 + 1, 45
+        hours = frozenset(_hours_24(hour, _PERIODS[_norm(period).lower()]))
+        said.append((m.group(), hours, minute, m.span()))
     for m in _EN_TIME.finditer(text):
-        hour, period = next(
-            (h, p) for h, p in zip(m.groups()[::2], m.groups()[1::2], strict=True) if h
-        )
-        said.append((m.group(), hour, period + "m" if len(period) == 1 else period))
+        word, digits, spoken, part, night, ampm = m.groups()
+        hour = _hour(word)
+        if hour is None:
+            continue
+        minute = int(digits) if digits else (_minute(spoken) or 0) if spoken else 0
+        kind = (part or night or (ampm.lower() + "m")).lower()
+        said.append((m.group(), frozenset(_hours_24(hour, kind)), minute, m.span()))
     return said
-
-
-def _hours_known(texts: list[str]) -> set[int]:
-    return set().union(*(_ground_hours(t) for t in texts)) if texts else set()
-
-
-@lru_cache(maxsize=512)
-def _ground_clocks(text: str) -> frozenset[tuple[int, int]]:
-    """Every (hour, minute) the text names: "18:30", and a part of the day with an hour at :00."""
-    text = _norm(text)
-    found = {
-        (int(m.group(1)) % 24, int(m.group(2)))
-        for m in _CLOCK_HM.finditer(text.translate(_TO_ASCII))
-    }
-    for _phrase, hour_word, period in _said_times(text):
-        if hour := _hour(hour_word):
-            found.update((h, 0) for h in _hours_24(hour, _PERIODS[_norm(period).lower()]))
-    return frozenset(found)
 
 
 _CLOCK_HM = re.compile(r"(?<![0-9])([0-9]{1,2}):([0-9]{2})")
 
 
+def _bare_clocks(text: str) -> list[re.Match[str]]:
+    """Clock times not inside a part-of-day phrase ("সন্ধ্যা ১:০০" is read with its part of day)."""
+    spans = [span for *_rest, span in _said_times(text)]
+    return [
+        m
+        for m in _CLOCK_HM.finditer(text.translate(_TO_ASCII))
+        if not any(a <= m.start() < b for a, b in spans)
+    ]
+
+
+@lru_cache(maxsize=512)
+def _ground_clocks(text: str) -> frozenset[tuple[int, int]]:
+    """Every (hour, minute) the text names: "18:30", "রাত ৯টা" (21:00), "সাড়ে ৬টা" (18:30)."""
+    text = _norm(text)
+    found = {(int(m.group(1)) % 24, int(m.group(2))) for m in _bare_clocks(text)}
+    for _phrase, hours, minute, _span in _said_times(text):
+        found.update((h, minute) for h in hours)
+    return frozenset(found)
+
+
 def _unknown_time(sentence: str, texts: list[str]) -> str | None:
-    """A clock time is checked whole, hour and minute ("21:15" is not "21:00"); a part of the
-    day with an hour is checked by its hour."""
+    """Each time is checked whole, hour and minute, against the times of the facts: "21:15" and
+    "রাত সাড়ে ৯টা" are not "21:00"."""
     clocks = set().union(*(_ground_clocks(t) for t in texts)) if texts else set()
-    for m in _CLOCK_HM.finditer(sentence.translate(_TO_ASCII)):
+    for m in _bare_clocks(sentence):
         hour, minute = int(m.group(1)), int(m.group(2))
         if (hour % 24, minute) not in clocks and not (
             hour <= 12 and ((hour + 12) % 24, minute) in clocks
         ):
             return m.group()
-    grounded = _hours_known(texts)
-    for phrase, hour_word, period in _said_times(sentence):
-        hour = _hour(hour_word)
-        if hour and not _hours_24(hour, _PERIODS[_norm(period).lower()]) & grounded:
+    for phrase, hours, minute, _span in _said_times(sentence):
+        if not any((h, minute) in clocks for h in hours):
             return phrase
     return None
 
 
 def _without_clocks(sentence: str) -> str:
-    """The sentence without its clock times: they are checked as times, not as numbers."""
-    return _CLOCK_HM.sub(" ", sentence.translate(_TO_ASCII))
+    """The sentence without its times: they are checked as times, not as numbers (the 15 of
+    "রাত ৯টা ১৫ মিনিট" is no fee or count of years)."""
+    text = sentence.translate(_TO_ASCII)
+    spans = sorted(span for *_rest, span in _said_times(text))
+    out, at = [], 0
+    for a, b in spans:
+        if a >= at:
+            out.append(text[at:a] + " ")
+            at = b
+    return _CLOCK_HM.sub(" ", "".join([*out, text[at:]]))
 
 
 # --- a "yes, we have it" -----------------------------------------------------------------------
@@ -864,10 +961,10 @@ def _adds_a_fact(text: str, caller: str, grounds: Grounds, claim_ok: bool) -> bo
         return True
     if _day_set(text) - _day_set(caller):
         return True
-    said_times = {p for p, _h, _p in _said_times(text)} | set(
+    said_times = {p for p, *_rest in _said_times(text)} | set(
         _CLOCK_HM.findall(text.translate(_TO_ASCII))
     )
-    heard_times = {p for p, _h, _p in _said_times(caller)} | set(
+    heard_times = {p for p, *_rest in _said_times(caller)} | set(
         _CLOCK_HM.findall(caller.translate(_TO_ASCII))
     )
     if said_times - heard_times:
@@ -959,7 +1056,8 @@ _WHEN_TO_COME = re.compile(
     r"|কোন (?:দিনে?|সময়ে?) আপনার (?:মত|মতো|সুবিধা)"
     r"|বুকিং (?:করতে|দিতে|নিতে) চা(?:ন|চ্ছেন|ইছেন)"
     r"|\b(?:would|do) you (?:like|want) to come\b|\b(?:can|will) you come\b"
-    r"|আপনি কি [^?।]{0,25}(?:আসবেন|আসতে পারবেন|আসতে চান)",
+    r"|আপনি কি [^?।]{0,25}(?:আসবেন|আসতে পারবেন|আসতে চান)"
+    r"|\b(?:shall|should|can|could) we see you\b",
     re.IGNORECASE,
 )
 _ACTIONS = {
@@ -1089,7 +1187,8 @@ def _uncovered_facility(stated: str, grounds: Grounds) -> str | None:
     if topic is None or topic in grounds.topics:
         return None
     patterns = [TOPICS[topic][0], *([_COVERS[topic]] if topic in _COVERS else [])]
-    if any(p.search(text) for p in patterns for text in grounds.texts):
+    facts = [t for t in grounds.texts if not (grounds.directory and t is grounds.directory)]
+    if any(p.search(text) for p in patterns for text in facts):
         return None
     return topic
 
@@ -1178,6 +1277,12 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
             return Verdict(False, "fact", f"the time {time} is not in the facts")
         if day := _unknown_day(clause, scope):
             return Verdict(False, "fact", f"the day {day} is not in the facts")
+    if number := _echoed_guess(text, grounds):
+        return Verdict(
+            False,
+            "unsupported",
+            f"it gives back the caller's number {number}, which no fact states for this",
+        )
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
     if day := _open_on_a_closed_day(text, grounds.texts):

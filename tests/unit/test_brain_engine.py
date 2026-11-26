@@ -419,13 +419,15 @@ def test_the_callers_words_never_ground_a_fact():
 
 
 def test_booking_today_and_earlier_tool_results_ground_a_reply():
+    # Changed in Task 7b fix round 2: the booking's slots (the caller's words) ground nothing,
+    # so the doctor and Thursday now come from the tool result that returned them.
     said = "রহমান স্যারের সিরিয়াল চাই"
     session = _session(said)
     save(
         session,
         CallState(goal="booking", booking={"doctor": "ডা. রহমান", "date": "2026-11-26"}),
     )
-    session.metadata["brain_grounds"] = ["free at 17:00"]
+    session.metadata["brain_grounds"] = ["ডা. রহমান free 2026-11-26 at 17:00"]
     llm = FakeLLM("আজ বুধবার, ডা. রহমান বৃহস্পতিবার বিকেল ৫টায় খালি আছেন।")
     speak = Recorder()
     _turn(session, said, llm, speak)
@@ -1070,3 +1072,104 @@ def test_a_facility_question_with_the_bare_word_doctor_is_answered_by_code(said)
     _turn(session, said, llm, Recorder())
     assert session.metadata["brain_trace"][-1]["facility"] == "video"
     assert llm.calls == []
+
+
+# --- Task 7b fix round 2: the caller's words never ground a fact, end to end ---------------------
+# TODAY is a Wednesday; Dr Rahman sits Sun/Tue/Thu 16-20, Dr Sultana Mon/Wed/Sat 10-13.
+
+
+@pytest.mark.parametrize(
+    ("said", "reply"),
+    [
+        ("Does Dr Rahman sit on Saturday?", "Yes, Dr Rahman sits on Saturday."),
+        ("Does Dr Rahman sit today?", "Yes, Dr Rahman sits today, Wednesday."),
+        ("Is Dr Rahman in today?", "Yes, Dr Rahman sits on Wednesday."),
+        ("ডাক্তার রহমান কি শনিবার বসেন?", "হ্যাঁ, ডাক্তার রহমান শনিবার বসেন।"),
+        ("ডাক্তার রহমান কি আজ বসেন?", "হ্যাঁ, ডাক্তার রহমান আজ বুধবার বসেন।"),
+        ("ডাক্তার রহমান কি সকাল ১০টায় বসেন?", "হ্যাঁ, ডাক্তার রহমান সকাল ১০টায় বসেন।"),
+        ("ডাক্তার সুলতানা কি কাল বসেন?", "হ্যাঁ, ডাক্তার সুলতানা বৃহস্পতিবার বসেন।"),
+        ("Does Dr Sultana see patients at 6 pm?", "Yes, Dr Sultana sees patients at 6 pm."),
+        ("শুক্রবার কোন ডাক্তার বসেন?", "শুক্রবার ডাক্তার হোসেন বসেন।"),
+        ("ডাক্তার রহমান কবে বসেন?", "উনি শনিবার আর সোমবার বসেন।"),
+    ],
+)
+def test_a_callers_guessed_day_or_time_is_never_confirmed(said, reply, example_clinic):
+    session = _session(said)
+    llm = FakeLLM(reply, reply, route=route_json("none", "calm", "information"))
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert reply not in speak.said
+    assert session.metadata["brain_trace"][-1]["verdicts"][0] != "ok"
+
+
+@pytest.mark.parametrize(
+    ("said", "reply"),
+    [
+        ("Does Dr Rahman sit on Sunday?", "Yes, Dr Rahman sits on Sunday."),
+        ("ডাক্তার রহমান কি রবিবার বসেন?", "হ্যাঁ, ডাক্তার রহমান রবিবার বসেন।"),
+        ("ডাক্তার রহমান কবে বসেন?", "উনি রবিবার, মঙ্গলবার ও বৃহস্পতিবার বসেন।"),
+    ],
+)
+def test_a_true_answer_about_a_named_doctor_is_spoken(said, reply, example_clinic):
+    session = _session(said)
+    speak = Recorder()
+    _turn(session, said, FakeLLM(reply, route=route_json("none", "calm", "information")), speak)
+    assert speak.said == [reply]
+
+
+def test_a_tool_result_with_its_doctor_grounds_the_booking_time(example_clinic):
+    said = "রহমান স্যারের সিরিয়াল চাই"
+    session = _session(said)
+    session.metadata["brain_grounds"] = [{"text": "free 2026-11-26 at 17:00", "doctor": "Rahman"}]
+    llm = FakeLLM("ডাক্তার রহমান বৃহস্পতিবার বিকেল ৫টায় খালি আছেন।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["ডাক্তার রহমান বৃহস্পতিবার বিকেল ৫টায় খালি আছেন।"]
+
+
+def test_a_kb_entry_without_the_calls_language_goes_to_the_model():
+    lift = default_knowledge_store().add(
+        "default", "lift", text_bn="", text_en="There is a lift.", tags=["zzz"], author="test"
+    )
+    said = "লিফট আছে?"
+    session = _session(said)
+    llm = FakeLLM("জি, বলছি।", route=route_json())
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["জি, বলছি।"]  # never the English text, spoken by code unchecked
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["reply_source"] == "model"
+    assert lift in trace["hits"]  # the entry is a hit for the model and the checker
+
+
+def test_a_clinic_ambulance_entry_keeps_the_999_lead_in():
+    default_knowledge_store().add(
+        "default",
+        "ambulance",
+        text_bn="ক্লিনিকের নিজস্ব অ্যাম্বুলেন্স আছে।",
+        text_en="",
+        tags=["zzz"],
+        author="test",
+    )
+    said = "অ্যাম্বুলেন্স সার্ভিস আছে?"
+    session = _session(said)
+    speak = Recorder()
+    _turn(session, said, FakeLLM("unused", route=route_json()), speak)
+    assert speak.said[0].startswith("জরুরি অবস্থা হলে এখনই ৯৯৯-এ ফোন করুন।")
+    assert "ক্লিনিকের নিজস্ব অ্যাম্বুলেন্স আছে।" in speak.said[0]
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "শিশু ডাক্তার কবে বসেন, ক্লিনিক কখন বন্ধ হয়?",
+        "When does the child doctor sit and what time do you close?",
+        "Is there parking and a pharmacy?",
+    ],
+)
+def test_joined_questions_are_not_a_pure_facility_question(said, example_clinic):
+    session = _session(said)
+    llm = FakeLLM("জি, বলছি।", route=route_json())
+    _turn(session, said, llm, Recorder())
+    assert session.metadata["brain_trace"][-1]["reply_source"] == "model"
+

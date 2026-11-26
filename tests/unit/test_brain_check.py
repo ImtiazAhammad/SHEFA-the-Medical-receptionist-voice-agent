@@ -313,7 +313,9 @@ def test_a_hyphenated_date_in_the_grounds_is_not_a_stranger_number():
 
 
 def test_doctor_hours_from_the_directory_pass():
+    # Changed in Task 7b fix round 2: "উনি" is the call's doctor, so the call must have one.
     g = grounds(DIRECTORY_LINE)
+    g.doctor = "Sultana"
     assert check("উনি সকাল ১০টা থেকে দুপুর ১টা পর্যন্ত বসেন।", g).ok
     assert check("উনি সকাল দশটা থেকে বসেন।", g).ok
 
@@ -352,6 +354,7 @@ def test_the_real_directory_block_grounds_its_fees_and_hours(tmp_path):
         import_directory(store, DIRECTORY)
         block = directory_brief(store, "bn")
     g = grounds(block)
+    g.doctor = "Sultana"  # Task 7b fix round 2: "উনি" below is the call's doctor
     assert check("ডাক্তার সুলতানার প্রথমবারের ফি ছয়শো টাকা, পরের বার চারশো।", g).ok
     assert check("উনি সকাল দশটা থেকে দুপুর একটা পর্যন্ত বসেন।", g).ok
     assert check("ডাক্তার সুলতানার ফি সাতশো টাকা।", g).kind == "fact"

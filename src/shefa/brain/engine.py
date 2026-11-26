@@ -26,6 +26,7 @@ from shefa.brain.check import Grounds, Verdict, check_sentence
 from shefa.brain.config import call_config
 from shefa.brain.knowledge import default_knowledge_store
 from shefa.brain.prompt import DIRECTORY_HEADER, compose
+from shefa.brain.retrieve import Hit as _RetrievedHit
 from shefa.brain.retrieve import retriever_for
 from shefa.brain.router import Route, route
 from shefa.brain.state import Cues, doctor_named, load, save, track
@@ -42,6 +43,7 @@ from shefa.pipeline.language_detector import is_emergency
 from shefa.pipeline.replycheck import tidy
 
 if TYPE_CHECKING:
+    from shefa.brain.knowledge import Entry
     from shefa.brain.retrieve import Hit
     from shefa.brain.state import CallState
     from shefa.session.manager import CallSession
@@ -120,6 +122,16 @@ def _day_names(day: _date) -> list[str]:
     return [WEEKDAYS_BN[day.weekday()], WEEKDAYS_EN[day.weekday()]]
 
 
+_ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def _iso_day_names(iso: str) -> list[str]:
+    try:
+        return _day_names(_date.fromisoformat(iso))
+    except ValueError:
+        return []
+
+
 def _grounds(
     session: CallSession,
     state: CallState,
@@ -136,25 +148,18 @@ def _grounds(
         grounds.topics.add(hit.entry.topic)
     if directory:
         grounds.add(directory)
+        grounds.directory = directory
     for earlier in session.metadata.get("brain_grounds", []):
         # A tool result says whose it is ({"text": ..., "doctor": ...}); a bare string is nobody's.
-        if isinstance(earlier, dict):
-            doctor = str(earlier.get("doctor") or "")
-            grounds.add_value(str(earlier.get("text", "")), doctor=doctor)
-        else:
-            grounds.add_value(str(earlier))
-    # The booking so far is one value that belongs to its doctor: Dr Rahman's booked Sunday is
-    # not a day Dr Sultana sits.
-    slots = ("doctor", "date", "time", "period")
-    booking = [state.booking[k] for k in slots if state.booking.get(k)]
-    try:
-        booked_day = _date.fromisoformat(state.booking.get("date", ""))
-    except ValueError:
-        booked_day = None
-    if booked_day is not None:
-        booking.extend(_day_names(booked_day))
-    if booking:
-        grounds.add_value(" ".join(booking), doctor=state.booking.get("doctor", ""))
+        # Its dates also name their weekday ("2026-11-26" is a Thursday).
+        doctor = str(earlier.get("doctor") or "") if isinstance(earlier, dict) else ""
+        text = str(earlier.get("text", "")) if isinstance(earlier, dict) else str(earlier)
+        days = [n for m in _ISO_DATE.finditer(text) for n in _iso_day_names(m.group())]
+        grounds.add_value(" ".join([text, *days]), doctor=doctor)
+    # The booking slots so far (doctor, day, time) are what `track` read from the caller's own
+    # words ("কাল", "শনিবার", "১০টায়"), so they ground nothing: a day or time reaches the grounds
+    # only as a tool result that returned it. The booking's doctor (found in the directory) is
+    # who "উনি/he/she" means.
     grounds.doctor = state.booking.get("doctor", "")
     grounds.add_value(" ".join([today.isoformat(), *_day_names(today)]), today=True)
     if phone := _caller_phone(session):
@@ -171,7 +176,10 @@ _OTHER_ASK = re.compile(
     r"|\b(?:fee|fees|cost|charge|price|appointment|book|booking|serial)\b",
     re.IGNORECASE,
 )
-_QUESTION_END = re.compile(r"[?।!]+|\.\s")
+# A line asks two things when two questions are joined: "?", "।", a comma, "and", "&", "আর".
+_QUESTION_END = re.compile(
+    r"[?।!]+|\.\s|,\s*|\s*&\s*|\s(?:and|also|আর|এবং|ও)\s", re.IGNORECASE
+)
 
 
 def _pure_facility(said: str) -> bool:
@@ -182,8 +190,10 @@ def _pure_facility(said: str) -> bool:
 
 def _facility_reply(
     said: str, hits: list[Hit], language: str, directory: str, clinic: str
-) -> tuple[str, str] | None:
-    """(topic, what code says) for a pure facility question the turn's facts do not cover.
+) -> tuple[str, str | Entry] | None:
+    """(topic, what code says) for a pure facility question the turn's facts do not cover, or
+    (topic, entry) when the clinic's entry for it lacks the call's language: the model then gets
+    it as a hit and is checked as usual (code never speaks the other language unchecked).
 
     The model answers when a knowledge hit or the clinic's facility facts (the guided engine's
     source, `settings.facilities`) cover it, when the directory speaks of it (chamber hours, an
@@ -206,8 +216,14 @@ def _facility_reply(
     if is_emergency(said, spoken):
         return None
     for entry in default_knowledge_store().entries([clinic or "default"]):
-        if entry.topic == topic and (text := entry.text(lang).strip()):
-            return topic, text
+        if entry.topic != topic:
+            continue
+        own = (entry.text_en if lang == "en" else entry.text_bn).strip()
+        if not own:
+            return topic, entry
+        # Said the way `facilities.answer` says the clinic's own facts (ambulance: 999 first).
+        facts = {topic: {lang: own}}
+        return topic, facilities.answer(said, language, facts, during_booking=True) or own
     text = facilities.answer(said, language, settings.facilities, during_booking=True) or ""
     return topic, text
 
@@ -419,7 +435,14 @@ class Brain:
         trace["hits"] = [h.entry.id for h in hits]
         spoken: list[str] = []
 
-        if (found := _facility_reply(said, hits, language, directory, clinic)) is not None:
+        found = _facility_reply(said, hits, language, directory, clinic)
+        if found is not None and not isinstance(found[1], str):
+            # The clinic's entry has no text in the call's language: the model answers with it.
+            hits = [*hits, _RetrievedHit(found[1], 0.0, "topic")]
+            grounds = _grounds(session, state, hits, directory, said, today)
+            trace["hits"] = [h.entry.id for h in hits]
+            found = None
+        if found is not None:
             # Code answers from what the clinic wrote, or says it does not know, the way the
             # guided engine does: the model never gets the chance to invent a "yes" or "no".
             # No booking offer: the caller asked for information.
