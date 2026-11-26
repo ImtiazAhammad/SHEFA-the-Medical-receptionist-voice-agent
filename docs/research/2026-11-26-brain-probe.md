@@ -211,3 +211,230 @@ regenerated non-tool turns (m-rushed, e-days) add a whole second generation.
 
 After a fix, re-run `uv run python scripts/brain_probe.py`; it exits 0 only when all four
 criteria pass.
+
+
+## Re-run after 8c
+
+Date: 2026-11-26. Same script, extended (`uv run python scripts/brain_probe.py`, defaults
+`--runs 2 --concurrent 3`). Raw runs (untracked): `data/bench/brain-probe-20261126-072737.json`
+(first gate run) and `data/bench/brain-probe-20261126-073610.json` (after the stream-close fix
+below; **the numbers here are from this one** unless marked). Same setup as above (temp stores,
+`configs/clinic.example.yaml`, words-only retrieval, caller identified with one booking,
+`today` = 2026-11-28, client built as the product builds it). vLLM untouched.
+
+What changed in the brain (Task 8c):
+
+- **Router beside the reply** (`shefa.brain.router`): one JSON-only call, temperature 0, 40
+  tokens max, output forced by vLLM `structured_outputs` with a regex for the compact JSON
+  `{"tool":…,"mood":…,"goal":…}` (25 tokens instead of 33 for the pretty-printed JSON schema
+  form). Tools: the 8 of `TOOL_NAMES` without `find_doctors`, plus `none`. Fixed instructions
+  first (prefix cache), then the last 4 turns and the caller's line. Error, timeout
+  (`brain.router_timeout_s` = 1.5 s) or unreadable output = no route, plain reply.
+- **Engine**: router and reply start together; reply sentences wait for the route. A named tool
+  closes the reply unheard and calls `_act` (still the stub, which speaks the repeat prompt) with
+  arguments built by code; `none` releases the sentences. Router mood/goal override the word
+  rules (a question never replaces a real goal). The talker's TOOL protocol and the whitespace
+  hold are gone; tool-like text is still never spoken.
+- **Prompt**: persona, conduct, directory (brain header without "offer to book"), the
+  identified-caller line, then the per-turn parts. A cut history now starts with a caller turn
+  (see "Prefix cache in a longer call").
+- **Client**: per-request settings override the client's; a stream closed early now closes the
+  HTTP response (see "Orphaned generations").
+
+The router prompt was written and tuned on a separate set of 24 lines (15 tool, 9 non-tool, none
+of them in the probe; 24/24 right on the first try) and frozen before the gate ran. The probe's
+turns: 31 tool turns (4 to 5 per tool, Bangla and English, two emergencies and two "a person,
+please") and 59 non-tool turns (15 knowledge, 10 doctor questions including symptom → doctor,
+10 moods, 16 English, 8 small talk). Each turn is a fresh call (greeting + caller's line).
+
+### Verdict: router and regenerations pass; first-spoken latency FAILS
+
+| Criterion | run 1 | run 2 | 3 calls at once | Result |
+|---|---|---|---|---|
+| Router right tool on tool turns (≥ 90%) | 30/31 (96.8%) | 30/31 (96.8%) | 30/31 | pass |
+| Router names a tool on non-tool turns (≤ 10%) | 2/59 (3.4%) | 2/59 (3.4%) | 2/59 | pass |
+| Regenerations (≤ 20% of turns) | 9/90 (10%) | 8/90 (8.9%) | 9/90 | pass |
+| First spoken p95, non-tool turns, one call at a time (≤ 1100 ms) | **1338 ms** | **1407 ms** | 1612 ms (not gated) | FAIL |
+
+p95 is nearest-rank over the 59 non-tool turns (a turn that never spoke would count as
+infinite; none did). A non-tool turn counts as a false tool when the router named any tool. The
+first gate run (before the stream-close fix) gave the same router results (30/31, 2/59), 10 and
+11 regenerations, and p95 1409 / 1342 ms.
+
+The router's misses, identical in every run (temperature 0):
+
+- t-move2 "সিরিয়ালের সময়টা একটু পিছিয়ে সন্ধ্যা ৭টায় করে দিন।" (push my serial back to 7 pm) → `book`
+  instead of `reschedule_booking`.
+- d-heart "বুক ধড়ফড় করে মাঝে মাঝে, কোন ডাক্তারের কাছে যাওয়া উচিত?" (palpitations now and then,
+  which doctor?) → `hand_over`. Arguably cautious, counted as false.
+- m-upset "গতবার দুই ঘণ্টা বসিয়ে রেখেছিলেন … এবার কি দেরি হবে?" (will there be a delay this
+  time?) → `lookup_booking`.
+
+### Where the time goes (non-tool turns, final run)
+
+| | run 1 p50 / p95 | run 2 p50 / p95 | 3 at once p50 / p95 |
+|---|---|---|---|
+| Router call | 525 / 612 ms | 536 / 627 ms | 690 / 798 ms |
+| Reply first token | 80 / 120 ms | 83 / 148 ms | 121 / 199 ms |
+| First sentence finished in the stream | 532 / 1126 ms | 519 / 1166 ms | 622 / 1220 ms |
+| Decode of the first sentence (first token → finished) | 457 / 1036 ms | 425 / 1087 ms | 509 / 1074 ms |
+| Finished sentence waiting for the router | 0 / 276 ms (23 of 59 turns waited) | 56 / 270 ms (28 turns) | 60 / 295 ms (27 turns) |
+| First spoken | 599 / 1338 ms | 573 / 1407 ms | 709 / 1612 ms |
+
+- **First token is solved**: 80 ms median against 290–460 ms in 8b. The call-constant prefix
+  (persona, conduct, directory) is cached; vLLM's prefix-cache hit share over the whole probe was
+  93.7%. Real prompts are 1,117 tokens median, 1,369 max (vLLM tokenizer).
+- **Decode is the remainder**: 25.4 ms per token (median, first sentences of run 1; ~39
+  tokens/s), first sentences 16 tokens median. The non-regenerated turns over 1100 ms are all one
+  long Bangla first sentence of 40–44 tokens (k-parking 1170, k-rahman-time 1126, m-rude 1270,
+  k-pharmacy 1407 ms): 40 × 25.4 ≈ 1,020 ms of decode alone.
+- **Regenerations decide the p95**: of the 9 / 10 turns over the limit, 6 / 6 were regenerated
+  (a whole second generation, 1,170–1,500 ms). Without regenerated turns the p95 is 1126 / 1167
+  ms: over by 26 / 67 ms, which is decode. Bangla turns without regeneration: p50 665 ms, max 1270;
+  English: p50 525 ms, max 774.
+- **The router costs a little**: its ~525 ms (25 output tokens) ends after the reply's first
+  sentence on 23–28 of 59 turns, holding speech by up to ~275 ms (p95). Short English answers are
+  the ones held.
+
+So the latency criterion misses for two reasons, in this order: checker false positives that
+force a regeneration (out of 8c's scope, listed below), and decode speed on long Bangla first
+sentences (hardware-bound at ~39 tokens/s on this card for gemma2-9b AWQ).
+
+### Regenerations by reason (final run 1)
+
+7 `unsupported`, 2 `fact`. The `unsupported` ones are mostly the checker refusing true answers:
+"it only repeats the caller's own words" on d-exp ("ডাক্তার রহমানের অভিজ্ঞতা 18 বছরের।"), d-english
+("হ্যাঁ, ডাক্তার হোসেন ইংরেজিতে কথা বলেন।"), s-salam ("আসসালামু আলাইকুম, ভালো আছি।"); "it says yes to something
+the facts do not state" on d-lady (the directory lists a female doctor as `female`). The two
+`fact` ones are the word-form time issue from 8b (m-rushed "রাত ৯টা", e-hours "9 pm"), still open.
+Several of these end in the safe sentence after the second attempt fails the same way.
+
+### Orphaned generations (found and fixed in 8c)
+
+The first gate run waited up to 1.6–1.8 s (p95 ~1.1 s) after a turn for vLLM to go idle:
+closing the client's stream generator did not close the HTTP response, so vLLM kept generating
+the cut-off reply (after a routed tool or after the second sentence). `OpenAICompatibleLLM` now
+closes the response in a `finally`; after the fix the wait is ≤ 58 ms (the polling step). The
+probe waits for an idle server before each turn, so the sequential timings were not skewed by
+this, but on a live line every cut-off reply had been running on the GPU beside the next turn.
+
+### Prefix cache in a longer call
+
+A 7-turn call (one session, replies kept in history): the template folds the system text into
+the first user turn, so once the 6-turn window slides and starts on an assistant turn, the prompt
+opens with a different reply every turn and the cache misses (first token 600–700 ms from turn 4
+on, measured before the fix). A cut history now drops leading assistant turns: first token
+49, 121, 171, **612** (the one miss as the window first slides), 196, 212, 209 ms. First spoken in
+that call still reached 1.1–2.5 s on turns with long Bangla answers.
+
+### Every turn (final run 1)
+
+`rtr` router ms, `ttft` reply first token, `ready` first sentence finished in the stream,
+`first` first spoken; all ms from `Brain.turn`. Tool turns speak `_act`'s stub repeat prompt.
+
+```
+id             expected           route              mood/goal             regen        rtr  ttft  ready  first  reply
+----------------------------------------------------------------------------------------------------------------------
+t-free         free_times         free_times         calm/booking                       587   136    619    620  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-free2        free_times         free_times         calm/booking                       581   106      -    614  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-free-en      free_times         free_times         calm/information                   539    93    411    545  Sorry, I didn't catch that clearly. Could you say that again
+t-free-en2     free_times         free_times         calm/booking                       528    81    238    534  Sorry, I didn't catch that clearly. Could you say that again
+t-book         book               book               calm/booking                       533   144      -    571  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-book2        book               book               calm/booking                       535   113      -    568  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-book3        book               book               calm/booking                       564   143      -    600  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-book-en      book               book               calm/booking                       503    85    376    509  Sorry, I didn't catch that clearly. Could you say that again
+t-book-en2     book               book               calm/booking                       518   101    339    528  Sorry, I didn't catch that clearly. Could you say that again
+t-mine         lookup_booking     lookup_booking     calm/lookup                        548    74      -    579  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-mine2        lookup_booking     lookup_booking     calm/lookup                        522    73      -    552  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-mine-en      lookup_booking     lookup_booking     calm/lookup                        560    64    406    566  Sorry, I didn't catch that clearly. Could you say that again
+t-mine-en2     lookup_booking     lookup_booking     calm/lookup                        499    56    451    504  Sorry, I didn't catch that clearly. Could you say that again
+t-cancel       cancel_booking     cancel_booking     calm/change                        612   111    512    627  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-cancel2      cancel_booking     cancel_booking     calm/change                        558    84      -    590  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-cancel-en    cancel_booking     cancel_booking     calm/change                        516    71    282    521  Sorry, I didn't catch that clearly. Could you say that again
+t-cancel-en2   cancel_booking     cancel_booking     calm/change                        559    87    350    568  Sorry, I didn't catch that clearly. Could you say that again
+t-move         reschedule_booking reschedule_booking calm/change                        575   102      -    609  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-move2        reschedule_booking book               calm/change                        474   106      -    505  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-move-en      reschedule_booking reschedule_booking calm/change                        524    79    342    529  Sorry, I didn't catch that clearly. Could you say that again
+t-move-en2     reschedule_booking reschedule_booking calm/change                        580    59    373    586  Sorry, I didn't catch that clearly. Could you say that again
+t-callback     request_callback   request_callback   calm/change                        616   170      -    656  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-callback2    request_callback   request_callback   calm/change                        556   109      -    590  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-callback-en  request_callback   request_callback   calm/change                        543    72    204    549  Sorry, I didn't catch that clearly. Could you say that again
+t-callback-en2 request_callback   request_callback   calm/change                        591    92    409    597  Sorry, I didn't catch that clearly. Could you say that again
+t-urgent       hand_over          hand_over          anxious/change                     578    78    584    594  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-urgent-en    hand_over          hand_over          anxious/change                     551    49    233    557  Sorry, I didn't catch that clearly. Could you say that again
+t-person       hand_over          hand_over          calm/unknown                       558    79      -    599  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-person-en    hand_over          hand_over          calm/unknown                       588    78    404    605  Sorry, I didn't catch that clearly. Could you say that again
+t-bye          end_call           end_call           calm/unknown                       538    84    519    547  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+t-bye-en       end_call           end_call           calm/unknown                       543    64    170    548  Sorry, I didn't catch that clearly. Could you say that again
+k-fee          -                  -                  calm/information                   496    65    712    713  ডাক্তার রহমানের প্রথম ভিজিট ফি ৮০০ টাকা। আপনার আর কোন প্রশ্ন
+k-parking      -                  -                  calm/information                   521    97   1169   1170  হ্যাঁ, ক্লিনিকের বেসমেন্টে গাড়ি পার্কিং আছে, রোগীদের জন্য ব
+k-address      -                  -                  calm/information                   525    97    366    531  ধানমন্ডি, ঢাকা। সিটি কলেজের পাশে।
+k-unknown      -                  -                  calm/information                   498    67    504    506  না, আমাদের ক্লিনিকে ক্যান্টিন নেই। আপনি কি আর কিছু জানতে চান
+k-about        -                  -                  confused/unknown                   537   108    270    546  আমি একটি মেশিন। ইমতিয়াজ আহাম্মদ একজন এআই ইঞ্জিনিয়ার আমাকে 
+k-days         -                  -                  calm/information                   512    81    837    838  ডাক্তার সুলতানা বুধবার, শনিবার এবং রবিবার দিনে বসেন। কোন দিন
+k-hours        -                  -                  calm/information                   539   106    378    544  সকাল ৯টায় খোলা। আপনার আর কি জানতে চান?
+k-friday       -                  -                  calm/information                   515    85    545    546  না, শুক্রবারে ক্লিনিক খোলা থাকে।
+k-report       -                  -                  calm/information                   537   108    947    948  এক মাসের মধ্যে রিপোর্ট দেখাতে আসলে ৩০০ টাকা দিতে হবে। আপনার 
+k-followup     -                  -                  calm/information      unsupported   513   105    758   1503  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+k-hossain-fee  -                  -                  calm/information                   534    80    913    914  মেডিসিনের ডাক্তারের প্রথম ভিজিটের ফি ৭০০ টাকা। আপনার আর কি জ
+k-landmark     -                  -                  calm/information                   505    80    537    538  আপনার প্রশ্নের উত্তর দিতে খুশি। ক্লিনিকের কাছে বড় জায়গা আছ
+k-pharmacy     -                  -                  calm/information                   538   116    675    676  আপনার প্রশ্নের উত্তর জানা আমার কাছে নেই। আপনার জন্য আমি ডেস্
+k-how-book     -                  -                  calm/information                   518    95    497    525  আপনার কথা শুনে ভাল লাগছে। আপনার কী প্রকার সাহায্য প্রয়োজন?
+k-rahman-time  -                  -                  calm/information                   513    90   1126   1126  ডাক্তার রহমান বৃহস্পতিবার ও তুষারবার সন্ধ্যা ৪টা থেকে ৮টা পর
+d-child        -                  -                  anxious/information                527    80    584    585  আমি বুঝি, আপনার বাচ্চার জ্বর আছে। শিশু বিভাগে ডাক্তার সুলতান
+d-heart        -                  hand_over          anxious/change                     583    82      -    618  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+d-sugar        -                  -                  calm/information                   497    77    738    739  ডায়াবেটিসের জন্য ডাক্তার হোসেন আপনাকে দেখতে পারেন। আপনার আর
+d-lady         -                  -                  calm/information      unsupported   501    78    529   1174  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+d-exp          -                  -                  calm/information      unsupported   501    77    661   1338  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+d-room         -                  -                  calm/information                   505    83    773    774  ডাক্তার হোসেন প্রথম তলায় এক নম্বর রুমে বসেন।
+d-list         -                  -                  calm/information                   498    76    529    529  আপনার প্রশ্নের উত্তর দিতে খুশি। এখানে হৃদরোগ বিভাগ, শিশু বিভ
+d-degree       -                  -                  calm/information                   482    57    510    510  ডাক্তার সুলতানার ডিগ্রি MBBS এবং DCH। আপনার আর কি জানতে চান?
+d-sunday       -                  -                  calm/information                   503    78    979    980  রবিবারে ডাক্তার হোসেন, ডাক্তার রহমান, এবং ডাক্তার সুলতানা বস
+d-english      -                  -                  calm/information      unsupported   510    85    644   1305  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+m-angry        -                  -                  upset/complaint                    578   119    698    700  আমি খুব দুঃখিত, আপনার কথা বলা সঠিক।
+m-anxious      -                  -                  anxious/information                629   166    746    747  চিন্তা করবেন না, আমি আপনাকে সাহায্য করব। রিপোর্ট দেখাতে এক ম
+m-rushed       -                  -                  rushed/information    fact         587   120    701   1400  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+m-rude         -                  -                  upset/information                  522    84   1269   1270  আপনার কথা বুঝলাম, বেসমেন্টে গাড়ি পার্কিং আছে, রোগীদের জন্য 
+m-upset        -                  lookup_booking     upset/change                       626   110      -    665  দুঃখিত, আমি স্পষ্টভাবে বুঝতে পারলাম না। আবার বলবেন?
+m-confused     -                  -                  confused/information               499    93    646    646  আপনি যা বুঝতে চান তা বুঝতে পারছি।
+m-chatty       -                  -                  chatty/small_talk                  627   145    836    837  আপনার ভাইয়ের ছেলেকে দেখিয়েছেন ডাক্তার সুলতানা? তিনি খুবই ভ
+m-complain     -                  -                  upset/complaint                    519    84    747    748  আমি দুঃখিত, আপনার অভিজ্ঞতা খারাপ হয়েছে। আপনাকে কিভাবে সাহায
+m-worried-en   -                  -                  anxious/information                556    91    423    564  I understand you're worried, don't you fret. Dr. Sultana see
+m-angry-en     -                  -                  upset/complaint                    576   112    416    584  I'm so sorry for the trouble this has caused. What doctor ar
+e-fee          -                  -                  calm/information                   525    92    448    532  Dr. Rahman charges 800 taka for a new patient. Would you lik
+e-address      -                  -                  calm/information                   503    67    532    533  We are at House 12, Road 5, Dhanmondi, Dhaka. We are next to
+e-days         -                  -                  calm/information                   492    61    251    499  Mondays, Wednesdays, and Saturdays. What time would you like
+e-notes        -                  -                  calm/information                   513    81    599    599  I understand you're wanting to know what to bring for your h
+e-parking      -                  -                  calm/information                   505    67    397    510  Yes, we have free parking in the basement for our patients. 
+e-hours        -                  -                  calm/information      fact         507    67    538   1001  I don't have confirmed information about that, so I won't gu
+e-friday       -                  -                  calm/information                   496    61    197    501  We are closed on Fridays. What else can I help you with?
+e-report       -                  -                  calm/information                   518    80    467    525  It costs 300 taka to show a report within one month.
+e-who          -                  -                  calm/information                   529    91    202    535  I am a computer. How can I help you today?
+e-sugar        -                  -                  calm/information                   494    62    389    500  I understand you're looking for information about high blood
+e-lady         -                  -                  calm/information      unsupported   492    60    168    688  I don't have confirmed information about that, so I won't gu
+e-room         -                  -                  calm/information                   502    67    449    506  I understand you're looking for Dr. Sultana's room. She's in
+e-rahman-days  -                  -                  calm/information                   500    62    774    774  Dr. Rahman sees patients on Tuesdays, Thursdays, and Sundays
+e-canteen      -                  -                  calm/information                   488    74    380    493  I understand you're looking for information about the clinic
+e-how-book     -                  -                  calm/information                   482    79    405    488  I understand you'd like to know about booking an appointment
+e-exp          -                  -                  calm/information                   500    67    312    504  Dr. Hossain has fifteen years of experience. Would you like 
+s-salam        -                  -                  calm/small_talk       unsupported   561    67    618   1258  এ বিষয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। আমি
+s-hello        -                  -                  calm/small_talk       unsupported   540    60    354   1001  হ্যালো, আপনার কী আছে?
+s-thanks-ask   -                  -                  calm/information                   497    78    608    608  আপনার কথা আমার কাছে খুবই মনে হলো। লিফট আছে, ক্লিনিকের তৃতীয়
+s-hello-en     -                  -                  calm/unknown                       476    58    241    480  Yes, this is Shefa Clinic. How can I help you?
+s-name         -                  -                  calm/small_talk                    532    56    294    535  আমার নাম শেফা। আপনার কি সাহায্য লাগছে?
+s-weather      -                  -                  chatty/small_talk                  585    83    375    590  হ্যাঁ, খুবই গরম। আপনার কী জানতে চান?
+s-how-en       -                  -                  calm/small_talk                    540    58    268    545  I'm doing well, thank you. How can I help you?
+s-lang         -                  -                  calm/information                   489    60    409    494  না, আমি বাংলাতেই কথা বলি। আপনার কি কোনো প্রশ্ন আছে?
+```
+
+### Observations beyond the gate
+
+1. Router mood never says `angry` (angry and rude callers come back `upset`), and it overrides the
+   word rules, so `angry_turns` no longer counts up for "!!" or "ফালতু"; the "angry two turns →
+   offer a person" rule depends on it. Router goal for callbacks and emergencies is `change`.
+2. Wrong facts still pass the checker: k-days "ডাক্তার সুলতানা বুধবার, শনিবার এবং রবিবার" (Sunday is
+   wrong), k-unknown "no canteen" invented, e-days pushes "What time would you like to come?" on
+   an information question.
+3. The conduct prompt still names `hand_over` ("get hand_over with reason emergency"), a tool the
+   reply can no longer call; the router covers emergencies (both emergency turns routed right).
+4. `_act` is still the stub: every routed turn speaks the repeat prompt. Task 9 fills it.
