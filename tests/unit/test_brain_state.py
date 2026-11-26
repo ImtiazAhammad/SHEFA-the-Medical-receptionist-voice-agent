@@ -322,3 +322,9 @@ def test_two_different_bangla_questions_are_not_a_repeat():
 def test_a_repeated_bangla_question_is_still_a_repeat():
     state = track(CallState(), "ডাক্তার রহমান কখন বসেন?", previous="ডাক্তার রহমান কখন বসেন", today=TODAY)
     assert state.mood == "confused" and state.repeats == 1
+
+
+def test_doctor_named_is_public_and_the_old_name_still_works():
+    from shefa.brain import state as state_module
+
+    assert state_module.doctor_named is state_module._doctor_named

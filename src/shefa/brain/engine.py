@@ -27,7 +27,7 @@ from shefa.brain.config import call_config
 from shefa.brain.prompt import DIRECTORY_HEADER, compose
 from shefa.brain.retrieve import retriever_for
 from shefa.brain.router import Route, route
-from shefa.brain.state import Cues, _doctor_named, load, save, track
+from shefa.brain.state import Cues, doctor_named, load, save, track
 from shefa.brain.tools import ToolCall
 from shefa.clinic import default_clinic_store
 from shefa.clinic.brief import directory_brief
@@ -197,7 +197,7 @@ def _tool_args(name: str, said: str, state: CallState, today: _date) -> dict[str
     in one sentence, so "which" is left to the executor. hand_over's reason is code's: the
     clinic's emergency words, else the router's anger, else a request for a person."""
     if name == "cancel_booking":
-        named = parse_date(said, today) is not None or _doctor_named(said) is not None
+        named = parse_date(said, today) is not None or doctor_named(said) is not None
         return {"which": said} if named else {}
     if name == "reschedule_booking":
         args = {}

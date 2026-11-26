@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from shefa.brain.state import _doctor_label, _doctor_named
+from shefa.brain.state import _doctor_label, doctor_named
 from shefa.clinic import default_clinic_store
 from shefa.pipeline.grounding import in_period, parse_date, parse_period, parse_time
 from shefa.pipeline.guided import symptom_department
@@ -230,7 +230,7 @@ def _appointment(which: str, session: CallSession, today: date) -> dict[str, str
     if not fits:
         # A doctor named anywhere in the phrase ("the one with Dr. Rahman", "রহমানের সিরিয়ালটা").
         named = {d["id"] for d in store.find_doctors(which)}
-        if not named and (inside := _doctor_named(which)) is not None:
+        if not named and (inside := doctor_named(which)) is not None:
             named = {inside["id"]}
         fits = [a for a in upcoming if a["doctor_id"] in named]
     if len(fits) == 1:

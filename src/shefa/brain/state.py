@@ -176,7 +176,7 @@ def _mood(said: str, previous: str, cues: Cues | None) -> str:
     return "calm"
 
 
-def _doctor_named(said: str) -> dict[str, Any] | None:
+def doctor_named(said: str) -> dict[str, Any] | None:
     """The one doctor named anywhere in the sentence ("ডাক্তার রহমানকে কাল দেখাতে চাই")."""
     doctors = default_clinic_store().doctors()
     words = tokens(said)
@@ -197,6 +197,10 @@ def _doctor_named(said: str) -> dict[str, Any] | None:
             # Two different doctors in one sentence: say nothing rather than guess.
             return next(iter(found.values())) if len(found) == 1 else None
     return None
+
+
+# The old private name, kept for code written against it.
+_doctor_named = doctor_named
 
 
 def _caller_name(said: str, today: date) -> str | None:
@@ -223,7 +227,7 @@ def _doctor_label(doctor: dict[str, Any]) -> str:
 
 def _slots(said: str, today: date, booking: dict[str, str]) -> None:
     """Add what this turn says to the booking; anything it does not say stays as it was."""
-    doctor = _doctor_named(said)
+    doctor = doctor_named(said)
     if doctor is not None:
         booking["doctor_id"] = str(doctor["id"])
         booking["doctor"] = _doctor_label(doctor)
