@@ -217,3 +217,24 @@ def test_the_command_line_creates_and_lists_accounts(world, monkeypatch, capsys)
     )
     assert main(["staff", "disable", "karim"]) == 0
     assert main(["staff", "passwd", "karim", "--password-env", "NEW_PW"]) == 0
+
+
+def test_the_command_line_asks_for_the_password_twice(world, monkeypatch, capsys):
+    import getpass
+
+    answers = iter([PASSWORD, PASSWORD, PASSWORD, "something else"])
+    monkeypatch.setattr(getpass, "getpass", lambda _prompt="": next(answers))
+    assert main(["staff", "add", "asked", "--role", "desk"]) == 0
+    assert main(["staff", "add", "typo", "--role", "desk"]) == 1
+    err = capsys.readouterr().err
+    assert "The two passwords differ." in err and "No password given." in err
+    assert "typo" not in [u["username"] for u in default_staff_store().users()]
+
+
+def test_the_command_line_refuses_an_unknown_clinic_and_a_taken_name(world, monkeypatch, capsys):
+    monkeypatch.setenv("NEW_PW", PASSWORD)
+    add = ["staff", "add", "karim", "--role", "desk", "--password-env", "NEW_PW"]
+    assert main([*add, "--clinic", "nowhere"]) == 1
+    assert "Unknown clinic 'nowhere'" in capsys.readouterr().err
+    assert main(add) == 1  # karim exists: the store's refusal is an exit code, not a traceback
+    assert capsys.readouterr().err.strip()

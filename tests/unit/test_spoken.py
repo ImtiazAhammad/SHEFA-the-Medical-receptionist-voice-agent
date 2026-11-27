@@ -126,3 +126,10 @@ def test_every_number_below_a_hundred_has_a_word_and_dates_use_them():
 
     assert all(bn_number(n) != str(n) for n in range(100))
     assert bn_date_words(date(2026, 11, 8)) == "রবিবার, আট নভেম্বর"
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_the_possessive_of_no_name_is_no_name(name):
+    from shefa.spoken import of
+
+    assert of(name) == ""

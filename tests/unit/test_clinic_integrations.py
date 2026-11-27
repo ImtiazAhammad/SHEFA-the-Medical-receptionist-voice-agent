@@ -158,3 +158,19 @@ async def test_executor_routes_the_new_tools_and_sets_the_session_patient(seeded
         "lookup_patient_history", {"patient_id": verified["patient_id"]}, session
     )
     assert history["appointments"] == []
+
+
+def test_the_next_time_after_an_unreadable_or_past_day_is_the_next_free_time(seeded):
+    store = seeded["store"]
+    rahman = store.find_doctor("Rahman")["id"]
+    first = store.next_available(rahman)
+    assert calendar._next_after(store, rahman, "not a day") == first
+    assert calendar._next_after(store, rahman, "2000-01-01") == first
+
+
+async def test_a_name_that_fits_several_doctors_asks_which(seeded):
+    store = seeded["store"]
+    cardio = store.departments()[0]["id"]
+    store.add_doctor("Rahman Ali", cardio)
+    several = await ehr.get_doctor_info("Rahman")
+    assert "could be several" in several["error"] and len(several["candidates"]) >= 2
