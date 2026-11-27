@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import date, datetime
 
 import pytest
@@ -840,7 +841,11 @@ def test_a_none_route_releases_the_reply_before_the_rest_of_the_router_answer():
     async def speak(text):
         heard_before_router_done.append(not llm.route_done)
 
-    _turn(session, FEE_QUESTION, llm, speak)
+    async def run():
+        await Brain().turn(session, FEE_QUESTION, llm, speak, today=TODAY)
+        await asyncio.sleep(0.4)  # M2: the turn does not wait; the trace fills when it lands
+
+    asyncio.run(run())
     assert heard_before_router_done == [True, True]
     route = session.metadata["brain_trace"][-1]["route"]
     assert (route["tool"], route["mood"], route["goal"]) == (None, "calm", "information")
@@ -1368,3 +1373,50 @@ def test_c1_a_booking_claim_with_no_booking_is_never_spoken(claim, router, examp
     assert "actions" not in session.metadata
     trace = session.metadata["brain_trace"][-1]
     assert trace["verdicts"] == ["claim", "claim"] and trace["safe"] == "claim"
+
+
+# --- final review M10, M2 -----------------------------------------------------------------------
+
+
+def test_m10_a_push_on_an_unknown_goal_with_no_router_answer_is_dropped(
+    monkeypatch, example_clinic
+):
+    monkeypatch.setattr(settings.brain, "router_timeout_s", 0.05)
+    said = "রহমান সাহেব"
+    session = _session(said)
+    llm = FakeLLM(
+        "ডাক্তার রহমান রবিবার বসেন। সিরিয়াল দিয়ে দেব?", route=route_json("none"), route_delay=2
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["goal"] == "unknown" and trace["route"]["error"] == "timeout"
+    assert speak.said == ["ডাক্তার রহমান রবিবার বসেন।"]
+
+
+def test_m10_a_booking_goal_from_the_router_still_lets_the_offer_through(example_clinic):
+    said = "রহমান সাহেব"
+    session = _session(said)
+    llm = FakeLLM(
+        "ডাক্তার রহমান রবিবার বসেন। সিরিয়াল দিয়ে দেব?", route=route_json("none", "calm", "booking")
+    )
+    speak = Recorder()
+    _turn(session, said, llm, speak)
+    assert speak.said == ["ডাক্তার রহমান রবিবার বসেন।", "সিরিয়াল দিয়ে দেব?"]
+
+
+def test_m2_the_turn_does_not_wait_for_the_rest_of_the_router_answer():
+    session = _session(FEE_QUESTION)
+    llm = FakeLLM("ফি ৮০০ টাকা।", route=route_json(), route_pause=0.5)
+
+    async def run():
+        began = time.monotonic()
+        await Brain().turn(session, FEE_QUESTION, llm, Recorder(), today=TODAY)
+        took = time.monotonic() - began
+        await asyncio.sleep(0.7)  # the router's answer lands after the turn
+        return took
+
+    took = asyncio.run(run())
+    assert took < 0.3
+    route = session.metadata["brain_trace"][-1]["route"]
+    assert route is not None and route["goal"] == "unknown"

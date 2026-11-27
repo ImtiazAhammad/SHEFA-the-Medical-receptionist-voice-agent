@@ -332,6 +332,7 @@ class _Routing:
         self.task: asyncio.Task[tuple[Route, int]] | None = None
         self.applied = False
         self.overruled: str | None = None  # a tool the router named that code refused
+        self.detached = False  # the turn ended; the router's answer only fills the trace
         # The goal the caller's words gave this turn: only an explicit booking verb says booking.
         self.words_goal = state.goal
 
@@ -352,10 +353,32 @@ class _Routing:
         """Apply the router's mood and goal once its whole answer is in; never waits."""
         if self.applied or self.task is None or not self.task.done() or self.task.cancelled():
             return
-        found, ms = self.task.result()
         self.applied = True
-        _apply_route(self.state, found)
-        self.trace["mood"], self.trace["goal"] = self.state.mood, self.state.goal
+        self._record(self.state)
+
+    def detach(self) -> None:
+        """The turn is over: record the router's answer for the trace when it lands, without
+        waiting for it (it is bounded by the router timeout). The labels are the trace's only:
+        the turn's state is already saved."""
+        if self.task is None or self.applied:
+            return
+        if self.task.done():
+            self.labels()
+            return
+        self.detached = True
+        words = copy.deepcopy(self.state)
+
+        def landed(task: asyncio.Task[tuple[Route, int]]) -> None:
+            if not task.cancelled() and task.exception() is None:
+                self._record(words)
+
+        self.task.add_done_callback(landed)
+
+    def _record(self, state: CallState) -> None:
+        assert self.task is not None
+        found, ms = self.task.result()
+        _apply_route(state, found)
+        self.trace["mood"], self.trace["goal"] = state.mood, state.goal
         self.trace["route"] = {
             "tool": found.tool,
             "mood": found.mood,
@@ -487,7 +510,7 @@ class Brain:
             entry.unwind(session, state, trace, heard, exc, started)
             raise
         finally:
-            if routing.task is not None and not routing.task.done():
+            if routing.task is not None and not routing.task.done() and not routing.detached:
                 routing.task.cancel()
 
     async def _route(
@@ -573,7 +596,7 @@ class Brain:
                 await speak(text)
                 spoken.append(text)
                 session.metadata[actions.OFFERED] = True
-            await routing.finish()
+            routing.detach()  # the trace gets the router's labels when they land
             state.mood, state.goal = words  # the router's labels were for this turn only
             save(session, state)
             trace["ms"] = int((time.monotonic() - started) * 1000)
@@ -761,7 +784,12 @@ class Brain:
                 await routing.finish()
                 trace = routing.trace
                 trace["push_wait_ms"] += int((time.monotonic() - began) * 1000)
-            verdict = check_sentence(text, grounds, goal=state.goal, language=state.language)
+            goal = state.goal
+            if routing is not None and goal == "unknown":
+                # Neither the words nor the router said booking (a router that timed out on a
+                # first turn): a booking offer is still a push.
+                goal = "information"
+            verdict = check_sentence(text, grounds, goal=goal, language=state.language)
             out.verdicts.append("ok" if verdict.ok else verdict.kind)
             if verdict.ok:
                 await speak(text)
