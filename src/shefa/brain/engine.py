@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 import re
+import sqlite3
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -23,7 +25,6 @@ from typing import TYPE_CHECKING, Any
 from shefa.brain import actions, safe
 from shefa.brain.check import Grounds, Verdict, check_sentence, offers_booking
 from shefa.brain.config import call_config
-from shefa.brain.knowledge import default_knowledge_store
 from shefa.brain.prompt import DIRECTORY_HEADER, compose
 from shefa.brain.retrieve import Hit as _RetrievedHit
 from shefa.brain.retrieve import retriever_for
@@ -50,6 +51,8 @@ if TYPE_CHECKING:
     from shefa.session.manager import CallSession
 
 Speak = Callable[[str], Awaitable[None]]
+
+logger = logging.getLogger(__name__)
 
 MAX_SENTENCES = 2
 TOOL_CORRECTION = (
@@ -114,9 +117,12 @@ def _grounds(
     directory: str,
     said: str,
     today: _date,
+    *,
+    phone: str | None = None,
 ) -> Grounds:
     """What this turn's sentences may rest on. The caller's words never ground a fact; they are
-    kept only so the checker can catch a reply that merely repeats them."""
+    kept only so the checker can catch a reply that merely repeats them. `phone` is the caller
+    ID's number when the turn already read it off the event loop."""
     grounds = Grounds(caller=said)
     for hit in hits:
         grounds.add(hit.entry.text(state.language))
@@ -140,7 +146,9 @@ def _grounds(
     # who "উনি/he/she" means.
     grounds.doctor = state.booking.get("doctor", "")
     grounds.add_value(" ".join([today.isoformat(), *actions.day_names(today)]), today=True)
-    if phone := actions.caller_phone(session):
+    if phone is None:
+        phone = actions.caller_phone(session)
+    if phone:
         grounds.add_value(phone)
     grounds.add_value(EMERGENCY_NUMBER)
     return grounds
@@ -167,7 +175,12 @@ def _pure_facility(said: str) -> bool:
 
 
 def _facility_reply(
-    said: str, hits: list[Hit], language: str, directory: str, clinic: str
+    said: str,
+    hits: list[Hit],
+    language: str,
+    directory: str,
+    clinic: str,
+    entries: list[Entry] | None,
 ) -> tuple[str, str | Entry] | None:
     """(topic, what code says) for a pure facility question the turn's facts do not cover, or
     (topic, entry) when the clinic's entry for it lacks the call's language: the model then gets
@@ -177,7 +190,9 @@ def _facility_reply(
     source, `settings.facilities`) cover it, when the directory speaks of it (chamber hours, an
     ECG or blood-test note), and when the line asks anything else or names a doctor. Otherwise
     code answers: the clinic's knowledge entry for the topic when retrieval missed it, else "not
-    known". An emergency is never answered here: the router hands it over."""
+    known". An emergency is never answered here: the router hands it over. `entries` are the
+    knowledge base's entries, read off the event loop; None when they could not be read, and then
+    the model answers (checked) rather than code saying "not known"."""
     topic = facilities.asked_topic(said)
     if topic is None or not _pure_facility(said):
         return None
@@ -191,10 +206,11 @@ def _facility_reply(
         if hit.entry.topic == topic or pattern.search(hit.entry.text_bn + "\n" + hit.entry.text_en):
             return None
     spoken = Language.BANGLA if lang == "bn" else Language.ENGLISH
-    if is_emergency(said, spoken):
+    if is_emergency(said, spoken) or entries is None:
         return None
-    for entry in default_knowledge_store().entries([clinic or "default"]):
-        if entry.topic != topic:
+    scope = clinic or "default"
+    for entry in entries:
+        if entry.scope != scope or entry.topic != topic:
             continue
         own = (entry.text_en if lang == "en" else entry.text_bn).strip()
         if not own:
@@ -243,7 +259,9 @@ def _apply_route(state: CallState, found: Route) -> None:
     state.goal = goal
 
 
-def _tool_args(name: str, said: str, state: CallState, today: _date) -> dict[str, Any]:
+def _tool_args(
+    name: str, said: str, state: CallState, today: _date, session: CallSession | None = None
+) -> dict[str, Any]:
     """Arguments for a routed tool, for `tools.resolve`.
 
     The router names only the tool, so the arguments come from code. `track` has already read
@@ -270,8 +288,32 @@ def _tool_args(name: str, said: str, state: CallState, today: _date) -> dict[str
         language = Language.BANGLA if state.language == "bn" else Language.ENGLISH
         if is_emergency(said, language):
             return {"reason": "emergency"}
+        person = actions._wants_person(said, state.language) or (
+            session is not None and actions.offered_person(session, state.language)
+        )
+        if not person:
+            return {"reason": "emergency"}
         return {"reason": "angry" if state.mood == "angry" else "asked_for_person"}
     return {}
+
+
+def _reads(
+    clinic: str, said: str, language: str, session: CallSession
+) -> tuple[list[Hit], list[Entry] | None, Any, str, str]:
+    """Everything a turn reads from the databases, run in a worker thread so a locked file never
+    holds the event loop: the knowledge hits and entries (None when the knowledge base could not
+    be read: the turn goes on without it), the clinic store, its directory block and the caller
+    ID's phone."""
+    try:
+        retriever = retriever_for(clinic)
+        hits = retriever.search(said)
+        entries = getattr(retriever, "entries", None)
+    except sqlite3.Error as exc:
+        logger.warning("Knowledge base unreadable for this turn (%s); going on without it", exc)
+        hits, entries = [], None
+    store = default_clinic_store()
+    directory = directory_brief(store, language, header=DIRECTORY_HEADER)
+    return hits, entries, store, directory, actions.caller_phone(session)
 
 
 class _Routing:
@@ -289,6 +331,7 @@ class _Routing:
         self.tool_ms: int | None = None
         self.task: asyncio.Task[tuple[Route, int]] | None = None
         self.applied = False
+        self.overruled: str | None = None  # a tool the router named that code refused
         # The goal the caller's words gave this turn: only an explicit booking verb says booking.
         self.words_goal = state.goal
 
@@ -320,6 +363,7 @@ class _Routing:
             "ms": ms,
             "tool_ms": self.tool_ms,
             **({"error": found.error} if found.error else {}),
+            **({"overruled": self.overruled} if self.overruled else {}),
         }
 
     async def finish(self) -> None:
@@ -404,7 +448,10 @@ class Brain:
         started = time.monotonic()
         today = today or clinic_today()
         history, previous = _history(session, said)
-        state = track(load(session), said, previous=previous, cues=cues, today=today)
+        # `track` reads the clinic's doctors: off the event loop.
+        state = await asyncio.to_thread(
+            track, load(session), said, previous=previous, cues=cues, today=today
+        )
         config = call_config(session)
         trace: dict[str, Any] = {
             "turn": state.turn,
@@ -451,11 +498,21 @@ class Brain:
         history: list[dict[str, str]],
         routing: _Routing,
     ) -> tuple[Route, int]:
+        def on_tool(tool: str | None) -> None:
+            # The router alone never hangs up: end_call stands only on a goodbye or thanks with
+            # nothing asked beside it; otherwise the turn is a plain reply ("none").
+            if tool == "end_call" and not actions.says_goodbye(said):
+                routing.overruled = tool
+                tool = None
+            routing.on_tool(tool)
+
         try:
-            found = await route(llm, state, said, history, on_tool=routing.on_tool)
+            found = await route(llm, state, said, history, on_tool=on_tool)
         except Exception as exc:  # noqa: BLE001 - route() never raises; a failure is a plain reply
             found = Route(None, None, None, f"{type(exc).__name__}: {exc}"[:200])
-        routing.on_tool(found.tool)  # no-op when the stream already told it
+        on_tool(found.tool)  # no-op when the stream already told it
+        if routing.overruled and found.tool == routing.overruled:
+            found = Route(None, found.mood, found.goal, found.error)
         return found, int((time.monotonic() - routing.began) * 1000)
 
     async def _turn(
@@ -482,10 +539,10 @@ class Brain:
         # Angry two turns running: a person is offered once a call, after a one-sentence reply.
         offer = state.angry_turns >= 2 and not session.metadata.get(actions.OFFERED)
         clinic = current()
-        hits = await asyncio.to_thread(lambda: retriever_for(clinic).search(said))
-        store = default_clinic_store()
-        directory = directory_brief(store, language, header=DIRECTORY_HEADER)
-        grounds = _grounds(session, state, hits, directory, said, today)
+        hits, entries, store, directory, phone = await asyncio.to_thread(
+            _reads, clinic, said, language, session
+        )
+        grounds = _grounds(session, state, hits, directory, said, today, phone=phone)
 
         trace["hits"] = [h.entry.id for h in hits]
         spoken: list[str] = []
@@ -579,11 +636,11 @@ class Brain:
             await outcome(settled)
             return await finish()
 
-        found = _facility_reply(said, hits, language, directory, clinic)
+        found = _facility_reply(said, hits, language, directory, clinic, entries)
         if found is not None and not isinstance(found[1], str):
             # The clinic's entry has no text in the call's language: the model answers with it.
             hits = [*hits, _RetrievedHit(found[1], 0.0, "topic")]
-            grounds = _grounds(session, state, hits, directory, said, today)
+            grounds = _grounds(session, state, hits, directory, said, today, phone=phone)
             trace["hits"] = [h.entry.id for h in hits]
             found = None
         if found is not None:
@@ -629,7 +686,7 @@ class Brain:
                     # Its reason reads the mood, which follows the tool field: wait for the rest
                     # (bounded by the router timeout; the word rules' mood if it never comes).
                     await routing.finish()
-                call = ToolCall(tool, _tool_args(tool, said, state, today))
+                call = ToolCall(tool, _tool_args(tool, said, state, today, session))
                 trace["tool"], trace["tool_args"] = call.name, dict(call.args)
                 await outcome(await self._act(call, session, state, grounds, speak, today))
                 break

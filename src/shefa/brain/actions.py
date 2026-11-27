@@ -173,23 +173,60 @@ def _forget(
     grounds.values[:] = [v for v in grounds.values if v.text not in dropped]
 
 
+_FREE = re.compile(r"^(?P<who>.*) is free on (?P<day>\S+) at (?P<times>.*)\.$")
+
+
+def _taken(session: CallSession, grounds: Grounds, slot: str) -> None:
+    """A slot just booked is no longer free: it leaves the free-times facts that list it."""
+    clock = slot.rsplit("|", 1)[-1]
+    kept: list[Any] = []
+    for entry in session.metadata.get(GROUNDS, []):
+        held = isinstance(entry, dict) and slot in (entry.get("slots") or [])
+        m = _FREE.match(str(entry.get("text", ""))) if held else None
+        if m is None:
+            kept.append(entry)
+            continue
+        dropped = _grounded_text(str(entry["text"]))
+        grounds.texts[:] = [t for t in grounds.texts if t != dropped]
+        grounds.values[:] = [v for v in grounds.values if v.text != dropped]
+        times = [t for t in m["times"].split(", ") if t != clock]
+        if not times:
+            continue
+        text = f"{m['who']} is free on {m['day']} at {', '.join(times)}."
+        slots = [s for s in entry["slots"] if s != slot]
+        kept.append({**entry, "text": text, "slots": slots})
+        ground(grounds, text, str(entry.get("doctor") or ""))
+    session.metadata[GROUNDS] = kept
+
+
 def succeeded(state: CallState, session: CallSession) -> set[str]:
-    """The tools whose success may be said: a booking or a move only while no later cancel of
-    the same slot took it back."""
+    """The tools whose success may be said: a booking or a move only while no later cancel took
+    it back. A booking is followed through its moves to where it now stands before a cancel is
+    matched (book A, move A to B, cancel B: nothing is booked)."""
     kinds: set[str] = set(session.metadata.get(SUCCEEDED, []))
     for at, entry in enumerate(state.done):
         kind = str(entry.get("kind") or "")
         if not kind:
             continue
-        key = _slot(entry.get("doctor"), entry.get("date"), entry.get("time"))
-        cancelled = any(
-            later.get("kind") == "cancel_booking"
-            and _slot(later.get("doctor"), later.get("date"), later.get("time")) == key
-            for later in state.done[at + 1 :]
-        )
-        if kind == "cancel_booking" or not cancelled:
+        if kind == "cancel_booking" or not _cancelled_later(state.done, at):
             kinds.add(kind)
     return kinds
+
+
+def _cancelled_later(done: list[dict[str, Any]], at: int) -> bool:
+    entry = done[at]
+    doctor = entry.get("doctor")
+    where = _slot(doctor, entry.get("date"), entry.get("time"))
+    for later in done[at + 1 :]:
+        kind = later.get("kind")
+        if kind == "reschedule_booking" and later.get("from_date"):
+            if _slot(later.get("doctor"), later.get("from_date"), later.get("from_time")) == where:
+                where = _slot(later.get("doctor"), later.get("date"), later.get("time"))
+        elif kind == "cancel_booking" and (
+            _slot(later.get("doctor"), later.get("date"), later.get("time")) == where
+        ):
+            return True
+    return False
 
 
 APPOINTMENT = "The caller's appointment:"
@@ -350,6 +387,36 @@ def _spoken(language: str) -> Language:
 
 def _wants_person(said: str, language: str) -> bool:
     return is_human_request(said, _spoken(language)) or bool(_PERSON.search(said))
+
+
+# A goodbye or thanks ("ধন্যবাদ, রাখছি", "thanks, bye", "আর কিছু না"): the only lines a routed
+# end_call may hang up on.
+_GOODBYE = re.compile(
+    r"(?<![ঀ-৿])(?:বাই|হাফেজ|হাফিজ|ধন্যবাদ|থ্যাংকস|থ্যাংক|থ্যাঙ্কস|শুক্রিয়া|রাখছি|রাখি|রাখলাম"
+    r"|রেখে দিচ্ছি)(?![ঀ-৿])|আর কিছু (?:লাগবে )?না"
+    r"|\b(?:bye|goodbye|thanks|thank you|that'?s all|that is all|nothing else)\b",
+    re.IGNORECASE,
+)
+# A question or a request in the same line keeps the call open ("আর একটা কথা জানতে চাই").
+_STILL_ASKING = re.compile(
+    r"\?|(?<![ঀ-৿])(?:জানতে|চাই|চাচ্ছি|বলুন|বলবেন|বলেন|দিন|দেন|করুন|করেন|কি|কী|কেন|কখন|কবে"
+    r"|কোথায়|কত|কোন|কাকে|একটা|আরেকটা|তবে|কিন্তু|লাগবে)(?![ঀ-৿])"
+    r"|\b(?:what|when|where|which|why|how|who|want|need|can|could|would|tell|book|please|one more"
+    r"|another|also|but|question|ask)\b",
+    re.IGNORECASE,
+)
+
+
+def says_goodbye(said: str) -> bool:
+    """The caller is done: a goodbye or thanks, and nothing asked or requested with it."""
+    return bool(_GOODBYE.search(said)) and not _STILL_ASKING.search(said)
+
+
+def offered_person(session: CallSession, language: str) -> bool:
+    """SHEFA's last turn offered a person (the angry offer, or the reception line's "say
+    'person'"): a yes to it asks for a person."""
+    last = next((t.content for t in reversed(session.history) if t.role == "assistant"), "")
+    return safe.person_offer(language) in last or reception_text(language) in last
 
 
 def _kin_only(said: str) -> bool:
@@ -612,9 +679,25 @@ async def _carry_out(
         "date": str(preview.get("new_date") or preview.get("date") or ""),
         "time": str(preview.get("new_time") or preview.get("time") or ""),
     }
+    if pending["tool"] == "reschedule_booking":
+        # Where it stood before, so a later cancel can follow the booking (`succeeded`).
+        entry["from_date"] = str(preview.get("date") or "")
+        entry["from_time"] = str(preview.get("time") or "")
     state.done.append(entry)
+    old = _slot(entry["doctor"], preview.get("date"), preview.get("time"))
+    now = _slot(entry["doctor"], entry["date"], entry["time"])
     if pending["tool"] == "cancel_booking":
-        _forget(session, grounds, {_slot(entry["doctor"], entry["date"], entry["time"])})
+        _forget(session, grounds, {old})
+    elif pending["tool"] in ("book", "reschedule_booking"):
+        if pending["tool"] == "reschedule_booking":
+            _forget(session, grounds, {old})  # the old time no longer stands
+        # The confirmation is the fact now: the read-back goes, the slot is no longer free,
+        # and the booking stands where it is.
+        _forget(session, grounds, {now}, read_back_only=True)
+        _taken(session, grounds, now)
+        who = _who(entry["doctor"], entry["doctor_bn"])
+        text = f"{APPOINTMENT} {who} on {entry['date']} at {entry['time']}."
+        _remember(session, grounds, text, entry["doctor"], [now])
     grounds.succeeded.clear()
     grounds.succeeded |= succeeded(state, session)
     if executor == "book_appointment":

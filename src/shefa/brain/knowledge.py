@@ -61,6 +61,7 @@ CREATE INDEX IF NOT EXISTS kb_history_by_entry ON kb_history(entry_id, version);
 """
 
 _COLUMNS = "id, scope, topic, tags_json, text_bn, text_en, active, version"
+BUSY_TIMEOUT_S = 5.0  # how long a locked file is waited for, unless the read says less
 _EDITABLE = frozenset({"topic", "tags", "text_bn", "text_en"})
 
 
@@ -101,16 +102,19 @@ def _entry(row: tuple[Any, ...]) -> Entry:
 class KnowledgeStore:
     """The `kb_entries` and `kb_history` tables of one SQLite file."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, busy_timeout_s: float | None = None) -> None:
+        """`busy_timeout_s` bounds only this first connection (a call's quick read); every
+        later one waits the usual time unless its read says less."""
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(self._connect()) as conn, conn:
+        with closing(self._connect(busy_timeout_s)) as conn, conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self, busy_timeout_s: float | None = None) -> sqlite3.Connection:
         # One short connection per call: nothing is shared between request threads.
-        return sqlite3.connect(str(self.path), check_same_thread=False, timeout=5.0)
+        timeout = BUSY_TIMEOUT_S if busy_timeout_s is None else busy_timeout_s
+        return sqlite3.connect(str(self.path), check_same_thread=False, timeout=timeout)
 
     def add(
         self,
@@ -182,7 +186,13 @@ class KnowledgeStore:
     def deactivate(self, entry_id: int, *, author: str) -> None:
         self._change(entry_id, author, {"active": 0})
 
-    def entries(self, scopes: Iterable[str], *, active_only: bool = True) -> list[Entry]:
+    def entries(
+        self,
+        scopes: Iterable[str],
+        *,
+        active_only: bool = True,
+        busy_timeout_s: float | None = None,
+    ) -> list[Entry]:
         wanted = list(scopes)
         if not wanted:
             return []
@@ -190,7 +200,7 @@ class KnowledgeStore:
         sql = f"SELECT {_COLUMNS} FROM kb_entries WHERE scope IN ({marks})"
         if active_only:
             sql += " AND active = 1"
-        with closing(self._connect()) as conn:
+        with closing(self._connect(busy_timeout_s)) as conn:
             rows = conn.execute(sql + " ORDER BY id", wanted).fetchall()
         return [_entry(r) for r in rows]
 
@@ -211,9 +221,9 @@ class KnowledgeStore:
             ).fetchone()
         return found is not None
 
-    def stamp(self) -> float:
+    def stamp(self, *, busy_timeout_s: float | None = None) -> float:
         """Time of the latest change; a cache is stale when this moved."""
-        with closing(self._connect()) as conn:
+        with closing(self._connect(busy_timeout_s)) as conn:
             (latest,) = conn.execute("SELECT MAX(updated_at) FROM kb_entries").fetchone()
         return float(latest or 0.0)
 
@@ -221,11 +231,14 @@ class KnowledgeStore:
 _default_knowledge_store: KnowledgeStore | None = None
 
 
-def default_knowledge_store() -> KnowledgeStore:
-    """The process-wide store in the platform database, built lazily from config."""
+def default_knowledge_store(*, busy_timeout_s: float | None = None) -> KnowledgeStore:
+    """The process-wide store in the platform database, built lazily from config.
+    `busy_timeout_s` bounds the first open only (a call's read gives up quickly)."""
     global _default_knowledge_store
     if _default_knowledge_store is None:
-        _default_knowledge_store = KnowledgeStore(settings.storage.db_path)
+        _default_knowledge_store = KnowledgeStore(
+            settings.storage.db_path, busy_timeout_s=busy_timeout_s
+        )
     return _default_knowledge_store
 
 

@@ -400,7 +400,7 @@ def test_reschedule_records_the_new_slot(executor):
     assert [name for name, _ in executor.ran] == ["reschedule_appointment"]
     assert load(session).done[-1] == {
         "kind": "reschedule_booking", "doctor": "Rahman", "doctor_bn": "রহমান",
-        "date": "2026-11-29", "time": "17:00",
+        "date": "2026-11-29", "time": "17:00", "from_date": TOMORROW, "from_time": "18:00",
     }  # fmt: skip
 
 
@@ -1153,3 +1153,157 @@ def test_an_honorific_is_still_a_yes(executor, line):
     session, _, _ = read_back_booking(executor)
     say(session, line, FakeLLM())
     assert [name for name, _ in executor.ran] == ["book_appointment"]
+
+
+# --- final review I1: a hand-over that is no person request hears 999 first ---------------------
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "আমার বাবা হঠাৎ কথা বলতে পারছেন না, মুখ বেঁকে গেছে",  # stroke
+        "বাচ্চা বিষ খেয়ে ফেলেছে",  # poisoning
+    ],
+)
+def test_i1_a_missed_emergency_routed_to_hand_over_hears_999_first(executor, line):
+    from shefa.pipeline.language_detector import is_emergency
+
+    assert not is_emergency(line, Language.BANGLA)  # the keyword list misses it
+    order = []
+    executor.results["transfer_to_human"] = lambda args: (
+        order.append("transfer") or {"transferred": False}
+    )
+    session = identified_session()
+    llm = FakeLLM("unused", route=route_json("hand_over", "anxious", "unknown"))
+
+    async def speak(text):
+        order.append(text)
+
+    say(session, line, llm, speak)
+    assert order[0] == safe.emergency_text("bn")
+    assert order[1:] == ["transfer", safe.transfer_failed("bn")]
+    assert session.metadata["handover_reason"] == "emergency"
+
+
+def test_i1_a_plain_person_request_gets_no_999(executor):
+    order = []
+    executor.results["transfer_to_human"] = lambda args: (
+        order.append("transfer") or {"transferred": True}
+    )
+    session = identified_session()
+    llm = FakeLLM("unused", route=route_json("hand_over", "calm", "unknown"))
+
+    async def speak(text):
+        order.append(text)
+
+    say(session, "মানুষের সাথে কথা বলতে চাই", llm, speak)
+    assert order == ["transfer", safe.connecting(language="bn")]
+    assert session.metadata["handover_reason"] == "asked_for_person"
+
+
+def test_i1_a_yes_to_the_person_offer_is_a_person_request(executor):
+    order = []
+    executor.results["transfer_to_human"] = lambda args: (
+        order.append("transfer") or {"transferred": True}
+    )
+    session = identified_session()
+    session.add_turn("user", "ধুর, কিছুই হচ্ছে না")
+    session.add_turn("assistant", "দুঃখিত। " + safe.person_offer("bn"))
+    llm = FakeLLM("unused", route=route_json("hand_over", "calm", "unknown"))
+
+    async def speak(text):
+        order.append(text)
+
+    say(session, "হ্যাঁ", llm, speak)
+    assert safe.emergency_text("bn") not in order
+    assert order == ["transfer", safe.connecting(language="bn")]
+
+
+# --- final review I2: the router alone never hangs up -------------------------------------------
+
+
+def test_i2_a_false_end_call_is_a_plain_reply(executor):
+    session = identified_session()
+    llm = FakeLLM("জি, বলুন।", route=route_json("end_call", "calm", "small_talk"))
+    speak = say(session, "আচ্ছা, আর একটা কথা জানতে চাই", llm)
+    assert session.state != "completed"
+    assert speak.said == ["জি, বলুন।"]
+    assert session.metadata["brain_trace"][-1]["tool"] is None
+
+
+@pytest.mark.parametrize("line", ["ধন্যবাদ, রাখছি", "thanks, bye", "ঠিক আছে, আর কিছু না, রাখছি"])
+def test_i2_a_goodbye_routed_to_end_call_hangs_up(executor, line):
+    session = identified_session()
+    llm = FakeLLM("unused", route=route_json("end_call", "calm", "small_talk"))
+    say(session, line, llm)
+    assert session.state == "completed"
+
+
+@pytest.mark.parametrize("line", ["ধন্যবাদ, ডাক্তার রহমানের ফি কত?", "thanks, and when is Dr Rahman in?"])
+def test_i2_thanks_with_a_question_does_not_hang_up(executor, line):
+    session = identified_session()
+    llm = FakeLLM("জি, বলছি।", route=route_json("end_call", "calm", "small_talk"))
+    say(session, line, llm)
+    assert session.state != "completed"
+
+
+# --- final review I4 / M7: a move or a booking takes back the facts it changed ------------------
+
+MOVE_PREVIEW = {
+    "preview": {**CANCEL_PREVIEW["preview"], "appointment_id": "42", "new_date": "2026-11-29",
+                "new_time": "17:00"}
+}  # fmt: skip
+MOVED = {"success": True, "appointment_id": "42", "date": "2026-11-29", "time": "17:00",
+         "doctor": "Rahman"}  # fmt: skip
+
+
+def _book_then_move(executor):
+    session, _, _ = read_back_booking(executor)
+    say(session, "হ্যাঁ", FakeLLM())
+    executor.previews["reschedule_appointment"] = MOVE_PREVIEW
+    executor.results["reschedule_appointment"] = MOVED
+    llm = FakeLLM("unused", route=route_json("reschedule_booking", "calm", "change"))
+    say(session, "আমার সিরিয়ালটা রবিবার বিকেল ৫টায় সরিয়ে দিন", llm)
+    say(session, "হ্যাঁ", FakeLLM())
+    assert [name for name, _ in executor.ran] == ["book_appointment", "reschedule_appointment"]
+    return session
+
+
+def test_i4_after_a_move_the_old_time_is_refused_and_the_new_one_spoken(executor):
+    session = _book_then_move(executor)
+    old = "আপনার সিরিয়াল বৃহস্পতিবার সন্ধ্যা ৬টায়।"
+    new = "আপনার সিরিয়াল রবিবার বিকেল ৫টায়।"
+    speak = say(session, "তাহলে কবে আসব?", FakeLLM(old, old, route=route_json()))
+    assert old not in speak.said
+    speak = say(session, "তাহলে কবে আসব?", FakeLLM(new, route=route_json()))
+    assert speak.said == [new]
+    assert not any("Read back" in e["text"] for e in session.metadata["brain_grounds"])
+
+
+def test_i4_book_move_then_cancel_the_new_slot_takes_the_booking_back(executor):
+    session = _book_then_move(executor)
+    cancel = {"preview": {**CANCEL_PREVIEW["preview"], "appointment_id": "42",
+                          "date": "2026-11-29", "time": "17:00"}}  # fmt: skip
+    executor.previews["cancel_appointment"] = cancel
+    executor.results["cancel_appointment"] = {"success": True, "appointment_id": "42"}
+    say(session, "সিরিয়ালটা বাতিল করুন", FakeLLM("unused", route=route_json("cancel_booking")))
+    say(session, "হ্যাঁ", FakeLLM())
+    assert brain_actions.succeeded(load(session), session) == {"cancel_booking"}
+    claim = "আপনার সিরিয়াল বুক হয়েছে।"
+    speak = say(session, "আমার সিরিয়াল আছে?", FakeLLM(claim, claim, route=route_json()))
+    assert claim not in speak.said
+
+
+def test_m7_a_booked_slot_is_no_longer_free_and_its_read_back_is_gone(executor):
+    executor.results["check_appointment_slots"] = free_tomorrow("18:00", "18:15")
+    session = identified_session()
+    say(session, FREE_LINE, FakeLLM("unused", "জি, বলছি।", route=route_json("free_times")))
+    read_back_booking(executor, session)
+    say(session, "হ্যাঁ", FakeLLM())
+    texts = [e["text"] for e in session.metadata["brain_grounds"]]
+    assert not any("Read back" in t for t in texts)
+    free = [t for t in texts if "is free on" in t]
+    assert free and all("18:00" not in t and "18:15" in t for t in free)
+    assert any(t.startswith("The caller's appointment:") and "18:00" in t for t in texts)
+    # The booking itself now grounds 18:00 ("আপনার সিরিয়াল সন্ধ্যা ৬টায়"); the checker reads
+    # numbers, not "free", so a "still free at 6" would pass on it (reported, not fixed here).

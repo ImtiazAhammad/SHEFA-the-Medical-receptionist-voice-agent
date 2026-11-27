@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import math
+import sqlite3
 import threading
 from collections import Counter
 from dataclasses import dataclass
@@ -83,6 +84,11 @@ class Retriever:
             except Exception:
                 logger.exception("embedding the knowledge base failed; searching by words only")
 
+    @property
+    def entries(self) -> list[Entry]:
+        """Every entry it searches (the platform's and the clinic's)."""
+        return list(self._entries)
+
     def _word_scores(self, query: list[str]) -> list[float]:
         scores = []
         for doc, length in zip(self._docs, self._lengths, strict=True):
@@ -153,16 +159,32 @@ def _shared_embedder(name: str) -> Embedder | None:
     return _embedders[name]
 
 
+# A call's reads of the knowledge base wait this long for a locked file, like the config read.
+CALL_READ_TIMEOUT_S = 0.5
+
+
 def retriever_for(clinic_id: str) -> Retriever:
-    """The retriever over the platform entries and this clinic's, rebuilt when either changed."""
-    store = default_knowledge_store()
-    stamp = store.stamp()
+    """The retriever over the platform entries and this clinic's, rebuilt when either changed.
+
+    It runs at call time, so a locked platform database is waited for only briefly: then the
+    retriever already built is used, or the read fails (`sqlite3.Error`) and the caller goes on
+    without the knowledge base."""
+    store = default_knowledge_store(busy_timeout_s=CALL_READ_TIMEOUT_S)
     key = clinic_id or "default"
+    try:
+        stamp = store.stamp(busy_timeout_s=CALL_READ_TIMEOUT_S)
+    except sqlite3.Error:
+        with _lock:
+            cached = _retrievers.get(key)
+        if cached is not None and cached[0] is store:
+            logger.warning("knowledge base busy; searching the entries read before")
+            return cached[2]
+        raise
     with _lock:
         cached = _retrievers.get(key)
         if cached is not None and cached[0] is store and cached[1] == stamp:
             return cached[2]
-        entries = store.entries(["platform", key])
+        entries = store.entries(["platform", key], busy_timeout_s=CALL_READ_TIMEOUT_S)
         embedder = _shared_embedder(settings.brain.embedding_model)
         retriever = Retriever(entries, embedder)
         _retrievers[key] = (store, stamp, retriever)

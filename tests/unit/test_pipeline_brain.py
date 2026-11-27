@@ -976,3 +976,49 @@ async def test_a_turn_deadline_during_the_transfer_ends_the_voice_loop(agent, mo
     session = await pipe.session_for("SID-XFER")
     assert session.state == "escalated"
     assert len(FakeBrain.seen) == 1
+
+
+# --- final review I5: the brain's own reads never block the event loop --------------------------
+
+
+async def test_i5_a_locked_knowledge_base_never_stalls_the_loop(locked_platform, monkeypatch):
+    """A pure facility question retrieval cannot answer, on a call whose platform database is
+    held by a writer: the knowledge reads run off the loop and give up quickly."""
+    from shefa.brain import engine as brain_engine
+    from shefa.brain import knowledge as brain_knowledge
+    from shefa.brain import retrieve as brain_retrieve
+
+    brain_knowledge.set_default_knowledge_store(None)
+    brain_retrieve.reset()
+    loop = asyncio.get_running_loop()
+    gaps: list[float] = []
+    stop = asyncio.Event()
+
+    async def ticker() -> None:
+        last = loop.time()
+        while not stop.is_set():
+            await asyncio.sleep(0.01)
+            now = loop.time()
+            gaps.append(now - last)
+            last = now
+
+    ticking = asyncio.create_task(ticker())
+    session = CallSession(call_sid="CA-kb-locked")
+    session.metadata["brain_config"] = {**brain_config.defaults(), "engine": "agent"}
+    session.add_turn("user", "পার্কিং আছে?")
+    llm = FakeLLM("জি, বলুন।", route=route_json())
+    spoken: list[str] = []
+
+    async def speak(text: str) -> None:
+        spoken.append(text)
+
+    began = time.monotonic()
+    await brain_engine.Brain().turn(session, "পার্কিং আছে?", llm, speak, today=TODAY)
+    took = time.monotonic() - began
+    stop.set()
+    await ticking
+    assert max(gaps) < 0.3, max(gaps)
+    assert took < 2.5
+    assert spoken  # something was said
+    brain_knowledge.set_default_knowledge_store(None)
+    await locked_platform.release()
