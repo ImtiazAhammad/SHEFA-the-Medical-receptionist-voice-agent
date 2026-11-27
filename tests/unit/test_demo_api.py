@@ -92,7 +92,9 @@ def test_calls_are_limited_in_number_and_in_length(monkeypatch):
                 ws.receive_text()
             assert ended.value.code == demo_api.CLOSE_TOO_LONG
         monkeypatch.setattr(settings.demo, "calls_per_ip_per_hour", 1)
-        with pytest.raises(WebSocketDisconnect) as busy:
-            with client.websocket_connect("/ws/demo-call", headers=headers):
-                pass
+        with (
+            pytest.raises(WebSocketDisconnect) as busy,
+            client.websocket_connect("/ws/demo-call", headers=headers),
+        ):
+            pass
         assert busy.value.code == demo_api.CLOSE_BUSY

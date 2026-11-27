@@ -17,7 +17,9 @@ from shefa.session.manager import CallSession
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def doctor(name, name_bn, conditions_bn=(), conditions_en=(), start="09:00", end="10:30", leave=None):
+def doctor(
+    name, name_bn, conditions_bn=(), conditions_en=(), start="09:00", end="10:30", leave=None
+):
     entry = {
         "name": name,
         "name_bn": name_bn,

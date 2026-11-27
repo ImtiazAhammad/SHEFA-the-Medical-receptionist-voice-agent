@@ -107,3 +107,10 @@ def test_the_store_refuses_agent_without_the_ack(store):
     assert store.live("engine") is None
     store.publish(store.draft("prompt.persona", "Be kind.", author="f"), author="f")
     assert store.live("prompt.persona") == "Be kind."
+
+
+def test_a_settings_object_key_needs_json_and_a_bare_word_is_kept_as_text():
+    with pytest.raises(ValueError, match="needs JSON"):
+        cli._config_value("turn.settings", "fast please")
+    assert cli._config_value("engine", " agent ") == "agent"
+    assert cli._config_value("turn.settings", '{"a": 1}') == {"a": 1}
