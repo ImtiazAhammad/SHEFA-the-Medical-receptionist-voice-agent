@@ -155,8 +155,8 @@ def _grounded(result: ScenarioResult, facts: set[str]) -> CheckResult:
 def _caller_agreed(line: str) -> bool:
     """A yes by the brain's strict rule (`shefa.brain.confirm`): a clear yes that asks for no
     other day, time, part of the day or doctor, and holds no "but" and no refusal or negation
-    anywhere. The guided engine accepts more ("হ্যাঁ, শুক্রবার" books there); the bench judges
-    both engines by the strict rule, so a booking after such a reply fails this check."""
+    anywhere. Both engines use this rule at the read-back (guided since 6eb243d), so a booking
+    after any other reply fails this check."""
     from shefa.brain.confirm import strict_answer
 
     return strict_answer(line) == "yes"

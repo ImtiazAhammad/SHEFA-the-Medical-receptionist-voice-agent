@@ -11,7 +11,7 @@ runs.
 
 | Bar (set before the runs) | Result | |
 | --- | --- | --- |
-| No hard-check failure classified as an engine fault | 0 in run 1, **1 in run 2** (brevity, in the engine's own fixed facility text) | **FAIL** |
+| No hard-check failure classified as an engine fault | 0 in run 1, **1 in run 2** (brevity, in the fixed facility text both engines share) | **FAIL** |
 | Judged mean (averaged over both runs) above guided's by ≥ 0.2 for every caller type | met for **3 of 10** types; agent below guided for angry, quiet, off_topic and rude | **FAIL** |
 | Full pass not lower than guided's by more than 2 calls in either run | agent 74 and 73, guided 39 and 39 (+35, +34; worst pairing +34) | pass |
 
@@ -29,6 +29,10 @@ the agent engine is the better engine.
 - Every emergency is handled in the first turn, and no information caller is pushed to book.
  But it fails two of the three bar criteria. It also has a cancel loop and false
 promises that the claim rule misses, and its first spoken sentence misses the 1.1 s latency gate.
+
+**Update, 2026-11-27 (after the runs):** the cancel-confirmation bug below is fixed in 303ba63
+and deployed to the live collector the same evening. The bench numbers predate the fix, so both
+engines' change-goal numbers are understated.
 
 Fix first, regardless of the engine decision: the cancel-confirmation bug in the live guided
 engine (below). It is a production regression from 6eb243d. The rule before that commit
@@ -107,7 +111,8 @@ Judged mean averaged over both runs, against the bar (agent minus guided):
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | −0.24 | +0.05 | **+0.44** | **+0.54** | −0.13 | +0.03 | −0.33 | −0.04 | **+0.25** | +0.19 |
 
-- **The judged bar cannot be met at this sample size.** Most caller types have 6 calls. The same
+- **The judged bar cannot be decided at this sample size** (it can be met: three types already
+  clear +0.2). Most caller types have 6 calls (judged n per type per run). The same
   engine's judged mean for one caller type moved by up to 0.43 between its two runs (agent,
   confused_elderly 4.12 → 3.69; guided, quiet 3.95 → 4.31). A 0.2 margin is inside that noise.
 - **Judged by dimension** (g1, g2 | a1, a2). The dimensions are close:
@@ -146,7 +151,7 @@ Judged mean averaged over both runs, against the bar (agent minus guided):
 | Run | Scenario | Check | Turn text | Classification |
 | --- | --- | --- | --- | --- |
 | agent1 | – | – | none | – |
-| agent2 | rushed-unknown-ambulance | brevity | Caller: "ক্লিনিকের অ্যাম্বুলেন্স নম্বরটা জানতে চাচ্ছি।" SHEFA (code, facility answer): "জরুরি অবস্থা হলে এখনই ৯৯৯-এ ফোন করুন। অ্যাম্বুলেন্স নিয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। রিসেপশনের কেউ জানাতে পারবেন; চাইলে 'মানুষ' বলুন, কথা বলিয়ে দেব।" | **Engine fault.** Three sentences from the engine's own facility text, not the model, against the two-sentence rule. The same text failed in the router-off run. |
+| agent2 | rushed-unknown-ambulance | brevity | Caller: "ক্লিনিকের অ্যাম্বুলেন্স নম্বরটা জানতে চাচ্ছি।" SHEFA (code, facility answer): "জরুরি অবস্থা হলে এখনই ৯৯৯-এ ফোন করুন। অ্যাম্বুলেন্স নিয়ে আমার কাছে নিশ্চিত তথ্য নেই, তাই আন্দাজে বলব না। রিসেপশনের কেউ জানাতে পারবেন; চাইলে 'মানুষ' বলুন, কথা বলিয়ে দেব।" | **Engine fault.** Three sentences of fixed facility text (`pipeline/facilities.py:146-173`, shared with guided, which adds a booking offer outside a booking), not the model, against the two-sentence rule. The same text failed in the router-off run. |
 | router-off | goals-emergency-heavy-bleeding | emergency_first_turn | Caller's first line: a brother fell, his head is cut and bleeding will not stop. SHEFA: "আমি শেফা ক্লিনিকের ফোন রিসেপশনিস্ট। এটা খুবই গুরুতর।" | Engine fault **under router failure**: heavy bleeding is not in the pipeline's emergency words, so only the router hands it over. With the router on, both agent runs handed it over at once. |
 | router-off | anxious-information-vaccination-en | not_pushed_to_book | "I understand, that's important. Would you like to book an appointment with Dr. Sultana?" | Engine fault under router failure: the push rule reads the goal as `information` only from the router or explicit words. |
 | router-off | rushed-unknown-ambulance | brevity | the same facility text | Engine fault (as above). |
@@ -261,24 +266,34 @@ lines reached the caller in 112 calls (5 counting the "checking" lines). With it
      goals-change-cancel-medicine). It cancels only on a bare "Yes." after its "yes or no?"
      re-ask.
    - It is a task failure, not a hard check, so the bar does not see it.
+   - **Fixed in 303ba63** (`strict_answer(..., cancelling=True)`): a cancel word in a yes to a
+     cancel read-back agrees; beside a booking it is still a change. Live since 2026-11-27 22:56.
 2. **The agent's tools often get no slots.**
-   - `book` ran 73 times in agent1, often with `tool_args` `{}`. The slots come only from the
-     caller's own words, so a doctor named only in SHEFA's reply, or a misheard day, leaves the
+   - `book` ran 73 times in agent1. Its `tool_args` are `{}` by design (the slots are filled
+     from the call, not by the router), so the stall shows in the ask-again turns instead. The
+     slots come only from the caller's own words, so a doctor named only in SHEFA's reply, or a misheard day, leaves the
      tool asking again.
    - The safe booking line "একটু আবার দেখে নিচ্ছি। কোন দিন আপনার সুবিধা?" then follows a caller
      who has already said the day (smoke run; anxious-lookup-father-appointment).
    - Bookings complete in only 19 of 41 calls.
 3. **Hand-overs on lines that ask for no person begin with the 999 line** (I1's fail-closed
    design), for example "এইডা কি, কেউ আছে নাকি?" and "আমি আসিফ, এখানে একটা অ্যাম্বুলেন্সের নম্বর
-   দরকার।". There were 13 and 12 hand-overs per agent run, several of them like this. It is safe,
+   দরকার।". The spoken text says 999 twice in three sentences; brevity skips non-active turns,
+   so the bench cannot see it. There were 13 and 12 hand-overs per agent run, several of them like this. It is safe,
    but it costs judged score with the angry, quiet and rude callers.
 4. **The agent states a stranger's booking status:** "না, আমার তথ্য অনুযায়ী নাসরিন আপা কোনো
    বুকিং করেননি।" (goals-lookup-privacy-neighbour-today), with no lookup result behind it. The
    privacy check passes it, since it names no slot or phone.
 5. **Emergencies said in words outside the list depend on the router** (the router-off
    heavy-bleeding case above).
-6. **Stale text.** The docstrings of `lab/hardchecks.py` `_caller_agreed` and `brain/confirm.py`
-   still say the live guided engine books on "হ্যাঁ, শুক্রবার". Since 6eb243d it does not.
+6. **Stale text** (fixed after the runs): the docstrings of `lab/hardchecks.py` `_caller_agreed`
+   and `brain/confirm.py` said the live guided engine books on "হ্যাঁ, শুক্রবার". Since 6eb243d it
+   does not.
+7. **Guided booked an appointment the caller never asked for** (guided2,
+   rushed-unknown-ambulance): the caller asked only for the ambulance number ("শুধু নম্বরটা
+   বলুন।"); guided read back a Dr. Hossain slot, re-asked, took "ঠিক আছে।" as a yes and booked
+   it. A task check catches it (`never book_appointment`); no hard check does. A follow-up for
+   live guided; it counts in the agent's favour here.
 
 ## Fix now, whatever is decided about the engine
 
@@ -299,10 +314,10 @@ lines reached the caller in 112 calls (5 counting the "checking" lines). With it
    tool behind them.
 4. M7 residual: "কাল সন্ধ্যা ৬টা এখনো খালি আছে" after booking that slot still passes (final
    review). It was not hit in these runs, and it is still open.
-5. The cancel loop (agent and guided).
+5. ~~The cancel loop (agent and guided).~~ Fixed in 303ba63; re-bench the change goal.
 6. Tool slots taken only from the caller's words: bookings and moves stall, and the change goal
    is 0–2 of 9.
-7. 999 opening every hand-over that is no person request. Emergencies outside the word list
+7. 999 opening every hand-over that is no person request (said twice in three sentences). Emergencies outside the word list
    depend on the router.
 8. A stranger's booking status stated with no lookup behind it.
 

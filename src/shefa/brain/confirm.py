@@ -9,8 +9,8 @@ request; a line that only refuses is a no. A yes with a word outside the allow-l
 else wrong ("জি, ঠিক আছে দেখি") is "unclear": the caller is asked once more. Failing this way
 costs a second question, never a booking the caller did not agree to.
 
-The live guided engine keeps its own rule (changing it changes the live product); the bench's
-`_caller_agreed` uses this one, so it catches the hole in both engines.
+The live guided engine uses this rule at its read-back too (since 6eb243d), and the bench's
+`_caller_agreed` uses it to judge both engines.
 """
 
 from __future__ import annotations
