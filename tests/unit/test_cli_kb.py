@@ -67,7 +67,7 @@ def test_seed_command(store, capsys, monkeypatch):
 
 
 def test_fetch_embedder_downloads_the_configured_model(store, capsys, monkeypatch):
-    import huggingface_hub
+    huggingface_hub = pytest.importorskip("huggingface_hub")  # optional: not in CI's install
 
     seen: list[str] = []
     monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda name, **_k: seen.append(name))
@@ -82,7 +82,7 @@ def test_fetch_embedder_downloads_the_configured_model(store, capsys, monkeypatc
 
 
 def test_fetch_embedder_reports_a_failed_download(store, capsys, monkeypatch):
-    import huggingface_hub
+    huggingface_hub = pytest.importorskip("huggingface_hub")  # optional: not in CI's install
 
     def boom(*_a, **_k):
         raise OSError("no network")

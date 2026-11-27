@@ -131,7 +131,7 @@ def test_load_embedder_empty_name_is_none():
 
 
 def test_load_embedder_missing_model_is_none_and_logs_once(monkeypatch, caplog):
-    import huggingface_hub
+    huggingface_hub = pytest.importorskip("huggingface_hub")  # optional: not in CI's install
 
     def no_download(*_a, **_k):
         raise AssertionError("must not download during a call")
