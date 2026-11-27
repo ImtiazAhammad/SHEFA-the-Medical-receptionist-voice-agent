@@ -665,6 +665,19 @@ C1_CLAIMS = [
     # The engine lines (said after "কাল বিকেলে রহমান স্যারের একটা সিরিয়াল দিন").
     ("জি, বুকিং হয়ে গেছে।", "book"),
     ("জি, আপনার সিরিয়াল দেওয়া হলো।", "book"),
+    # Re-review (a): English verb promises, for every action.
+    ("I'll book it for you now.", "book"),
+    ("I will book Sunday for you.", "book"),
+    ("Let me book that for you.", "book"),
+    ("I'll go ahead and book it.", "book"),
+    ("I'm going to book you in now.", "book"),
+    ("I'll book you in for Sunday.", "book"),
+    ("Let me cancel that for you.", "cancel_booking"),
+    ("I'll move your appointment to Sunday.", "reschedule_booking"),
+    ("Let me change it to Sunday for you.", "reschedule_booking"),
+    ("I'll have someone ring you back.", "request_callback"),
+    ("Let me put you on to reception.", "hand_over"),
+    ("Let me transfer you.", "hand_over"),
     # A negation that governs something else does not exempt the claim.
     ("No worries your booking went through.", "book"),
     ("Don't worry your appointment is fixed for Sunday.", "book"),
@@ -741,6 +754,12 @@ C1_NOT_CLAIMS = [
     "সিরিয়াল নিতে হলে আগে নাম বলতে হবে।",
     "দয়া করে কাল আবার ফোন করবেন।",
     "ঠিক আছে।",
+    # Offers of the English verbs (re-review (a)).
+    "Would you like me to book it?",
+    "Shall I cancel it for you?",
+    "Do you want me to move it to Sunday?",
+    "Should I transfer you to reception?",
+    "You can book through reception.",
     # Asking for what a booking needs.
     "To book an appointment I will need your name.",
     "What name should I put the appointment under?",
@@ -877,3 +896,49 @@ def test_c1_a_looked_up_booking_may_be_said_as_standing():
 def test_o2_today_said_beside_a_doctor_is_no_sitting_day():
     # Today (a Saturday) is said on its own; Dr Rahman's own clause names no day.
     assert _verdict("আজ শনিবার, ডাক্তার রহমান কাল বসবেন।", "bn", "x", _by("Rahman")).ok
+
+
+# --- re-review (b): a held appointment backs only its own doctor, day and time -----------------
+
+
+def _with_appointment(language: str):
+    state = CallState(language=language, booking={"doctor": "Dr. Rahman"})
+    session = CallSession(call_sid="matrix")
+    session.metadata["brain_grounds"] = [
+        {"text": "The caller's appointment: Dr. Rahman on 2026-12-01 at 16:00.",
+         "doctor": "Rahman", "slots": ["rahman|2026-12-01|16:00"], "read_back": False},
+        {"text": "Dr. Rahman is free on 2026-11-29 at 18:00, 18:15.", "doctor": "Rahman",
+         "slots": ["rahman|2026-11-29|18:00", "rahman|2026-11-29|18:15"], "read_back": False},
+    ]  # fmt: skip
+    return engine._grounds(session, state, [_hours_hit()], _directory(language), "x", TODAY)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "ok"),
+    [
+        ("You have an appointment with Dr Rahman on Sunday at 6 pm.", False),
+        ("You have an appointment with Dr Rahman on Sunday at 6:15 pm.", False),
+        ("আপনার রবিবার সন্ধ্যা ৬টায় সিরিয়াল আছে।", False),
+        ("You have an appointment with Dr Rahman on 3 December at 4 pm.", False),
+        ("You have an appointment with Dr Rahman on 1 December at 4 pm.", True),
+        ("You have an appointment on Tuesday at 4 pm.", True),
+        ("আপনার মঙ্গলবার বিকেল ৪টায় সিরিয়াল আছে।", True),
+        ("You have an appointment with Dr Rahman.", True),
+    ],
+)
+def test_c1_a_held_appointment_backs_only_its_own_slot(sentence, ok):
+    language = "en" if sentence.isascii() else "bn"
+    v = check_sentence(sentence, _with_appointment(language), goal="x", language=language)
+    assert v.ok is ok, (sentence, v)
+    if not ok:
+        assert v.kind == "claim", v
+
+
+def test_c1_every_action_in_a_clause_is_checked():
+    # Re-review (c): a call-back saved this call does not cover the booking said beside it.
+    for sentence in ("The desk will call you back to book it.",
+                     "I'll have them call you to confirm your booking is done."):
+        assert _claim_verdict(sentence, {"request_callback"}).kind == "claim", sentence
+        assert _claim_verdict(sentence, {"request_callback", "book"}).ok, sentence
+    # The booking a cancel acts on is no booking claim of its own.
+    assert _claim_verdict("Your appointment has been cancelled.", {"cancel_booking"}).ok

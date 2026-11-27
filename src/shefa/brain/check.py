@@ -80,7 +80,7 @@ class Grounds:
     topics: set[str] = field(default_factory=set)
     # A tool result says the caller has a booking (a lookup, or a booking made this call): "you
     # have an appointment on Sunday" may then be said, its day and time checked as any fact.
-    appointments: bool = False
+    appointments: list[Value] = field(default_factory=list)
 
     def add(self, text: str) -> None:
         self.texts.append(text)
@@ -1595,7 +1595,9 @@ _ACTION_NOUNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "reschedule_booking",
         re.compile(
             _B + r"(?:পরিবর্তন|বদল|বদলে|বদলানো|সরিয়ে|সরানো|পিছিয়ে|এগিয়ে)" + _BW + _E
-            + r"|\breschedul\w*|\b(?:moved|changed|shifted)\s+(?:your|it|you|the)\b"
+            + r"|\breschedul\w*"
+            + r"|\b(?:move|moving|moved|change|changing|changed|shift|shifting|shifted)\s+"
+            + r"(?:your|it|you|the|that|this)\b"
             + r"|\b(?:was|is|has been|have been|been)\s+(?:moved|changed|shifted)\b",
             re.IGNORECASE,
         ),
@@ -1616,7 +1618,8 @@ _ACTION_NOUNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             _B + r"(?:যুক্ত|সংযোগ|সংযুক্ত|ট্রান্সফার|কানেক্ট|হস্তান্তর)" + _BW + _E
             + r"|লাইন(?:টা|টি)?\s+(?:দিচ্ছি|দিয়ে দিচ্ছি|দেব|দিব|দিলাম)|কথা বলিয়ে"
             + r"|(?:রিসেপশন|রিসেপশনিস্ট|কর্মী|মানুষ|ডেস্ক|স্টাফ)\S*\s+(?:দিচ্ছি|দিয়ে দিচ্ছি)"
-            + r"|\btransferr?\w*|\bconnect\w*|\bput(?:ting)?\s+you\s+through\b"
+            + r"|\btransferr?\w*|\bconnect\w*|\bput(?:ting)?\s+you\s+(?:through|on\s+to|onto)\b"
+            + r"|\b(?:pass|passing)\s+you\s+(?:on\s+)?to\b"
             + r"|\bhand(?:ing)?\s+you\s+over\b",
             re.IGNORECASE,
         ),
@@ -1627,8 +1630,9 @@ _ACTION_NOUNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             # বুক alone is also the chest ("বুকে ব্যথা"): only the word itself, never before ব্যথা.
             _B + r"(?:সিরিয়াল|বুকিং|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট|অ্যাপোয়েন্টমেন্ট|রিজার্ভ)" + _BW + _E
             + r"|" + _B + r"বুকড?" + _E + r"(?!\s*(?:ব্যথা|ধড়ফড়))"
-            + r"|\b(?:bookings?|booked|appointments?|serials?|reservations?|reserved)\b"
-            + r"|\bput you down\b|\bbooked? (?:you|it) in\b",
+            + r"|\b(?:book|books|booking|bookings|booked|appointments?|serials?|reservations?"
+            + r"|reserve|reserved)\b"
+            + r"|\bput you down\b",
             re.IGNORECASE,
         ),
     ),
@@ -1656,11 +1660,14 @@ _BN_STATIVE_ONLY = re.compile(_B + rf"(?:{_BN_STATIVE})" + _E)
 _BN_MUST = re.compile(r"[ঀ-৿]+(?:তে|লে) হবে" + _E)
 _EN_COMPLETED = (
     r"done|fixed|set|confirmed|made|booked|noted|scheduled|reserved|arranged|sorted|registered"
-    r"|recorded|saved|secured|went|gone|through|placed|cancell?ed|moved|rescheduled|changed"
+    r"|recorded|saved|secured|went|gone|placed|cancell?ed|moved|rescheduled|changed"
     r"|transferred|connected|finished|complete|completed|taken|put"
 )
 _EN_STATIVE = r"is|are|was|were|been|'s|'re|have|has|had|'ve|got|am|'m"
-_EN_PROMISE = r"will|'ll|shall|going|transferring|connecting|calling|phoning|putting|arranging"
+_EN_PROMISE = (
+    r"will|'ll|shall|going|transferring|connecting|calling|phoning|putting|arranging|let me"
+    r"|let's|go ahead"
+)
 _EN_PREDICATE = re.compile(
     rf"(?:\b(?:{_EN_COMPLETED}|{_EN_PROMISE}|is|are|was|were|been|have|has|had|got|am)\b"
     r"|(?<=[a-z])(?:'s|'re|'ve|'ll|'m)\b)",
@@ -1834,8 +1841,21 @@ def _asks_or_offers(sentence: str, start: int, end: int, mark: str, bangla: bool
     return bool(opener) and not _EN_NESTED.search(clause, opener.end())
 
 
+_GO_AHEAD = re.compile(r"\b(?:go ahead|go on|just)\s+and\b", re.IGNORECASE)
+# A booking said as a verb ("book it", "বুক করে দিচ্ছি"), not as the thing another action acts
+# on ("cancel your appointment", "সিরিয়াল বাতিল").
+_BOOK_VERB = re.compile(
+    r"\b(?:book|books|booking|booked|reserve|reserved)\b(?!\s+(?:is|was|has))|\bput you down\b"
+    r"|" + _B + r"বুকড?" + _E + r"(?=\s*(?:করে|করা|করব|করছি|করলাম|দি|দে|হ))"
+    r"|" + _B + r"সিরিয়াল" + _BW + _E + r"(?=\s+(?:দিয়ে|দেওয়া|দিচ্ছি|দিলাম|দেব|নেওয়া|নিয়ে|করে))",
+    re.IGNORECASE,
+)
+
+
 def _action_claim(sentence: str, grounds: Grounds) -> Verdict | None:
     """The first clause that claims an action no tool did this call."""
+    # "I'll go ahead and book it" is one promise, not two clauses.
+    sentence = _GO_AHEAD.sub(" ", sentence)
     for start, end, mark in _claim_clauses(sentence):
         clause = sentence[start:end]
         lead = _CLAIM_LEAD.match(clause)
@@ -1871,10 +1891,38 @@ def _named_claim(
     sentence: str, start: int, end: int, mark: str, body: str, bangla: bool, grounds: Grounds
 ) -> Verdict | None:
     """A clause naming an action with a verb that says it happened, stands or will happen."""
-    found = next(((tool, m) for tool, regex in _ACTION_NOUNS if (m := regex.search(body))), None)
-    if found is None or found[0] in grounds.succeeded:
-        return None
-    tool, noun = found
+    other_ends = [
+        m.end() for tool, regex in _ACTION_NOUNS if tool != "book" for m in regex.finditer(body)
+    ]
+    for tool, regex in _ACTION_NOUNS:
+        text, noun = body, regex.search(body)
+        if tool == "book" and other_ends:
+            # Beside another action the booking noun is what it acts on ("cancel your
+            # appointment"). A booking verb is still a claim of its own ("…call you back to
+            # book it"), and so is a booking said after the other action with its own verb
+            # ("…call you to confirm your booking is done").
+            noun = _BOOK_VERB.search(body)
+            if noun is None:
+                text = body[max(other_ends) :]
+                noun = regex.search(text)
+        if noun is None or tool in grounds.succeeded:
+            continue
+        if verdict := _one_claim(sentence, start, end, mark, text, bangla, grounds, tool, noun):
+            return verdict
+    return None
+
+
+def _one_claim(
+    sentence: str,
+    start: int,
+    end: int,
+    mark: str,
+    body: str,
+    bangla: bool,
+    grounds: Grounds,
+    tool: str,
+    noun: re.Match[str],
+) -> Verdict | None:
     # What the clause says once "can be made", "নেওয়া যাবে", "করতে হবে" and "fully booked" are
     # left out.
     said = re.sub(r"\bfully booked\b|\bbooked (?:up|out)\b", " ", body, flags=re.IGNORECASE)
@@ -1889,7 +1937,7 @@ def _named_claim(
         # when it speaks of free time or a tool result holds the caller's booking (a lookup).
         if not _YOU.search(said) or _AVAILABLE.search(said):
             return None
-        if tool == "book" and grounds.appointments:
+        if tool == "book" and _held(said, grounds):
             return None
     if _negated_clause(body, noun.start(), bangla):
         return None
@@ -1898,6 +1946,25 @@ def _named_claim(
     if _asks_or_offers(sentence, start, end, mark, bangla):
         return None
     return _claimed(tool, noun.group())
+
+
+def _held(clause: str, grounds: Grounds) -> bool:
+    """The clause says the caller's own appointment as a tool returned it: its doctor, day,
+    time and numbers all on one appointment fact ("You have an appointment with Dr Rahman on 1
+    December at 4 pm"). Another time, even a free one, is no appointment of the caller's."""
+    groups = _doctor_groups(grounds)
+    named = _doctors_in(clause, groups)
+    plain = _without_clocks(clause)
+    for fact in grounds.appointments:
+        whose = {fold(w) for w in _words(fact.doctor)}
+        if named and not all(group & whose for group in named):
+            continue
+        if _unknown_day(clause, [fact.text]) or _unknown_time(clause, [fact.text]):
+            continue
+        if numbers_in(plain) - numbers_in(fact.text):
+            continue
+        return True
+    return False
 
 
 def _claimed(tool: str, words: str) -> Verdict:

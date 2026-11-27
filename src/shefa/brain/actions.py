@@ -234,13 +234,17 @@ def _cancelled_later(done: list[dict[str, Any]], at: int) -> bool:
 APPOINTMENT = "The caller's appointment:"
 
 
-def has_appointment(session: CallSession) -> bool:
-    """The kept tool results hold a booking of the caller's (a lookup, or one made this call):
-    "আপনার সিরিয়াল আছে" may then be said. A cancel or a move takes its fact back."""
-    return any(
-        isinstance(e, dict) and str(e.get("text", "")).startswith(APPOINTMENT)
+def appointments(session: CallSession) -> list[Any]:
+    """The caller's bookings as kept tool results hold them (a lookup, or one made this call),
+    each with its doctor, its dates naming their weekday: "আপনার সিরিয়াল আছে" may be said of
+    one of them, never of another time. A cancel or a move takes its fact back."""
+    from shefa.brain.check import Value
+
+    return [
+        Value(_grounded_text(str(e["text"])), str(e.get("doctor") or ""))
         for e in session.metadata.get(GROUNDS, [])
-    )
+        if isinstance(e, dict) and str(e.get("text", "")).startswith(APPOINTMENT)
+    ]
 
 
 def caller_phone(session: CallSession) -> str:
@@ -403,8 +407,11 @@ _GOODBYE = re.compile(
 _STILL_ASKING = re.compile(
     r"\?|(?<![ঀ-৿])(?:জানতে|চাই|চাচ্ছি|বলুন|বলবেন|বলেন|দিন|দেন|করুন|করেন|কি|কী|কেন|কখন|কবে"
     r"|কোথায়|কত|কোন|কাকে|একটা|আরেকটা|তবে|কিন্তু|লাগবে)(?![ঀ-৿])"
+    r"|(?<![ঀ-৿])(?:বাতিল|বদল|সিরিয়াল|বুক|ব্যথা|কষ্ট|অসুস্থ|জ্বর|রিসেপশন|মানুষ)[ঀ-৿]*"
     r"|\b(?:what|when|where|which|why|how|who|want|need|can|could|would|tell|book|please|one more"
-    r"|another|also|but|question|ask)\b",
+    r"|another|also|but|question|ask|cancel|change|move|reschedule|connect|transfer|put|call"
+    r"|appointment|booking|serial|reception|person|someone|doctor|pain|hurts?|sick|bleeding"
+    r"|breath\w*|fever|help|me)\b",
     re.IGNORECASE,
 )
 

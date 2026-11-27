@@ -1249,7 +1249,18 @@ def test_i2_a_goodbye_routed_to_end_call_hangs_up(executor, line):
     assert session.state == "completed"
 
 
-@pytest.mark.parametrize("line", ["ধন্যবাদ, ডাক্তার রহমানের ফি কত?", "thanks, and when is Dr Rahman in?"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ধন্যবাদ, ডাক্তার রহমানের ফি কত?",
+        "thanks, and when is Dr Rahman in?",
+        "thanks, cancel my appointment",
+        "ok bye, but book me for Sunday",
+        "okay thanks, connect me to reception",
+        "thanks, my father has chest pain",
+        "ধন্যবাদ, আব্বার বুকে ব্যথা",
+    ],
+)
 def test_i2_thanks_with_a_question_does_not_hang_up(executor, line):
     session = identified_session()
     llm = FakeLLM("জি, বলছি।", route=route_json("end_call", "calm", "small_talk"))
@@ -1317,3 +1328,32 @@ def test_m7_a_booked_slot_is_no_longer_free_and_its_read_back_is_gone(executor):
     assert any(t.startswith("The caller's appointment:") and "18:00" in t for t in texts)
     # The booking itself now grounds 18:00 ("আপনার সিরিয়াল সন্ধ্যা ৬টায়"); the checker reads
     # numbers, not "free", so a "still free at 6" would pass on it (reported, not fixed here).
+
+
+def test_c1_after_a_lookup_a_wrong_appointment_time_is_never_spoken(executor):
+    # Re-review (b): the caller's appointment is Tuesday 1 December at 16:00; Sunday 18:00 is
+    # only free. Through Brain.turn: the wrong time is refused, the true one spoken.
+    executor.results["list_my_appointments"] = {
+        "appointments": [
+            {"appointment_id": "7", "date": "2026-12-01", "time": "16:00", "doctor": "Rahman",
+             "doctor_bn": "রহমান"},
+        ]
+    }  # fmt: skip
+    executor.results["check_appointment_slots"] = {
+        **free_tomorrow("18:00", "18:15"), "date": "2026-11-29",
+    }  # fmt: skip
+    session = identified_session()
+    say(session, "আমার সিরিয়াল কবে?",
+        FakeLLM("unused", "জি, বলছি।", route=route_json("lookup_booking", "calm", "lookup")))
+    say(session, "রবিবার সন্ধ্যায় ডাক্তার রহমানের কোন সময় খালি আছে?",
+        FakeLLM("unused", "জি, বলছি।", route=route_json("free_times", "calm", "change")))
+    for wrong in ("আপনার রবিবার সন্ধ্যা ৬টায় সিরিয়াল আছে।",):
+        speak = say(session, "আমার সিরিয়াল কখন?", FakeLLM(wrong, wrong, route=route_json()))
+        assert wrong not in speak.said
+    session.language = Language.ENGLISH
+    wrong = "You have an appointment with Dr Rahman on Sunday at 6 pm."
+    speak = say(session, "When is my appointment?", FakeLLM(wrong, wrong, route=route_json()))
+    assert wrong not in speak.said
+    true = "You have an appointment with Dr Rahman on 1 December at 4 pm."
+    speak = say(session, "When is my appointment?", FakeLLM(true, route=route_json()))
+    assert speak.said == [true]
