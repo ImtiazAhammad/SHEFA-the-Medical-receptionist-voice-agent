@@ -78,6 +78,9 @@ class Grounds:
     # Facility topics a knowledge hit covers ("parking", "hours"): its text may not use the
     # caller's words for the topic ("9 am to 9 pm" says nothing of "opening hours").
     topics: set[str] = field(default_factory=set)
+    # A tool result says the caller has a booking (a lookup, or a booking made this call): "you
+    # have an appointment on Sunday" may then be said, its day and time checked as any fact.
+    appointments: bool = False
 
     def add(self, text: str) -> None:
         self.texts.append(text)
@@ -505,25 +508,81 @@ def _doctor_groups(grounds: Grounds) -> list[frozenset[str]]:
     return [frozenset(g) for g in groups]
 
 
-_Department = tuple[frozenset[str], set[frozenset[str]]]
+@dataclass(frozen=True)
+class _Department:
+    """One department of the directory block: its title words, its canonical key (the table in
+    `clinic.department_names`, so "child specialist" finds "Pediatrics") and its doctors."""
+
+    words: frozenset[str]
+    key: str | None
+    doctors: frozenset[frozenset[str]]
+
+
+# Ways callers name a department that `clinic.department_names` (shared with the guided
+# engine, so left as it is) does not list. Matched as whole words.
+_EXTRA_DEPARTMENT_NAMES = {
+    "cardiology": r"\bheart\b|হৃদরোগ\S*",
+    "pediatrics": r"\bp(?:a)?ediatric\w*|\bchildren'?s doctor\b|\bchild doctor\b"
+    + r"|\bkids'? doctor\b|শিশু\S*\s+ডাক্তার|শিশু বিশেষজ্ঞ|বাচ্চা\S*\s+ডাক্তার",
+    "medicine": r"\bphysician\b|\bmedicine\b",
+    "dermatology": r"\bdermatologists?\b|\bskin (?:doctor|specialist)s?\b",
+    "eye": r"\bophthalmologists?\b|\beye (?:doctor|specialist)s?\b",
+    "gynecology": r"\bgyn(?:a)?ecologists?\b|\bgyn(?:a)?e?\b",
+    "orthopedics": r"\borthop(?:a)?edic\w*|\bbone (?:doctor|specialist)s?\b",
+    "psychiatry": r"\bpsychiatrists?\b",
+    "ent": r"\bent (?:doctor|specialist)s?\b|\botolaryngologists?\b",
+    "gastro": r"\bgastroenterologists?\b",
+    "nephrology": r"\bnephrologists?\b",
+    "urology": r"\burologists?\b",
+    "endocrinology": r"\bendocrinologists?\b",
+    "oncology": r"\boncologists?\b",
+}
+# Any other specialist said in English ("rheumatologist", "pulmonologist"): some department,
+# never mistaken for the call's doctor.
+_SPECIALIST_WORD = re.compile(r"\b\w+(?:ologists?|iatrists?|iatricians?)\b", re.IGNORECASE)
+_EXTRA_DEPARTMENT_RE = {
+    key: re.compile(pattern, re.IGNORECASE) for key, pattern in _EXTRA_DEPARTMENT_NAMES.items()
+}
+
+
+@lru_cache(maxsize=512)
+def _department_keys(text: str) -> frozenset[str]:
+    """The canonical departments a text names, however it says them."""
+    from shefa.clinic import department_names
+
+    def known(words: str) -> set[str]:
+        found = set(department_names.mentioned(words))
+        return found | {key for key, regex in _EXTRA_DEPARTMENT_RE.items() if regex.search(words)}
+
+    keys = known(text)
+    if any(not known(m.group()) for m in _SPECIALIST_WORD.finditer(text)):
+        keys.add("unknown")  # no clinic has this key: an unmatched department
+    return frozenset(keys)
+
+
+def _title_key(title: str) -> str | None:
+    from shefa.clinic import department_names
+
+    english, _, bangla = title.partition(" / ")
+    return department_names.key_for(english.strip(), bangla.strip())
 
 
 def _departments(grounds: Grounds, groups: list[frozenset[str]]) -> list[_Department]:
     """Each department of the directory block (a short title line, then its "- Dr …" lines) as
-    its name words and its doctors: "মেডিসিনের ডাক্তার" names Dr Hossain."""
-    found: list[_Department] = []
+    its name words, its key and its doctors: "মেডিসিনের ডাক্তার" names Dr Hossain."""
+    found: list[tuple[frozenset[str], str | None, set[frozenset[str]]]] = []
     for text in grounds.texts:
-        current: _Department | None = None
+        current: tuple[frozenset[str], str | None, set[frozenset[str]]] | None = None
         for line in text.splitlines():
             if line.startswith("- "):
                 if current is not None:
-                    current[1].update(g for g in groups if g & _ground_words([line]))
+                    current[2].update(g for g in groups if g & _ground_words([line]))
                 continue
             current = None
             if line.strip() and len(line) < 60 and not line.startswith("#"):
-                current = (frozenset(_ground_words([line])), set())
+                current = (frozenset(_ground_words([line])), _title_key(line.strip()), set())
                 found.append(current)
-    return [(words, doctors) for words, doctors in found if doctors]
+    return [_Department(w, k, frozenset(d)) for w, k, d in found if d]
 
 
 def _doctors_in(
@@ -532,15 +591,23 @@ def _doctors_in(
     departments: list[_Department] | tuple[()] = (),
 ) -> set[frozenset[str]]:
     """The known doctors a text names, with a title or without one ("সুলতানা ম্যাডাম"), or
-    through their department ("মেডিসিনের ডাক্তার")."""
+    through their department ("মেডিসিনের ডাক্তার", "child specialist")."""
     stems = set(_titled_names(text))
     for word in _words(text):
         stems.update(_stems(word))
     found = {g for g in groups if g & stems}
-    for words, doctors in departments:
-        if words & stems:
-            found |= doctors
+    keys = _department_keys(text) if departments else frozenset()
+    for department in departments:
+        if department.words & stems or (department.key and department.key in keys):
+            found |= department.doctors
     return found
+
+
+def _unmatched_department(text: str, departments: list[_Department]) -> bool:
+    """The text names a department ("dermatologist", "চোখের ডাক্তার") this clinic does not
+    have: whoever it means, it is not the call's doctor."""
+    have = {d.key for d in departments if d.key}
+    return bool(_department_keys(text) - have)
 
 
 # A clause ends at a comma, a danda or a joiner: "ডাক্তার রহমান ও ডাক্তার সুলতানা রবিবার বসেন" says
@@ -591,19 +658,25 @@ def _subjects(text: str, grounds: Grounds) -> list[tuple[str, _Subject]]:
     """Each clause with its one subject.
 
     A clause has a subject of its own when it names doctors (by name, title or department), or
-    when it has a clinic word (খোলা, বন্ধ, ক্লিনিক, open, closed, clinic, hours), no pronoun, and
-    no doctor is named in it or earlier in the sentence: then it is the clinic's ("উনি ক্লিনিকে
-    সোমবার বসেন" is still a doctor's clause).
+    when it has a clinic word (খোলা, বন্ধ, ক্লিনিক, open, closed, clinic, hours), no pronoun or
+    generic doctor word ("ডাক্তার সাহেব", "the doctor"), and no doctor is named in it or earlier
+    in the sentence: then it is the clinic's ("উনি ক্লিনিকে সোমবার বসেন" and "আমাদের ক্লিনিকে
+    ডাক্তার সাহেব সোমবার বসেন" are still a doctor's clauses). A clause naming a department the
+    clinic does not have has nobody for its subject.
 
     - A clause with its own subject takes it.
-    - A pronoun clause ("উনি", "he") takes the nearest doctor named earlier, else a doctor or
-      department the caller's line names, else the call's doctor, else nobody.
+    - A pronoun or generic-doctor clause ("উনি", "he", "the doctor") takes the nearest doctor
+      named earlier in the sentence, else one named later ("She sits on Monday, Dr Sultana."),
+      else a doctor or department the caller's line names, else the call's doctor, else nobody.
+      It never takes the clinic.
     - Any other clause takes the nearest subject of its own in the sentence, doctor or clinic:
       earlier first, else later ("On Monday, Dr Rahman sits."; "We are open ..., from 9 am to 9
       pm."); else the caller's line's doctor, else the call's doctor, else nobody.
 
-    Nobody: the clause's days, times and doctors' numbers are refused. The caller's line only
-    chooses whose facts a clause is checked against; it grounds none."""
+    The caller's line naming a department the clinic does not have leaves nobody as that
+    fallback: the call's doctor is someone else. Nobody: the clause's days, times and doctors'
+    numbers are refused. The caller's line only chooses whose facts a clause is checked against;
+    it grounds none."""
     groups = _doctor_groups(grounds)
     departments = _departments(grounds, groups)
     clauses = _clauses(text)
@@ -615,22 +688,44 @@ def _subjects(text: str, grounds: Grounds) -> list[tuple[str, _Subject]]:
     for i, clause in enumerate(clauses):
         if named[i]:
             own.append(_Subject(frozenset(named[i])))
-        elif _CLINIC_WORD.search(clause) and not any(named[:i]) and not _PRONOUN.search(clause):
+        elif departments and _unmatched_department(clause, departments):
+            own.append(nobody)
+        elif _CLINIC_WORD.search(clause) and not any(named[:i]) and not _someone(clause):
             own.append(_Subject(clinic=True))
         else:
             own.append(None)
-    fallback = _Subject(frozenset(caller or call)) if caller or call else nobody
+    if caller:
+        fallback = _Subject(frozenset(caller))
+    elif grounds.caller and departments and _unmatched_department(grounds.caller, departments):
+        fallback = nobody
+    else:
+        fallback = _Subject(frozenset(call)) if call else nobody
     out = []
     for i, clause in enumerate(clauses):
         if (subject := own[i]) is None:
-            if _PRONOUN.search(clause):
-                earlier = next((named[j] for j in range(i - 1, -1, -1) if named[j]), set())
-                subject = _Subject(frozenset(earlier)) if earlier else fallback
+            if _someone(clause):
+                near = [*range(i - 1, -1, -1), *range(i + 1, len(clauses))]
+                doctor = next((named[j] for j in near if named[j]), set())
+                subject = _Subject(frozenset(doctor)) if doctor else fallback
             else:
                 near = [*range(i - 1, -1, -1), *range(i + 1, len(clauses))]
                 subject = next((own[j] for j in near if own[j] is not None), fallback)
         out.append((clause, subject))
     return out
+
+
+# A doctor said without a name: "ডাক্তার সাহেব", "ডাক্তারের", "the doctor", "doctors". Like a
+# pronoun, it is some doctor, never the clinic.
+_GENERIC_DOCTOR = re.compile(
+    _B + r"(?:ডাক্তার|ডাক্তর|ডাঃ|চিকিৎসক|বিশেষজ্ঞ)[ঀ-৿]*" + _E
+    + r"|\b(?:doctor|doctors|doctor's|dr|specialist|physician)\b",
+    re.IGNORECASE,
+)
+
+
+def _someone(clause: str) -> bool:
+    """The clause speaks of a doctor it does not name: a pronoun or a generic doctor word."""
+    return bool(_PRONOUN.search(clause) or _GENERIC_DOCTOR.search(clause))
 
 
 def _fact_lines(grounds: Grounds) -> list[tuple[str, set[str]]]:
@@ -758,6 +853,30 @@ def _clause_fault(clause: str, subject: _Subject, grounds: Grounds) -> Verdict |
         return _unsaid_subject(time) if not subject.resolved else _fact("time", time)
     if day := _unknown_day(clause, own):
         return _unsaid_subject(day) if not subject.resolved else _fact("day", day)
+    return None
+
+
+# A clause that says a doctor sits or sees patients, with no day of its own.
+_SITS = re.compile(
+    _B + r"(?:বসেন|বসবেন|বসছেন|বসেছেন|দেখেন|দেখবেন|আছেন|থাকবেন|থাকেন|আসেন|আসবেন)" + _E
+    + r"|\b(?:sits?|sees?|works?|comes?|is in|is available|available)\b",
+    re.IGNORECASE,
+)
+
+
+def _sitting_day_beside(
+    text: str, subjects: list[tuple[str, _Subject]], grounds: Grounds
+) -> str | None:
+    """A day said in another clause of the sentence that a doctor's sitting clause leans on:
+    "শুক্রবার ক্লিনিক বন্ধ, তবে ডাক্তার হোসেন বসেন" says Dr Hossain sits on Friday."""
+    for clause, subject in subjects:
+        if not subject.doctors or not _SITS.search(clause) or _NEGATED_CLAIM.search(clause):
+            continue
+        if _day_set(clause):
+            continue
+        own, _wider = _scope(clause, subject, grounds)
+        if day := _unknown_day(text, own):
+            return day
     return None
 
 
@@ -1172,7 +1291,12 @@ _GENDER_SAID = {
     "female": r"মহিলা|নারী|\b(?:female|woman|women|lady|ladies)\b",
     "male": r"পুরুষ|\b(?:male|man|men)\b",
 }
-_SPEAKS_SAID = re.compile(r"কথা বল|বলেন|বলতে|\bspeaks?\b|\btalks?\b", re.IGNORECASE)
+# Understanding a language is a claim about it too ("Dr Rahman understands Hindi", "হিন্দি বোঝেন").
+_SPEAKS_SAID = re.compile(
+    r"কথা বল|বলেন|বলতে|বোঝেন|বুঝেন|বুঝতে|জানেন"
+    r"|\b(?:speaks?|talks?|understands?|knows?)\b",
+    re.IGNORECASE,
+)
 _PRONOUN = re.compile(
     _B + r"(?:উনি|তিনি|ওনার|উনার|তাঁর|ওঁর|ওনাকে|উনাকে)" + _E + r"|\b(?:he|she|his|her)\b",
     re.IGNORECASE,
@@ -1451,6 +1575,289 @@ def _claim(sentence: str, succeeded: set[str]) -> Verdict | None:
     return None
 
 
+# --- any claim that an action happened (final review C1) ------------------------------------
+
+# `_CLAIMS` lists claim phrases; a claim it does not list was spoken unchecked. This rule fails
+# closed instead: a clause that names an action (a booking, cancellation, move, call-back or
+# transfer) together with a completed, stative or promised verb is a claim, refused unless that
+# action succeeded this call. It is exempt only when negated, when it says the action can be
+# done, or when it is a question or offer in the narrow sense of `_governed`.
+_BW = r"[ঀ-৿]*"  # a Bangla word's ending ("সিরিয়ালটা", "বুকিংয়ের")
+_ACTION_NOUNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # The verb noun decides which action: "সিরিয়াল বাতিল হয়েছে" claims the cancel.
+    (
+        "cancel_booking",
+        re.compile(_B + "বাতিল" + _BW + _E + r"|\bcancel\w*", re.IGNORECASE),
+    ),
+    (
+        "reschedule_booking",
+        re.compile(
+            _B + r"(?:পরিবর্তন|বদল|বদলে|বদলানো|সরিয়ে|সরানো|পিছিয়ে|এগিয়ে)" + _BW + _E
+            + r"|\breschedul\w*|\b(?:moved|changed|shifted)\s+(?:your|it|you|the)\b"
+            + r"|\b(?:was|is|has been|have been|been)\s+(?:moved|changed|shifted)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "request_callback",
+        re.compile(
+            r"(?:আপনাকে|আপনার সাথে|আপনার সঙ্গে|আপনার নম্বরে)[^।?!,]{0,30}?(?:ফোন|কল|যোগাযোগ)"
+            r"|কল ?ব্যাক|ফোন ?ব্যাক"
+            r"|\b(?:call|phone|ring|contact|reach|text)\s+you\b|\bcall(?:-|\s)?backs?\b"
+            r"|\bget (?:back )?(?:back )?to you\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "hand_over",
+        re.compile(
+            _B + r"(?:যুক্ত|সংযোগ|সংযুক্ত|ট্রান্সফার|কানেক্ট|হস্তান্তর)" + _BW + _E
+            + r"|লাইন(?:টা|টি)?\s+(?:দিচ্ছি|দিয়ে দিচ্ছি|দেব|দিব|দিলাম)|কথা বলিয়ে"
+            + r"|(?:রিসেপশন|রিসেপশনিস্ট|কর্মী|মানুষ|ডেস্ক|স্টাফ)\S*\s+(?:দিচ্ছি|দিয়ে দিচ্ছি)"
+            + r"|\btransferr?\w*|\bconnect\w*|\bput(?:ting)?\s+you\s+through\b"
+            + r"|\bhand(?:ing)?\s+you\s+over\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "book",
+        re.compile(
+            # বুক alone is also the chest ("বুকে ব্যথা"): only the word itself, never before ব্যথা.
+            _B + r"(?:সিরিয়াল|বুকিং|অ্যাপয়েন্টমেন্ট|এপয়েন্টমেন্ট|অ্যাপোয়েন্টমেন্ট|রিজার্ভ)" + _BW + _E
+            + r"|" + _B + r"বুকড?" + _E + r"(?!\s*(?:ব্যথা|ধড়ফড়))"
+            + r"|\b(?:bookings?|booked|appointments?|serials?|reservations?|reserved)\b"
+            + r"|\bput you down\b|\bbooked? (?:you|it) in\b",
+            re.IGNORECASE,
+        ),
+    ),
+)
+# Verbs that say it happened, stands, or will happen.
+_BN_COMPLETED = (
+    r"হয়েছে|হয়েছিল|হয়ে|গেছে|গিয়েছে|হলো|হল|হলাম|দিয়েছি|দিয়েছে|দিয়েছেন|দিলাম|দিল|দিলেন"
+    r"|করেছি|করেছে|করেছেন|করলাম|করল|করলেন|নিয়েছি|নিয়েছে|নিয়েছেন|নিলাম|নিলেন"
+    r"|রেখেছি|রেখেছে|রাখলাম|রাখা|নিশ্চিত|কনফার্ম|কনফার্মড|বুকড|ঠিক|সম্পন্ন|ফাইনাল|পাকা"
+    r"|দিয়েছিলাম|করেছিলাম|হয়েছেই|দিলামই"
+)
+_BN_STATIVE = r"আছে|রয়েছে|আছেন"
+_BN_PROMISE = (
+    r"করবে|করবেন|করব|করবো|দেবে|দেবেন|দেব|দিব|দেবো|দিবে|দিবেন|নেবে|নেবেন|হবে|রাখব|রাখবে"
+    r"|করছি|করছে|করছেন|দিচ্ছি|দিচ্ছে|দিচ্ছেন|হচ্ছে|নিচ্ছি"
+)
+# নেওয়া/দেওয়া/করা alone say it was done ("অ্যাপয়েন্টমেন্ট নেওয়া"), but not before হয় or যায়
+# ("সিরিয়াল বিকেলে দেওয়া হয়" says how it is done; "নেওয়া যাবে" that it can be).
+_BN_PARTICIPLE = r"(?:নেওয়া|নেয়া|দেওয়া|দেয়া|করা|সরানো)(?!\s+(?:হয়|যায়|যাবে|যেতে|সম্ভব|হতে|লাগে|যায়না))"
+_BN_PREDICATE = re.compile(
+    _B + rf"(?:{_BN_COMPLETED}|{_BN_STATIVE}|{_BN_PROMISE}|{_BN_PARTICIPLE})" + _E
+)
+_BN_STATIVE_ONLY = re.compile(_B + rf"(?:{_BN_STATIVE})" + _E)
+# "করতে হবে" is a must, not a promise.
+_BN_MUST = re.compile(r"[ঀ-৿]+(?:তে|লে) হবে" + _E)
+_EN_COMPLETED = (
+    r"done|fixed|set|confirmed|made|booked|noted|scheduled|reserved|arranged|sorted|registered"
+    r"|recorded|saved|secured|went|gone|through|placed|cancell?ed|moved|rescheduled|changed"
+    r"|transferred|connected|finished|complete|completed|taken|put"
+)
+_EN_STATIVE = r"is|are|was|were|been|'s|'re|have|has|had|'ve|got|am|'m"
+_EN_PROMISE = r"will|'ll|shall|going|transferring|connecting|calling|phoning|putting|arranging"
+_EN_PREDICATE = re.compile(
+    rf"(?:\b(?:{_EN_COMPLETED}|{_EN_PROMISE}|is|are|was|were|been|have|has|had|got|am)\b"
+    r"|(?<=[a-z])(?:'s|'re|'ve|'ll|'m)\b)",
+    re.IGNORECASE,
+)
+_EN_STATIVE_ONLY = re.compile(rf"(?:\b(?:{_EN_STATIVE})\b|(?<=[a-z])(?:'s|'re|'ve|'m)\b)", re.I)
+_EN_STRONG = re.compile(rf"\b(?:{_EN_COMPLETED}|{_EN_PROMISE})\b|(?<=[a-z])'ll\b", re.IGNORECASE)
+_BN_STRONG = re.compile(_B + rf"(?:{_BN_COMPLETED}|{_BN_PROMISE})" + _E)
+# Said to the caller, about their own booking: "your", "you", "আপনার".
+_YOU = re.compile(
+    r"\b(?:you|your|yours|you're|you've)\b|" + _B + r"(?:আপনার|আপনাকে|আপনি|আপনারা|আপনাদের)" + _E,
+    re.IGNORECASE,
+)
+# A clause that is only "done": "Done.", "That's done", "জি, হয়ে গেছে".
+_BARE_DONE = re.compile(
+    r"^\s*(?:(?:ok|okay|great|good|alright|so|and|it's|it is|that's|that is|all|everything|"
+    r"everything's|now|i've|we've|i have|we have)\s+)*(?:all\s+)?(?:done|set|sorted|finished"
+    r"|complete|completed|arranged|fixed|confirmed|taken care of)\s*$"
+    r"|^\s*(?:(?:জি|জ্বি|হ্যাঁ|ঠিক আছে|আচ্ছা|সব|কাজ|এটা|ওটা|আমি|আমরা)\s+)*"
+    r"(?:হয়ে গেছে|হয়ে গিয়েছে|হয়েছে|সম্পন্ন|সম্পন্ন হয়েছে|করে দিয়েছি|করে দিলাম|দিয়ে দিয়েছি"
+    r"|দিয়ে দিলাম|দিয়েছি|করেছি|করলাম|ঠিক করে দিয়েছি|ঠিক করে দিলাম|ঠিক হয়ে গেছে|করে রেখেছি"
+    r"|রেখে দিয়েছি|ব্যবস্থা করেছি|ব্যবস্থা করে দিয়েছি|ব্যবস্থা হয়ে গেছে)\s*$",
+    re.IGNORECASE,
+)
+# "See you on Sunday", "রবিবার দেখা হবে": the caller is expected, so a booking stands.
+_SEE_YOU = re.compile(
+    r"\bsee you\s+(?:on\s+)?(?:then\b|tomorrow\b|next\b|mon|tue|wed|thu|fri|sat|sun|at\s+\d)"
+    r"|দেখা হবে",
+    re.IGNORECASE,
+)
+# A place held for the caller without a booking word: "I've got you in for Sunday", "You're on
+# the list", "আপনার নাম তালিকায় তুলে দিয়েছি".
+_HELD_FOR_YOU = re.compile(
+    r"\b(?:got|fit|squeezed|slotted|pencil(?:l)?ed)\s+you\s+in\b|\byou(?:'re| are)\s+(?:in|on)\s+"
+    r"(?:for|the list|the schedule)\b|\bon the (?:list|schedule) for\b"
+    r"|(?:তালিকা|লিস্ট)\S*\s+(?:তুলে|উঠিয়ে|রেখে)\s*(?:দিয়েছি|দিলাম|নিয়েছি|রেখেছি)?",
+    re.IGNORECASE,
+)
+# "I have noted your name", "আপনার নাম লিখে রাখলাম": the details are taken, so a booking or a
+# call-back is said to be under way.
+_NOTED = re.compile(
+    r"\b(?:noted|written down|wrote down|taken down|took down|registered|recorded|saved)\s+"
+    r"(?:down\s+)?(?:your|the)\s+(?:name|number|details|phone|request)"
+    r"|(?:নাম|নম্বর)\S*\s+(?:লিখে|নোট করে|টুকে|রেখে)\s*(?:নিয়েছি|রেখেছি|রাখলাম|নিলাম|দিলাম|দিয়েছি)?"
+    r"|(?:নাম|নম্বর)\S*\s+(?:নোট করেছি|লিখেছি|নিয়েছি|রেখেছি|রাখলাম|নিলাম)",
+    re.IGNORECASE,
+)
+# The clause says it can be done, not that it was: "Appointments can be made by phone",
+# "নেওয়া যাবে", "দিতে পারি". The modal and the verb after it are left out of the claim.
+_EN_ABILITY = re.compile(
+    r"\b(?:can|could|may|might)\s+(?:also\s+|still\s+)?(?:be\s+|get\s+)?\w+", re.IGNORECASE
+)
+_BN_ABILITY = re.compile(
+    r"[ঀ-৿]+(?:তে|য়ে|ে)\s+(?:দিতে\s+|নিতে\s+)?(?:পারি|পারব|পারবো|পারবেন|পারেন|পারে|পারবে|যাবে|যায়)" + _E
+    + r"|" + _B + r"(?:যাবে|যায়|সম্ভব|পারবেন|পারি|পারব|পারবো)" + _E
+)
+# Free time is no booking: "রবিবার সিরিয়াল খালি আছে", "Appointments are available".
+_AVAILABLE = re.compile(
+    r"খালি|ফাঁকা|পাওয়া যাবে|পাওয়া যায়|\b(?:available|free|open|possible)\b", re.IGNORECASE
+)
+# A negation that governs the verb: English puts it before, Bangla after.
+_EN_NOT = re.compile(
+    r"(?:\b(?:not|never|no|nothing|nobody|none|cannot|unable)\b|n't)\s+"
+    r"(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was|were|any|an|a|the|your|been)\s+){0,3}"
+    r"(?=\S)",
+    re.IGNORECASE,
+)
+_BN_NOT = re.compile(
+    _B + r"(?:না|নি|নেই|নাই|নয়|নন)" + _E
+    + r"|(?:হয়|কর|দে|দি|নে|নি|পার|যায়|পা|রাখ|রেখ)[ঀ-৿]*নি" + _E
+)
+# A Bangla clause ending in a first-person offer or a second-person question before "?":
+# "আপনার জন্য সিরিয়াল দেব?", "সিরিয়াল নেবেন?".
+_BN_OFFER_END = re.compile(
+    _B + r"(?:দেব|দিব|দেবো|দিই|দেই|করব|করবো|করি|নেব|নিই|রাখব|নেবেন|করবেন|দেবেন|রাখবেন|চান"
+    r"|চাইছেন|চাচ্ছেন|লাগবে)" + _E + r"(?:\s+(?:কি|কী|তো|এখন|এখনই|নাকি))?\s*$"
+)
+# An English question: an auxiliary and its subject first ("Do you have an appointment?",
+# "Shall I book...?", "Has your booking gone through?").
+_EN_QUESTION_OPENER = re.compile(
+    _EN_LEAD + r"(?:would|do|does|did|shall|should|can|could|may|will|have|has|had|is|are|was"
+    r"|were)\s+(?:you|i|we|it|they|he|she|there|that|this|(?:your|the|my|our)\s+\w+)\b",
+    re.IGNORECASE,
+)
+# A statement hidden inside a question: "Shall I confirm your booking is done?"
+_EN_NESTED = re.compile(
+    r"\b(?:you|it|we|they|he|she|i|that|this|your\s+\w+|the\s+\w+)\s+"
+    r"(?:is|are|was|were|has|have|had|will|'s|'re|'ve)\b"
+    r"|\b(?:you're|you've|it's|we've|i've|that's|we're)\b",
+    re.IGNORECASE,
+)
+_CLAIM_LEAD = re.compile(
+    r"^\s*(?:(?:ঠিক আছে|আচ্ছা|জি|জ্বি|ok|okay|alright|great|sure|well|so)\s*)+", re.IGNORECASE
+)
+
+
+def _claim_clauses(sentence: str) -> list[tuple[int, int, str]]:
+    """(start, end, closing mark) of each clause, cut where `_clause` cuts."""
+    found, begin = [], 0
+    for m in _CLAUSE_END.finditer(sentence):
+        found.append((begin, m.start(), m.group()))
+        begin = m.end()
+    found.append((begin, len(sentence), ""))
+    return [(a, b, mark) for a, b, mark in found if sentence[a:b].strip()]
+
+
+def _negated_clause(clause: str, noun_at: int, bangla: bool) -> bool:
+    if bangla:
+        return any(m.start() >= noun_at for m in _BN_NOT.finditer(clause))
+    return bool(_EN_NOT.search(clause))
+
+
+def _asks_or_offers(sentence: str, start: int, end: int, mark: str, bangla: bool) -> bool:
+    """The clause asks or offers the action instead of stating it (the narrow sense)."""
+    clause = sentence[start:end]
+    for regex in (pattern for _tool, pattern in _ACTION_NOUNS):
+        for m in regex.finditer(sentence, start, end):
+            if _governed(sentence, m):
+                return True
+    for m in _BN_PREDICATE.finditer(sentence, start, end):
+        if _governed(sentence, m):
+            return True
+    if mark != "?":
+        return False
+    if bangla:
+        return bool(_BN_OFFER_END.search(clause))
+    opener = _EN_QUESTION_OPENER.match(clause)
+    return bool(opener) and not _EN_NESTED.search(clause, opener.end())
+
+
+def _action_claim(sentence: str, grounds: Grounds) -> Verdict | None:
+    """The first clause that claims an action no tool did this call."""
+    for start, end, mark in _claim_clauses(sentence):
+        clause = sentence[start:end]
+        lead = _CLAIM_LEAD.match(clause)
+        body = clause[lead.end() :] if lead else clause
+        bangla = bool(re.search("[ঀ-৿]", body))
+        if verdict := _wordless_claim(body, mark, bangla, grounds.succeeded):
+            return verdict
+        if _BARE_DONE.match(body):
+            continue
+        if verdict := _named_claim(sentence, start, end, mark, body, bangla, grounds):
+            return verdict
+    return None
+
+
+def _wordless_claim(body: str, mark: str, bangla: bool, done: set[str]) -> Verdict | None:
+    """A claim without an action's name: "Done.", "see you Sunday", "I have noted your name",
+    "I've got you in for Sunday"."""
+    if _BARE_DONE.match(body):
+        return None if done else _claimed("book", body.strip())
+    if mark == "?" or _negated_clause(body, 0, bangla):
+        return None
+    if "book" not in done and (m := _SEE_YOU.search(body) or _HELD_FOR_YOU.search(body)):
+        return _claimed("book", m.group())
+    # Noted for a day or time is a booking; noted alone may be a call-back's number.
+    timed = bool(_day_set(body) or _said_times(body))
+    noted_for = {"book"} if timed else {"book", "request_callback"}
+    if (m := _NOTED.search(body)) and not done & noted_for:
+        return _claimed("book", m.group())
+    return None
+
+
+def _named_claim(
+    sentence: str, start: int, end: int, mark: str, body: str, bangla: bool, grounds: Grounds
+) -> Verdict | None:
+    """A clause naming an action with a verb that says it happened, stands or will happen."""
+    found = next(((tool, m) for tool, regex in _ACTION_NOUNS if (m := regex.search(body))), None)
+    if found is None or found[0] in grounds.succeeded:
+        return None
+    tool, noun = found
+    # What the clause says once "can be made", "নেওয়া যাবে", "করতে হবে" and "fully booked" are
+    # left out.
+    said = re.sub(r"\bfully booked\b|\bbooked (?:up|out)\b", " ", body, flags=re.IGNORECASE)
+    said = (_BN_ABILITY if bangla else _EN_ABILITY).sub(" ", said)
+    if bangla:
+        said = _BN_MUST.sub(" ", said)
+    if not (_BN_PREDICATE if bangla else _EN_PREDICATE).search(said):
+        return None
+    strong = bool((_BN_STRONG if bangla else _EN_STRONG).search(said))
+    if not strong and tool in ("book", "cancel_booking", "reschedule_booking"):
+        # "is", "আছে": only a booking said to be the caller's ("আপনার সিরিয়াল আছে"), and not
+        # when it speaks of free time or a tool result holds the caller's booking (a lookup).
+        if not _YOU.search(said) or _AVAILABLE.search(said):
+            return None
+        if tool == "book" and grounds.appointments:
+            return None
+    if _negated_clause(body, noun.start(), bangla):
+        return None
+    if _asks_or_offers(sentence, start, end, mark, bangla):
+        return None
+    return _claimed(tool, noun.group())
+
+
+def _claimed(tool: str, words: str) -> Verdict:
+    reason = f'it says {_ACTIONS[tool]} ("{words}") but the {tool} action did not succeed'
+    return Verdict(False, "claim", reason)
+
+
 # --- facilities -------------------------------------------------------------------------------
 
 # "has / has not": a sentence that names a facility and says whether the clinic has it.
@@ -1568,11 +1975,14 @@ def check_sentence(sentence: str, grounds: Grounds, *, goal: str, language: str)
                 "privacy",
                 f"the number {m.group()} looks like a phone number not in the facts",
             )
-    if claim := _claim(text, grounds.succeeded):
+    if claim := _claim(text, grounds.succeeded) or _action_claim(text, grounds):
         return claim
-    for clause, subject in _subjects(text, grounds):
+    subjects = _subjects(text, grounds)
+    for clause, subject in subjects:
         if fault := _clause_fault(clause, subject, grounds):
             return fault
+    if day := _sitting_day_beside(text, subjects, grounds):
+        return _fact("day", day)
     if name := _unknown_doctor(text, known):
         return Verdict(False, "fact", f"the doctor's name {name} is not in the facts")
     if day := _open_on_a_closed_day(text, grounds.texts):

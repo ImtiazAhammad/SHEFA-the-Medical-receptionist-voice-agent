@@ -1343,3 +1343,28 @@ def test_clinic_hours_after_a_doctor_turn_are_the_clinics(example_clinic):
     trace = session.metadata["brain_trace"][-1]
     assert trace["reply_source"] == "model"
     assert speak.said == ["ক্লিনিক রাত ৯টা পর্যন্ত খোলা।"]
+
+
+# --- final review C1: a claim the router missed is never spoken --------------------------------
+
+C1_LINE = "কাল বিকেলে রহমান স্যারের একটা সিরিয়াল দিন"
+C1_TURN_CLAIMS = [
+    "জি, বুকিং হয়ে গেছে।",
+    "আপনার অ্যাপয়েন্টমেন্ট নেওয়া হয়েছে।",
+    "জি, আপনার সিরিয়াল দেওয়া হলো।",
+]
+
+
+@pytest.mark.parametrize("router", ["none", "failing"])
+@pytest.mark.parametrize("claim", C1_TURN_CLAIMS)
+def test_c1_a_booking_claim_with_no_booking_is_never_spoken(claim, router, example_clinic):
+    session = _session(C1_LINE)
+    route = route_json("none", "calm", "booking") if router == "none" else None
+    llm = FakeLLM(claim, claim, route=route)
+    speak = Recorder()
+    _turn(session, C1_LINE, llm, speak)
+    assert claim not in speak.said
+    assert speak.said and all("হয়ে গেছে" not in s and "হয়েছে" not in s for s in speak.said)
+    assert "actions" not in session.metadata
+    trace = session.metadata["brain_trace"][-1]
+    assert trace["verdicts"] == ["claim", "claim"] and trace["safe"] == "claim"

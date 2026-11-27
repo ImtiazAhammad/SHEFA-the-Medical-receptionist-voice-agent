@@ -133,7 +133,31 @@ def _verdict(sentence: str, language: str, said: str, call: Doctor | None):
 
 # --- how a reply says whose value it is -------------------------------------------------------
 
-FORMS = ("titled", "untitled", "pronoun", "call_doctor", "caller_department", "no_doctor")
+FORMS = (
+    "titled",
+    "untitled",
+    "pronoun",
+    "call_doctor",
+    "caller_department",
+    "no_doctor",
+    # Final review I3: a generic doctor word beside a clinic word is still the doctor (O1); the
+    # caller names the department the way people say it (O3/N6); a pronoun before the name (N5);
+    # the caller names a department the clinic does not have (never the call's doctor).
+    "generic_clinic",
+    "caller_synonym",
+    "pronoun_later",
+    "caller_unknown_department",
+)
+# How callers name each department of the example clinic besides its own title.
+SYNONYMS = {
+    ("Cardiology", "en"): "cardiologist",
+    ("Cardiology", "bn"): "হার্টের ডাক্তার",
+    ("Pediatrics", "en"): "child specialist",
+    ("Pediatrics", "bn"): "বাচ্চাদের ডাক্তার",
+    ("Medicine", "en"): "medicine doctor",
+    ("Medicine", "bn"): "মেডিসিনের ডাক্তার",
+}
+UNKNOWN_DEPARTMENT = {"en": "dermatologist", "bn": "চর্মরোগের ডাক্তার"}
 
 
 def _genitive(doctor: Doctor) -> str:
@@ -148,22 +172,42 @@ def _subject(form: str, doctor: Doctor, language: str, *, owner: bool) -> str:
             "titled": f"Dr {doctor.name}" + ("'s" if owner else ""),
             "untitled": doctor.name + ("'s" if owner else ""),
             "pronoun": f"Dr {doctor.name}? {he}",
+            "pronoun_later": he,
+            "generic_clinic": "At the clinic the doctor" + ("'s" if owner else ""),
         }.get(form, "The" if owner else "The doctor")
     return {
         "titled": "ডাক্তার " + (_genitive(doctor) if owner else doctor.name_bn),
         "untitled": _genitive(doctor) if owner else doctor.name_bn,
         "pronoun": f"ডাক্তার {doctor.name_bn}? " + ("ওনার" if owner else "উনি"),
+        "pronoun_later": "ওনার" if owner else "উনি",
+        "generic_clinic": "আমাদের ক্লিনিকে ডাক্তার " + ("সাহেবের" if owner else "সাহেব"),
     }.get(form, "")
+
+
+def _sentence(form: str, doctor: Doctor, language: str, body: str, *, owner: bool) -> str:
+    """The reply: its opening for the form, the body, and for "pronoun_later" the doctor's name
+    after the claim ("She sits on Sunday, Dr Sultana.")."""
+    body = body.rstrip("।.")
+    tail = ""
+    if form == "pronoun_later":
+        tail = f", Dr {doctor.name}" if language == "en" else f", ডাক্তার {doctor.name_bn}"
+    return _join(_subject(form, doctor, language, owner=owner), body) + tail + (
+        "." if language == "en" else "।"
+    )
 
 
 def _case(form: str, doctor: Doctor, language: str, asks: dict[str, str]):
     """(caller's line, call's doctor) for the form. `asks` holds the plain question and the
     question about a department ({department})."""
     call, named = _others(doctor)
-    if form == "call_doctor":
+    if form in ("call_doctor", "generic_clinic"):
         return asks["plain"], doctor
     if form == "caller_department":
         return asks["department"].format(department=_department(doctor, language)), call
+    if form == "caller_synonym":
+        return asks["synonym"].format(synonym=SYNONYMS[doctor.department, language]), call
+    if form == "caller_unknown_department":
+        return asks["synonym"].format(synonym=UNKNOWN_DEPARTMENT[language]), doctor
     if form == "no_doctor":
         return asks["plain"], None
     return asks["department"].format(department=_department(named, language)), call
@@ -176,7 +220,7 @@ def _department(doctor: Doctor, language: str) -> str:
 def _check(sentence: str, form: str, doctor: Doctor, language: str, asks, true: bool, what: str):
     said, call = _case(form, doctor, language, asks)
     v = _verdict(sentence, language, said, call)
-    if form == "no_doctor":
+    if form in ("no_doctor", "caller_unknown_department"):
         assert (v.ok, v.kind) == (False, "unsupported"), (sentence, said, v)
         assert "which doctor" in v.reason, (sentence, v)
     elif true:
@@ -193,8 +237,16 @@ def _join(*parts: str) -> str:
 # --- sitting days -----------------------------------------------------------------------------
 
 DAY_ASKS = {
-    "bn": {"plain": "কবে বসেন?", "department": "{department} বিভাগের ডাক্তার কবে বসেন?"},
-    "en": {"plain": "Which days?", "department": "Which days does the {department} doctor sit?"},
+    "bn": {
+        "plain": "কবে বসেন?",
+        "department": "{department} বিভাগের ডাক্তার কবে বসেন?",
+        "synonym": "{synonym} কবে বসেন?",
+    },
+    "en": {
+        "plain": "Which days?",
+        "department": "Which days does the {department} doctor sit?",
+        "synonym": "Which days does the {synonym} sit?",
+    },
 }
 
 
@@ -208,10 +260,8 @@ def test_a_sitting_day_passes_only_when_that_doctor_sits_that_day(
     doctor, day, form, language, wording
 ):
     said_day = DAY_WORDINGS[language][wording][day]
-    if language == "en":
-        sentence = f"{_subject(form, doctor, 'en', owner=False)} sits on {said_day}."
-    else:
-        sentence = _join(_subject(form, doctor, "bn", owner=False), said_day, "বসেন।")
+    body = f"sits on {said_day}" if language == "en" else f"{said_day} বসেন"
+    sentence = _sentence(form, doctor, language, body, owner=False)
     true = day in doctor.days
     _check(sentence, form, doctor, language, DAY_ASKS[language], true, "day")
 
@@ -219,8 +269,16 @@ def test_a_sitting_day_passes_only_when_that_doctor_sits_that_day(
 # --- fees -------------------------------------------------------------------------------------
 
 FEE_ASKS = {
-    "bn": {"plain": "ফি কত?", "department": "{department} বিভাগের ডাক্তারের ফি কত?"},
-    "en": {"plain": "What is the fee?", "department": "What is the {department} doctor's fee?"},
+    "bn": {
+        "plain": "ফি কত?",
+        "department": "{department} বিভাগের ডাক্তারের ফি কত?",
+        "synonym": "{synonym}ের ফি কত?",
+    },
+    "en": {
+        "plain": "What is the fee?",
+        "department": "What is the {department} doctor's fee?",
+        "synonym": "What is the {synonym}'s fee?",
+    },
 }
 
 
@@ -234,12 +292,12 @@ def _wrong_fee(doctor: Doctor) -> int:
 
 
 def _fee_sentence(form: str, doctor: Doctor, language: str, kind: str, fee: int) -> str:
-    owner = _subject(form, doctor, language, owner=True)
     if language == "en":
         label = "first-visit fee" if kind == "new" else "follow-up fee"
-        return f"{owner} {label} is {fee} taka."
+        return _sentence(form, doctor, language, f"{label} is {fee} taka", owner=True)
     label = "প্রথম ভিজিটের ফি" if kind == "new" else "ফলো-আপ ফি"
-    return _join(owner, label, str(fee).translate(BN_DIGITS), "টাকা।")
+    body = _join(label, str(fee).translate(BN_DIGITS), "টাকা")
+    return _sentence(form, doctor, language, body, owner=True)
 
 
 @pytest.mark.parametrize("language", ["bn", "en"])
@@ -258,10 +316,15 @@ def test_a_fee_passes_only_when_it_is_that_doctors(doctor, kind, true, form, lan
 # --- start times ------------------------------------------------------------------------------
 
 TIME_ASKS = {
-    "bn": {"plain": "কখন থেকে বসেন?", "department": "{department} বিভাগের ডাক্তার কখন থেকে বসেন?"},
+    "bn": {
+        "plain": "কখন থেকে বসেন?",
+        "department": "{department} বিভাগের ডাক্তার কখন থেকে বসেন?",
+        "synonym": "{synonym} কখন থেকে বসেন?",
+    },
     "en": {
         "plain": "From what time?",
         "department": "From what time does the {department} doctor sit?",
+        "synonym": "From what time does the {synonym} sit?",
     },
 }
 
@@ -337,10 +400,7 @@ def test_a_start_time_passes_only_when_it_is_that_doctors(
     hour = doctor.start if true else _wrong_hour(doctor, wording)
     words = _time_words(hour, language, wording)
     rest = VERBS[verb][language].format(words=words)
-    if language == "en":
-        sentence = f"{_subject(form, doctor, 'en', owner=False)} {rest}."
-    else:
-        sentence = _join(_subject(form, doctor, "bn", owner=False), rest)
+    sentence = _sentence(form, doctor, language, rest, owner=False)
     what = "number" if wording == "plain_number" else "time"
     _check(sentence, form, doctor, language, TIME_ASKS[language], true, what)
 
@@ -494,10 +554,11 @@ def test_today_said_alone_needs_no_subject():
         ("Tuesdays, Thursdays and Sundays.", "I want to know which days the heart doctor sits."),
     ],
 )
-def test_n6_a_department_synonym_names_nobody_so_a_doctorless_reply_is_refused(sentence, said):
-    # N6 is parked: "child specialist" and "heart doctor" are not the directory's words.
+def test_n6_a_department_synonym_names_that_departments_doctor(sentence, said):
+    # Final review I3: "child specialist" and "heart doctor" now find Pediatrics and Cardiology
+    # (they were parked as N6, refused for want of a subject); both lines are true.
     v = _verdict(sentence, "en", said, None)
-    assert (v.ok, v.kind) == (False, "unsupported"), v
+    assert v.ok, v
 
 
 # --- round 5 ----------------------------------------------------------------------------------
@@ -579,3 +640,222 @@ def test_a_pronoun_with_a_clinic_word_is_still_the_doctors_clause(sentence, lang
     # Dr Rahman never sits on Monday; the clinic is open then. "উনি/he" is a doctor.
     v = _verdict(sentence, language, "x", _by("Rahman"))
     assert (v.ok, v.kind) == (False, "fact"), v
+
+
+# --- final review C1: a claim that an action happened needs that action's success -------------
+
+# (sentence, the tool whose success it claims). Every line passed the checker at d371c0f with
+# nothing done; the call's doctor is Dr Rahman (Sun/Tue/Thu).
+C1_CLAIMS = [
+    ("বুকিং হয়ে গেছে।", "book"),
+    ("আপনার অ্যাপয়েন্টমেন্ট নেওয়া হয়েছে।", "book"),
+    ("আপনার সিরিয়াল দেওয়া হলো।", "book"),
+    ("রবিবার আপনার সিরিয়াল ঠিক করা হয়েছে।", "book"),
+    ("আপনার সিরিয়ালটা নিশ্চিত।", "book"),
+    ("উনি আপনার সিরিয়াল বাতিল করেছেন।", "cancel_booking"),
+    ("ডাক্তার রহমানের কাছে আপনার সিরিয়াল আছে।", "book"),
+    ("Your booking went through.", "book"),
+    ("Your appointment is fixed for Sunday.", "book"),
+    ("Your cancellation is done.", "cancel_booking"),
+    ("You have an appointment with Dr Rahman on Sunday.", "book"),
+    ("Done, see you Sunday.", "book"),
+    ("I have noted your name for Sunday.", "book"),
+    ("Someone from the clinic will phone you later.", "request_callback"),
+    ("আমি আপনাকে এখন একজন মানুষের সাথে যুক্ত করছি।", "hand_over"),
+    # The engine lines (said after "কাল বিকেলে রহমান স্যারের একটা সিরিয়াল দিন").
+    ("জি, বুকিং হয়ে গেছে।", "book"),
+    ("জি, আপনার সিরিয়াল দেওয়া হলো।", "book"),
+    # Kin of the review's lines, said other ways.
+    ("আপনার সিরিয়াল কনফার্ম হয়ে গেছে।", "book"),
+    ("সিরিয়াল দিয়ে দিয়েছি, রবিবার আসবেন।", "book"),
+    ("Your appointment has been made.", "book"),
+    ("You're all booked in for Sunday.", "book"),
+    ("We have reserved Sunday for you.", "book"),
+    ("Your serial is set.", "book"),
+    ("রিসেপশন থেকে আপনাকে কল ব্যাক করা হবে।", "request_callback"),
+    ("আমাদের স্টাফ পরে আপনার সাথে যোগাযোগ করবেন।", "request_callback"),
+    ("The desk will get back to you this evening.", "request_callback"),
+    ("I am connecting you to the front desk.", "hand_over"),
+    ("আপনার সিরিয়াল রবিবারে সরানো হয়েছে।", "reschedule_booking"),
+    ("Your appointment was moved to Sunday.", "reschedule_booking"),
+]
+ALL_TOOLS = {"book", "cancel_booking", "reschedule_booking", "request_callback", "hand_over"}
+
+
+def _claim_verdict(sentence: str, succeeded: set[str]):
+    language = "en" if sentence.isascii() else "bn"
+    state = CallState(language=language, booking={"doctor": "Dr. Rahman"})
+    session = CallSession(call_sid="matrix")
+    said = "কাল বিকেলে রহমান স্যারের একটা সিরিয়াল দিন"
+    grounds = engine._grounds(session, state, [_hours_hit()], _directory(language), said, TODAY)
+    grounds.succeeded |= succeeded
+    return check_sentence(sentence, grounds, goal="booking", language=language)
+
+
+@pytest.mark.parametrize(("sentence", "tool"), C1_CLAIMS)
+def test_c1_a_claim_with_nothing_done_is_refused(sentence, tool):
+    v = _claim_verdict(sentence, set())
+    assert (v.ok, v.kind) == (False, "claim"), (sentence, v)
+
+
+@pytest.mark.parametrize(("sentence", "tool"), C1_CLAIMS)
+def test_c1_a_claim_of_another_action_is_still_refused(sentence, tool):
+    v = _claim_verdict(sentence, ALL_TOOLS - {tool})
+    assert (v.ok, v.kind) == (False, "claim"), (sentence, v)
+
+
+@pytest.mark.parametrize(("sentence", "tool"), C1_CLAIMS)
+def test_c1_a_claim_after_the_matching_success_is_spoken(sentence, tool):
+    v = _claim_verdict(sentence, {tool})
+    assert v.ok, (sentence, v)
+
+
+C1_NOT_CLAIMS = [
+    # Offers and questions (the narrow sense of Task 7 round 4).
+    "আপনার জন্য সিরিয়াল দেব?",
+    "আপনার জন্য কি সিরিয়াল দিয়ে দেব?",
+    "Shall I book Sunday 6 pm?",
+    "Would you like a call-back?",
+    "Do you have an appointment with us?",
+    "Has your booking gone through?",
+    "আপনার কি আগে থেকে সিরিয়াল নেওয়া আছে?",
+    "আপনাকে কি রিসেপশনে যুক্ত করে দেব?",
+    "Shall I connect you to the front desk?",
+    # Saying it did not happen, or that it could.
+    "আপনার সিরিয়াল এখনো দেওয়া হয়নি।",
+    "Your appointment has not been booked yet.",
+    "No booking has been made.",
+    "সিরিয়াল রবিবার নেওয়া যাবে।",
+    "Appointments can be made by phone.",
+    "চাইলে আমি আপনাকে রিসেপশনে যুক্ত করে দিতে পারি।",
+    "We can arrange a call-back if you like.",
+    # Facts about serials that claim nothing for this caller.
+    "ডাক্তার রহমানের সিরিয়াল সাধারণত বিকেলে দেওয়া হয়।",
+    "রবিবার বিকেলে সিরিয়াল খালি আছে।",
+    "Dr Rahman's appointments are on Sunday, Tuesday and Thursday.",
+    "সিরিয়াল নিতে হলে আগে নাম বলতে হবে।",
+    "দয়া করে কাল আবার ফোন করবেন।",
+    "ঠিক আছে।",
+]
+
+
+@pytest.mark.parametrize("sentence", C1_NOT_CLAIMS)
+def test_c1_offers_questions_and_non_claims_pass(sentence):
+    v = _claim_verdict(sentence, set())
+    assert v.kind != "claim", (sentence, v)
+
+
+# --- final review I3: the review's lines, verbatim, as regression rows --------------------------
+
+I3_WRONG = [
+    # O1: a generic doctor word beside a clinic word (call doctor Rahman, Sun/Tue/Thu).
+    ("At the clinic the doctor sits on Monday.", "x"),
+    ("আমাদের ক্লিনিকে ডাক্তার সাহেব সোমবার বসেন।", "x"),
+    ("The clinic is open, and the doctor sits on Monday.", "x"),
+    # O3 / N6: the child specialist (Dr Sultana, Sat/Mon/Wed) asked about.
+    ("The child specialist sits on Tuesday.", "Which days does the child specialist sit?"),
+    ("Tuesdays, Thursdays and Sundays.", "Which days does the child specialist sit?"),
+    ("মঙ্গলবার, বৃহস্পতিবার আর রবিবার বসেন।", "বাচ্চাদের ডাক্তার কবে বসেন?"),
+    ("Tuesdays, Thursdays and Sundays.", "Which days does the paediatric doctor sit?"),
+    ("সোমবার বসেন।", "হার্টের ডাক্তার কবে বসেন?"),
+    ("Mondays.", "When does the heart doctor sit?"),
+    # N5: a pronoun before the name.
+    ("She sits on Sunday, Dr Sultana.", "x"),
+    ("উনি রবিবার বসেন, ডাক্তার সুলতানা।", "x"),
+    # O2: the clinic's day said beside a doctor who does not sit then (Dr Hossain, Sat-Thu).
+    ("শুক্রবার ক্লিনিক বন্ধ, তবে ডাক্তার হোসেন বসেন।", "x"),
+    ("The clinic is closed on Friday, but Dr Hossain sits.", "x"),
+]
+
+
+@pytest.mark.parametrize(("sentence", "said"), I3_WRONG)
+def test_i3_a_wrong_doctor_day_is_refused(sentence, said):
+    language = "en" if sentence.isascii() else "bn"
+    v = _verdict(sentence, language, said, _by("Rahman"))
+    assert not v.ok, (sentence, said, v)
+    assert v.kind in ("fact", "unsupported"), v
+
+
+I3_TRUE = [
+    ("At the clinic the doctor sits on Sunday.", "x"),
+    ("আমাদের ক্লিনিকে ডাক্তার সাহেব রবিবার বসেন।", "x"),
+    ("The clinic is open, and the doctor sits on Tuesday.", "x"),
+    ("The child specialist sits on Monday.", "Which days does the child specialist sit?"),
+    ("Mondays, Wednesdays and Saturdays.", "Which days does the child specialist sit?"),
+    ("সোমবার, বুধবার আর শনিবার বসেন।", "বাচ্চাদের ডাক্তার কবে বসেন?"),
+    ("She sits on Monday, Dr Sultana.", "x"),
+    ("উনি সোমবার বসেন, ডাক্তার সুলতানা।", "x"),
+    ("রবিবার বসেন।", "হার্টের ডাক্তার কবে বসেন?"),
+    ("The clinic is open on Saturday, and Dr Hossain sits then too.", "x"),
+]
+
+
+@pytest.mark.parametrize(("sentence", "said"), I3_TRUE)
+def test_i3_the_true_day_still_passes(sentence, said):
+    language = "en" if sentence.isascii() else "bn"
+    v = _verdict(sentence, language, said, _by("Rahman"))
+    assert v.ok, (sentence, said, v)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "said"),
+    [
+        ("Tuesdays, Thursdays and Sundays.", "Which days does the dermatologist sit?"),
+        ("মঙ্গলবার বসেন।", "চর্মরোগের ডাক্তার কবে বসেন?"),
+        ("The doctor sits on Tuesday.", "When does the eye doctor sit?"),
+    ],
+)
+def test_i3_a_department_the_clinic_lacks_is_never_the_calls_doctor(sentence, said):
+    # Dr Rahman sits on Tuesday, but the caller asked about a department this clinic has not.
+    language = "en" if sentence.isascii() else "bn"
+    v = _verdict(sentence, language, said, _by("Rahman"))
+    assert (v.ok, v.kind) == (False, "unsupported"), (sentence, said, v)
+
+
+@pytest.mark.parametrize(
+    ("sentence", "ok"),
+    [
+        ("Dr Rahman understands Hindi.", False),
+        ("Dr Rahman understands English.", True),
+        ("ডাক্তার রহমান হিন্দি বোঝেন।", False),
+        ("ডাক্তার রহমান ইংরেজি জানেন।", True),
+    ],
+)
+def test_n8_understanding_a_language_is_a_language_claim(sentence, ok):
+    language = "en" if sentence.isascii() else "bn"
+    assert _verdict(sentence, language, "x", _by("Rahman")).ok is ok
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "জি, ঠিক করে দিয়েছি।",
+        "It's all arranged.",
+        "I've got you in for Sunday.",
+        "You're on the list for Sunday.",
+        "আপনার নাম তালিকায় তুলে দিয়েছি।",
+    ],
+)
+def test_c1_a_claim_without_a_booking_word_is_still_refused(sentence):
+    assert _claim_verdict(sentence, set()).kind == "claim"
+    assert _claim_verdict(sentence, {"book"}).ok
+
+
+def test_c1_a_looked_up_booking_may_be_said_as_standing():
+    # The lookup's fact grounds "you have an appointment"; a completed claim still needs a booking.
+    language = "en"
+    state = CallState(language=language, booking={"doctor": "Dr. Rahman"})
+    session = CallSession(call_sid="matrix")
+    session.metadata["brain_grounds"] = [
+        {
+            "text": "The caller's appointment: Dr. Rahman on 2026-11-29 at 18:00.",
+            "doctor": "Rahman",
+            "slots": ["rahman|2026-11-29|18:00"],
+            "read_back": False,
+        }
+    ]
+    g = engine._grounds(session, state, [_hours_hit()], _directory(language), "x", TODAY)
+    assert check_sentence("You have an appointment on Sunday.", g, goal="x", language="en").ok
+    assert check_sentence("আপনার রবিবার সিরিয়াল আছে।", g, goal="x", language="bn").ok
+    v = check_sentence("Your booking went through.", g, goal="x", language="en")
+    assert v.kind == "claim"

@@ -132,6 +132,8 @@ def _grounds(
         actions.ground(grounds, text, doctor)
     # What a tool did this call may be said ("আপনার সিরিয়াল বুক হয়েছে"); nothing else may.
     grounds.succeeded |= actions.succeeded(state, session)
+    # A booking the caller has, as a tool returned it and no later cancel or move took back.
+    grounds.appointments = actions.has_appointment(session)
     # The booking slots so far (doctor, day, time) are what `track` read from the caller's own
     # words ("কাল", "শনিবার", "১০টায়"), so they ground nothing: a day or time reaches the grounds
     # only as a tool result that returned it. The booking's doctor (found in the directory) is

@@ -192,6 +192,18 @@ def succeeded(state: CallState, session: CallSession) -> set[str]:
     return kinds
 
 
+APPOINTMENT = "The caller's appointment:"
+
+
+def has_appointment(session: CallSession) -> bool:
+    """The kept tool results hold a booking of the caller's (a lookup, or one made this call):
+    "আপনার সিরিয়াল আছে" may then be said. A cancel or a move takes its fact back."""
+    return any(
+        isinstance(e, dict) and str(e.get("text", "")).startswith(APPOINTMENT)
+        for e in session.metadata.get(GROUNDS, [])
+    )
+
+
 def caller_phone(session: CallSession) -> str:
     if not session.patient_id:
         return ""
@@ -256,7 +268,7 @@ def _appointment_facts(result: dict[str, Any]) -> list[Fact]:
     for a in items:
         doctor = str(a.get("doctor") or "")
         who = _who(doctor, str(a.get("doctor_bn") or ""))
-        text = f"The caller's appointment: {who} on {a.get('date')} at {a.get('time')}."
+        text = f"{APPOINTMENT} {who} on {a.get('date')} at {a.get('time')}."
         facts.append((text, doctor, [_slot(doctor, a.get("date"), a.get("time"))]))
     return facts
 
