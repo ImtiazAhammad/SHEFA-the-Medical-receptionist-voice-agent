@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -335,7 +336,13 @@ async def _transfer_to_human(args: dict[str, Any], session: CallSession) -> dict
     if hold_url:
         await control.play_file(session.call_sid, hold_url, loop=1)
 
-    result = await control.transfer(session.call_sid, target)
+    try:
+        result = await control.transfer(session.call_sid, target)
+    except asyncio.CancelledError:
+        # The request may already have reached the exchange: the call is handed over, never
+        # undone as if nothing happened.
+        session.state = "escalated"
+        raise
     if result.get("error"):
         return {**result, "reason": args.get("reason", "User requested")}
     session.state = "escalated"

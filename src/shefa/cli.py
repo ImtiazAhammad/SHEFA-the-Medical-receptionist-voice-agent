@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 DEFAULT_ITERATIONS = 20
+DEFAULT_EMBEDDER = "intfloat/multilingual-e5-small"
 
 # `shefa setup --demo`: the same agent with OpenAI doing speech recognition and the language
 # model, so a laptop without a GPU or Ollama can run it. The voice (Piper) still runs here,
@@ -128,6 +131,52 @@ BENCH_TEXTS = [
 ]
 
 
+def _add_bench_options(parser: argparse.ArgumentParser, tags_default: str) -> None:
+    """The options `lab score` and `lab bakeoff` share: which cases, who plays and judges."""
+    from shefa.lab.models import DEFAULT_SIDE_MODEL, OLLAMA_URL
+
+    parser.add_argument(
+        "--scenarios",
+        nargs="+",
+        default=None,
+        metavar="PATH",
+        help="scenario files (default: configs/lab/bench/*.yaml and configs/lab/scenarios.yaml)",
+    )
+    parser.add_argument(
+        "--tags",
+        default=tags_default,
+        help="comma-separated tags, caller types or goals to keep",
+    )
+    parser.add_argument("--judge-model", default=DEFAULT_SIDE_MODEL)
+    parser.add_argument("--caller-model", default=DEFAULT_SIDE_MODEL)
+    parser.add_argument(
+        "--side-base-url",
+        default=OLLAMA_URL,
+        help="the OpenAI-compatible server the caller and judge run on (default: Ollama)",
+    )
+    parser.add_argument(
+        "--mishear",
+        type=float,
+        default=0.15,
+        help="share of words the caller is misheard on, 0 to 1 (0 turns it off)",
+    )
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--speech",
+        action="store_true",
+        help="speak the caller's lines over a simulated phone line and transcribe them "
+        "(real speech recognition replaces --mishear)",
+    )
+    parser.add_argument("--out", default="data/bench", help="folder for scorecards and tables")
+    parser.add_argument("--clinic", default="configs/clinic.example.yaml")
+    parser.add_argument(
+        "--engine",
+        choices=["agent", "guided"],
+        default=None,
+        help="which engine answers the calls for this run (default: pipeline.engine)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="shefa",
@@ -233,6 +282,44 @@ def build_parser() -> argparse.ArgumentParser:
     lab_voices.add_argument("--out", default="voice-test")
     for command in (lab_run, lab_list):
         command.add_argument("--scenarios", default="configs/lab/scenarios.yaml")
+    lab_score = lab_sub.add_parser(
+        "score", help="run the bench against a local model, judge every call, save a scorecard"
+    )
+    _add_bench_options(lab_score, tags_default="")
+    lab_score.add_argument(
+        "--model", default=None, help="an Ollama model to test (default: the configured model)"
+    )
+    lab_score.add_argument(
+        "--router-off",
+        action="store_true",
+        help="the agent engine's router fails every turn (measures what the claim check alone"
+        " holds back)",
+    )
+    lab_bakeoff = lab_sub.add_parser(
+        "bakeoff",
+        help="score several Ollama models, time their first sentence, weigh their memory, pick one",
+    )
+    lab_bakeoff.add_argument("models", nargs="+", metavar="MODEL", help="Ollama model names")
+    _add_bench_options(lab_bakeoff, tags_default="bakeoff")
+    from shefa.lab.models import OLLAMA_URL
+
+    lab_bakeoff.add_argument(
+        "--base-url", default=OLLAMA_URL, help="the Ollama server the candidates run on"
+    )
+    lab_bakeoff.add_argument(
+        "--rounds",
+        type=int,
+        default=10,
+        help="first-sentence timing rounds per model, 3 requests at once each (more: steadier p95)",
+    )
+    lab_bakeoff.add_argument(
+        "--with-voice",
+        action="store_true",
+        help="load speech recognition and the voice first, so the memory readings include them",
+    )
+    lab_compare = lab_sub.add_parser("compare", help="compare two scorecards")
+    lab_compare.add_argument("a", help="the first scorecard (JSON)")
+    lab_compare.add_argument("b", help="the second scorecard (JSON)")
     lab_run.add_argument("--only", default="", help="comma-separated scenario ids")
     lab_run.add_argument("--out", default="lab-report", help="folder for report.html + audio")
     lab_run.add_argument("--clinic", default="configs/clinic.example.yaml")
@@ -250,6 +337,51 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument(
         "--https", action="store_true", help="self-signed certificate (phone mics need https)"
+    )
+
+    config = sub.add_parser("config", help="versioned prompts and settings of the brain")
+    config_sub = config.add_subparsers(dest="config_command", required=True)
+    c_show = config_sub.add_parser("show", help="each key's live version id, or default")
+    c_show.add_argument("--clinic", default="", help="a clinic's own layer (default: the platform)")
+    c_draft = config_sub.add_parser("draft", help="save a new draft; prints its version id")
+    c_draft.add_argument("key")
+    c_draft.add_argument("--file", required=True, help="the value: text, or JSON for settings")
+    c_draft.add_argument("--note", default="")
+    c_draft.add_argument("--clinic", default="")
+    c_publish = config_sub.add_parser(
+        "publish",
+        help="make a version live (an old one = rollback); engine 'agent' needs --ack",
+        description="Make a version live; publishing an old one is a rollback. A version that"
+        " sets engine to 'agent' switches every new call to the agent engine, so it is refused"
+        " unless --ack bench-passed says the bench (Task 12) passed.",
+    )
+    c_publish.add_argument("version_id", type=int)
+    c_publish.add_argument(
+        "--ack",
+        default="",
+        help="'bench-passed': required to publish engine 'agent' (the bench passed)",
+    )
+    c_history = config_sub.add_parser("history", help="every version of a key, newest first")
+    c_history.add_argument("key")
+    c_history.add_argument("--clinic", default="")
+
+    kb = sub.add_parser("kb", help="the knowledge base the brain may speak from")
+    kb_sub = kb.add_subparsers(dest="kb_command", required=True)
+    k_seed = kb_sub.add_parser("seed", help="add the clinic's facilities and About SHEFA, once")
+    k_seed.add_argument("--clinic", default="", help="clinic id (default: the single clinic)")
+    k_list = kb_sub.add_parser("list", help="entries, oldest first")
+    k_list.add_argument("--scope", default="", help="platform, or a clinic id (default: all)")
+    k_list.add_argument("--all", action="store_true", help="include deactivated entries")
+    k_add = kb_sub.add_parser("add", help="add an entry; prints its id")
+    k_add.add_argument("--scope", required=True, help="platform, or a clinic id")
+    k_add.add_argument("--topic", required=True)
+    k_add.add_argument("--bn", required=True, help="the text in Bangla (may be empty)")
+    k_add.add_argument("--en", required=True, help="the text in English (may be empty)")
+    k_add.add_argument("--tags", default="", help="comma-separated words that find this entry")
+    k_off = kb_sub.add_parser("deactivate", help="hide an entry from the brain")
+    k_off.add_argument("entry_id", type=int)
+    kb_sub.add_parser(
+        "fetch-embedder", help="download the embedding model (once, needs the network)"
     )
 
     token = sub.add_parser("token", help="mint an API bearer token for a configured role")
@@ -882,8 +1014,14 @@ def run_lab(args: argparse.Namespace) -> int:
 
     if args.lab_command == "voices":
         return run_voice_test(args)
+    if args.lab_command == "score":
+        return _run_score(args)
+    if args.lab_command == "bakeoff":
+        return _run_bakeoff(args)
+    if args.lab_command == "compare":
+        return _run_compare(args)
     if args.lab_command not in {"run", "list"}:
-        print("usage: shefa lab {run,list,voices}", file=sys.stderr)
+        print("usage: shefa lab {run,list,voices,score,bakeoff,compare}", file=sys.stderr)
         return 2
     try:
         scenarios = load_scenarios(args.scenarios)
@@ -902,6 +1040,111 @@ def run_lab(args: argparse.Namespace) -> int:
         return 2
     chosen = [s for s in scenarios if not wanted or s.id in wanted]
     return asyncio.run(_run_lab(chosen, args))
+
+
+def _run_score(args: argparse.Namespace) -> int:
+    from shefa.lab.scoring import select_scenarios
+
+    if not 0.0 <= args.mishear <= 1.0:
+        print("--mishear is a share of words between 0 and 1", file=sys.stderr)
+        return 2
+    try:
+        scenarios = select_scenarios(args)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_score(scenarios, args))
+
+
+async def _score(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab import scorecard
+    from shefa.lab.scoring import run_scorecard
+    from shefa.models.registry import registry
+
+    try:
+        card = await run_scorecard(args.model, args, scenarios=scenarios)
+    except ValueError as error:  # a bad label or table file, found before any model ran
+        print(str(error), file=sys.stderr)
+        return 2
+    finally:
+        await registry.reset()
+    print(f"\n{scorecard.summary(card)}")
+    print(f"Scorecard: {scorecard.save(card, Path(args.out))}")
+    return 0
+
+
+def _run_bakeoff(args: argparse.Namespace) -> int:
+    from shefa.lab.scoring import select_scenarios, validate_files
+
+    if not 0.0 <= args.mishear <= 1.0:
+        print("--mishear is a share of words between 0 and 1", file=sys.stderr)
+        return 2
+    if args.rounds < 1:
+        print("--rounds must be at least 1", file=sys.stderr)
+        return 2
+    from shefa.lab.bakeoff import self_judged
+
+    clashes = self_judged(args.models, args)
+    if clashes:
+        print(
+            f"{', '.join(clashes)} would also play the caller or the judge "
+            f"(--caller-model {args.caller_model}, --judge-model {args.judge_model}) on the same "
+            "server, so it would mark its own calls. Pick another caller and judge, or run them "
+            "on another server with --side-base-url.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        scenarios = select_scenarios(args)
+    except ValueError as error:
+        hint = (
+            " Pass --tags or --scenarios to choose other cases."
+            if str(error).startswith("No scenario matches")
+            else ""
+        )
+        print(f"{error}.{hint}" if hint else str(error), file=sys.stderr)
+        return 2
+    try:
+        validate_files(args)  # once, here: not after the first model has been scored
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    return asyncio.run(_bakeoff(scenarios, args))
+
+
+async def _bakeoff(scenarios: list[Any], args: argparse.Namespace) -> int:
+    from shefa.lab import bakeoff
+    from shefa.models.registry import registry
+
+    try:
+        result = await bakeoff.bake(args.models, args, scenarios=scenarios)
+    finally:
+        await registry.reset()
+    rows, winner = result["rows"], result["winner"]
+    text = bakeoff.table(
+        rows,
+        winner,
+        result["tts_first_ms"],
+        result["budget_ms"],
+        gpu_baseline_mb=result.get("gpu_baseline_mb"),
+    )
+    print(f"\n{text}")
+    print(f"Bake-off: {result['path']}")
+    return 0 if any(row["status"] == "ok" for row in rows) else 1  # nothing was scored
+
+
+def _run_compare(args: argparse.Namespace) -> int:
+    import json
+
+    from shefa.lab import scorecard
+
+    try:
+        cards = [json.loads(Path(path).read_text(encoding="utf-8")) for path in (args.a, args.b)]
+        print(scorecard.compare(*cards))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f"Cannot compare {args.a} and {args.b}: {error}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def run_voice_test(args: argparse.Namespace) -> int:
@@ -970,23 +1213,30 @@ async def _run_lab(scenarios: list[Any], args: argparse.Namespace) -> int:
     # Lab calls write audit rows like real calls; they go to the lab's own file, never
     # to the clinic's database.
     audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
-    voice = await registry.get_tts() if args.audio or args.speech else None
-    stt = await registry.get_stt() if args.speech else None
-    lab = Lab(
-        clinic_file=args.clinic,
-        work_dir=work,
-        voice=voice,
-        stt=stt,
-        patient_llm=await registry.get_llm(),
-    )
-    results = []
-    for scenario in scenarios:
-        print(f"  {scenario.id:<24} ", end="", flush=True)
-        result = await lab.run(scenario)
-        results.append(result)
-        failed = [c.name for c in result.checks if not c.ok]
-        failed += [c.name for t in result.turns for c in t.checks if not c.ok]
-        print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    # Nor does it read production's config store or knowledge base, or write its call log.
+    from shefa.lab.scoring import isolate
+
+    isolated = isolate(work, None)
+    try:
+        voice = await registry.get_tts() if args.audio or args.speech else None
+        stt = await registry.get_stt() if args.speech else None
+        lab = Lab(
+            clinic_file=args.clinic,
+            work_dir=work,
+            voice=voice,
+            stt=stt,
+            patient_llm=await registry.get_llm(),
+        )
+        results = []
+        for scenario in scenarios:
+            print(f"  {scenario.id:<24} ", end="", flush=True)
+            result = await lab.run(scenario)
+            results.append(result)
+            failed = [c.name for c in result.checks if not c.ok]
+            failed += [c.name for t in result.turns for c in t.checks if not c.ok]
+            print("pass" if result.passed else f"NEEDS WORK  {result.error or '; '.join(failed)}")
+    finally:
+        isolated.restore()
     page = write_report(results, out, lab_meta(args.speech, args.audio))
     passed = sum(1 for result in results if result.passed)
     print(f"\n{passed}/{len(results)} scenarios passed. Report: {page}")
@@ -1014,6 +1264,107 @@ def run_asterisk(args: argparse.Namespace) -> int:
         (out / name).write_text(text, encoding="utf-8")
     out.chmod(0o700)
     print(f"Wrote {len(files)} files to {out} (contains the trunk password; keep it private)")
+    return 0
+
+
+_JSON_OBJECT_KEYS = {"model.llm.params", "turn.settings", "escalation.settings"}
+
+
+def _config_value(key: str, text: str) -> Any:
+    """Prompts are taken as written; other keys are JSON, or a bare word like `agent`."""
+    if key.startswith("prompt."):
+        return text
+    try:
+        return json.loads(text)
+    except ValueError:
+        if key in _JSON_OBJECT_KEYS:
+            raise ValueError(f"{key} needs JSON") from None
+        return text.strip()
+
+
+def run_config(args: argparse.Namespace) -> int:
+    import getpass
+
+    from shefa.brain.config import KEYS, default_config_store
+
+    store = default_config_store()
+    scope = getattr(args, "clinic", "") or "platform"
+    try:
+        if args.config_command == "show":
+            for key in sorted(KEYS):
+                rows = [v for v in store.versions(key, scope) if v["status"] == "live"]
+                print(f"{key:<22} {rows[0]['id'] if rows else 'default'}")
+        elif args.config_command == "draft":
+            text = Path(args.file).read_text(encoding="utf-8")
+            vid = store.draft(
+                args.key,
+                _config_value(args.key, text),
+                scope=scope,
+                author=getpass.getuser(),
+                note=args.note,
+            )
+            print(vid)
+        elif args.config_command == "publish":
+            store.publish(args.version_id, author=getpass.getuser(), ack=args.ack)
+            print(f"version {args.version_id} is live")
+        else:
+            for v in store.versions(args.key, scope):
+                when = time.strftime("%Y-%m-%d %H:%M", time.localtime(v["created_at"]))
+                print(f"{v['id']:>5}  {v['status']:<8} {when}  {v['author']}  {v['note']}")
+    except (ValueError, OSError) as problem:
+        print(f"config: {problem}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def run_kb(args: argparse.Namespace) -> int:
+    import getpass
+
+    from shefa.brain.knowledge import PLATFORM_FILE, default_knowledge_store, seed
+    from shefa.clinic.registry import valid_id
+    from shefa.config.settings import settings
+
+    store = default_knowledge_store()
+    try:
+        if args.kb_command == "seed":
+            if args.clinic and not valid_id(args.clinic):
+                raise ValueError(f"not a clinic id: {args.clinic!r}")
+            added = seed(store, clinic_id=args.clinic, platform_file=PLATFORM_FILE)
+            print(f"{added} entries added")
+        elif args.kb_command == "list":
+            for e in store.all_entries(active_only=not args.all):
+                if args.scope and e.scope != args.scope:
+                    continue
+                flag = "" if e.active else "  (inactive)"
+                print(f"{e.id:>4}  {e.scope:<10} {e.topic:<22} v{e.version}  {e.text('en')}{flag}")
+        elif args.kb_command == "add":
+            if not (args.bn.strip() or args.en.strip()):
+                raise ValueError("give --bn or --en text")
+            tags = tuple(t.strip() for t in args.tags.split(",") if t.strip())
+            print(
+                store.add(
+                    args.scope,
+                    args.topic,
+                    text_bn=args.bn.strip(),
+                    text_en=args.en.strip(),
+                    tags=tags,
+                    author=getpass.getuser(),
+                )
+            )
+        elif args.kb_command == "fetch-embedder":
+            from huggingface_hub import snapshot_download
+
+            name = settings.brain.embedding_model or DEFAULT_EMBEDDER
+            snapshot_download(name)
+            print(f"{name} is downloaded")
+            if settings.brain.embedding_model != name:
+                print(f"set brain.embedding_model: {name} in the config to search by meaning")
+        else:
+            store.deactivate(args.entry_id, author=getpass.getuser())
+            print(f"entry {args.entry_id} is deactivated")
+    except (ValueError, OSError) as problem:
+        print(f"kb: {problem}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -1073,6 +1424,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "staff":
         return run_staff(args)
+
+    if args.command == "config":
+        return run_config(args)
+
+    if args.command == "kb":
+        return run_kb(args)
 
     if args.command == "setup":
         return run_setup(args)

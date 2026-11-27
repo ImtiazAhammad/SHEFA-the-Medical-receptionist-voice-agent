@@ -52,6 +52,7 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
         "shefa/coverage_policy.py",
         "shefa/integrations/calendar.py",
         "shefa/integrations/ehr.py",
+        "shefa/integrations/notifications.py",
         "shefa/lab/__init__.py",
         "shefa/lab/report.py",
         "shefa/lab/runner.py",
@@ -86,7 +87,6 @@ MUST_BE_FULLY_COVERED: frozenset[str] = frozenset(
 # Named, visible gaps: every module below 100%. Each is reported the moment it
 # reaches 100%, at which point it must be promoted into MUST_BE_FULLY_COVERED.
 CONVERGING_MODULES: tuple[str, ...] = (
-    "shefa/integrations/notifications.py",
     "shefa/main.py",
     "shefa/models/llm/anthropic_llm.py",
     "shefa/models/llm/openai_compatible_llm.py",

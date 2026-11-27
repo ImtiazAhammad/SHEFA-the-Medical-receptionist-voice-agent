@@ -15,6 +15,7 @@ from shefa.models.base import (
     StreamEvent,
     ToolDefinition,
 )
+from shefa.models.llm.think_filter import ThinkFilter, strip_thinking
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -25,6 +26,14 @@ logger = logging.getLogger(__name__)
 def _lang_from_content(text: str) -> Language:
     bn_chars = sum(1 for c in text if "\u0980" <= c <= "\u09FF")
     return Language.BANGLA if bn_chars / max(len(text), 1) > 0.1 else Language.ENGLISH
+
+
+async def _close(response: Any) -> None:
+    close = getattr(response, "close", None)
+    if close is not None:
+        result = close()
+        if hasattr(result, "__await__"):
+            await result
 
 
 class OpenAICompatibleLLM(BaseLLM):
@@ -49,6 +58,11 @@ class OpenAICompatibleLLM(BaseLLM):
             base_url=base_url, api_key=key, timeout=timeout_s, max_retries=0
         )
 
+    @property
+    def extra_body(self) -> dict[str, Any] | None:
+        """The extra fields sent with every request, or None."""
+        return self._extra_body
+
     def _convert_tools(self, tools: list[ToolDefinition] | None) -> list[dict[str, Any]] | None:
         if not tools:
             return None
@@ -71,14 +85,29 @@ class OpenAICompatibleLLM(BaseLLM):
         **overrides: Any,
     ) -> Any:
         return await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=converted,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            **({"extra_body": self._extra_body} if self._extra_body else {}),
-            **overrides,
+            **self._request(messages, converted, dict(overrides))
         )
+
+    def _request(
+        self,
+        messages: list[dict[str, str]],
+        converted: list[dict[str, Any]] | None,
+        overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        """The request fields: a caller's per-request settings win over the client's, and a
+        per-request extra body is merged into the client's rather than replacing it."""
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "tools": converted,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+        }
+        extra = {**(self._extra_body or {}), **(overrides.pop("extra_body", None) or {})}
+        if extra:
+            request["extra_body"] = extra
+        request.update(overrides)
+        return request
 
     async def generate(
         self,
@@ -110,7 +139,7 @@ class OpenAICompatibleLLM(BaseLLM):
                     "arguments": tc.function.arguments,
                 })
 
-        text = message.content or ""
+        text = strip_thinking(message.content or "")
         return LLMResult(
             text=text,
             tool_calls=tool_calls,
@@ -125,17 +154,23 @@ class OpenAICompatibleLLM(BaseLLM):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         response = await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=self._convert_tools(tools),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
+            **self._request(messages, self._convert_tools(tools), {**kwargs, "stream": True})
         )
-        async for chunk in response:
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if delta and delta.content:
-                yield delta.content
+        thinking = ThinkFilter()
+        try:
+            async for chunk in response:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    text = thinking.feed(delta.content)
+                    if text:
+                        yield text
+        finally:
+            # A caller that stops reading early (the brain cuts a reply off) must close the
+            # response: the server only stops generating once the connection goes.
+            await _close(response)
+        rest = thinking.flush()
+        if rest:
+            yield rest
 
     async def _create_stream(
         self,
@@ -144,13 +179,7 @@ class OpenAICompatibleLLM(BaseLLM):
         **overrides: Any,
     ) -> Any:
         return await self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=converted,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
-            **overrides,
+            **self._request(messages, converted, {**overrides, "stream": True})
         )
 
     async def generate_events(
@@ -183,8 +212,18 @@ class OpenAICompatibleLLM(BaseLLM):
             )
             stream = await self._create_stream(messages, None, **kwargs)
 
+        events = self._events(stream)
+        try:
+            async for event in events:
+                yield event
+        finally:
+            await events.aclose()
+            await _close(stream)  # the server only stops generating once the connection goes
+
+    async def _events(self, stream: Any) -> AsyncIterator[StreamEvent]:
         pending: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
+        thinking = ThinkFilter()  # a model's written-out reasoning is never spoken
         async for chunk in stream:
             if not chunk.choices:
                 continue
@@ -192,7 +231,9 @@ class OpenAICompatibleLLM(BaseLLM):
             delta = choice.delta
             if delta is not None:
                 if delta.content:
-                    yield StreamEvent(text=delta.content)
+                    text = thinking.feed(delta.content)
+                    if text:
+                        yield StreamEvent(text=text)
                 for tc in delta.tool_calls or []:
                     acc = pending.setdefault(
                         tc.index, {"id": "", "name": "", "arguments": ""}
@@ -208,6 +249,9 @@ class OpenAICompatibleLLM(BaseLLM):
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
 
+        rest = thinking.flush()
+        if rest:
+            yield StreamEvent(text=rest)
         if pending:
             yield StreamEvent(
                 tool_calls=[pending[index] for index in sorted(pending)],

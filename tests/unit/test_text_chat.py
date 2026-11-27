@@ -8,7 +8,7 @@ router, the tool executor, the clinic store and the spoken templates. A demo tha
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +18,7 @@ from shefa import main as main_module
 from shefa.auth import AuthStore, hash_token
 from shefa.clinic import default_clinic_store
 from shefa.clinic.loader import import_directory
+from shefa.clinic.store import clinic_today
 from shefa.config.settings import settings
 from shefa.main import create_app
 from shefa.models.base import StreamEvent
@@ -92,7 +93,7 @@ def chat(monkeypatch):
 
 
 def _tomorrow() -> str:
-    return (date.today() + timedelta(days=1)).isoformat()
+    return (clinic_today() + timedelta(days=1)).isoformat()
 
 
 def test_first_message_opens_with_the_greeting_then_answers_from_the_directory(chat):
@@ -213,3 +214,11 @@ def test_every_typed_turn_is_kept_with_the_action_it_led_to(chat):
     assert turns[1]["actions"] == ["list_departments"]
     assert turns[2]["actions"] == [] and turns[3]["actions"] == []
     assert all(t["language"] == "en" for t in turns)
+
+
+def test_engine_guided_set_explicitly_behaves_exactly_as_before(chat, monkeypatch):
+    # Task 11: the pipeline now asks which engine talks; "guided" is the same chat as ever.
+    monkeypatch.setattr(settings.pipeline, "engine", "guided")
+    test_first_message_opens_with_the_greeting_then_answers_from_the_directory(chat)
+    session = chat.client.portal.call(chat.sessions.get, "chat-1")
+    assert "brain_trace" not in session.metadata and "brain" not in session.metadata

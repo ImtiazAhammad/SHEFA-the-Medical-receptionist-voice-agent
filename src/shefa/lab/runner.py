@@ -16,6 +16,7 @@ emergency handoff as a phone call. Optional layers make it closer to a call:
 from __future__ import annotations
 
 import contextlib
+import random
 import re
 import time
 import unicodedata
@@ -26,6 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from shefa.audio import mulaw8k_to_s16le_16k_mono, s16le_16k_mono_to_mulaw8k
+from shefa.lab.mishear import Confusions
+from shefa.lab.mishear import mishear as mishear_text
 from shefa.models.tts.routed import script_language
 
 if TYPE_CHECKING:
@@ -70,6 +73,15 @@ class TurnRecord:
     agent_audio: bytes | None = None
     greeting_audio: bytes | None = None
     checks: list[CheckResult] = field(default_factory=list)
+    # The agent engine's record of this turn (`brain_trace`), what its tools had done by the
+    # turn's end (the claims it may make), and whether the guided fallback answered it.
+    trace: dict[str, Any] | None = None
+    succeeded: list[str] = field(default_factory=list)
+    fallback: bool = False
+    # The caller's appointments as the agent engine's kept tool results held them after the turn,
+    # and every sentence its checker refused this turn (never spoken): {text, kind, reason}.
+    appointments: list[dict[str, str]] = field(default_factory=list)
+    refused: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +91,8 @@ class ScenarioResult:
     checks: list[CheckResult] = field(default_factory=list)
     appointments: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    brain_fallbacks: int = 0  # turns the brain failed and the guided engine answered
+    engine: str | None = None  # the engine the call's frozen config chose ("agent"/"guided")
 
     @property
     def passed(self) -> bool:
@@ -200,6 +214,57 @@ def scenario_checks(scenario: Scenario, result: ScenarioResult) -> list[CheckRes
     return checks
 
 
+def _brain_marks(session: Any) -> tuple[int, int]:
+    """How many brain traces and guided fallbacks the call holds so far."""
+    metadata = session.metadata if session is not None else {}
+    return len(metadata.get("brain_trace") or []), int(metadata.get("brain_fallbacks", 0))
+
+
+def _succeeded(session: Any) -> list[str]:
+    """The tools whose success the agent engine may claim, as it stood after the turn."""
+    from shefa.brain import actions
+    from shefa.brain.state import load
+
+    return sorted(actions.succeeded(load(session), session))
+
+
+def _appointments(session: Any) -> list[dict[str, str]]:
+    from shefa.brain import actions
+
+    return [{"text": v.text, "doctor": v.doctor} for v in actions.appointments(session)]
+
+
+@contextlib.contextmanager
+def _refusals(into: list[dict[str, str]]):
+    """Record each sentence the agent engine's checker refuses while the block runs."""
+    from shefa.brain import engine
+
+    checked = engine.check_sentence
+
+    def watched(sentence: str, grounds: Any, **kwargs: Any) -> Any:
+        verdict = checked(sentence, grounds, **kwargs)
+        if not verdict.ok:
+            into.append({"text": sentence, "kind": verdict.kind, "reason": verdict.reason})
+        return verdict
+
+    engine.check_sentence = watched
+    try:
+        yield
+    finally:
+        engine.check_sentence = checked
+
+
+def _attach_traces(turns: list[TurnRecord], traces: list[dict[str, Any]]) -> None:
+    """Give each turn its own brain trace (the last, when a turn left more than one)."""
+    for turn in turns:
+        if turn.trace is None:
+            continue
+        start, end = turn.trace["_slice"]
+        mine = traces[start:end]
+        # The trace itself, not a copy: a router that lands after the call still fills it in.
+        turn.trace = mine[-1] if mine else None
+
+
 def _clean_patient_line(text: str) -> str | None:
     """The simulated patient's line, or None when it ended the call."""
     if _END in text:
@@ -220,6 +285,9 @@ class Lab:
         patient_llm: Any = None,
         today: date | None = None,
         clock: Any = time.perf_counter,
+        mishear: Confusions | None = None,
+        mishear_rate: float = 0.0,
+        seed: int = 0,
     ) -> None:
         self.clinic_file = Path(clinic_file)
         self.work_dir = Path(work_dir)
@@ -228,6 +296,9 @@ class Lab:
         self.patient_llm = patient_llm
         self.today = today or date.today()
         self.clock = clock
+        self.mishear = mishear or Confusions({}, 0.0)
+        self.mishear_rate = mishear_rate
+        self.seed = seed
 
     # --- audio ---------------------------------------------------------------------
     async def speak(self, text: str, language: str) -> tuple[bytes, float | None]:
@@ -285,7 +356,10 @@ class Lab:
             store.add_leave(doctor["id"], leave["from"], leave.get("to", leave["from"]),
                             leave.get("reason", ""))
         for booking in scenario.setup.get("appointments", []):
-            patient = store.upsert_patient(scenario.phone, booking.get("name", ""))
+            # `phone:` books it for another patient (one whose details must stay private);
+            # without it the appointment is the caller's own.
+            phone = str(booking.get("phone") or scenario.phone)
+            patient = store.upsert_patient(phone, booking.get("name", ""))
             doctor = store.find_doctor(booking["doctor"])
             # Prepared state does not depend on what time it is now: book from the scenario's
             # own morning, so a slot is open whatever the real clock says.
@@ -309,6 +383,10 @@ class Lab:
         call_sid = f"lab-{scenario.id}"
         transcript: list[tuple[str, str]] = []
         scripted = list(scenario.turns)
+        # One generator per scenario, so what a scenario "hears" depends only on the seed and
+        # its id, never on how many draws earlier scenarios or another model's replies used.
+        rng = random.Random(f"{self.seed}:{scenario.id}")
+        hard: list[CheckResult] = []
         try:
             while len(result.turns) < max(scenario.max_turns, len(scenario.turns)):
                 if scripted:
@@ -319,21 +397,42 @@ class Lab:
                         break
                 else:
                     break
-                await self._turn(pipeline, call_sid, scenario, said, result, transcript)
+                await self._turn(pipeline, call_sid, scenario, said, result, transcript, rng)
                 if result.turns[-1].state != "active":
                     break
+            session = await pipeline.session_for(call_sid)
+            metadata = session.metadata if session else {}
+            result.brain_fallbacks = int(metadata.get("brain_fallbacks", 0))
+            result.engine = (metadata.get("brain_config") or {}).get("engine")
+            _attach_traces(result.turns, metadata.get("brain_trace") or [])
         except Exception as error:  # noqa: BLE001 - one broken scenario never stops the rest
             result.error = f"{type(error).__name__}: {error}"
         finally:
-            if scenario.phone:
-                patient = store.upsert_patient(scenario.phone)
-                result.appointments = store.appointments_for_patient(patient)
-            set_default_clinic_store(previous)
-            store.close()
-        result.checks = scenario_checks(scenario, result)
+            try:
+                if scenario.phone:
+                    patient = store.upsert_patient(scenario.phone)
+                    result.appointments = store.appointments_for_patient(patient)
+                # The hard checks read the clinic's own data, so they run before the store
+                # closes; one that breaks is recorded, and never skips the clean-up below.
+                hard = self._hard_checks(scenario, result, store)
+            except Exception as error:  # noqa: BLE001
+                result.error = result.error or f"hard checks: {type(error).__name__}: {error}"
+            finally:
+                set_default_clinic_store(previous)
+                store.close()
+        result.checks = [*scenario_checks(scenario, result), *hard]
         return result
 
-    async def _turn(self, pipeline, call_sid, scenario, said, result, transcript) -> None:
+    def _hard_checks(self, scenario: Scenario, result: ScenarioResult, store: Any):
+        from shefa.lab.hardchecks import facts_for, hard_checks, strangers_in
+
+        said = [line for turn in result.turns for line in (turn.said, turn.heard)]
+        facts = facts_for(store, self.today, said)
+        return hard_checks(scenario, result, facts, strangers_in(store, scenario.phone))
+
+    async def _turn(
+        self, pipeline, call_sid, scenario, said, result, transcript, rng: random.Random
+    ) -> None:
         record = TurnRecord(said=said, heard=said, reply="", state="active",
                             language=scenario.language)
         if self.voice is not None and self.stt is not None:
@@ -343,9 +442,22 @@ class Lab:
             record.wer = word_error_rate(said, record.heard)
         elif self.voice is not None:
             record.patient_audio, _ = await self.speak(said, scenario.language)
+        if (self.voice is None or self.stt is None) and self.mishear_rate > 0:
+            record.heard = mishear_text(said, self.mishear, self.mishear_rate, rng)
+            record.wer = word_error_rate(said, record.heard)
+        before = _brain_marks(await pipeline.session_for(call_sid))
         started = self.clock()
-        turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
+        with _refusals(record.refused):
+            turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
         record.llm_ms = (self.clock() - started) * 1000
+        session = await pipeline.session_for(call_sid)
+        after = _brain_marks(session)
+        record.fallback = after[1] > before[1]
+        # Which of the call's brain traces are this turn's; attached once the call is over, when
+        # a router that finished after its turn has filled its trace in.
+        record.trace = {"_slice": [before[0], after[0]]} if after[0] > before[0] else None
+        if record.trace is not None:
+            record.succeeded, record.appointments = _succeeded(session), _appointments(session)
         record.reply, record.state = turn["reply"], turn["state"]
         record.language, record.actions = turn["language"], turn["actions"]
         record.greeting = turn["greeting"]

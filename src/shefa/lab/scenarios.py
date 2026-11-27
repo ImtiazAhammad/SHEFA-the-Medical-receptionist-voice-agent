@@ -3,7 +3,8 @@
 A scenario is either scripted (`turns`: the patient's lines, word for word, so an edge
 case is reproduced exactly) or simulated (`persona`: the language model plays the
 patient for up to `max_turns`, so the agent meets phrasing nobody scripted). Both can
-start from `setup`: existing appointments for the caller, or a doctor on leave.
+start from `setup`: existing appointments (the caller's, or with `phone:` another patient's),
+or a doctor on leave.
 
 Dates are written as placeholders and filled in at run time, so a scenario never goes
 stale: `{iso:Sun}` is the next Sunday as YYYY-MM-DD, `{en:Sun}` "Sunday 8 November",
@@ -24,6 +25,29 @@ from shefa.bangla import bn_date, en_date
 
 _WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _PLACEHOLDER = re.compile(r"\{(iso|en|bn):([A-Za-z]+)\}")
+
+CALLER_TYPES = (
+    "angry",
+    "anxious",
+    "talkative",
+    "quiet",
+    "confused_elderly",
+    "rushed",
+    "rude",
+    "off_topic",
+    "code_switching",
+    "ordinary",
+)
+GOALS = (
+    "information",
+    "booking",
+    "change",
+    "lookup",
+    "emergency",
+    "medical_advice",
+    "about_shefa",
+    "unknown_answer",
+)
 
 
 def resolve_day(name: str, today: date) -> date:
@@ -79,6 +103,9 @@ class Scenario:
     max_turns: int = 6
     expect: Expect = field(default_factory=Expect)
     setup: dict[str, Any] = field(default_factory=dict)
+    caller_type: str = "ordinary"  # one of CALLER_TYPES: how the caller behaves
+    goal: str = "booking"  # one of GOALS: what the caller came to do
+    tags: list[str] = field(default_factory=list)  # free labels, e.g. "kb", "hard-check"
 
     def filled(self, today: date) -> Scenario:
         """A copy with every date placeholder resolved against `today`."""
@@ -113,9 +140,25 @@ def parse_scenarios(raw: Any) -> list[Scenario]:
             raise ValueError(f"duplicate scenario id {scenario.id!r}")
         if not scenario.turns and not scenario.persona:
             raise ValueError(f"scenario {scenario.id!r} needs turns or a persona")
+        if scenario.caller_type not in CALLER_TYPES:
+            raise ValueError(
+                f"scenario {scenario.id!r}: caller_type {scenario.caller_type!r} "
+                f"is not one of {CALLER_TYPES}"
+            )
+        if scenario.goal not in GOALS:
+            raise ValueError(
+                f"scenario {scenario.id!r}: goal {scenario.goal!r} is not one of {GOALS}"
+            )
         seen.add(scenario.id)
         scenarios.append(scenario)
     return scenarios
+
+
+def select(scenarios: list[Scenario], tags: set[str]) -> list[Scenario]:
+    """The scenarios whose tag, caller type or goal is in `tags`; no tags means all."""
+    if not tags:
+        return list(scenarios)
+    return [s for s in scenarios if tags & {*s.tags, s.caller_type, s.goal}]
 
 
 def load_scenarios(path: str | Path) -> list[Scenario]:

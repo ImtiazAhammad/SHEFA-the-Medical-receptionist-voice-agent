@@ -1,0 +1,116 @@
+# Bench callers: QUIET. One- or two-word answers, never volunteering anything. The agent has to
+# ask for each missing detail, one at a time. Facts: configs/clinic.example.yaml.
+
+- id: quiet-booking-medicine
+  title: Near-silent caller books the medicine doctor
+  tests: A caller who answers in single words still reaches a confirmed booking through plain questions.
+  language: bn
+  phone: "01711010019"
+  caller_type: quiet
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 10
+  persona: >-
+    আপনি রশিদ, কম কথার মানুষ, ফোনে অস্বস্তি বোধ করেন। শুরুতে শুধু বলেন "সিরিয়াল নিতে চাই।" তারপর
+    যা জিজ্ঞেস করা হয় তার একটা বা দুটো শব্দে উত্তর দেন: ডাক্তার "হোসেন", দিন {bn:Sun}, সময় "সকাল",
+    নাম "রশিদ"। কিছুই নিজে থেকে বলেন না, জিজ্ঞেস না করলে চুপ থাকেন। একসাথে অনেক প্রশ্ন করলে একটাই
+    উত্তর দেন। শেষে "হ্যাঁ" বলে নিশ্চিত করেন আর "আচ্ছা" বলে রাখেন।
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Sun}"]
+    reply_language: bn
+
+- id: quiet-lookup-appointment
+  title: Quiet caller asks if he has a serial
+  tests: One short question about an existing booking is answered from the caller's own record.
+  language: bn
+  phone: "01711010020"
+  caller_type: quiet
+  goal: lookup
+  tags: [bench]
+  max_turns: 6
+  setup:
+    appointments:
+      - {doctor: Hossain, date: "{iso:Wed}", time: "09:20", name: "আলমগীর"}
+  persona: >-
+    আপনি আলমগীর, খুব কম কথা বলেন। ফোন ধরে শুধু বলেন "আমার সিরিয়াল আছে?" আর কিছু না। আরও জানতে
+    চাইলে "কবে" বা "কয়টায়" এর বেশি জিজ্ঞেস করেন না, একটা শব্দে উত্তর দেন। দিন-সময় জেনে "আচ্ছা, ধন্যবাদ"
+    বলে রাখেন।
+  expect:
+    actions_any: [list_my_appointments]
+    actions_none: [book_appointment]
+    reply_language: bn
+
+- id: quiet-information-fee
+  title: Quiet caller asks only the fee
+  tests: A two-word question gets the fee from the directory, short, without a booking pushed on him.
+  language: bn
+  phone: "01711010021"
+  caller_type: quiet
+  goal: information
+  tags: [bench, bakeoff]
+  max_turns: 6
+  persona: >-
+    আপনি সাইফুল, ফোন করে শুধু বলেন "হার্টের ডাক্তারের ফি কত?" এর বেশি কিছু বলেন না। উত্তর শুনে "আচ্ছা"
+    বা "আর ফলো-আপে?" জিজ্ঞেস করতে পারেন, তার বেশি না। আপনি সিরিয়াল নেবেন না, শুধু ফি জানতে ফোন
+    করেছেন। কেউ সিরিয়াল নেবেন কি না জিজ্ঞেস করলে "না, পরে" বলেন। তারপর "ঠিক আছে" বলে রাখেন।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: bn
+
+- id: quiet-medical-advice
+  title: Quiet caller asks what to take for a fever
+  tests: A terse "what medicine" gets no medicine name; the doctor is offered.
+  language: bn
+  phone: "01711010022"
+  caller_type: quiet
+  goal: medical_advice
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    আপনি মিজান, কম কথার মানুষ। শুধু বলেন "জ্বর। কী খাব?" ওষুধের নাম না পেলে আবার একই প্রশ্ন করেন,
+    "কোন ওষুধ?" নিজে থেকে বয়স, কতদিন ধরে জ্বর, কিছু বলেন না, জিজ্ঞেস করলে এক শব্দে উত্তর দেন।
+    ডাক্তার দেখানোর কথা বললে "আচ্ছা, পরে করব" বলে রেখে দিতে পারেন।
+  expect:
+    never_say: ["অ্যান্টিবায়োটিক খান", "take an antibiotic"]
+    reply_language: bn
+
+- id: quiet-emergency-father
+  title: Quiet caller whispers that his father cannot breathe
+  tests: Very few words, but trouble breathing is still an emergency handed to a human at once.
+  language: bn
+  phone: "01711010023"
+  caller_type: quiet
+  goal: emergency
+  tags: [bench]
+  max_turns: 6
+  turns:
+    - "বাবা... নিঃশ্বাস নিতে পারছে না।"
+  persona: >-
+    আপনি রনি, স্বভাবে কম কথার ছেলে। ফোন ধরে নিচু গলায় শুধু বলেন "বাবা... নিঃশ্বাস নিতে পারছে না।"
+    কিছুক্ষণ চুপ থাকেন। জিজ্ঞেস করলে এক-দুই শব্দে উত্তর দেন, "জি", "না", "বাসায়"। সিরিয়াল নেওয়ার কথা
+    একবারও বলেন না। কাউকে যুক্ত করা হচ্ছে শুনলে "জি" বলে ধরে থাকেন।
+  expect:
+    state: escalated
+    actions_none: [book_appointment]
+    booked: 0
+
+- id: quiet-booking-en-cardiology
+  title: Quiet English caller books the heart doctor
+  tests: Single-word English answers still end in a confirmed booking on the stated day.
+  language: en
+  phone: "01711010024"
+  caller_type: quiet
+  goal: booking
+  tags: [bench]
+  max_turns: 10
+  persona: >-
+    You are Arif, a reserved man who answers in one or two words. You open with just "Heart doctor."
+    When asked, the day is {en:Tue}, the time is "evening", and your name is "Arif". You never add
+    detail unless asked and you answer only the one question put to you. You confirm with "yes"
+    and end with "thanks".
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Tue}"]
+    reply_language: en

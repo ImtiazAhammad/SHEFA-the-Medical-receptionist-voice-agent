@@ -1,7 +1,7 @@
 """A yes to the agent's own offer ("Shall I book that?") is that booking, not small talk."""
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -17,7 +17,7 @@ from shefa.session.manager import CallSession
 
 
 def tomorrow() -> str:
-    return (date.today() + timedelta(days=1)).isoformat()
+    return (clinic_today() + timedelta(days=1)).isoformat()
 
 
 DIRECTORY = {
@@ -146,7 +146,7 @@ async def test_everyday_ways_of_accepting_an_offer_read_the_booking_back(call, p
 async def test_the_next_free_time_is_never_earlier_than_the_day_asked_about(call):
     from shefa.integrations.calendar import check_slots
 
-    day = (date.today() + timedelta(days=5)).isoformat()
+    day = (clinic_today() + timedelta(days=5)).isoformat()
     result = await check_slots(day, "Rahman")
     nxt = result["next_available"]
     assert nxt is None or nxt["date"] > day or result["available_slots"]

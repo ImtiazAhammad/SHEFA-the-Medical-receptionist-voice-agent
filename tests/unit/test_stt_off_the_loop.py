@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
+
 from shefa.models.stt.whisper_local import WhisperLocalSTT
 
 
@@ -68,6 +70,7 @@ def test_the_local_model_client_gives_up_instead_of_hanging():
 
 
 def test_parallel_decodes_get_a_worker_each_and_the_default_changes_nothing(monkeypatch):
+    pytest.importorskip("faster_whisper")  # optional (local-stt extra): not in CI's install
     seen: list[dict] = []
 
     class Fake:

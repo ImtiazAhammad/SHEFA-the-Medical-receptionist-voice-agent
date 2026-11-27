@@ -43,6 +43,14 @@ class ModelRegistry:
             self._llm = await self._create_llm()
         return self._llm
 
+    def use_llm(self, llm: BaseLLM | None) -> None:
+        """Make the next `get_llm()` return `llm`; None restores normal creation.
+
+        How the lab points the product's own pipeline at a different model. It does not
+        close what it replaces: the caller that built `llm` closes it.
+        """
+        self._llm = llm
+
     async def _create_stt(self) -> BaseSTT:
         from shefa.models.stt.openai_stt import OpenAISTT
 

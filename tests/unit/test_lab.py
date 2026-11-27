@@ -24,12 +24,77 @@ from shefa.lab.runner import (
     turn_checks,
     word_error_rate,
 )
-from shefa.lab.scenarios import Expect, Scenario, fill, load_scenarios, parse_scenarios, resolve_day
+from shefa.lab.scenarios import (
+    CALLER_TYPES,
+    GOALS,
+    Expect,
+    Scenario,
+    fill,
+    load_scenarios,
+    parse_scenarios,
+    resolve_day,
+    select,
+)
 from shefa.models.base import Language, StreamEvent, STTResult
 
 WEDNESDAY = date(2026, 11, 4)
 SHIPPED = Path(__file__).resolve().parents[2] / "configs" / "lab" / "scenarios.yaml"
 CLINIC = Path(__file__).resolve().parents[2] / "configs" / "clinic.example.yaml"
+
+
+class TestScenarioMetadata:
+    def test_scenario_defaults_caller_type_and_goal(self):
+        [s] = parse_scenarios([{"id": "a", "title": "t", "tests": "x", "turns": ["hi"]}])
+        assert (s.caller_type, s.goal, s.tags) == ("ordinary", "booking", [])
+
+    def test_unknown_caller_type_is_rejected(self):
+        with pytest.raises(ValueError, match="caller_type"):
+            parse_scenarios([
+                {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "caller_type": "grumpy"}
+            ])
+
+    def test_unknown_goal_is_rejected(self):
+        with pytest.raises(ValueError, match="goal.*'refund'"):
+            parse_scenarios([
+                {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "goal": "refund"}
+            ])
+
+    def test_every_allowed_value_parses(self):
+        raw = [
+            {
+                "id": f"{c}-{g}", "title": "t", "tests": "x", "turns": ["hi"],
+                "caller_type": c, "goal": g,
+            }
+            for c in CALLER_TYPES
+            for g in GOALS
+        ]
+        assert len(parse_scenarios(raw)) == len(CALLER_TYPES) * len(GOALS)
+
+    def test_metadata_survives_filling_dates(self):
+        [s] = parse_scenarios([{
+            "id": "a", "title": "t", "tests": "x", "turns": ["hi"],
+            "caller_type": "rushed", "goal": "change", "tags": ["kb", "mid"],
+        }])
+        filled = s.filled(WEDNESDAY)
+        assert (filled.caller_type, filled.goal, filled.tags) == ("rushed", "change", ["kb", "mid"])
+
+    def test_the_shipped_scenarios_still_load_with_defaults(self):
+        shipped = load_scenarios(SHIPPED)
+        assert shipped
+        assert all(s.caller_type in CALLER_TYPES and s.goal in GOALS for s in shipped)
+
+    def test_select_by_tag_caller_type_or_goal(self):
+        s = parse_scenarios([
+            {"id": "a", "title": "t", "tests": "x", "turns": ["hi"], "caller_type": "angry"},
+            {
+                "id": "b", "title": "t", "tests": "x", "turns": ["hi"],
+                "goal": "information", "tags": ["kb"],
+            },
+        ])
+        assert [x.id for x in select(s, {"angry"})] == ["a"]
+        assert [x.id for x in select(s, {"kb"})] == ["b"]
+        assert [x.id for x in select(s, {"information"})] == ["b"]
+        assert [x.id for x in select(s, set())] == ["a", "b"]
 
 
 class TestScenarios:
@@ -273,7 +338,10 @@ class TestRunner:
         assert result.turns[2].actions == ["book_appointment"]
         assert "রেফারেন্স নম্বর এক" in result.turns[2].reply
         assert [a["start_time"] for a in result.appointments] == ["10:00"]
-        assert result.passed, [c for c in result.checks if not c.ok]
+        # The confirmation template is three sentences, but a turn that booked is the product's
+        # own wording, not the model's, so `brevity` skips it: every check must hold.
+        failed = [c.name for c in result.checks if not c.ok]
+        assert failed == [], [c for c in result.checks if not c.ok]
 
     async def test_setup_puts_a_doctor_on_leave_and_books_an_existing_appointment(self, lab):
         scenario = Scenario(
@@ -291,6 +359,26 @@ class TestRunner:
         store = ClinicStore(runner.work_dir / "setup.db")
         assert store.doctor_on_leave(store.find_doctor("Rahman")["id"], "2026-11-10")
         store.close()
+
+    async def test_a_setup_appointment_can_belong_to_another_patient_and_a_leak_fails(
+        self, lab, monkeypatch
+    ):
+        async def leaks(messages, tools=None, **kwargs):
+            yield StreamEvent(text="রফিকুল ইসলাম রবিবার সকালে আসছেন।")
+
+        monkeypatch.setattr(lab.script, "generate_events", leaks)
+        scenario = Scenario(
+            id="privacy", title="t", tests="t", phone="01711000004",
+            turns=["আমার ভাই রফিক কখন আসবে?"],
+            setup={"appointments": [{"doctor": "Hossain", "date": "{iso:Sun}", "time": "09:00",
+                                     "name": "রফিকুল ইসলাম", "phone": "01911555101"}]},
+        )
+
+        result = await lab.make().run(scenario)
+
+        assert result.appointments == []  # the brother's booking is not the caller's
+        privacy = next(c for c in result.checks if c.name == "privacy")
+        assert not privacy.ok and "রফিকুল ইসলাম" in privacy.detail
 
     async def test_a_rerun_starts_from_a_clean_database(self, lab):
         scenario = Scenario(
@@ -311,7 +399,40 @@ class TestRunner:
         result = await lab.make().run(scenario)
 
         assert len(result.turns) == 1 and result.turns[0].state == "escalated"
-        assert result.passed
+        # The handover template is three sentences, but a turn that ended the call is the
+        # product's own wording, so `brevity` skips it: every check must hold.
+        assert [c.name for c in result.checks if not c.ok] == []
+
+    async def test_every_run_ends_with_the_hard_checks(self, lab):
+        scenario = Scenario(id="h", title="t", tests="t", turns=["হ্যালো"])
+
+        result = await lab.make().run(scenario)
+
+        assert [c.name for c in result.checks][-7:] == [
+            "grounded", "no_unconfirmed_booking", "no_medical_advice", "privacy",
+            "emergency_first_turn", "not_pushed_to_book", "brevity",
+        ]
+
+    async def test_a_failing_hard_check_is_recorded_and_the_next_scenario_gets_a_fresh_store(
+        self, lab, monkeypatch
+    ):
+        from shefa.clinic import default as clinic_default
+        from shefa.lab import hardchecks
+
+        runner = lab.make()
+        before = clinic_default._store  # noqa: SLF001
+        broken = Scenario(id="h1", title="t", tests="t", phone="01711000003", turns=["হ্যালো"])
+
+        with monkeypatch.context() as patch:
+            patch.setattr(hardchecks, "facts_for", lambda *a: 1 / 0)
+            result = await runner.run(broken)
+
+        assert result.error and "ZeroDivisionError" in result.error and not result.passed
+        assert clinic_default._store is before  # noqa: SLF001 - restored, not left on the dead store
+        again = await runner.run(
+            Scenario(id="h2", title="t", tests="t", phone="01711000003", turns=["হ্যালো"])
+        )
+        assert again.error is None and again.appointments == []
 
     async def test_a_simulated_patient_talks_until_it_ends_the_call(self, lab):
         lab.script.patient_lines = ["আমার নাতির জ্বর", "শিশু ডাক্তার আছেন?", "[END]"]
@@ -476,6 +597,49 @@ class TestLabCommand:
         assert (tmp_path / "r" / "report.html").exists()
         assert made["voice"] is not None and made["stt"] is not None and made["reset"]
         assert ("2/2 scenarios passed" if passes else "NEEDS WORK  booked") in out
+
+    def test_run_uses_its_own_stores_and_puts_them_back(self, monkeypatch, tmp_path, capsys):
+        # Task 11: every typed turn now reads the call's config (the engine); `lab run` must not
+        # read production's config store or knowledge base, nor write its call log.
+        from shefa.brain import config as brain_config
+        from shefa.brain import knowledge
+        from shefa.lab import runner as lab_runner
+        from shefa.models.registry import registry
+
+        seen = {}
+        production = brain_config._default_config_store
+
+        class FakeLab:
+            def __init__(self, **kwargs):
+                pass
+
+            async def run(self, scenario):
+                seen["config"] = brain_config._default_config_store.path
+                seen["knowledge"] = knowledge._default_knowledge_store.path
+                seen["db_path"] = settings.storage.db_path
+                return ScenarioResult(scenario, turns=[_record()])
+
+        async def get(*args):
+            return object()
+
+        async def reset():
+            pass
+
+        monkeypatch.setattr(lab_runner, "Lab", FakeLab)
+        monkeypatch.setattr(registry, "get_llm", get)
+        monkeypatch.setattr(registry, "reset", reset)
+        old_path = settings.storage.db_path
+        out = tmp_path / "r"
+        cli.main(["lab", "run", "--scenarios", str(SHIPPED), "--only", "fee-question",
+                  "--out", str(out)])  # fmt: skip
+        work = out / ".work"
+        assert seen == {
+            "config": work / "config.db",
+            "knowledge": work / "knowledge.db",
+            "db_path": str(work / "platform.db"),
+        }
+        assert brain_config._default_config_store is production
+        assert settings.storage.db_path == old_path
 
     def test_meta_names_the_models_used(self, monkeypatch):
         monkeypatch.setattr(settings.pipeline.stt, "per_language", {"bn": "x"})

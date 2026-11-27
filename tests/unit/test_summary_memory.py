@@ -29,8 +29,8 @@ def test_the_day_of_the_month_alone_means_the_next_one(said, expected):
 
 @pytest.mark.parametrize(
     ("said", "hours"),
-    [("সন্ধ্যার দিকে", (17, 21)), ("বিকেলে", (14, 18)), ("সকালে", (6, 12)), ("in the evening", (17, 21)),
-     ("রাতে", (19, 24)), ("কাল", None)],
+    [("সন্ধ্যার দিকে", (17, 21)), ("বিকেলে", (14, 18)), ("সকালে", (6, 12)),
+     ("in the evening", (17, 21)), ("রাতে", (19, 24)), ("কাল", None)],
 )  # fmt: skip
 def test_a_part_of_the_day_is_understood(said, hours):
     assert parse_period(said) == hours

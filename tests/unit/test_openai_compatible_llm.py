@@ -314,3 +314,167 @@ async def test_generate_events_rejection_without_tools_is_not_retried() -> None:
         await _collect(llm)
 
     assert len(completions.calls) == 1
+
+
+# --- extra_body must ride on streamed requests too ------------------------------------------
+
+_SSE = (
+    'data: {"id":"c","object":"chat.completion.chunk","created":0,"model":"m","choices":'
+    '[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]}\n\n'
+    "data: [DONE]\n\n"
+)
+
+
+def _wire_llm(
+    extra_body: dict[str, Any] | None,
+) -> tuple[OpenAICompatibleLLM, list[dict[str, Any]]]:
+    """The real adapter over a mock transport; returns it with the request bodies it sent."""
+    import json
+
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, text=_SSE, headers={"content-type": "text/event-stream"})
+
+    llm = OpenAICompatibleLLM(base_url="http://x/v1", model="m", extra_body=extra_body)
+    llm._client = openai.AsyncOpenAI(
+        base_url="http://x/v1",
+        api_key="k",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return llm, bodies
+
+
+_NO_THINK = {"think": False, "reasoning_effort": "none"}
+
+
+@pytest.mark.parametrize("call", ["generate_events", "generate_stream"])
+async def test_streamed_requests_carry_the_extra_body(call):
+    llm, bodies = _wire_llm(_NO_THINK)
+    async for _ in getattr(llm, call)(_MESSAGES):
+        pass
+    assert bodies[0]["stream"] is True
+    assert bodies[0]["think"] is False and bodies[0]["reasoning_effort"] == "none"
+
+
+async def test_a_blocking_request_carries_the_same_extra_body():
+    llm, bodies = _wire_llm(_NO_THINK)
+    bodies.clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        bodies.append(json.loads(request.content))
+        payload = {"id": "c", "object": "chat.completion", "created": 0, "model": "m",
+                   "choices": [{"index": 0, "finish_reason": "stop",
+                                "message": {"role": "assistant", "content": "hi"}}]}
+        return httpx.Response(200, json=payload)
+
+    llm._client = openai.AsyncOpenAI(
+        base_url="http://x/v1", api_key="k",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    await llm.generate(_MESSAGES)
+    assert bodies[0]["think"] is False and bodies[0]["reasoning_effort"] == "none"
+
+
+@pytest.mark.parametrize("call", ["generate_events", "generate_stream"])
+async def test_streamed_requests_without_extra_body_send_no_extra_fields(call):
+    llm, bodies = _wire_llm(None)
+    async for _ in getattr(llm, call)(_MESSAGES):
+        pass
+    assert "think" not in bodies[0] and "reasoning_effort" not in bodies[0]
+
+
+@pytest.mark.parametrize("call", ["generate_events", "generate_stream"])
+async def test_an_empty_extra_body_sends_no_extra_fields(call):
+    llm, bodies = _wire_llm({})
+    async for _ in getattr(llm, call)(_MESSAGES):
+        pass
+    assert set(bodies[0]) <= {"model", "messages", "stream", "temperature", "max_tokens",
+                              "stream_options", "tools", "tool_choice"}
+    assert "think" not in bodies[0] and "extra_body" not in bodies[0]
+
+
+async def test_generate_events_never_publishes_a_models_written_reasoning() -> None:
+    # Qwen3 builds from Hugging Face write <think>…</think> into the reply itself; spoken,
+    # the caller would hear the model talk to itself.
+    llm, _ = _llm(
+        _AsyncStream([_chunk("<thi"), _chunk("nk>\nthe user…\n</think>\n\n"), _chunk("At ten.")])
+    )
+
+    events = await _collect(llm)
+
+    assert "".join(e.text for e in events) == "At ten."
+
+
+async def test_generate_drops_a_models_written_reasoning() -> None:
+    llm, _ = _llm(_reply("<think>\n\n</think>\n\nTuesday at ten."))
+
+    result = await llm.generate(_MESSAGES)
+
+    assert result.text == "Tuesday at ten."
+
+
+async def test_per_request_settings_override_the_clients_and_extra_body_merges() -> None:
+    # The brain's router asks for temperature 0, a few tokens and a server-enforced output shape
+    # on the same client the reply uses; its extra body must not replace the client's own.
+    llm, completions = _llm(_reply("{}"))
+    llm._extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    await llm.generate(
+        _MESSAGES,
+        temperature=0,
+        max_tokens=40,
+        extra_body={"structured_outputs": {"regex": "x"}},
+    )
+    sent = completions.calls[0]
+    assert sent["temperature"] == 0
+    assert sent["max_tokens"] == 40
+    assert sent["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "structured_outputs": {"regex": "x"},
+    }
+
+
+class _ClosableStream(_AsyncStream):
+    def __init__(self, chunks: list[Any]) -> None:
+        super().__init__(chunks)
+        self.closed = 0
+
+    async def close(self) -> None:
+        self.closed += 1
+
+
+@pytest.mark.parametrize("call", ["generate_stream", "generate_events"])
+async def test_a_stream_closed_early_closes_the_response_so_the_server_stops(call) -> None:
+    # The brain closes a reply stream the moment the router names a tool or two sentences are
+    # out. Without closing the HTTP response vLLM kept generating for up to ~1.2 s (probe 8c).
+    response = _ClosableStream([_chunk("one. "), _chunk("two. "), _chunk("three.")])
+    llm, _ = _llm(response)
+    stream = getattr(llm, call)(_MESSAGES)
+    await stream.__anext__()
+    await stream.aclose()
+    assert response.closed == 1
+
+
+async def test_generate_stream_passes_per_request_settings() -> None:
+    # The brain's router streams with temperature 0, a few tokens and a server-enforced shape.
+    llm, completions = _llm(_ClosableStream([_chunk('{"tool":"none"}')]))
+    llm._extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    out = [
+        t
+        async for t in llm.generate_stream(
+            _MESSAGES,
+            temperature=0,
+            max_tokens=40,
+            extra_body={"structured_outputs": {"regex": "x"}},
+        )
+    ]
+    assert out == ['{"tool":"none"}']
+    sent = completions.calls[0]
+    assert (sent["temperature"], sent["max_tokens"], sent["stream"]) == (0, 40, True)
+    assert sent["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False},
+        "structured_outputs": {"regex": "x"},
+    }

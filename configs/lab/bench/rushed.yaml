@@ -1,0 +1,98 @@
+# Bench callers: RUSHED. At work, on a bad line, wants it done in one breath and interrupts
+# long answers. The agent must be short and precise. Facts: configs/clinic.example.yaml.
+
+- id: rushed-booking-cardiology-en
+  title: Rushed office worker books the heart doctor for Thursday evening
+  tests: A caller who interrupts long answers still gets exactly the doctor, day and evening slot.
+  language: en
+  phone: "01711010031"
+  caller_type: rushed
+  goal: booking
+  tags: [bench, bakeoff]
+  max_turns: 6
+  persona: >-
+    You are Tanvir, an executive calling between meetings. You want Dr. Rahman, the heart doctor,
+    on {en:Thu}, any slot after 6 pm, name Tanvir. You speak in fragments, say "just book it" and
+    "quickly please" when answers run long, and cut in when the assistant repeats things you
+    already said. You confirm with a quick "yes, fine" and hang up as soon as it is done.
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Thu}"]
+    reply_language: en
+
+- id: rushed-booking-medicine-morning
+  title: Rushed caller wants the medicine doctor on Monday morning
+  tests: A hurried caller who names the day and says "the earliest" still gets the first free morning slot booked fast.
+  language: bn
+  phone: "01711010032"
+  caller_type: rushed
+  goal: booking
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    আপনি শাহিন, অফিসে বসে ফোন করছেন, হাতে সময় কম। {bn:Mon} সকালে ডাক্তার হোসেনকে দেখাতে চান, যেটা
+    সবচেয়ে আগের খালি সময় সেটাই নেবেন। বড় উত্তর দিলে মাঝখানে বলেন "ঠিক আছে ঠিক আছে, সময়টা বলুন।"
+    নাম শাহিন। সব ঠিক হলে "ধন্যবাদ" বলে সাথে সাথে রেখে দেন।
+  expect:
+    booked: 1
+    booked_dates: ["{iso:Mon}"]
+    reply_language: bn
+
+- id: rushed-change-heart-appointment
+  title: Rushed caller moves his heart appointment in one go
+  tests: The reschedule is done with minimal questions and the old slot is freed, not doubled.
+  language: bn
+  phone: "01711010033"
+  caller_type: rushed
+  goal: change
+  tags: [bench]
+  max_turns: 6
+  setup:
+    appointments:
+      - {doctor: Rahman, date: "{iso:Sun}", time: "17:00", name: "নাসির উদ্দিন"}
+  persona: >-
+    আপনি নাসির উদ্দিন, রবিবার বিকেল পাঁচটায় হার্টের ডাক্তার রহমানের সিরিয়াল আছে, কিন্তু অফিসে মিটিং পড়ে
+    গেছে। আপনি সেটা {bn:Tue} সন্ধ্যায় নিতে চান, সময়টা সন্ধ্যা সাতটার কাছাকাছি হলে ভালো। কথা
+    দ্রুত বলেন, দীর্ঘ ব্যাখ্যা শুনতে চান না। সবকিছু ঠিক হলে "হ্যাঁ, করে দিন" বলে নিশ্চিত করেন।
+  expect:
+    actions_any: [reschedule_appointment]
+    booked: 1
+    booked_dates: ["{iso:Tue}"]
+    reply_language: bn
+
+- id: rushed-information-hossain-en
+  title: Rushed caller needs one fact before a meeting
+  tests: Fee and days are given in a sentence each, with no booking and no extra detail forced on him.
+  language: en
+  phone: "01711010034"
+  caller_type: rushed
+  goal: information
+  tags: [bench]
+  max_turns: 6
+  persona: >-
+    You are Rubel, about to walk into a meeting. In one breath you ask which days Dr. Hossain sits
+    and what the fee is. You cut off long answers with "okay okay, just the days and the fee."
+    You are not booking now, you will call back. Once you have both facts you say "got it, thanks"
+    and hang up.
+  expect:
+    actions_none: [book_appointment]
+    booked: 0
+    reply_language: en
+
+- id: rushed-unknown-ambulance
+  title: Rushed caller wants the clinic's ambulance number
+  tests: An ambulance number is not in the clinic data; the agent must not invent one.
+  language: bn
+  phone: "01711010035"
+  caller_type: rushed
+  goal: unknown_answer
+  tags: [bench, bakeoff]
+  max_turns: 6
+  persona: >-
+    আপনি আসিফ, অফিস থেকে ফোন করছেন, তাড়ার মধ্যে আছেন। জানতে চান এই ক্লিনিকের নিজের অ্যাম্বুলেন্সের
+    নম্বর কত, কারণ পরে লাগতে পারে। এখন কোনো জরুরি অবস্থা নেই, শুধু নম্বরটা সেভ করে রাখবেন। অপর পাশ
+    থেকে লম্বা উত্তর এলে বলেন "শুধু নম্বরটা বলুন।" নম্বর না থাকলে "ঠিক আছে" বলে রেখে দেন। সিরিয়াল
+    নেবেন না।
+  expect:
+    actions_none: [book_appointment]
+    booked: 0

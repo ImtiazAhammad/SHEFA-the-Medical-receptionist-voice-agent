@@ -70,3 +70,34 @@ def _isolate_the_default_calls_store(tmp_path):
     yield
     set_default_calls_store(None)
     store.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_config_store(tmp_path):
+    from shefa.brain.config import ConfigStore, set_default_config_store
+
+    store = ConfigStore(tmp_path / "default-config.db")
+    set_default_config_store(store)
+    yield
+    set_default_config_store(None)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_default_knowledge_store(tmp_path):
+    from shefa.brain.knowledge import KnowledgeStore, set_default_knowledge_store
+
+    store = KnowledgeStore(tmp_path / "default-knowledge.db")
+    set_default_knowledge_store(store)
+    yield
+    set_default_knowledge_store(None)
+
+
+@pytest.fixture(autouse=True)
+def _keep_retrieval_offline(monkeypatch):
+    """The embedding model is on by default; no test may load it (slow) or reach the network."""
+    from shefa.brain import retrieve
+
+    retrieve.reset()
+    monkeypatch.setattr(retrieve, "load_embedder", lambda name: None)
+    yield
+    retrieve.reset()
