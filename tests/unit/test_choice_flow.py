@@ -1,7 +1,7 @@
 """'The second one' after the agent reads out times books that time, with no model call."""
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +9,7 @@ import pytest
 from shefa.audio import AudioFrame
 from shefa.clinic import default_clinic_store
 from shefa.clinic.loader import import_directory
+from shefa.clinic.store import clinic_today
 from shefa.config.settings import settings
 from shefa.models.base import Language, StreamEvent
 from shefa.pipeline.voice_pipeline import VoicePipeline
@@ -39,7 +40,7 @@ DIRECTORY = {
 
 
 def tomorrow() -> str:
-    return (date.today() + timedelta(days=1)).isoformat()
+    return (clinic_today() + timedelta(days=1)).isoformat()
 
 
 class Script:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +11,7 @@ from shefa.auth import AuthStore, hash_token
 from shefa.cli import main
 from shefa.clinic import default_clinic_store
 from shefa.clinic.loader import import_directory
+from shefa.clinic.store import clinic_today
 from shefa.main import create_app
 from shefa.store.staff import MAX_FAILURES, StaffError, default_staff_store
 
@@ -55,13 +55,13 @@ def sign_in(client, username, password=PASSWORD):
 
 
 def book(clinic, doctor_id, phone, time_="10:00", day=None):
-    day = day or date.today().isoformat()
+    day = day or clinic_today().isoformat()
     patient = clinic.upsert_patient(phone, "Patient " + phone[-2:])
     from datetime import datetime
 
     from shefa.clinic.store import CLINIC_TZ
 
-    early = datetime.combine(date.today(), datetime.min.time(), tzinfo=CLINIC_TZ)
+    early = datetime.combine(clinic_today(), datetime.min.time(), tzinfo=CLINIC_TZ)
     return clinic.book(patient, doctor_id, day, time_, now=early)["appointment_id"]
 
 
