@@ -206,3 +206,14 @@ class TestSystemPromptSafetyRules:
 
     def test_it_asks_for_short_replies(self):
         assert "one or two short sentences" in self._system()
+
+
+def test_the_directory_block_is_empty_when_the_clinic_store_cannot_be_opened(monkeypatch):
+    from shefa import clinic
+    from shefa.session import messages
+
+    def broken():
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(clinic, "default_clinic_store", broken)
+    assert messages.clinic_directory("bn") == ""

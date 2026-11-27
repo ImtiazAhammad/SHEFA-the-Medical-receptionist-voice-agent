@@ -11,6 +11,17 @@ from shefa.brain.knowledge import KnowledgeStore, set_default_knowledge_store
 from shefa.config.settings import settings
 
 
+def _fake_hub(monkeypatch):
+    """huggingface_hub is optional (not in CI's install): a stand-in module the command imports."""
+    import sys
+    import types
+
+    hub = types.ModuleType("huggingface_hub")
+    hub.snapshot_download = lambda *_a, **_k: None
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    return hub
+
+
 @pytest.fixture
 def store(tmp_path):
     s = KnowledgeStore(tmp_path / "p.db")
@@ -67,7 +78,7 @@ def test_seed_command(store, capsys, monkeypatch):
 
 
 def test_fetch_embedder_downloads_the_configured_model(store, capsys, monkeypatch):
-    huggingface_hub = pytest.importorskip("huggingface_hub")  # optional: not in CI's install
+    huggingface_hub = _fake_hub(monkeypatch)
 
     seen: list[str] = []
     monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda name, **_k: seen.append(name))
@@ -82,7 +93,7 @@ def test_fetch_embedder_downloads_the_configured_model(store, capsys, monkeypatc
 
 
 def test_fetch_embedder_reports_a_failed_download(store, capsys, monkeypatch):
-    huggingface_hub = pytest.importorskip("huggingface_hub")  # optional: not in CI's install
+    huggingface_hub = _fake_hub(monkeypatch)
 
     def boom(*_a, **_k):
         raise OSError("no network")
@@ -90,3 +101,8 @@ def test_fetch_embedder_reports_a_failed_download(store, capsys, monkeypatch):
     monkeypatch.setattr(huggingface_hub, "snapshot_download", boom)
     assert cli.main(["kb", "fetch-embedder"]) == 2
     assert "no network" in capsys.readouterr().err
+
+
+def test_seed_refuses_a_clinic_id_that_is_not_one(store, capsys):
+    assert cli.main(["kb", "seed", "--clinic", "../etc"]) != 0
+    assert "not a clinic id" in capsys.readouterr().err

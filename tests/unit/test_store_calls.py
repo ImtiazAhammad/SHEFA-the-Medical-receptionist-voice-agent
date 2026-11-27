@@ -101,3 +101,25 @@ class TestDurableDeleteTombstones:
         reopened = CallsStore(path)
         record = reopened.get_call("CA1")
         assert record["deleted_at"] is not None
+
+def test_a_database_made_before_call_summaries_gains_the_columns(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.execute(
+        "CREATE TABLE calls (call_sid TEXT PRIMARY KEY UNIQUE NOT NULL, direction TEXT,"
+        " caller_phone_hashed TEXT, status TEXT, disposition TEXT, duration_seconds REAL,"
+        " started_at REAL, created_at REAL NOT NULL, deleted_at REAL, deleted_by TEXT)"
+    )
+    old.commit()
+    old.close()
+    CallsStore(path)
+    columns = {r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(calls)")}
+    assert {"patient_id", "summary"} <= columns
+
+
+def test_a_summary_that_is_not_json_reads_as_none(calls):
+    calls.connection.execute(
+        "INSERT INTO calls (call_sid, created_at, summary) VALUES ('CA9', 1.0, 'not json')"
+    )
+    calls.connection.commit()
+    assert calls.get_call("CA9")["summary"] is None
