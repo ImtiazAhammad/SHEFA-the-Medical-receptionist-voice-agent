@@ -40,7 +40,7 @@ from shefa.clinic import default as clinic_default
 from shefa.clinic.loader import import_directory_file
 from shefa.clinic.store import CLINIC_TZ
 from shefa.config.settings import settings
-from shefa.lab.scoring import DEFAULT_CLINIC
+from shefa.lab.scoring import DEFAULT_CLINIC, isolate
 from shefa.models.base import Language
 from shefa.models.llm.openai_compatible_llm import OpenAICompatibleLLM
 from shefa.pipeline.language_detector import detect_language
@@ -498,6 +498,15 @@ async def _run_turn(
         await brain.turn(session, said, llm, speak, today=today)
     except Exception as problem:  # noqa: BLE001 - a broken turn is a failure, recorded
         error = f"{type(problem).__name__}: {problem}"
+    # Since M2 the turn no longer waits for the router's mood and goal: its trace is filled in
+    # when the router lands. Wait for that (bounded by the router timeout), so a router that was
+    # still running at turn end is counted as such, never as a miss.
+    router_open = bool(c.router) and c.router.get("done_ms") is None
+    if router_open:
+        deadline = time.monotonic() + settings.brain.router_timeout_s + 0.5
+        while c.router.get("done_ms") is None and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)  # the engine's done-callback writes the route into the trace
     trace = (session.metadata.get("brain_trace") or [{}])[-1]
     first = c.attempts[0] if c.attempts else {}
     return {
@@ -515,6 +524,7 @@ async def _run_turn(
         "checks": list(c.checks),
         "prompt_tokens_est": max((a["prompt_tokens_est"] for a in c.attempts), default=0),
         "trace": dict(trace),
+        "router_open_at_turn_end": router_open,
         "error": error,
     }
 
@@ -622,6 +632,7 @@ def summarise(rows: list[dict[str, Any]], *, sequential: bool) -> dict[str, Any]
         "router_false_pass": len(false) <= ROUTER_FALSE * len(controls),
         "router_false_turns": false,
         "router_errors": [r["id"] for r in rows if (r["trace"].get("route") or {}).get("error")],
+        "router_unfinished_at_turn_end": sum(1 for r in rows if r.get("router_open_at_turn_end")),
         "regenerated": f"{len(regen)}/{len(rows)}",
         "regenerated_pass": len(regen) <= REGEN_LIMIT * len(rows),
         "regeneration_reasons": reasons,
@@ -800,6 +811,10 @@ async def main(args: argparse.Namespace) -> int:
     hits_before = _counter(args.base_url, "vllm:prefix_cache_hits_total")
     queries_before = _counter(args.base_url, "vllm:prefix_cache_queries_total")
     with tempfile.TemporaryDirectory(prefix="brain-probe-") as tmp:
+        # The lab's isolation first: `storage.db_path` and the call log (call-backs) point into
+        # the temporary folder too, so nothing falls back to the live database.
+        (Path(tmp) / "lab").mkdir()
+        isolated = isolate(Path(tmp) / "lab", "agent")
         store, seeded = _setup(Path(tmp), today)
         patient = store.upsert_patient(CALLER_PHONE)
         _instrument()
@@ -823,6 +838,7 @@ async def main(args: argparse.Namespace) -> int:
             set_default_clinic_store(previous)
             store.close()
             await llm.inner.close()
+            isolated.restore()
     hits = _counter(args.base_url, "vllm:prefix_cache_hits_total") - hits_before
     queries = _counter(args.base_url, "vllm:prefix_cache_queries_total") - queries_before
     # Real token counts for the first run only, after all generation (tokenizing is not generating).
