@@ -18,14 +18,22 @@ runs.
 There were no guided fallbacks in any agent run, so the bar comes out the same with or without
 the fallback scenarios (carry item 12).
 
+**The spec's own bar fails too.** It asks for zero hard-check failures and a judged score above
+guided for every caller type. agent2 has one hard failure, and the agent scores below guided on
+angry, quiet, off_topic and rude.
+
 **Recommendation to the founder: keep `guided` as the default.** On safety and task completion
-the agent engine is the better engine: full pass nearly doubles (39 → 73–74 of 112), with no
-brevity failures against 46–48, every emergency handled first, and no information caller
-pushed. But it fails two of the three bar criteria. It also has a cancel loop and false
+the agent engine is the better engine.
+- Full pass nearly doubles (39 → 73–74 of 112). Most of that is the hard checks: 0 and 1 brevity
+  failures against guided's 46–48. Task pass alone rises less, from 64–66 to 74 of 112.
+- Every emergency is handled in the first turn, and no information caller is pushed to book.
+ But it fails two of the three bar criteria. It also has a cancel loop and false
 promises that the claim rule misses, and its first spoken sentence misses the 1.1 s latency gate.
 
 Fix first, regardless of the engine decision: the cancel-confirmation bug in the live guided
-engine (below). It is a production regression from 6eb243d.
+engine (below). It is a production regression from 6eb243d. The rule before that commit
+(`yes_no`, then `leading_yes` and no `changes_request`) took "হ্যাঁ, বাতিল করে দিন।", "Yes, cancel
+it." and "Yes, please cancel it." as a yes. The strict rule does not.
 
 ## Setup
 
@@ -39,7 +47,7 @@ engine (below). It is a production regression from 6eb243d.
 | Mishearing | 15% of words, the bake-off's `data/bench/confusions.json`, seed 7 |
 | Command | `PYTHONUNBUFFERED=1 uv run shefa lab score --engine {guided,agent} --side-base-url http://127.0.0.1:11435/v1 --caller-model hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --judge-model hf.co/unsloth/gemma-3-4b-it-GGUF:Q4_K_M --out data/bench`, plus `--router-off` for run 5 |
 | Order | one at a time, interleaved, all on 2026-11-27: guided1 18:51–19:32, agent1 19:32–20:14, guided2 20:14–20:55, agent2 20:55–21:41, router-off 21:41–22:24 |
-| Analysis | `uv run python scripts/brain_vs_guided.py --guided G1 G2 --agent A1 A2 --router-off R` → `data/bench/task12/analysis.json` |
+| Analysis | `uv run python scripts/brain_vs_guided.py --guided G1 G2 --agent A1 A2 --router-off R` → `data/bench/task12/analysis.json`; `shefa lab compare` on each pair → `data/bench/task12/compare.txt` |
 | Retrieval | words only (the embedding model is not on disk), as in the probe |
 
 Scorecards (untracked, `data/bench/`): guided `scorecard-local_shefa-llm-20261127-193141027.json`
@@ -51,6 +59,11 @@ and `…-205521633.json`; agent `…-201359279.json` and `…-214035320.json`; r
 five runs and the probe, and it has no -wal or -shm file. No process was added to the GPU. The
 bench chose its engine through `--engine`, so the publish ack (`ConfigStore.publish`) never
 applied. Nothing was published to any config store.
+
+One slip: while diagnosing the cancel loop, I ran `strict_answer` once from a one-off
+`uv run python -c` outside `tests/`. Its `doctor_named` reads the doctors through
+`default_clinic_store()`, which opened `data/shefa.db` read-only for that call. Its mtime and size
+were unchanged afterwards.
 
 **Lab changes for this task.**
 - The scorecard now keeps every turn: the words both ways, the actions, the time taken, the
@@ -79,6 +92,14 @@ Full / task / hard pass counts and judged mean, per caller type (run 1; run 2).
 | rushed | 5 | 2/2/4; 1/1/4 | 3.83; 3.49 | 3/3/5; 1/2/4 | 4.17; 3.64 | 1/2/4, 3.89 |
 | talkative | 6 | 0/2/1; 2/4/3 | 3.55; 3.45 | 3/3/6; 4/4/6 | 3.57; 3.81 | 3/3/6, 3.38 |
 | **All** | 112 | **39/64/61; 39/66/61** | **3.76; 3.80** | **74/74/112; 73/74/111** | **3.80; 3.89** | 61/63/109, 3.82 |
+
+`shefa lab compare`, guided vs agent (pair 1; pair 2):
+- hard pass +0.455; +0.446
+- task pass +0.089; +0.071
+- full pass +0.312; +0.304
+- judged mean +0.04; +0.09
+- brevity +0.429; +0.402
+- turn p95 −321; −288 ms
 
 Judged mean averaged over both runs, against the bar (agent minus guided):
 
@@ -222,8 +243,10 @@ on turns where that action had not succeeded, read by hand:
 These are the word-list class the final review left open (C1): the "দিই/করি/দেই" present forms,
 the code-switched "confirm করে দিই", and promises of a call with no action noun. **A clean bench
 does not prove C1 is closed.** The bench check is narrow, and the claim rule passes every line
-above. With the router off, 3 to 5 such lines reached the caller in 112 calls. With it on, about
-4 in 224 calls.
+above. These counts are lower bounds. The net is a keyword search that skips questions, and the
+call-placement line was found only by reading a whole call. With the router off, at least 3 such
+lines reached the caller in 112 calls (5 counting the "checking" lines). With it on, at least 4 in
+224 calls.
 
 ## Other findings
 
