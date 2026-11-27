@@ -230,7 +230,9 @@ async def run_scorecard(
     # the clinic's database.
     isolated: _Isolated | None = None
     try:
-        isolated = isolate(work, getattr(args, "engine", None))
+        isolated = isolate(
+            work, getattr(args, "engine", None), router_off=bool(getattr(args, "router_off", False))
+        )
         audit.set_default_audit_store(audit.AuditStore(work / "audit.db"))
         if agent is not None:
             registry.use_llm(agent)  # None: the registry builds the configured model itself
@@ -271,6 +273,7 @@ async def run_scorecard(
             "tags": getattr(args, "tags", "") or "",
             "started": started,
             "engine": _current_engine(),
+            "router_off": bool(getattr(args, "router_off", False)),
         }
         card = scorecard.build(results, judged, meta)
         if human is not None:
@@ -304,8 +307,12 @@ class _Isolated:
             step()
 
 
-def isolate(work: Path, engine: str | None) -> _Isolated:
+def isolate(work: Path, engine: str | None, *, router_off: bool = False) -> _Isolated:
     """Point the run at its own stores in `work` and set the engine (None: the configured one).
+
+    `router_off` makes the agent engine's router fail on every turn, without a request, the way
+    a router that errors or times out does: every turn is then a plain reply, so what the model
+    says about actions is held back by the claim check alone.
 
     The lab never reads production's prompts, knowledge base or call log and never writes to
     them: the config store, the knowledge base (seeded fresh from the clinic's facilities and
@@ -321,10 +328,28 @@ def isolate(work: Path, engine: str | None) -> _Isolated:
 
     undo: list[Callable[[], None]] = []
     try:
+        if router_off:
+            _router_off(undo)
         return _isolated(work, engine, undo, call_log, brain_config, knowledge, settings)
     except BaseException:
         _Isolated("", undo).restore()  # half done is put back before the error goes on
         raise
+
+
+ROUTER_OFF = "router off (lab)"
+
+
+def _router_off(undo: list[Callable[[], None]]) -> None:
+    from shefa.brain import engine as brain_engine
+    from shefa.brain.router import Route
+
+    old_route = brain_engine.route
+
+    async def failed(llm: Any, state: Any, said: str, history: Any, **kwargs: Any) -> Route:
+        return Route(None, None, None, ROUTER_OFF)
+
+    brain_engine.route = failed
+    undo.append(lambda: setattr(brain_engine, "route", old_route))
 
 
 def _isolated(

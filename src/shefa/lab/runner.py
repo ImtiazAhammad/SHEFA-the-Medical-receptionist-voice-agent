@@ -73,6 +73,15 @@ class TurnRecord:
     agent_audio: bytes | None = None
     greeting_audio: bytes | None = None
     checks: list[CheckResult] = field(default_factory=list)
+    # The agent engine's record of this turn (`brain_trace`), what its tools had done by the
+    # turn's end (the claims it may make), and whether the guided fallback answered it.
+    trace: dict[str, Any] | None = None
+    succeeded: list[str] = field(default_factory=list)
+    fallback: bool = False
+    # The caller's appointments as the agent engine's kept tool results held them after the turn,
+    # and every sentence its checker refused this turn (never spoken): {text, kind, reason}.
+    appointments: list[dict[str, str]] = field(default_factory=list)
+    refused: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -83,6 +92,7 @@ class ScenarioResult:
     appointments: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     brain_fallbacks: int = 0  # turns the brain failed and the guided engine answered
+    engine: str | None = None  # the engine the call's frozen config chose ("agent"/"guided")
 
     @property
     def passed(self) -> bool:
@@ -202,6 +212,57 @@ def scenario_checks(scenario: Scenario, result: ScenarioResult) -> list[CheckRes
             "final reply mentions " + " / ".join(expect.final_reply_contains_any), hit, text[:80]
         ))
     return checks
+
+
+def _brain_marks(session: Any) -> tuple[int, int]:
+    """How many brain traces and guided fallbacks the call holds so far."""
+    metadata = session.metadata if session is not None else {}
+    return len(metadata.get("brain_trace") or []), int(metadata.get("brain_fallbacks", 0))
+
+
+def _succeeded(session: Any) -> list[str]:
+    """The tools whose success the agent engine may claim, as it stood after the turn."""
+    from shefa.brain import actions
+    from shefa.brain.state import load
+
+    return sorted(actions.succeeded(load(session), session))
+
+
+def _appointments(session: Any) -> list[dict[str, str]]:
+    from shefa.brain import actions
+
+    return [{"text": v.text, "doctor": v.doctor} for v in actions.appointments(session)]
+
+
+@contextlib.contextmanager
+def _refusals(into: list[dict[str, str]]):
+    """Record each sentence the agent engine's checker refuses while the block runs."""
+    from shefa.brain import engine
+
+    checked = engine.check_sentence
+
+    def watched(sentence: str, grounds: Any, **kwargs: Any) -> Any:
+        verdict = checked(sentence, grounds, **kwargs)
+        if not verdict.ok:
+            into.append({"text": sentence, "kind": verdict.kind, "reason": verdict.reason})
+        return verdict
+
+    engine.check_sentence = watched
+    try:
+        yield
+    finally:
+        engine.check_sentence = checked
+
+
+def _attach_traces(turns: list[TurnRecord], traces: list[dict[str, Any]]) -> None:
+    """Give each turn its own brain trace (the last, when a turn left more than one)."""
+    for turn in turns:
+        if turn.trace is None:
+            continue
+        start, end = turn.trace["_slice"]
+        mine = traces[start:end]
+        # The trace itself, not a copy: a router that lands after the call still fills it in.
+        turn.trace = mine[-1] if mine else None
 
 
 def _clean_patient_line(text: str) -> str | None:
@@ -340,9 +401,10 @@ class Lab:
                 if result.turns[-1].state != "active":
                     break
             session = await pipeline.session_for(call_sid)
-            result.brain_fallbacks = int((session.metadata if session else {}).get(
-                "brain_fallbacks", 0
-            ))
+            metadata = session.metadata if session else {}
+            result.brain_fallbacks = int(metadata.get("brain_fallbacks", 0))
+            result.engine = (metadata.get("brain_config") or {}).get("engine")
+            _attach_traces(result.turns, metadata.get("brain_trace") or [])
         except Exception as error:  # noqa: BLE001 - one broken scenario never stops the rest
             result.error = f"{type(error).__name__}: {error}"
         finally:
@@ -383,9 +445,19 @@ class Lab:
         if (self.voice is None or self.stt is None) and self.mishear_rate > 0:
             record.heard = mishear_text(said, self.mishear, self.mishear_rate, rng)
             record.wer = word_error_rate(said, record.heard)
+        before = _brain_marks(await pipeline.session_for(call_sid))
         started = self.clock()
-        turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
+        with _refusals(record.refused):
+            turn = await pipeline.handle_text(call_sid, record.heard or said, scenario.phone)
         record.llm_ms = (self.clock() - started) * 1000
+        session = await pipeline.session_for(call_sid)
+        after = _brain_marks(session)
+        record.fallback = after[1] > before[1]
+        # Which of the call's brain traces are this turn's; attached once the call is over, when
+        # a router that finished after its turn has filled its trace in.
+        record.trace = {"_slice": [before[0], after[0]]} if after[0] > before[0] else None
+        if record.trace is not None:
+            record.succeeded, record.appointments = _succeeded(session), _appointments(session)
         record.reply, record.state = turn["reply"], turn["state"]
         record.language, record.actions = turn["language"], turn["actions"]
         record.greeting = turn["greeting"]

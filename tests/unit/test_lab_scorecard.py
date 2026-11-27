@@ -59,11 +59,14 @@ def test_build_counts_hard_and_judged():
     assert card["judged"]["mean"] == 3.0
     assert card["judged"]["by_dimension"]["warmth"] == 4.0
     assert card["judged"]["by_dimension"]["natural_bangla"] is None
-    assert card["scenarios"]["a"] == {
+    head = ("passed", "failed", "judge_mean", "brain_fallbacks")
+    assert {k: card["scenarios"]["a"][k] for k in head} == {
         "passed": True, "failed": [], "judge_mean": 3.0, "brain_fallbacks": 0,
     }  # fmt: skip
+    assert card["scenarios"]["a"]["caller_type"] == "angry"
+    assert card["scenarios"]["b"]["failures"] == [{"name": "grounded", "detail": ""}]
     assert card["brain_fallbacks"] == 0
-    assert card["scenarios"]["b"] == {
+    assert {k: card["scenarios"]["b"][k] for k in head} == {
         "passed": False, "failed": ["grounded"], "judge_mean": None, "brain_fallbacks": 0,
     }  # fmt: skip
 
@@ -358,3 +361,14 @@ def test_compare_names_the_engine_each_card_ran():
     lines = compare(a, b).splitlines()
     assert "engine" not in lines[0]  # a card from before Task 11 says nothing about it
     assert lines[1].endswith("(agent engine)")
+
+
+def test_a_turn_keeps_its_words_and_drops_an_unattached_trace():
+    from shefa.lab.runner import TurnRecord
+    from shefa.lab.scorecard import _turn
+
+    record = TurnRecord(said="s", heard="h", reply="r", state="active", language="bn",
+                        llm_ms=12.345, trace={"_slice": [0, 1]})  # fmt: skip
+    assert _turn(record)["trace"] is None and _turn(record)["llm_ms"] == 12.3
+    record.trace = {"reply_source": "model", "hits": [1], "safe": None}
+    assert _turn(record)["trace"] == {"reply_source": "model", "safe": None}

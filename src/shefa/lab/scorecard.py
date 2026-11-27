@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from shefa.lab.judge import JudgeScore
-    from shefa.lab.runner import CheckResult, ScenarioResult
+    from shefa.lab.runner import CheckResult, ScenarioResult, TurnRecord
 
 # The seven pass/fail gates of `hardchecks.hard_checks`. `result.checks` also holds the lab's
 # older scenario checks; those are reported per scenario but are not part of the hard rate.
@@ -183,6 +183,43 @@ def _failed(result: ScenarioResult) -> list[str]:
     return ["error", *names] if result.error is not None else names
 
 
+# The parts of the agent engine's turn record worth reading after a run.
+_TRACE_KEYS = (
+    "reply_source",
+    "safe",
+    "regenerated",
+    "verdicts",
+    "tool",
+    "tool_args",
+    "route",
+    "facility",
+    "error",
+    "cancelled",
+    "push_wait_ms",
+    "ms",
+)
+
+
+def _turn(t: TurnRecord) -> dict[str, Any]:
+    """One turn as the scorecard keeps it: the words both ways, what was done, how long."""
+    trace = t.trace if t.trace is not None and "_slice" not in t.trace else None
+    return {
+        "said": t.said,
+        "heard": t.heard,
+        "greeting": t.greeting,
+        "reply": t.reply,
+        "state": t.state,
+        "actions": list(t.actions),
+        "llm_ms": round(t.llm_ms, 1),
+        "failed": [{"name": c.name, "detail": c.detail} for c in t.checks if not c.ok],
+        "fallback": t.fallback,
+        "succeeded": list(t.succeeded),
+        "appointments": list(t.appointments),
+        "refused": list(t.refused),
+        "trace": None if trace is None else {k: trace.get(k) for k in _TRACE_KEYS if k in trace},
+    }
+
+
 def build(
     results: list[ScenarioResult], judged: dict[str, JudgeScore | None], meta: dict[str, Any]
 ) -> dict[str, Any]:
@@ -201,6 +238,13 @@ def build(
             "failed": _failed(r),
             "judge_mean": score.mean if score else None,
             "brain_fallbacks": r.brain_fallbacks,
+            "caller_type": r.scenario.caller_type,
+            "goal": r.scenario.goal,
+            "engine": r.engine,
+            "error": r.error,
+            # Each failed check with what it saw, so a failure can be read without a re-run.
+            "failures": [{"name": c.name, "detail": c.detail} for c in r.checks if not c.ok],
+            "turns": [_turn(t) for t in r.turns],
         }
     return {
         "meta": filled,

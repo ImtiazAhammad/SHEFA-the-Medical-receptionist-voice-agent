@@ -699,3 +699,77 @@ async def test_a_failure_setting_up_the_stores_puts_everything_back(tmp_path, mo
     with pytest.raises(OSError):
         await run_engine(tmp_path, "agent")
     assert settings.storage.db_path == old_path and settings.pipeline.engine == old_engine
+
+
+# --- Task 12: what each turn did, the engine each call used, the router switched off ---------
+
+
+async def test_an_agent_card_keeps_each_turn_with_its_brain_trace(tmp_path):
+    card = await run_engine(tmp_path, "agent", BrainLLM())
+    row = card["scenarios"]["a"]
+    assert row["engine"] == "agent"
+    assert row["caller_type"] and row["goal"]
+    turn = row["turns"][0]
+    assert turn["reply"] == "জি, বলুন।" and turn["fallback"] is False
+    assert turn["trace"]["reply_source"] == "model"
+    assert turn["trace"]["route"]["tool"] is None  # the router said "none"
+    assert turn["succeeded"] == []
+    assert turn["llm_ms"] >= 0
+
+
+async def test_a_guided_card_has_turns_without_a_brain_trace(tmp_path):
+    card = await run_engine(tmp_path, "guided", AgentLLM())
+    row = card["scenarios"]["a"]
+    assert row["engine"] == "guided"
+    assert row["turns"] and all(t["trace"] is None for t in row["turns"])
+
+
+async def test_a_fallback_turn_is_marked(tmp_path):
+    card = await run_engine(tmp_path, "agent", FlakyBrainLLM())
+    assert card["scenarios"]["a"]["turns"][0]["fallback"] is True
+
+
+async def test_router_off_fails_every_route_without_a_request_and_is_put_back(tmp_path):
+    from shefa.brain import engine as brain_engine
+
+    before = brain_engine.route
+    agent = BrainLLM()
+    card = await run_engine(tmp_path, "agent", agent, router_off=True)
+    assert card["meta"]["router_off"] is True
+    route = card["scenarios"]["a"]["turns"][0]["trace"]["route"]
+    assert route["tool"] is None and route["error"] == scoring.ROUTER_OFF
+    assert brain_engine.route is before
+
+
+async def test_router_on_is_the_default(tmp_path):
+    card = await run_engine(tmp_path, "agent", BrainLLM())
+    assert card["meta"]["router_off"] is False
+
+
+def test_router_off_is_a_lab_score_flag():
+    parse = cli.build_parser().parse_args
+    assert parse(["lab", "score"]).router_off is False
+    assert parse(["lab", "score", "--router-off"]).router_off is True
+
+
+class ClaimingBrainLLM(BrainLLM):
+    """The brain's reply claims a booking nobody made, then (regenerated) says something safe."""
+
+    def generate_stream(self, messages, tools=None, **kwargs):
+        if "extra_body" in kwargs:
+            return self._stream('{"tool":"none","mood":"calm","goal":"unknown"}')
+        said = "জি, বলুন।" if "was not used" in str(messages) else "আপনার সিরিয়াল বুক হয়েছে।"
+        return self._stream(said)
+
+
+async def test_a_refused_claim_is_kept_with_its_turn(tmp_path):
+    from shefa.brain import engine as brain_engine
+
+    checked = brain_engine.check_sentence
+    card = await run_engine(tmp_path, "agent", ClaimingBrainLLM())
+    turn = card["scenarios"]["a"]["turns"][0]
+    assert turn["refused"] and turn["refused"][0]["kind"] == "claim"
+    assert "বুক হয়েছে" in turn["refused"][0]["text"]
+    assert "বুক হয়েছে" not in turn["reply"]
+    assert turn["appointments"] == []
+    assert brain_engine.check_sentence is checked  # put back after each turn

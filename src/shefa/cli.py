@@ -289,6 +289,12 @@ def build_parser() -> argparse.ArgumentParser:
     lab_score.add_argument(
         "--model", default=None, help="an Ollama model to test (default: the configured model)"
     )
+    lab_score.add_argument(
+        "--router-off",
+        action="store_true",
+        help="the agent engine's router fails every turn (measures what the claim check alone"
+        " holds back)",
+    )
     lab_bakeoff = lab_sub.add_parser(
         "bakeoff",
         help="score several Ollama models, time their first sentence, weigh their memory, pick one",
