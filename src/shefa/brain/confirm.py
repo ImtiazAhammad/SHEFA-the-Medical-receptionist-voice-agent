@@ -88,24 +88,37 @@ _YES_WORDS = _YES_ALONE | frozenset(
         "fine", "thanks", "thank", "you", "hmm", "bhai", "apa", "sir", "madam",
     }
 )  # fmt: skip
+# The cancel words. Beside a yes to a booking they ask for something else; answering a cancel
+# read-back they repeat it ("হ্যাঁ, বাতিল করে দিন।", "Yes, cancel it."): one more yes word.
+_CANCEL_WORD = re.compile(
+    _B + r"(?:বাতিল|ক্যানসেল|ক্যান্সেল)" + _E + r"|\bcancel\b", re.IGNORECASE
+)
 
 
-def strict_answer(line: str, *, today: date | None = None) -> str | None:
+def strict_answer(
+    line: str, *, today: date | None = None, cancelling: bool = False
+) -> str | None:
     """ "yes", "no", "change" (a new request: it changes or refuses what was read back),
     "unclear" (a yes with a word outside the allow-list: ask once more), or None when the line
-    is neither."""
+    is neither. `cancelling`: the read-back answered is a cancel, so a cancel word agrees."""
     from shefa.brain.state import doctor_named
 
     softened = _SOFT_NA.search(line)
     text = _SOFT_NA.sub(r"\1", line) if softened else line
+    restated = False
+    if cancelling and _CANCEL_WORD.search(text):
+        restated = True
+        text = _CANCEL_WORD.sub(" ", text)
+        line = _CANCEL_WORD.sub(" ", line)
     words = [w for w in _WORDS.split(text.lower()) if w]
     if not words:
-        return None
+        return "yes" if restated else None  # "বাতিল।" to "shall I cancel it?"
     plain = yes_no(text)
     said_yes = (
         plain is True
         or leading_yes(text)
         or bool(softened)
+        or (restated and not _NEGATION.search(text))
         or any(w in _YES_ALONE for w in words)
         or "all right" in " ".join(words)
     )

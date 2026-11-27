@@ -1301,7 +1301,11 @@ class VoicePipeline:
             # yes that is not clean ("yes, book it, but will you not take my number?", "হ্যাঁ,
             # কিন্তু আমি আসতে পারব না") is asked once more instead of booking, and the read-back
             # is kept so the follow-up yes still books it.
-            strict = strict_answer(said, today=clinic_today())
+            strict = strict_answer(
+                said,
+                today=clinic_today(),
+                cancelling=pending["name"] == "cancel_appointment",
+            )
             answer = {"yes": True, "no": False}.get(strict or "")
             concrete_change = strict == "change" and guided.changes_request(said)
             starts_yes = leading_yes(said)

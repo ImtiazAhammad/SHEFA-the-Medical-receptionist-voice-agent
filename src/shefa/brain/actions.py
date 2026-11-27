@@ -462,7 +462,9 @@ def _is_name(said: str, state: CallState) -> str:
 
 def _answer(pending: dict[str, Any], said: str, today: _date) -> str:
     """How a reply settles a read-back: "yes", "no", "reask" (once) or "void" (a new request)."""
-    answer = strict_answer(said, today=today)
+    answer = strict_answer(
+        said, today=today, cancelling=pending.get("tool") == "cancel_booking"
+    )
     if answer in ("yes", "no"):
         return answer
     if answer == "change":

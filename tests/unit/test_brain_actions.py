@@ -1357,3 +1357,44 @@ def test_c1_after_a_lookup_a_wrong_appointment_time_is_never_spoken(executor):
     true = "You have an appointment with Dr Rahman on 1 December at 4 pm."
     speak = say(session, "When is my appointment?", FakeLLM(true, route=route_json()))
     assert speak.said == [true]
+
+
+# --- 2026-11-27: a yes that repeats the cancel is a yes to the cancel read-back ------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "cancelling", "answer"),
+    [
+        ("হ্যাঁ, বাতিল করে দিন।", True, "yes"),
+        ("জি, ক্যানসেল করুন", True, "yes"),
+        ("বাতিল করুন", True, "yes"),
+        ("বাতিল।", True, "yes"),
+        ("বাতিল।", False, "change"),
+        ("Yes, cancel it.", True, "yes"),
+        ("cancel it please", True, "yes"),
+        ("হ্যাঁ, বাতিল করে দিন।", False, "change"),
+        ("Yes, cancel it.", False, "change"),
+        ("হ্যাঁ, বাতিল না, অন্য দিন দিন", True, "change"),
+        ("না, বাতিল করবেন না", True, "no"),
+        ("yes, cancel the other one", True, "change"),
+        ("yes but cancel later", True, "change"),
+    ],
+)
+def test_strict_answer_hears_a_cancel_word_as_agreement_only_to_a_cancel(line, cancelling, answer):
+    from shefa.brain.confirm import strict_answer
+
+    assert strict_answer(line, cancelling=cancelling) == answer
+
+
+@pytest.mark.parametrize("yes", ["হ্যাঁ, বাতিল করে দিন।", "Yes, cancel it."])
+def test_a_yes_that_repeats_the_cancel_cancels_in_the_brain(executor, yes):
+    executor.results["list_my_appointments"] = {
+        "appointments": [{"appointment_id": "7", "date": TOMORROW, "time": "18:00",
+                          "doctor": "Rahman", "doctor_bn": "রহমান"}]
+    }  # fmt: skip
+    executor.previews["cancel_appointment"] = CANCEL_PREVIEW
+    executor.results["cancel_appointment"] = {"success": True, "appointment_id": "7"}
+    session = identified_session()
+    say(session, "বাতিল করুন", FakeLLM("unused", route=route_json("cancel_booking")))
+    say(session, yes, FakeLLM())
+    assert brain_actions.succeeded(load(session), session) == {"cancel_booking"}

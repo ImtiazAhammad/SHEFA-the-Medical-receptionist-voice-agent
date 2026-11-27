@@ -352,3 +352,38 @@ async def test_filler_can_be_turned_off(call, monkeypatch):
     monkeypatch.setattr(_Script, "generate", slow_generate)
     await call.say("Which departments do you have?", {"tool": "list_departments", "arguments": {}})
     assert "One moment." not in call.tts.spoken
+
+
+@pytest.mark.parametrize("said", ["Yes, cancel it.", "yes cancel", "cancel it please"])
+async def test_a_yes_that_repeats_the_cancel_cancels(call, said):
+    # 2026-11-27: the strict yes rule took "cancel" beside a yes as a change, so a cancel
+    # read-back answered "Yes, cancel it." was asked again and again instead of cancelling.
+    await _identify(call)
+    await call.say(
+        "09:00",
+        {
+            "tool": "book_appointment",
+            "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
+        },
+    )
+    await call.yes()
+    await call.say("cancel my appointment", {"tool": "cancel_appointment", "arguments": {}})
+    reply = await call.say(said, None)
+    assert "appointment number 1" in reply and "cancelled" in reply
+    assert default_clinic_store().get_appointment(1)["status"] == "cancelled"
+
+
+async def test_a_yes_with_cancel_to_a_booking_read_back_books_nothing(call):
+    await _identify(call)
+    await call.say(
+        "09:00",
+        {
+            "tool": "book_appointment",
+            "arguments": {"date": _tomorrow(), "time": "09:00", "doctor_name": "Rahman"},
+        },
+    )
+    await call.say("yes, cancel it", None)
+    from shefa.clinic.store import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        default_clinic_store().get_appointment(1)
