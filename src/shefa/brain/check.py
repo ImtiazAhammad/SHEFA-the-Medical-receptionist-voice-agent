@@ -1667,6 +1667,9 @@ _EN_STATIVE = r"is|are|was|were|been|'s|'re|have|has|had|'ve|got|am|'m"
 _EN_PROMISE = (
     r"will|'ll|shall|going|transferring|connecting|calling|phoning|putting|arranging|let me"
     r"|let's|go ahead"
+    # "I'm booking it now": the progressive is a promise; a bare "booking" is also a noun.
+    r"|(?:i'm|i am|we're|we are) (?:now )?(?:booking|cancell?ing|moving|rescheduling|reserving"
+    r"|confirming|noting|saving|setting|getting)"
 )
 _EN_PREDICATE = re.compile(
     rf"(?:\b(?:{_EN_COMPLETED}|{_EN_PROMISE}|is|are|was|were|been|have|has|had|got|am)\b"

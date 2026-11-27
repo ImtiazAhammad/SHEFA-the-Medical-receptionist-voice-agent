@@ -672,6 +672,8 @@ C1_CLAIMS = [
     ("I'll go ahead and book it.", "book"),
     ("I'm going to book you in now.", "book"),
     ("I'll book you in for Sunday.", "book"),
+    ("OK, I'm booking it now.", "book"),
+    ("We are cancelling it for you.", "cancel_booking"),
     ("Let me cancel that for you.", "cancel_booking"),
     ("I'll move your appointment to Sunday.", "reschedule_booking"),
     ("Let me change it to Sunday for you.", "reschedule_booking"),
