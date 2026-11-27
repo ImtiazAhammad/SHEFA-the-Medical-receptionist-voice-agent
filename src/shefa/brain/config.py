@@ -60,6 +60,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS config_one_live
 """
 
 BUSY_TIMEOUT_S = 5.0  # how long a locked file is waited for, unless the caller says less
+# Publishing `engine: agent` switches every new call to the agent engine, with no code change.
+# It is the founder's decision once the bench (Task 12) passed, so it is never taken by accident:
+# the publish must say so with this word (`shefa config publish ID --ack bench-passed`).
+ENGINE_ACK = "bench-passed"
 
 _COLUMNS = "id, scope, key, value_json, status, author, created_at, note"
 
@@ -67,6 +71,13 @@ _COLUMNS = "id, scope, key, value_json, status, author, created_at, note"
 def _check_scope(scope: str) -> None:
     if scope != "platform" and not valid_id(scope):
         raise ValueError(f"scope must be 'platform' or a clinic id, not {scope!r}")
+
+
+def _loads(value_json: str) -> Any:
+    try:
+        return json.loads(value_json)
+    except ValueError:
+        return None
 
 
 def _row(row: tuple[Any, ...]) -> dict[str, Any]:
@@ -126,15 +137,24 @@ class ConfigStore:
             )
             return int(cur.lastrowid or 0)
 
-    def publish(self, version_id: int, *, author: str) -> None:
-        """Make this row live; the live row of the same key and scope becomes archived."""
+    def publish(self, version_id: int, *, author: str, ack: str = "") -> None:
+        """Make this row live; the live row of the same key and scope becomes archived.
+
+        `engine: agent` is refused unless `ack` is `ENGINE_ACK`: it switches live calls to the
+        agent engine, which is only done once the bench passed."""
         with closing(self._connect()) as conn, conn:
             found = conn.execute(
-                "SELECT scope, key FROM config_versions WHERE id = ?", (version_id,)
+                "SELECT scope, key, value_json FROM config_versions WHERE id = ?", (version_id,)
             ).fetchone()
             if found is None:
                 raise ValueError(f"no config version {version_id}")
-            scope, key = found
+            scope, key, value_json = found
+            if key == "engine" and _loads(value_json) == "agent" and ack != ENGINE_ACK:
+                raise ValueError(
+                    f"version {version_id} sets engine to 'agent', which switches every new call"
+                    f" ({scope}) to the agent engine; publish it only once the bench passed,"
+                    f" with --ack {ENGINE_ACK}"
+                )
             conn.execute(
                 "UPDATE config_versions SET status = 'archived'"
                 " WHERE scope = ? AND key = ? AND status = 'live'",

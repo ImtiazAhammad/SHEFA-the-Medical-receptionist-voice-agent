@@ -962,17 +962,24 @@ class VoicePipeline:
             save(session, state)
         begun: list[str] = []
         spoken: list[str] = []
+        # The filler and the brain's sentences take turns at the voice, so a sentence ready
+        # while the filler plays follows it.
+        voice = asyncio.Lock()
 
         async def speak(sentence: str) -> None:
-            begun.append(sentence)
-            await self._emit(tts, sentence, session.language.value, put_playback)
-            spoken.append(sentence)
+            async with voice:
+                begun.append(sentence)
+                await self._emit(tts, sentence, session.language.value, put_playback)
+                spoken.append(sentence)
 
         traces = len(session.metadata.get("brain_trace", []))
         succeeded = list(session.metadata.get(brain_actions.SUCCEEDED, []))
         call_state = session.state
         try:
-            reply = await brain_engine.Brain().turn(session, said, llm, speak)
+            reply = await self._with_filler(
+                brain_engine.Brain().turn(session, said, llm, speak),
+                tts, session, put_playback, voice, begun,
+            )  # fmt: skip
         except asyncio.CancelledError:
             if len(session.metadata.get("brain_trace", [])) > traces and spoken:
                 session.add_turn("assistant", " ".join(spoken), session.language)
@@ -1016,6 +1023,50 @@ class VoicePipeline:
             return await self._reply(llm, tts, session, put_playback)
         self._void_guided_questions(session)
         return reply
+
+    async def _with_filler(
+        self,
+        work: Any,
+        tts: Any,
+        session: CallSession,
+        put_playback: PlaybackSink,
+        voice: asyncio.Lock,
+        begun: list[str],
+    ) -> Any:
+        """Run the brain's turn; when nothing was said after `filler_after_s`, say the filler
+        the guided engine says, so a slow or hung model server is never dead air. The filler is
+        not part of the reply (it never enters the history, nor counts as spoken, so a guided
+        fallback still answers)."""
+        turn = asyncio.ensure_future(work)
+        language = session.language.value
+        filler = FILLERS.get(language)
+        delay = settings.pipeline.llm.filler_after_s
+
+        playing: list[bool] = []
+
+        async def fill() -> None:
+            await asyncio.sleep(delay)
+            async with voice:
+                if not begun and not turn.done():
+                    playing.append(True)
+                    await self._emit(tts, filler, language, put_playback)
+
+        filling = asyncio.ensure_future(fill()) if filler and delay > 0 else None
+        try:
+            return await turn
+        except asyncio.CancelledError:
+            if not turn.done():
+                turn.cancel()
+                with contextlib.suppress(BaseException):
+                    await turn  # let the brain undo or keep its turn before the caller looks
+            raise
+        finally:
+            if filling is not None and not filling.done():
+                if playing:  # never cut the filler off half-said: the next words follow it
+                    with contextlib.suppress(Exception):
+                        await filling
+                else:
+                    filling.cancel()
 
     @staticmethod
     def _what_was_done(session: CallSession, succeeded: list[str], call_state: str) -> str | None:

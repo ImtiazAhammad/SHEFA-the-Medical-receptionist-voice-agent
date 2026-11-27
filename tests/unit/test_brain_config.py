@@ -9,6 +9,7 @@ import pytest
 
 from shefa.brain import config as brain_config
 from shefa.brain.config import (
+    ENGINE_ACK,
     KEYS,
     ConfigStore,
     call_config,
@@ -92,7 +93,7 @@ def test_values_of_any_json_shape_round_trip(tmp_path):
 
 def test_scopes_do_not_mix(tmp_path):
     s = ConfigStore(tmp_path / "p.db")
-    s.publish(s.draft("engine", "agent", author="f"), author="f")
+    s.publish(s.draft("engine", "agent", author="f"), author="f", ack=ENGINE_ACK)
     s.publish(s.draft("engine", "guided", scope="alo", author="f"), author="f")
     assert s.live("engine") == "agent"
     assert s.live("engine", "alo") == "guided"
@@ -138,7 +139,7 @@ def test_the_brain_settings_have_the_agreed_defaults():
 
 
 def test_the_snapshot_layers_clinic_over_platform_over_defaults(store):
-    store.publish(store.draft("engine", "agent", author="f"), author="f")
+    store.publish(store.draft("engine", "agent", author="f"), author="f", ack=ENGINE_ACK)
     store.publish(store.draft("engine", "guided", scope="alo", author="f"), author="f")
     store.publish(store.draft("prompt.persona", "Alo persona", scope="alo", author="f"), author="f")
     assert snapshot("alo")["engine"] == "guided"
@@ -151,7 +152,7 @@ def test_the_snapshot_layers_clinic_over_platform_over_defaults(store):
 
 def test_a_publish_is_seen_at_once_in_this_process(store):
     assert snapshot()["engine"] == "guided"
-    store.publish(store.draft("engine", "agent", author="f"), author="f")
+    store.publish(store.draft("engine", "agent", author="f"), author="f", ack=ENGINE_ACK)
     assert snapshot()["engine"] == "agent"
 
 
@@ -197,7 +198,8 @@ def test_a_call_keeps_the_config_it_started_with(store):
 def test_a_call_uses_the_clinic_it_is_in(store):
     from shefa.clinic.registry import CURRENT
 
-    store.publish(store.draft("engine", "agent", scope="alo", author="f"), author="f")
+    vid = store.draft("engine", "agent", scope="alo", author="f")
+    store.publish(vid, author="f", ack=ENGINE_ACK)
     token = CURRENT.set("alo")
     try:
         assert call_config(CallSession(call_sid="CA3"))["engine"] == "agent"

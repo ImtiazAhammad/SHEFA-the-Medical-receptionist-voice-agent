@@ -7,7 +7,7 @@ import getpass
 import pytest
 
 from shefa import cli
-from shefa.brain.config import ConfigStore, set_default_config_store
+from shefa.brain.config import ENGINE_ACK, ConfigStore, set_default_config_store
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def test_draft_then_publish_makes_it_live(store, tmp_path, capsys, monkeypatch):
 
 def test_show_prints_the_live_version_id_or_default(store, capsys):
     vid = store.draft("engine", "agent", author="f")
-    store.publish(vid, author="f")
+    store.publish(vid, author="f", ack=ENGINE_ACK)
     assert cli.main(["config", "show"]) == 0
     lines = dict(line.split(maxsplit=1) for line in capsys.readouterr().out.splitlines())
     assert lines["engine"].strip() == str(vid)
@@ -44,7 +44,7 @@ def test_show_prints_the_live_version_id_or_default(store, capsys):
 
 def test_show_for_a_clinic_scope(store, capsys):
     vid = store.draft("engine", "agent", scope="alo", author="f")
-    store.publish(vid, author="f")
+    store.publish(vid, author="f", ack=ENGINE_ACK)
     assert cli.main(["config", "show", "--clinic", "alo"]) == 0
     lines = dict(line.split(maxsplit=1) for line in capsys.readouterr().out.splitlines())
     assert lines["engine"].strip() == str(vid)
@@ -68,3 +68,42 @@ def test_refusals_are_exit_codes_not_tracebacks(store, tmp_path, capsys):
     assert cli.main(["config", "publish", "999"]) == 2
     assert cli.main(["config", "draft", "engine", "--file", str(tmp_path / "missing")]) == 2
     assert capsys.readouterr().err
+
+
+# --- final review Recommendation 3: the engine is not switched by accident --------------------
+
+
+def test_publishing_the_agent_engine_needs_the_bench_ack(store, tmp_path, capsys):
+    f = tmp_path / "engine.txt"
+    f.write_text("agent\n", encoding="utf-8")
+    assert cli.main(["config", "draft", "engine", "--file", str(f)]) == 0
+    vid = capsys.readouterr().out.strip()
+    assert cli.main(["config", "publish", vid]) == 2
+    err = capsys.readouterr().err
+    assert "--ack bench-passed" in err and "agent" in err
+    assert store.live("engine") is None
+    assert cli.main(["config", "publish", vid, "--ack", "yes"]) == 2
+    assert store.live("engine") is None
+    assert cli.main(["config", "publish", vid, "--ack", "bench-passed"]) == 0
+    assert store.live("engine") == "agent"
+
+
+def test_publishing_guided_needs_no_ack(store, tmp_path, capsys):
+    store.publish(store.draft("engine", "agent", author="f"), author="f", ack=ENGINE_ACK)
+    f = tmp_path / "engine.txt"
+    f.write_text("guided\n", encoding="utf-8")
+    assert cli.main(["config", "draft", "engine", "--file", str(f)]) == 0
+    vid = capsys.readouterr().out.strip()
+    assert cli.main(["config", "publish", vid]) == 0
+    assert store.live("engine") == "guided"
+
+
+def test_the_store_refuses_agent_without_the_ack(store):
+    vid = store.draft("engine", "agent", author="f")
+    with pytest.raises(ValueError, match="bench-passed"):
+        store.publish(vid, author="f")
+    with pytest.raises(ValueError):
+        store.publish(store.draft("engine", "agent", scope="alo", author="f"), author="f")
+    assert store.live("engine") is None
+    store.publish(store.draft("prompt.persona", "Be kind.", author="f"), author="f")
+    assert store.live("prompt.persona") == "Be kind."

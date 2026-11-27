@@ -342,8 +342,19 @@ def build_parser() -> argparse.ArgumentParser:
     c_draft.add_argument("--file", required=True, help="the value: text, or JSON for settings")
     c_draft.add_argument("--note", default="")
     c_draft.add_argument("--clinic", default="")
-    c_publish = config_sub.add_parser("publish", help="make a version live (an old one = rollback)")
+    c_publish = config_sub.add_parser(
+        "publish",
+        help="make a version live (an old one = rollback); engine 'agent' needs --ack",
+        description="Make a version live; publishing an old one is a rollback. A version that"
+        " sets engine to 'agent' switches every new call to the agent engine, so it is refused"
+        " unless --ack bench-passed says the bench (Task 12) passed.",
+    )
     c_publish.add_argument("version_id", type=int)
+    c_publish.add_argument(
+        "--ack",
+        default="",
+        help="'bench-passed': required to publish engine 'agent' (the bench passed)",
+    )
     c_history = config_sub.add_parser("history", help="every version of a key, newest first")
     c_history.add_argument("key")
     c_history.add_argument("--clinic", default="")
@@ -1288,7 +1299,7 @@ def run_config(args: argparse.Namespace) -> int:
             )
             print(vid)
         elif args.config_command == "publish":
-            store.publish(args.version_id, author=getpass.getuser())
+            store.publish(args.version_id, author=getpass.getuser(), ack=args.ack)
             print(f"version {args.version_id} is live")
         else:
             for v in store.versions(args.key, scope):

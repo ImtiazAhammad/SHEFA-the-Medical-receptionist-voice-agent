@@ -28,6 +28,7 @@ from shefa.brain import config as brain_config
 from shefa.brain import engine as brain_engine
 from shefa.brain import greeting as brain_greeting
 from shefa.brain import safe
+from shefa.brain.config import ENGINE_ACK
 from shefa.brain.engine import Brain
 from shefa.brain.state import CallState, load, save
 from shefa.clinic import default_clinic_store
@@ -688,7 +689,7 @@ async def test_a_failed_config_read_never_flips_the_call_later(monkeypatch):
     assert await pipe._engine_ready(session) == "guided"
     # The store recovers with a live "agent" row: the call that began guided stays guided.
     healthy = brain_config.ConfigStore(Path(settings.storage.db_path).parent / "ok.db")
-    healthy.publish(healthy.draft("engine", "agent", author="t"), author="t")
+    healthy.publish(healthy.draft("engine", "agent", author="t"), author="t", ack=ENGINE_ACK)
     brain_config.set_default_config_store(healthy)
     assert await pipe._engine_ready(session) == "guided"
     assert Broken.reads == 1
@@ -1022,3 +1023,63 @@ async def test_i5_a_locked_knowledge_base_never_stalls_the_loop(locked_platform,
     assert spoken  # something was said
     brain_knowledge.set_default_knowledge_store(None)
     await locked_platform.release()
+
+
+# --- final review M1: a slow brain turn hears the guided filler, never dead air -----------------
+
+
+class _HungLLM:
+    """A model server that accepts the request and never answers."""
+
+    def generate_stream(self, messages, tools=None, **kwargs):
+        async def never():
+            await asyncio.Event().wait()
+            yield ""
+
+        return never()
+
+
+async def test_m1_a_hung_model_hears_the_filler(monkeypatch):
+    from shefa.pipeline.voice_pipeline import FILLERS
+
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0.05)
+    session = CallSession(call_sid="CA-hung", language=Language.BANGLA)
+    session.metadata["brain_config"] = {**brain_config.defaults(), "engine": "agent"}
+    session.add_turn("user", "ফি কত?")
+    voice = _SilentVoice()
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(
+            VoicePipeline()._brain_reply(_HungLLM(), voice, session, _sink), timeout=0.4
+        )
+    assert [text for text, _ in voice.spoken] == [FILLERS["bn"]]
+
+
+async def test_m1_the_filler_comes_first_and_never_blocks_the_fallback(agent, monkeypatch):
+    from shefa.pipeline.voice_pipeline import FILLERS
+
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0.05)
+
+    class Slow(FakeBrain):
+        async def turn(self, session, said, llm, speak, *, today=None, cues=None):
+            await asyncio.sleep(0.2)
+            raise _connection_error()
+
+    monkeypatch.setattr(brain_engine, "Brain", Slow)
+    session = CallSession(call_sid="CA-slow", language=Language.BANGLA)
+    session.metadata["brain_config"] = {"engine": "agent"}
+    session.add_turn("user", "ফি কত?")
+    voice = _SilentVoice()
+    reply = await VoicePipeline()._brain_reply(_QuietLLM(), voice, session, _sink)
+    assert [text for text, _ in voice.spoken] == [FILLERS["bn"]]
+    assert reply == GUIDED_REPLY  # the filler is no answer: the guided engine still answers
+    assert agent.guided == ["ফি কত?"]
+
+
+async def test_m1_a_quick_brain_turn_has_no_filler(agent, monkeypatch):
+    monkeypatch.setattr(settings.pipeline.llm, "filler_after_s", 0.05)
+    session = CallSession(call_sid="CA-quick", language=Language.BANGLA)
+    session.metadata["brain_config"] = {"engine": "agent"}
+    session.add_turn("user", "ফি কত?")
+    voice = _SilentVoice()
+    await VoicePipeline()._brain_reply(_QuietLLM(), voice, session, _sink)
+    assert [text for text, _ in voice.spoken] == ["জি, বলুন।"]
