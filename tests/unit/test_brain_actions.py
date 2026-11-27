@@ -1182,7 +1182,8 @@ def test_i1_a_missed_emergency_routed_to_hand_over_hears_999_first(executor, lin
     say(session, line, llm, speak)
     assert order[0] == safe.emergency_text("bn")
     assert order[1:] == ["transfer", safe.transfer_failed("bn")]
-    assert session.metadata["handover_reason"] == "emergency"
+    # The 999 line comes first; the transfer keeps the reason code gave (the summary's label).
+    assert session.metadata["handover_reason"] == "asked_for_person"
 
 
 def test_i1_a_plain_person_request_gets_no_999(executor):
@@ -1231,7 +1232,16 @@ def test_i2_a_false_end_call_is_a_plain_reply(executor):
     assert session.metadata["brain_trace"][-1]["tool"] is None
 
 
-@pytest.mark.parametrize("line", ["ধন্যবাদ, রাখছি", "thanks, bye", "ঠিক আছে, আর কিছু না, রাখছি"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ধন্যবাদ, রাখছি",
+        "thanks, bye",
+        "ঠিক আছে, আর কিছু না, রাখছি",
+        "আর কিছু লাগবে না, ধন্যবাদ",
+        "that's all I need, thanks",
+    ],
+)
 def test_i2_a_goodbye_routed_to_end_call_hangs_up(executor, line):
     session = identified_session()
     llm = FakeLLM("unused", route=route_json("end_call", "calm", "small_talk"))

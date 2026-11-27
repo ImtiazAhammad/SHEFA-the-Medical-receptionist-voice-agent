@@ -288,12 +288,13 @@ def _tool_args(
         language = Language.BANGLA if state.language == "bn" else Language.ENGLISH
         if is_emergency(said, language):
             return {"reason": "emergency"}
+        args: dict[str, Any] = {"reason": "angry" if state.mood == "angry" else "asked_for_person"}
         person = actions._wants_person(said, state.language) or (
             session is not None and actions.offered_person(session, state.language)
         )
         if not person:
-            return {"reason": "emergency"}
-        return {"reason": "angry" if state.mood == "angry" else "asked_for_person"}
+            args[actions.EMERGENCY_FIRST] = True  # the reason stays; the 999 line comes first
+        return args
     return {}
 
 

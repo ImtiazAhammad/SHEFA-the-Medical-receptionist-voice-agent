@@ -875,7 +875,9 @@ def _sitting_day_beside(
         if _day_set(clause):
             continue
         own, _wider = _scope(clause, subject, grounds)
-        if day := _unknown_day(text, own):
+        # "আজ শনিবার, ডাক্তার রহমান কাল বসবেন": today's weekday said alone is no sitting day.
+        others = " , ".join(c for c, _s in subjects if not _only_today(c))
+        if day := _unknown_day(others, own):
             return day
     return None
 
@@ -1667,6 +1669,11 @@ _EN_PREDICATE = re.compile(
 _EN_STATIVE_ONLY = re.compile(rf"(?:\b(?:{_EN_STATIVE})\b|(?<=[a-z])(?:'s|'re|'ve|'m)\b)", re.I)
 _EN_STRONG = re.compile(rf"\b(?:{_EN_COMPLETED}|{_EN_PROMISE})\b|(?<=[a-z])'ll\b", re.IGNORECASE)
 _BN_STRONG = re.compile(_B + rf"(?:{_BN_COMPLETED}|{_BN_PROMISE})" + _E)
+# Only what says it happened ("হয়েছে", "booked"): a need beside it is still a claim.
+_COMPLETED_RE = {
+    True: re.compile(_B + rf"(?:{_BN_COMPLETED})" + _E),
+    False: re.compile(rf"\b(?:{_EN_COMPLETED})\b", re.IGNORECASE),
+}
 # Said to the caller, about their own booking: "your", "you", "আপনার".
 _YOU = re.compile(
     r"\b(?:you|your|yours|you're|you've)\b|" + _B + r"(?:আপনার|আপনাকে|আপনি|আপনারা|আপনাদের)" + _E,
@@ -1719,17 +1726,21 @@ _BN_ABILITY = re.compile(
 _AVAILABLE = re.compile(
     r"খালি|ফাঁকা|পাওয়া যাবে|পাওয়া যায়|\b(?:available|free|open|possible)\b", re.IGNORECASE
 )
-# A negation that governs the verb: English puts it before, Bangla after.
+# A negation that governs the claim: English puts it right before the verb or the noun ("has not
+# been booked", "no booking", "don't have"), Bangla right after the verb ("দেওয়া হয়নি", "করা হবে
+# না") or the noun ("কোনো সিরিয়াল নেই"). A negation of something else ("Don't worry your
+# appointment is fixed", "… হলো চিন্তা করবেন না") exempts nothing.
 _EN_NOT = re.compile(
-    r"(?:\b(?:not|never|no|nothing|nobody|none|cannot|unable)\b|n't)\s+"
-    r"(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was|were|any|an|a|the|your|been)\s+){0,3}"
-    r"(?=\S)",
+    r"(?:\b(?:not|never|no|nothing|nobody|none|cannot|unable to)\b|n't)\s+"
+    r"(?:(?:been|yet|be|being|have|has|got|gotten|is|are|was|were|any|an|a|the|your|ever|"
+    r"actually|really|still)\s+){0,3}(?P<word>[\w']+)",
     re.IGNORECASE,
 )
-_BN_NOT = re.compile(
-    _B + r"(?:না|নি|নেই|নাই|নয়|নন)" + _E
-    + r"|(?:হয়|কর|দে|দি|নে|নি|পার|যায়|পা|রাখ|রেখ)[ঀ-৿]*নি" + _E
+_BN_NOT_WORD = re.compile(
+    r"^(?:না|নি|নেই|নাই|নয়|নন)$|^(?:হয়|কর|দে|দি|নে|নি|পার|যায়|পা|রাখ|রেখ)[ঀ-৿]*নি$"
 )
+# Words a Bangla verb chain may hold between the verb and its negation ("করা হবে না").
+_BN_CHAIN = re.compile(r"^(?:হয়|হবে|হচ্ছে|যায়|যাবে|তো|এখনো|এখনও|আর|ও|ই)$")
 # A Bangla clause ending in a first-person offer or a second-person question before "?":
 # "আপনার জন্য সিরিয়াল দেব?", "সিরিয়াল নেবেন?".
 _BN_OFFER_END = re.compile(
@@ -1766,9 +1777,39 @@ def _claim_clauses(sentence: str) -> list[tuple[int, int, str]]:
 
 
 def _negated_clause(clause: str, noun_at: int, bangla: bool) -> bool:
-    if bangla:
-        return any(m.start() >= noun_at for m in _BN_NOT.finditer(clause))
-    return bool(_EN_NOT.search(clause))
+    """The claim's own verb (or noun) is negated."""
+    if not bangla:
+        return any(
+            _EN_PREDICATE.fullmatch(m["word"]) or _names_action(m["word"])
+            for m in _EN_NOT.finditer(clause)
+        )
+    words = re.findall(r"[ঀ-৿]+", clause[noun_at:])
+    if len(words) > 1 and _BN_NOT_WORD.match(words[1]):
+        return True  # "সিরিয়াল নেই"
+    for i, word in enumerate(words[1:], start=1):
+        if not _BN_PREDICATE.fullmatch(word):
+            continue
+        for after in words[i + 1 :]:  # the verb chain that follows the first verb
+            if _BN_NOT_WORD.match(after):
+                return True
+            if not (_BN_PREDICATE.fullmatch(after) or _BN_CHAIN.match(after)):
+                return False
+        return False
+    return False
+
+
+def _names_action(word: str) -> bool:
+    return any(regex.fullmatch(word) for _tool, regex in _ACTION_NOUNS)
+
+
+# A question asking what or when about the action, its question word before the verb
+# ("What name should I put the appointment under?", "আপনার সিরিয়ালটা কোন দিন হবে?").
+_EN_WH = re.compile(_EN_LEAD + r"(?:what|which|when|where|who|whose|how)\b", re.IGNORECASE)
+_BN_WH = re.compile(_B + r"(?:কোন|কোনটা|কবে|কখন|কোথায়|কত|কাকে|কার|কেমন|কয়টায়)" + _E)
+# What a booking needs is no claim it was made: "I will need your name", "নাম লাগবে".
+_NEEDS = re.compile(
+    r"\b(?:need|needs|require|requires|required)\b|লাগবে|দরকার|প্রয়োজন", re.IGNORECASE
+)
 
 
 def _asks_or_offers(sentence: str, start: int, end: int, mark: str, bangla: bool) -> bool:
@@ -1784,8 +1825,12 @@ def _asks_or_offers(sentence: str, start: int, end: int, mark: str, bangla: bool
     if mark != "?":
         return False
     if bangla:
-        return bool(_BN_OFFER_END.search(clause))
-    opener = _EN_QUESTION_OPENER.match(clause)
+        if _BN_OFFER_END.search(clause):
+            return True
+        verb = _BN_PREDICATE.search(clause)
+        asked = _BN_WH.search(clause)
+        return bool(asked) and (verb is None or asked.start() < verb.start())
+    opener = _EN_QUESTION_OPENER.match(clause) or _EN_WH.match(clause)
     return bool(opener) and not _EN_NESTED.search(clause, opener.end())
 
 
@@ -1847,6 +1892,8 @@ def _named_claim(
         if tool == "book" and grounds.appointments:
             return None
     if _negated_clause(body, noun.start(), bangla):
+        return None
+    if _NEEDS.search(said) and not _COMPLETED_RE[bangla].search(said):
         return None
     if _asks_or_offers(sentence, start, end, mark, bangla):
         return None

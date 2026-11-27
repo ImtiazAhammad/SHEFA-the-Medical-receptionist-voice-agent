@@ -665,6 +665,11 @@ C1_CLAIMS = [
     # The engine lines (said after "কাল বিকেলে রহমান স্যারের একটা সিরিয়াল দিন").
     ("জি, বুকিং হয়ে গেছে।", "book"),
     ("জি, আপনার সিরিয়াল দেওয়া হলো।", "book"),
+    # A negation that governs something else does not exempt the claim.
+    ("No worries your booking went through.", "book"),
+    ("Don't worry your appointment is fixed for Sunday.", "book"),
+    ("আপনার সিরিয়াল দেওয়া হলো চিন্তা করবেন না।", "book"),
+    ("চিন্তা করবেন না আপনার সিরিয়াল হয়ে গেছে।", "book"),
     # Kin of the review's lines, said other ways.
     ("আপনার সিরিয়াল কনফার্ম হয়ে গেছে।", "book"),
     ("সিরিয়াল দিয়ে দিয়েছি, রবিবার আসবেন।", "book"),
@@ -736,6 +741,14 @@ C1_NOT_CLAIMS = [
     "সিরিয়াল নিতে হলে আগে নাম বলতে হবে।",
     "দয়া করে কাল আবার ফোন করবেন।",
     "ঠিক আছে।",
+    # Asking for what a booking needs.
+    "To book an appointment I will need your name.",
+    "What name should I put the appointment under?",
+    "আপনার সিরিয়ালটা কোন দিন হবে?",
+    "সিরিয়ালের জন্য ঠিক কোন সময় চান?",
+    "সিরিয়াল দিতে আপনার নাম লাগবে।",
+    "কোনো সিরিয়াল নেই।",
+    "সিরিয়াল বাতিল করা হবে না।",
 ]
 
 
@@ -859,3 +872,8 @@ def test_c1_a_looked_up_booking_may_be_said_as_standing():
     assert check_sentence("আপনার রবিবার সিরিয়াল আছে।", g, goal="x", language="bn").ok
     v = check_sentence("Your booking went through.", g, goal="x", language="en")
     assert v.kind == "claim"
+
+
+def test_o2_today_said_beside_a_doctor_is_no_sitting_day():
+    # Today (a Saturday) is said on its own; Dr Rahman's own clause names no day.
+    assert _verdict("আজ শনিবার, ডাক্তার রহমান কাল বসবেন।", "bn", "x", _by("Rahman")).ok

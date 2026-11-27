@@ -61,6 +61,8 @@ SUCCEEDED = "brain_succeeded"
 OFFERED = "brain_person_offered"
 CONTACT_ONLY = "brain_contact_only"
 GROUNDS = "brain_grounds"
+# A hand-over's call argument: say the 999 line before the transfer (a possible emergency).
+EMERGENCY_FIRST = "emergency_first"
 ENDED = frozenset({"escalated", "escaped", "terminated", "completed"})
 
 _NAME_MISSING = "The patient's name is missing"
@@ -409,7 +411,17 @@ _STILL_ASKING = re.compile(
 
 def says_goodbye(said: str) -> bool:
     """The caller is done: a goodbye or thanks, and nothing asked or requested with it."""
-    return bool(_GOODBYE.search(said)) and not _STILL_ASKING.search(said)
+    if not _GOODBYE.search(said):
+        return False
+    # "আর কিছু লাগবে না", "that's all I need": the goodbye itself is no request.
+    rest = re.sub(
+        r"আর কিছু (?:লাগবে )?না|\bthat'?s all(?: I need)?\b|\bnothing else(?: I need)?\b"
+        r"|\bI don'?t need anything else\b",
+        " ",
+        said,
+        flags=re.IGNORECASE,
+    )
+    return not _STILL_ASKING.search(rest)
 
 
 def offered_person(session: CallSession, language: str) -> bool:
@@ -737,7 +749,10 @@ async def act(
             session.metadata[WAIT] = {"for": "name", "tool": call.name, "args": dict(call.args)}
         return Note(f"Tool problem: {resolved.message}")
     if resolved.tool == "hand_over":
-        return await _hand_over(str(resolved.args["reason"]), session, state, grounds, speak)
+        first = bool(call.args.get(EMERGENCY_FIRST))
+        return await _hand_over(
+            str(resolved.args["reason"]), session, state, grounds, speak, emergency_first=first
+        )
     if resolved.tool == "end_call":
         session.state = "completed"
         return await _say(speak, closing(state, language))
@@ -831,7 +846,13 @@ def _save_callback(
 
 
 async def _hand_over(
-    reason: str, session: CallSession, state: CallState, grounds: Grounds, speak: Speak
+    reason: str,
+    session: CallSession,
+    state: CallState,
+    grounds: Grounds,
+    speak: Speak,
+    *,
+    emergency_first: bool = False,
 ) -> str:
     """Put the caller through to a person.
 
@@ -841,7 +862,7 @@ async def _hand_over(
     promise holds). "cannot_help" keeps the guided engine's call-back line either way."""
     language = state.language
     said: list[str] = []
-    if reason == "emergency":
+    if reason == "emergency" or emergency_first:
         said.append(await _say(speak, safe.emergency_text(language)))
     result = await execute_tool("transfer_to_human", {"reason": reason}, session)
     _ran(session, "transfer_to_human")
