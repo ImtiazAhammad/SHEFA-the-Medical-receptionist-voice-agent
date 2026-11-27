@@ -36,11 +36,17 @@ async def to_readback(call):
     return readback
 
 
-async def test_a_yes_that_goes_on_talking_still_books_and_names_the_number(monkeypatch):
+async def test_a_yes_that_goes_on_talking_keeps_the_booking_and_names_the_number(monkeypatch):
+    # 2026-11-27: a yes with a "but" is asked once more (strict yes rule) instead of booking on
+    # the spot; the read-back is kept, so the follow-up yes books it and the number is named.
     call = start(monkeypatch, named=True)
     await to_readback(call)
 
-    reply = await call.say(LONG_YES)
+    again = await call.say(LONG_YES)
+    assert "হ্যাঁ বা না" in again
+    assert call.store.appointments_for_patient(call.patient) == []
+
+    reply = await call.say("হ্যাঁ")
 
     booked = call.store.appointments_for_patient(call.patient)
     assert len(booked) == 1 and booked[0]["start_time"] == "09:30"

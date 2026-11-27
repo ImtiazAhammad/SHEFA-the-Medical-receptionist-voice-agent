@@ -1242,13 +1242,31 @@ class VoicePipeline:
                 await self._emit(tts, text, language, put_playback)
                 return text
         if pending:
-            answer = yes_no(said)
-            # "Yes, book it, but will you not take my number?": a yes that goes on talking is
-            # still a yes unless the rest asks for something different. It used to be treated
-            # as a new request, which threw the read-back away and lost the whole booking.
-            aside = answer is None and leading_yes(said) and not guided.changes_request(said)
-            if aside:
-                answer = True
+            from shefa.brain.confirm import strict_answer
+            from shefa.clinic.store import clinic_today
+
+            # Only a clean yes executes what was read back (the brain's strict rule). A yes
+            # with a change ("হ্যাঁ, শুক্রবার", "yes but Friday") is a new request; any other
+            # yes that is not clean ("yes, book it, but will you not take my number?", "হ্যাঁ,
+            # কিন্তু আমি আসতে পারব না") is asked once more instead of booking, and the read-back
+            # is kept so the follow-up yes still books it.
+            strict = strict_answer(said, today=clinic_today())
+            answer = {"yes": True, "no": False}.get(strict or "")
+            concrete_change = strict == "change" and guided.changes_request(said)
+            starts_yes = leading_yes(said)
+            doubtful_yes = (
+                strict in ("change", "unclear")
+                and not concrete_change
+                and (strict == "unclear" or starts_yes)
+            )
+            if doubtful_yes and starts_yes:
+                pending["aside"] = True  # the caller's extra words: answered after the booking
+            if doubtful_yes and not pending.get("asked"):
+                pending["asked"] = True
+                text = reask_text(language)
+                await self._emit(tts, text, language, put_playback)
+                return text
+            aside = bool(pending.get("aside"))
             if answer is True:
                 session.metadata.pop("pending")
                 guided.finish(session)
@@ -1269,7 +1287,7 @@ class VoicePipeline:
                 text = declined_text(language)
                 await self._emit(tts, text, language, put_playback)
                 return text
-            if not pending.get("asked") and len(said.split()) <= 3:
+            if not concrete_change and not pending.get("asked") and len(said.split()) <= 3:
                 pending["asked"] = True  # one reminder; after that the pending action is dropped
                 text = reask_text(language)
                 await self._emit(tts, text, language, put_playback)
